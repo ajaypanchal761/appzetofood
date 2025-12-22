@@ -1,0 +1,1492 @@
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { Link, useNavigate } from "react-router-dom"
+import { motion, AnimatePresence } from "framer-motion"
+import { MapPin, Search, Mic, SlidersHorizontal, Star, Compass, X, ArrowDownUp, Timer, IndianRupee, UtensilsCrossed, BadgePercent, ShieldCheck, Clock, Bookmark, Check } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent } from "@/components/ui/card"
+import AnimatedPage from "../components/AnimatedPage"
+import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
+import { useLocation as useLocationHook } from "../hooks/useLocation"
+import { useProfile } from "../context/ProfileContext"
+import PageNavbar from "../components/PageNavbar"
+import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
+import diningBanner from "@/assets/diningbanner.png"
+import diningCard1 from "@/assets/dining images/diningcard1.png"
+import diningCard2 from "@/assets/dining images/diningcard2.png"
+import diningCard3 from "@/assets/dining images/diningcard3.png"
+import diningCard4 from "@/assets/dining images/diningcard4.png"
+import diningCard5 from "@/assets/dining images/diningcard5.png"
+import diningCard6 from "@/assets/dining images/diningcard6.png"
+import upto50off from "@/assets/diningpage/upto50off.png"
+import nearAndTopRated from "@/assets/diningpage/nearandtoprated.png"
+import coffeeBanner from "@/assets/diningpage/coffeebanner.png"
+import axisLogo from "@/assets/banklogo/axis.png"
+import barodaLogo from "@/assets/banklogo/baroda.png"
+import hdfcLogo from "@/assets/banklogo/hdfc.png"
+import iciciLogo from "@/assets/banklogo/icici.png"
+import pnbLogo from "@/assets/banklogo/pnb.png"
+import sbiLogo from "@/assets/banklogo/sbi.png"
+
+const diningCategories = [
+  {
+    id: 1,
+    name: "Pure veg",
+    image: diningCard1,
+  },
+  {
+    id: 2,
+    name: "Drink & dine",
+    image: diningCard2,
+  },
+  {
+    id: 3,
+    name: "Family dining",
+    image: diningCard3,
+  },
+  {
+    id: 4,
+    name: "Rooftops",
+    image: diningCard4,
+  },
+  {
+    id: 5,
+    name: "Cozy cafes",
+    image: diningCard5,
+  },
+  {
+    id: 6,
+    name: "Premium dining",
+    image: diningCard6,
+  },
+]
+
+const limelightRestaurants = [
+  {
+    id: 1,
+    name: "The Grand Bistro",
+    subheading: "Fine Dining Experience",
+    image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&h=600&fit=crop",
+    discount: "25% OFF",
+  },
+  {
+    id: 2,
+    name: "Skyline Rooftop",
+    subheading: "Panoramic City Views",
+    image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&h=600&fit=crop",
+    discount: "30% OFF",
+  },
+  {
+    id: 3,
+    name: "Coastal Kitchen",
+    subheading: "Fresh Seafood Specialties",
+    image: "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=1200&h=600&fit=crop",
+    discount: "20% OFF",
+  },
+  {
+    id: 4,
+    name: "Garden Terrace",
+    subheading: "Al Fresco Dining",
+    image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=600&fit=crop",
+    discount: "35% OFF",
+  },
+  {
+    id: 5,
+    name: "Midnight Lounge",
+    subheading: "Cocktails & Cuisine",
+    image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=600&fit=crop",
+    discount: "25% OFF",
+  },
+]
+
+const bankOffers = [
+  {
+    id: 1,
+    name: "Axis Bank",
+    cardType: "CORPORATE CARDS",
+    discount: "15% OFF",
+    maxDiscount: "up to ₹2000",
+    logo: axisLogo,
+    offerText: "Get 15% OFF for up to ₹2000 using Axis Bank Corporate Cards",
+    minAmount: "₹5000",
+    terms: [
+      "Offer valid once per customer during the offer period.",
+      "Offer applicable only on cards with BIN- 512042",
+      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
+      "Offer valid on all days",
+      "Offer not valid on Axis Bank Cashback / Rewards Credit Card variant",
+      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
+      "Other T&Cs may apply"
+    ]
+  },
+  {
+    id: 2,
+    name: "HDFC Bank",
+    cardType: "PREMIER CREDIT CARD",
+    discount: "10% OFF",
+    maxDiscount: "up to ₹1000",
+    logo: hdfcLogo,
+    offerText: "Get 10% OFF for up to ₹1000 using HDFC Premier Credit Cards",
+    minAmount: "₹5000",
+    terms: [
+      "Offer valid once per customer during the offer period.",
+      "Offer applicable only on cards with BIN- 512042",
+      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
+      "Offer valid on all days",
+      "Offer not valid on HDFC Cashback / Live+ Credit Card variant",
+      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
+      "Other T&Cs may apply"
+    ]
+  },
+  {
+    id: 3,
+    name: "ICICI Bank",
+    cardType: "CREDIT CARD",
+    discount: "15% OFF",
+    maxDiscount: "up to ₹750",
+    logo: iciciLogo,
+    offerText: "Get 15% OFF for up to ₹750 using ICICI Bank Credit Cards",
+    minAmount: "₹4000",
+    terms: [
+      "Offer valid once per customer during the offer period.",
+      "Offer applicable only on cards with BIN- 512042",
+      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
+      "Offer valid on all days",
+      "Offer not valid on ICICI Bank Cashback / Rewards Credit Card variant",
+      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
+      "Other T&Cs may apply"
+    ]
+  },
+  {
+    id: 4,
+    name: "SBI Bank",
+    cardType: "CREDIT CARD",
+    discount: "12% OFF",
+    maxDiscount: "up to ₹1500",
+    logo: sbiLogo,
+    offerText: "Get 12% OFF for up to ₹1500 using SBI Bank Credit Cards",
+    minAmount: "₹4500",
+    terms: [
+      "Offer valid once per customer during the offer period.",
+      "Offer applicable only on cards with BIN- 512042",
+      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
+      "Offer valid on all days",
+      "Offer not valid on SBI Cashback / Rewards Credit Card variant",
+      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
+      "Other T&Cs may apply"
+    ]
+  },
+  {
+    id: 5,
+    name: "PNB Bank",
+    cardType: "PREMIUM CARD",
+    discount: "20% OFF",
+    maxDiscount: "up to ₹2500",
+    logo: pnbLogo,
+    offerText: "Get 20% OFF for up to ₹2500 using PNB Bank Premium Cards",
+    minAmount: "₹6000",
+    terms: [
+      "Offer valid once per customer during the offer period.",
+      "Offer applicable only on cards with BIN- 512042",
+      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
+      "Offer valid on all days",
+      "Offer not valid on PNB Cashback / Rewards Credit Card variant",
+      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
+      "Other T&Cs may apply"
+    ]
+  },
+  {
+    id: 6,
+    name: "Baroda Bank",
+    cardType: "CREDIT CARD",
+    discount: "18% OFF",
+    maxDiscount: "up to ₹1800",
+    logo: barodaLogo,
+    offerText: "Get 18% OFF for up to ₹1800 using Baroda Bank Credit Cards",
+    minAmount: "₹5500",
+    terms: [
+      "Offer valid once per customer during the offer period.",
+      "Offer applicable only on cards with BIN- 512042",
+      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
+      "Offer valid on all days",
+      "Offer not valid on Baroda Cashback / Rewards Credit Card variant",
+      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
+      "Other T&Cs may apply"
+    ]
+  },
+]
+
+const popularRestaurants = [
+  {
+    id: 1,
+    name: "IRIS",
+    rating: 4.3,
+    location: "Press Complex, Indore",
+    distance: "2.9 km",
+    cuisine: "Continental",
+    price: "₹1500 for two",
+    image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
+    offer: "Flat 30% OFF + 3 more",
+    deliveryTime: "30-35 mins",
+    featuredDish: "Pasta",
+    featuredPrice: 450,
+  },
+  {
+    id: 2,
+    name: "Skyline Rooftop",
+    rating: 4.5,
+    location: "MG Road, Indore",
+    distance: "3.2 km",
+    cuisine: "Multi-cuisine",
+    price: "₹2000 for two",
+    image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&h=600&fit=crop",
+    offer: "Flat 25% OFF + 2 more",
+    deliveryTime: "35-40 mins",
+    featuredDish: "Grilled Chicken",
+    featuredPrice: 550,
+  },
+  {
+    id: 3,
+    name: "The Grand Bistro",
+    rating: 4.7,
+    location: "Vijay Nagar, Indore",
+    distance: "1.8 km",
+    cuisine: "Continental",
+    price: "₹1800 for two",
+    image: "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=600&fit=crop",
+    offer: "Flat 35% OFF + 4 more",
+    deliveryTime: "25-30 mins",
+    featuredDish: "Risotto",
+    featuredPrice: 650,
+  },
+  {
+    id: 4,
+    name: "Coastal Kitchen",
+    rating: 4.4,
+    location: "Palasia, Indore",
+    distance: "2.1 km",
+    cuisine: "Seafood",
+    price: "₹1600 for two",
+    image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=600&fit=crop",
+    offer: "Flat 20% OFF + 2 more",
+    deliveryTime: "28-33 mins",
+    featuredDish: "Fish Curry",
+    featuredPrice: 480,
+  },
+  {
+    id: 5,
+    name: "Garden Terrace",
+    rating: 4.6,
+    location: "Scheme 54, Indore",
+    distance: "4.5 km",
+    cuisine: "North Indian",
+    price: "₹1200 for two",
+    image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&h=600&fit=crop",
+    offer: "Flat 30% OFF + 3 more",
+    deliveryTime: "40-45 mins",
+    featuredDish: "Butter Chicken",
+    featuredPrice: 380,
+  },
+  {
+    id: 6,
+    name: "Midnight Lounge",
+    rating: 4.2,
+    location: "Bhawarkua, Indore",
+    distance: "3.8 km",
+    cuisine: "Continental",
+    price: "₹2200 for two",
+    image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
+    offer: "Flat 25% OFF + 2 more",
+    deliveryTime: "35-40 mins",
+    featuredDish: "Steak",
+    featuredPrice: 750,
+  },
+]
+
+export default function Dining() {
+  const navigate = useNavigate()
+  const [heroSearch, setHeroSearch] = useState("")
+  const [currentRestaurantIndex, setCurrentRestaurantIndex] = useState(0)
+  const [activeFilters, setActiveFilters] = useState(new Set())
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [activeFilterTab, setActiveFilterTab] = useState('sort')
+  const [sortBy, setSortBy] = useState(null)
+  const [selectedCuisine, setSelectedCuisine] = useState(null)
+  const [selectedBankOffer, setSelectedBankOffer] = useState(null)
+  const [mapButtonBottom, setMapButtonBottom] = useState("bottom-14")
+  const lastScrollY = useRef(0)
+  const filterSectionRefs = useRef({})
+  const rightContentRef = useRef(null)
+  const { openSearch, closeSearch, setSearchValue } = useSearchOverlay()
+  const { openLocationSelector } = useLocationSelector()
+  const { location } = useLocationHook()
+  const { addFavorite, removeFavorite, isFavorite } = useProfile()
+
+  const toggleFilter = (filterId) => {
+    setActiveFilters(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(filterId)) {
+        newSet.delete(filterId)
+      } else {
+        newSet.add(filterId)
+      }
+      return newSet
+    })
+  }
+
+  const filteredRestaurants = useMemo(() => {
+    let filtered = [...popularRestaurants]
+
+    if (activeFilters.has('delivery-under-30')) {
+      filtered = filtered.filter(r => {
+        const timeMatch = r.deliveryTime.match(/(\d+)/)
+        return timeMatch && parseInt(timeMatch[1]) <= 30
+      })
+    }
+    if (activeFilters.has('delivery-under-45')) {
+      filtered = filtered.filter(r => {
+        const timeMatch = r.deliveryTime.match(/(\d+)/)
+        return timeMatch && parseInt(timeMatch[1]) <= 45
+      })
+    }
+    if (activeFilters.has('distance-under-1km')) {
+      filtered = filtered.filter(r => {
+        const distMatch = r.distance.match(/(\d+\.?\d*)/)
+        return distMatch && parseFloat(distMatch[1]) <= 1.0
+      })
+    }
+    if (activeFilters.has('distance-under-2km')) {
+      filtered = filtered.filter(r => {
+        const distMatch = r.distance.match(/(\d+\.?\d*)/)
+        return distMatch && parseFloat(distMatch[1]) <= 2.0
+      })
+    }
+    if (activeFilters.has('rating-35-plus')) {
+      filtered = filtered.filter(r => r.rating >= 3.5)
+    }
+    if (activeFilters.has('rating-4-plus')) {
+      filtered = filtered.filter(r => r.rating >= 4.0)
+    }
+    if (activeFilters.has('rating-45-plus')) {
+      filtered = filtered.filter(r => r.rating >= 4.5)
+    }
+
+    // Apply cuisine filter
+    if (selectedCuisine) {
+      filtered = filtered.filter(r => r.cuisine.toLowerCase().includes(selectedCuisine.toLowerCase()))
+    }
+
+    // Apply sorting
+    if (sortBy === 'rating-high') {
+      filtered.sort((a, b) => b.rating - a.rating)
+    } else if (sortBy === 'rating-low') {
+      filtered.sort((a, b) => a.rating - b.rating)
+    }
+
+    return filtered
+  }, [activeFilters, selectedCuisine, sortBy])
+
+
+  const handleSearchFocus = useCallback(() => {
+    if (heroSearch) {
+      setSearchValue(heroSearch)
+    }
+    openSearch()
+  }, [heroSearch, openSearch, setSearchValue])
+
+  const handleOpenMap = () => {
+    // Get user's current location or use default location (Indore)
+    const lat = location?.latitude || 22.7196
+    const lng = location?.longitude || 75.8577
+    
+    // Open Google Maps with nearby restaurants search in full screen
+    const googleMapsUrl = `https://www.google.com/maps/search/restaurants+near+me/@${lat},${lng},15z`
+    window.open(googleMapsUrl, '_blank', 'fullscreen=yes')
+  }
+
+  // Auto-play carousel
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentRestaurantIndex((prev) => (prev + 1) % limelightRestaurants.length)
+    }, 2000) // Change every 2 seconds
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // Scroll detection for map button positioning
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      const scrollDifference = Math.abs(currentScrollY - lastScrollY.current)
+
+      // Only update if scroll difference is significant (avoid flickering)
+      if (scrollDifference < 5) {
+        return
+      }
+
+      // Scroll down -> bottom-0, Scroll up -> bottom-20
+      if (currentScrollY > lastScrollY.current) {
+        // Scrolling down
+        setMapButtonBottom("bottom-0")
+      } else if (currentScrollY < lastScrollY.current) {
+        // Scrolling up
+        setMapButtonBottom("bottom-20")
+      }
+
+      lastScrollY.current = currentScrollY
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
+
+  return (
+    <AnimatedPage className="bg-white" style={{ minHeight: '100vh', paddingBottom: '80px', overflow: 'visible' }}>
+      {/* Unified Navbar & Hero Section */}
+      <div 
+        className="relative w-full overflow-hidden min-h-[50vh] cursor-pointer"
+        onClick={() => navigate('/user/dining/restaurants')}
+      >
+        {/* Background with dining banner */}
+        <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
+          <img
+            src={diningBanner}
+            alt="Dining Banner"
+            className="w-full h-full object-cover"
+            style={{ objectPosition: 'center center', minHeight: '100%' }}
+          />
+        </div>
+
+        {/* Navbar */}
+        <PageNavbar 
+          textColor="white" 
+          zIndex={50} 
+          onNavClick={(e) => e.stopPropagation()}
+        />
+
+        {/* Hero Section with Search */}
+        <section 
+          className="relative z-50 w-full py-0 sm:py-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="relative z-50 w-full px-3 sm:px-6 lg:px-8">
+            {/* Search Bar Container */}
+            <div className="sticky top-4 z-50">
+              {/* Enhanced Search Bar */}
+              <div className="w-full relative">
+                <div className="relative bg-white rounded-xl shadow-lg border border-gray-200 p-1 sm:p-1.5 transition-all duration-300 hover:shadow-xl">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <Search className="h-4 w-4 sm:h-4 sm:w-4 text-green-500 flex-shrink-0 ml-2 sm:ml-3" strokeWidth={2.5} />
+                    <div className="flex-1 relative">
+                      <Input
+                        value={heroSearch}
+                        onChange={(e) => setHeroSearch(e.target.value)}
+                        onFocus={handleSearchFocus}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && heroSearch.trim()) {
+                            navigate(`/user/search?q=${encodeURIComponent(heroSearch.trim())}`)
+                            closeSearch()
+                            setHeroSearch("")
+                          }
+                        }}
+                        className="pl-0 pr-2 h-8 sm:h-9 w-full bg-transparent border-0 text-sm sm:text-base font-semibold text-gray-700 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full placeholder:font-semibold placeholder:text-gray-400"
+                        placeholder='Search "burger"'
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSearchFocus}
+                      className="flex-shrink-0 mr-2 sm:mr-3 p-1 hover:bg-gray-100 rounded-full transition-colors"
+                    >
+                      <Mic className="h-4 w-4 sm:h-4 sm:w-4 text-gray-500" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* Content */}
+      <div className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+        {/* Categories Section */}
+        <div className="mb-6">
+          <div className="mb-6">
+            <div className="flex items-center mb-2">
+              <div className="flex-grow border-t border-gray-300"></div>
+              <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                WHAT ARE YOU LOOKING FOR?
+              </h3>
+              <div className="flex-grow border-t border-gray-300"></div>
+            </div>
+          </div>
+          
+          {/* Light blue-grey background container */}
+          <div className="bg-white rounded-2xl">
+            <div className="grid  grid-cols-3 gap-3 sm:gap-4">
+              {diningCategories.map((category) => (
+                <Link
+                  key={category.id}
+                  to={`/user/dining/${category.name.toLowerCase().replace(/\s+/g, '-')}`}
+                  className="bg-[#f3f4f9] rounded-xl overflow-hidden shadow-sm border-2 border-white hover:shadow-lg transition-all duration-300 hover:scale-[1.02] flex flex-col h-[140px] sm:h-[160px] md:h-[180px]"
+                >
+                  {/* Text Label on Top */}
+                  <div className="flex items-center justify-start px-3 py-2 sm:py-3 flex-shrink-0">
+                    <p className="text-xs sm:text-sm font-bold text-gray-900 text-left uppercase tracking-wide">
+                      {category.name}
+                    </p>
+                  </div>
+                  
+                  {/* Image at Bottom */}
+                  <div className="relative flex-1 mt-auto">
+                    <img
+                      src={category.image}
+                      alt={category.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* In the Limelight Section */}
+        <div className="mb-6 mt-8 sm:mt-12">
+          <div className="mb-6">
+            <div className="flex items-center mb-2">
+              <div className="flex-grow border-t border-gray-300"></div>
+              <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                IN THE LIMELIGHT
+              </h3>
+              <div className="flex-grow border-t border-gray-300"></div>
+            </div>
+          </div>
+          
+          {/* Landscape Carousel */}
+          <div className="relative w-full h-[200px] sm:h-[280px] md:h-[350px] lg:h-[400px] rounded-2xl overflow-hidden shadow-lg">
+            {/* Carousel Container */}
+            <div 
+              className="flex h-full transition-transform duration-700 ease-in-out"
+              style={{ transform: `translateX(-${currentRestaurantIndex * 100}%)` }}
+            >
+              {limelightRestaurants.map((restaurant, index) => (
+                <div
+                  key={restaurant.id}
+                  className="min-w-full h-full relative flex-shrink-0 w-full"
+                >
+                  {/* Restaurant Image */}
+                  <img
+                    src={restaurant.image}
+                    alt={restaurant.name}
+                    className="w-full h-full object-cover object-center"
+                    style={{ minHeight: '100%', minWidth: '100%' }}
+                    onError={(e) => {
+                      e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&h=600&fit=crop"
+                    }}
+                  />
+                  
+                  {/* Discount Tag - Top Left */}
+                  <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10">
+                    <div className="bg-white/95 backdrop-blur-sm px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg shadow-lg">
+                      <span className="text-[10px] sm:text-xs font-bold text-green-500">
+                        {restaurant.discount}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Restaurant Info - Bottom Left */}
+                  <div className="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 z-10 flex flex-col gap-0">
+                    {/* Restaurant Name - Black text on white bg */}
+                    <div className="bg-white rounded-t-lg px-2 py-1.5 sm:px-3 sm:py-2 shadow-lg">
+                      <h4 className="text-xs sm:text-sm font-bold text-gray-900">
+                        {restaurant.name}
+                      </h4>
+                    </div>
+                    
+                    {/* Subheading - White text on black bg */}
+                    <div className="bg-black/90 backdrop-blur-sm rounded-b-lg px-2 py-1.5 sm:px-3 sm:py-2 shadow-lg">
+                      <p className="text-[10px] sm:text-xs font-semibold text-white">
+                        {restaurant.subheading}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Carousel Indicators */}
+            <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-10 flex gap-2">
+              {limelightRestaurants.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentRestaurantIndex(index)}
+                  className={`h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full transition-all ${
+                    index === currentRestaurantIndex
+                      ? "bg-white w-6 sm:w-8"
+                      : "bg-white/50"
+                  }`}
+                  aria-label={`Go to slide ${index + 1}`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Explore Section */}
+        <div className="mb-6 mt-8 sm:mt-12">
+          <div className="mb-6">
+            <div className="flex items-center mb-2">
+              <div className="flex-grow border-t border-gray-300"></div>
+              <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                EXPLORE
+              </h3>
+              <div className="flex-grow border-t border-gray-300"></div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <Link to="/user/dining/explore/upto50" className="rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow cursor-pointer">
+              <img
+                src={upto50off}
+                alt="Up to 50% Off"
+                className="w-full h-full object-cover"
+              />
+            </Link>
+            <Link to="/user/dining/explore/near-rated" className="rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow cursor-pointer">
+              <img
+                src={nearAndTopRated}
+                alt="Near and Top Rated"
+                className="w-full h-full object-cover"
+              />
+            </Link>
+          </div>
+        </div>
+
+        {/* Exclusive on Dining Section */}
+        <div className="mb-6 mt-8 sm:mt-12">
+        <div className="mb-6">
+  <div className="flex items-center mb-2">
+    <div className="flex-grow border-t border-gray-300"></div>
+
+    <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
+      EXCLUSIVE ON DINING
+    </h3>
+
+    <div className="flex-grow border-t border-gray-300"></div>
+  </div>
+</div>
+
+          <Link to="/user/dining/coffee" className="rounded-xl overflow-hidden shadow-lg block">
+            <img
+              src={coffeeBanner}
+              alt="Coffee Banner"
+              className="w-full h-full object-cover"
+            />
+          </Link>
+        </div>
+
+        {/* Must Tries in Indore Section */}
+        <div className="mb-6 mt-8 sm:mt-12">
+          <div className="mb-6">
+            <div className="flex items-center mb-2">
+              <div className="flex-grow border-t border-gray-300"></div>
+              <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                MUST TRIES IN INDORE
+              </h3>
+              <div className="flex-grow border-t border-gray-300"></div>
+            </div>
+          </div>
+          
+          {/* Horizontal Scroll Container */}
+          <div 
+            className="overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
+            style={{ 
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch'
+            }}
+          >
+            <style>{`
+              .must-tries-scroll::-webkit-scrollbar {
+                display: none;
+              }
+            `}</style>
+            <div className="flex gap-4 pb-4 must-tries-scroll" style={{ width: 'max-content' }}>
+              {[
+                {
+                  id: 1,
+                  name: "Luxury Dining",
+                  image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500&h=300&fit=crop",
+                },
+                {
+                  id: 2,
+                  name: "Romantic Dining",
+                  image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=500&h=300&fit=crop",
+                },
+                {
+                  id: 3,
+                  name: "Great Cafes",
+                  image: "https://images.unsplash.com/photo-1501339847302-ac426a4c7cfe?w=500&h=300&fit=crop",
+                },
+                {
+                  id: 4,
+                  name: "Local Favorite Places",
+                  image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500&h=300&fit=crop",
+                },
+                {
+                  id: 5,
+                  name: "Pan Asian Restaurant",
+                  image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=500&h=300&fit=crop",
+                },
+                {
+                  id: 6,
+                  name: "Sky High Sips",
+                  image: "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=500&h=300&fit=crop",
+                },
+                {
+                  id: 7,
+                  name: "Great Buffets",
+                  image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop",
+                },
+              ].map((item) => (
+                <div
+                  key={item.id}
+                  className="relative flex-shrink-0 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow cursor-pointer"
+                  style={{ 
+                    width: 'calc((100vw - 3rem) / 2.5)',
+                    minWidth: '140px',
+                    maxWidth: '200px'
+                  }}
+                >
+                  <div className="relative h-48 sm:h-56 md:h-64">
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop"
+                      }}
+                    />
+                    {/* White Subheading Overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/50 to-transparent p-3 sm:p-2">
+                      <h4 className="text-white text-md sm:text-md font-bold text-start">
+                        {item.name}
+                      </h4>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Explore More Button */}
+          {/* <div className="flex justify-center mt-6">
+            <Button
+              variant="ghost"
+              className="px-6 py-2 text-sm font-semibold"
+            >
+              Explore More
+            </Button>
+          </div> */}
+        </div>
+
+        {/* Popular Restaurants Around You Section */}
+        <div className="mb-6 mt-8 sm:mt-12">
+          <div className="mb-6">
+            <div className="flex items-center mb-2">
+              <div className="flex-grow border-t border-gray-300"></div>
+              <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                POPULAR RESTAURANTS AROUND YOU
+              </h3>
+              <div className="flex-grow border-t border-gray-300"></div>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <section className="py-1 mb-4">
+            <div 
+              className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pb-1"
+              style={{
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+              }}
+            >
+              {/* Filter Button - Opens Modal */}
+              <Button
+                variant="outline"
+                onClick={() => setIsFilterOpen(true)}
+                className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white border border-gray-200 hover:bg-gray-50 text-gray-700"
+              >
+                <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="text-xs sm:text-sm font-bold text-black">Filters</span>
+              </Button>
+
+              {/* Filter Buttons */}
+              {[
+                { id: 'delivery-under-30', label: 'Under 30 mins' },
+                { id: 'delivery-under-45', label: 'Under 45 mins' },
+                { id: 'distance-under-1km', label: 'Under 1km', icon: MapPin },
+                { id: 'distance-under-2km', label: 'Under 2km', icon: MapPin },
+                { id: 'rating-35-plus', label: '3.5+ Rating' },
+                { id: 'rating-4-plus', label: '4.0+ Rating' },
+                { id: 'rating-45-plus', label: '4.5+ Rating' },
+              ].map((filter) => {
+                const Icon = filter.icon
+                const isActive = activeFilters.has(filter.id)
+                return (
+                  <Button
+                    key={filter.id}
+                    variant="outline"
+                    onClick={() => toggleFilter(filter.id)}
+                    className={`h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${
+                      isActive
+                        ? 'bg-green-500 text-white border border-green-500 hover:bg-green-500/90'
+                        : 'bg-white border border-gray-200 hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    {Icon && <Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${isActive ? 'fill-white' : ''}`} />}
+                    <span className="text-xs sm:text-sm font-bold text-black">{filter.label}</span>
+                  </Button>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Restaurant Cards */}
+          <div className="grid grid-cols-1 gap-4 sm:gap-5">
+            {/* First 2 Restaurants */}
+            {filteredRestaurants.slice(0, 2).map((restaurant, index) => {
+              const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+              const favorite = isFavorite(restaurantSlug)
+
+              const handleToggleFavorite = (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (favorite) {
+                  removeFavorite(restaurantSlug)
+                } else {
+                  addFavorite({
+                    slug: restaurantSlug,
+                    name: restaurant.name,
+                    cuisine: restaurant.cuisine,
+                    rating: restaurant.rating,
+                    deliveryTime: restaurant.deliveryTime,
+                    distance: restaurant.distance,
+                    image: restaurant.image
+                  })
+                }
+              }
+
+              return (
+                <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`}>
+                  <Card className="overflow-hidden gap-0 cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl">
+                    {/* Image Section */}
+                    <div className="relative h-48 sm:h-56 md:h-60 w-full overflow-hidden rounded-t-2xl">
+                      <img
+                        src={restaurant.image}
+                        alt={restaurant.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => {
+                          e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
+                        }}
+                      />
+                      
+                      {/* Featured Dish Badge - Top Left */}
+                      <div className="absolute top-3 left-3">
+                        <div className="bg-gray-800/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium">
+                          {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
+                        </div>
+                      </div>
+                      
+                      {/* Bookmark Icon - Top Right */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-3 right-3 h-9 w-9 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white transition-colors"
+                        onClick={handleToggleFavorite}
+                      >
+                        <Bookmark className={`h-5 w-5 ${favorite ? "fill-gray-800 text-gray-800" : "text-gray-600"}`} strokeWidth={2} />
+                      </Button>
+
+                      {/* Blue Section - Bottom 40% */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-transparent" style={{ height: '40%' }}>
+                        <div className="h-full flex flex-col justify-end">
+                          <div className="pl-4 sm:pl-5 pb-4 sm:pb-5">
+                            <p className="text-white text-xs sm:text-sm font-medium uppercase tracking-wide mb-1">
+                              PRE-BOOK TABLE
+                            </p>
+                            <div className="h-px bg-white/30 mb-2 w-24"></div>
+                            <p className="text-white text-base sm:text-lg font-bold">
+                              {restaurant.offer}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Content Section */}
+                    <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
+                      {/* Restaurant Name & Rating */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 line-clamp-1">
+                            {restaurant.name}
+                          </h3>
+                        </div>
+                        <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1">
+                          <span className="text-sm font-bold">{restaurant.rating}</span>
+                          <Star className="h-3 w-3 fill-white text-white" />
+                        </div>
+                      </div>
+                      
+                      {/* Delivery Time & Distance */}
+                      <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
+                        <Clock className="h-4 w-4" strokeWidth={1.5} />
+                        <span className="font-medium">{restaurant.deliveryTime}</span>
+                        <span className="mx-1">|</span>
+                        <span className="font-medium">{restaurant.distance}</span>
+                      </div>
+                      
+                      {/* Offer Badge */}
+                      {restaurant.offer && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <BadgePercent className="h-4 w-4 text-blue-600" strokeWidth={2} />
+                          <span className="text-gray-700 font-medium">{restaurant.offer}</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+
+            {/* Bank Offers Section */}
+            <div className="my-6 sm:my-8">
+              <div className="mb-4">
+                <div className="flex items-center mb-2">
+                  <div className="flex-grow border-t border-gray-300"></div>
+                  <h3 className="px-3 text-base sm:text-lg font-semibold text-gray-600 uppercase tracking-wide">
+                    AVAILABLE BANK OFFERS
+                  </h3>
+                  <div className="flex-grow border-t border-gray-300"></div>
+                </div>
+              </div>
+
+              {/* Horizontal Scroll Container */}
+              <div 
+                className="overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
+                style={{ 
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                  WebkitOverflowScrolling: 'touch'
+                }}
+              >
+                <style>{`
+                  .bank-offers-scroll::-webkit-scrollbar {
+                    display: none;
+                  }
+                `}</style>
+                <div className="flex gap-3 sm:gap-4 pb-2 bank-offers-scroll" style={{ width: 'max-content' }}>
+                  {bankOffers.map((bank) => (
+                    <div 
+                      key={bank.id} 
+                      onClick={() => setSelectedBankOffer(bank)}
+                      className="flex-shrink-0 w-[calc((100vw-3rem)/3)] sm:w-[240px] md:w-[280px] bg-white rounded-xl shadow-sm border-2 border-gray-300 p-3 sm:p-4 cursor-pointer hover:shadow-md transition-shadow"
+                    >
+                      <h4 className="text-xs sm:text-sm font-bold text-gray-700 mb-3">{bank.cardType}</h4>
+                      <div className="mb-4">
+                        <img
+                          src={bank.logo}
+                          alt={bank.name}
+                          className="h-8 sm:h-10 object-contain"
+                          onError={(e) => {
+                            e.target.style.display = 'none'
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-base sm:text-lg font-bold text-gray-900">{bank.discount}</p>
+                        <p className="text-xs sm:text-sm text-gray-600">{bank.maxDiscount}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Remaining Restaurants */}
+            {filteredRestaurants.slice(2).map((restaurant, index) => {
+              const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+              const favorite = isFavorite(restaurantSlug)
+
+              const handleToggleFavorite = (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (favorite) {
+                  removeFavorite(restaurantSlug)
+                } else {
+                  addFavorite({
+                    slug: restaurantSlug,
+                    name: restaurant.name,
+                    cuisine: restaurant.cuisine,
+                    rating: restaurant.rating,
+                    deliveryTime: restaurant.deliveryTime,
+                    distance: restaurant.distance,
+                    image: restaurant.image
+                  })
+                }
+              }
+
+              return (
+                <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`}>
+                  <Card className="overflow-hidden cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl">
+                    {/* Image Section */}
+                    <div className="relative h-48 sm:h-56 md:h-60 w-full overflow-hidden rounded-t-2xl">
+                      <img
+                        src={restaurant.image}
+                        alt={restaurant.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => {
+                          e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
+                        }}
+                      />
+                      
+                      {/* Featured Dish Badge - Top Left */}
+                      <div className="absolute top-3 left-3">
+                        <div className="bg-gray-800/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium">
+                          {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
+                        </div>
+                      </div>
+                      
+                      {/* Bookmark Icon - Top Right */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-3 right-3 h-9 w-9 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white transition-colors"
+                        onClick={handleToggleFavorite}
+                      >
+                        <Bookmark className={`h-5 w-5 ${favorite ? "fill-gray-800 text-gray-800" : "text-gray-600"}`} strokeWidth={2} />
+                      </Button>
+
+                      {/* Blue Section - Bottom 40% */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-transparent" style={{ height: '40%' }}>
+                        <div className="h-full flex flex-col justify-end">
+                          <div className="pl-4 sm:pl-5 pb-4 sm:pb-5">
+                            <p className="text-white text-xs sm:text-sm font-medium uppercase tracking-wide mb-1">
+                              PRE-BOOK TABLE
+                            </p>
+                            <div className="h-px bg-white/30 mb-2 w-24"></div>
+                            <p className="text-white text-base sm:text-lg font-bold">
+                              {restaurant.offer}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Content Section */}
+                    <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
+                      {/* Restaurant Name & Rating */}
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 line-clamp-1">
+                            {restaurant.name}
+                          </h3>
+                        </div>
+                        <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1">
+                          <span className="text-sm font-bold">{restaurant.rating}</span>
+                          <Star className="h-3 w-3 fill-white text-white" />
+                        </div>
+                      </div>
+                      
+                      {/* Delivery Time & Distance */}
+                      <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
+                        <Clock className="h-4 w-4" strokeWidth={1.5} />
+                        <span className="font-medium">{restaurant.deliveryTime}</span>
+                        <span className="mx-1">|</span>
+                        <span className="font-medium">{restaurant.distance}</span>
+                      </div>
+                      
+                      {/* Offer Badge */}
+                      {restaurant.offer && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <BadgePercent className="h-4 w-4 text-blue-600" strokeWidth={2} />
+                          <span className="text-gray-700 font-medium">{restaurant.offer}</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Map Button - Sticky above bottom navigation */}
+      <div className={`sticky ${mapButtonBottom} left-0 right-0 z-40 px-4 pb-2 transition-all duration-300 ease-in-out`}>
+        <button
+          onClick={handleOpenMap}
+          className="w-min mx-auto bg-gradient-to-r from-blue-600 via-blue-800 to-blue-700 text-white text-bold rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 py-2 px-3"
+        >
+          <Compass className="h-4 w-4" />
+          <span className="text-sm font-semibold">Map</span>
+        </button>
+      </div>
+
+      {/* Filter Modal */}
+      {isFilterOpen && (
+        <div className="fixed inset-0 z-[100]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50" 
+            onClick={() => setIsFilterOpen(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-4 border-b">
+              <h2 className="text-lg font-bold text-gray-900">Filters and sorting</h2>
+              <button 
+                onClick={() => {
+                  setActiveFilters(new Set())
+                  setSortBy(null)
+                  setSelectedCuisine(null)
+                }}
+                className="text-green-600 font-medium text-sm"
+              >
+                Clear all
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div className="flex flex-1 overflow-hidden">
+              {/* Left Sidebar - Tabs */}
+              <div className="w-24 sm:w-28 bg-gray-50 border-r flex flex-col">
+                {[
+                  { id: 'sort', label: 'Sort By', icon: ArrowDownUp },
+                  { id: 'time', label: 'Time', icon: Timer },
+                  { id: 'rating', label: 'Rating', icon: Star },
+                  { id: 'distance', label: 'Distance', icon: MapPin },
+                  { id: 'price', label: 'Dish Price', icon: IndianRupee },
+                  { id: 'cuisine', label: 'Cuisine', icon: UtensilsCrossed },
+                ].map((tab) => {
+                  const Icon = tab.icon
+                  const isActive = activeFilterTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveFilterTab(tab.id)}
+                      className={`flex flex-col items-center gap-1 py-4 px-2 text-center relative transition-colors ${
+                        isActive ? 'bg-white text-green-600' : 'text-gray-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      {isActive && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-600 rounded-r" />
+                      )}
+                      <Icon className="h-5 w-5" strokeWidth={1.5} />
+                      <span className="text-xs font-medium leading-tight">{tab.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              
+              {/* Right Content Area - Scrollable */}
+              <div ref={rightContentRef} className="flex-1 overflow-y-auto p-4">
+                {/* Sort By Tab */}
+                {activeFilterTab === 'sort' && (
+                  <div className="space-y-4 mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Sort by</h3>
+                    <div className="flex flex-col gap-3">
+                      {[
+                        { id: null, label: 'Relevance' },
+                        { id: 'rating-high', label: 'Rating: High to Low' },
+                        { id: 'rating-low', label: 'Rating: Low to High' },
+                      ].map((option) => (
+                        <button
+                          key={option.id || 'relevance'}
+                          onClick={() => setSortBy(option.id)}
+                          className={`px-4 py-3 rounded-xl border text-left transition-colors ${
+                            sortBy === option.id
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-gray-200 hover:border-green-500'
+                          }`}
+                        >
+                          <span className={`text-sm font-medium ${sortBy === option.id ? 'text-green-600' : 'text-gray-700'}`}>
+                            {option.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Time Tab */}
+                {activeFilterTab === 'time' && (
+                  <div className="space-y-4 mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Delivery Time</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button 
+                        onClick={() => toggleFilter('delivery-under-30')}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has('delivery-under-30') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-30') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
+                        <span className={`text-sm font-medium ${activeFilters.has('delivery-under-30') ? 'text-green-600' : 'text-gray-700'}`}>Under 30 mins</span>
+                      </button>
+                      <button 
+                        onClick={() => toggleFilter('delivery-under-45')}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has('delivery-under-45') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-45') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
+                        <span className={`text-sm font-medium ${activeFilters.has('delivery-under-45') ? 'text-green-600' : 'text-gray-700'}`}>Under 45 mins</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Rating Tab */}
+                {activeFilterTab === 'rating' && (
+                  <div className="space-y-4 mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Restaurant Rating</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button 
+                        onClick={() => toggleFilter('rating-35-plus')}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has('rating-35-plus') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <Star className={`h-6 w-6 ${activeFilters.has('rating-35-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
+                        <span className={`text-sm font-medium ${activeFilters.has('rating-35-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 3.5+</span>
+                      </button>
+                      <button 
+                        onClick={() => toggleFilter('rating-4-plus')}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has('rating-4-plus') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <Star className={`h-6 w-6 ${activeFilters.has('rating-4-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
+                        <span className={`text-sm font-medium ${activeFilters.has('rating-4-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 4.0+</span>
+                      </button>
+                      <button 
+                        onClick={() => toggleFilter('rating-45-plus')}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has('rating-45-plus') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <Star className={`h-6 w-6 ${activeFilters.has('rating-45-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
+                        <span className={`text-sm font-medium ${activeFilters.has('rating-45-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 4.5+</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Distance Tab */}
+                {activeFilterTab === 'distance' && (
+                  <div className="space-y-4 mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Distance</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button 
+                        onClick={() => toggleFilter('distance-under-1km')}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has('distance-under-1km') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-1km') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
+                        <span className={`text-sm font-medium ${activeFilters.has('distance-under-1km') ? 'text-green-600' : 'text-gray-700'}`}>Under 1 km</span>
+                      </button>
+                      <button 
+                        onClick={() => toggleFilter('distance-under-2km')}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                          activeFilters.has('distance-under-2km') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-2km') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
+                        <span className={`text-sm font-medium ${activeFilters.has('distance-under-2km') ? 'text-green-600' : 'text-gray-700'}`}>Under 2 km</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Price Tab */}
+                {activeFilterTab === 'price' && (
+                  <div className="space-y-4 mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Dish Price</h3>
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={() => toggleFilter('price-under-200')}
+                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${
+                          activeFilters.has('price-under-200') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <span className={`text-sm font-medium ${activeFilters.has('price-under-200') ? 'text-green-600' : 'text-gray-700'}`}>Under ₹200</span>
+                      </button>
+                      <button 
+                        onClick={() => toggleFilter('price-under-500')}
+                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${
+                          activeFilters.has('price-under-500') 
+                            ? 'border-green-500 bg-green-50' 
+                            : 'border-gray-200 hover:border-green-500'
+                        }`}
+                      >
+                        <span className={`text-sm font-medium ${activeFilters.has('price-under-500') ? 'text-green-600' : 'text-gray-700'}`}>Under ₹500</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cuisine Tab */}
+                {activeFilterTab === 'cuisine' && (
+                  <div className="space-y-4 mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Cuisine</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {['Continental', 'Italian', 'Asian', 'Indian', 'Chinese', 'American', 'Seafood', 'Cafe'].map((cuisine) => (
+                        <button
+                          key={cuisine}
+                          onClick={() => setSelectedCuisine(selectedCuisine === cuisine ? null : cuisine)}
+                          className={`px-4 py-3 rounded-xl border text-center transition-colors ${
+                            selectedCuisine === cuisine
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-gray-200 hover:border-green-500'
+                          }`}
+                        >
+                          <span className={`text-sm font-medium ${selectedCuisine === cuisine ? 'text-green-600' : 'text-gray-700'}`}>
+                            {cuisine}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Footer */}
+            <div className="flex items-center gap-4 px-4 py-4 border-t bg-white">
+              <button 
+                onClick={() => setIsFilterOpen(false)}
+                className="flex-1 py-3 text-center font-semibold text-gray-700"
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => setIsFilterOpen(false)}
+                className={`flex-1 py-3 font-semibold rounded-xl transition-colors ${
+                  activeFilters.size > 0 || sortBy || selectedCuisine
+                    ? 'bg-green-600 text-white hover:bg-green-700'
+                    : 'bg-gray-200 text-gray-500'
+                }`}
+              >
+                {activeFilters.size > 0 || sortBy || selectedCuisine
+                  ? `Show ${filteredRestaurants.length} results`
+                  : 'Show results'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bank Offer Details Modal */}
+      <AnimatePresence>
+        {selectedBankOffer && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/50 z-[110]"
+              onClick={() => setSelectedBankOffer(null)}
+            />
+            
+            {/* Modal */}
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ 
+                type: 'spring',
+                damping: 25,
+                stiffness: 200
+              }}
+              className="sticky bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[111] max-h-[85vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-4 flex items-center justify-between rounded-t-3xl">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900">Offer details</h2>
+                <button
+                  onClick={() => setSelectedBankOffer(null)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-600" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="px-4 sm:px-6 py-4 sm:py-6">
+                {/* Bank Logo and Name */}
+                <div className="flex items-center gap-3 mb-4">
+                  <img
+                    src={selectedBankOffer.logo}
+                    alt={selectedBankOffer.name}
+                    className="h-8 sm:h-10 object-contain"
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                    }}
+                  />
+                  <span className="text-base sm:text-lg font-semibold text-gray-900">{selectedBankOffer.name}</span>
+                </div>
+
+                {/* Offer Text */}
+                <p className="text-base sm:text-lg font-bold text-gray-900 mb-2">
+                  {selectedBankOffer.offerText}
+                </p>
+
+                {/* Minimum Amount */}
+                <p className="text-sm sm:text-base text-gray-600 mb-6">
+                  Valid on final payable amount of ₹{selectedBankOffer.minAmount} or more
+                </p>
+
+                {/* Terms and Conditions */}
+                <div className="space-y-3">
+                  {selectedBankOffer.terms.map((term, index) => (
+                    <div key={index} className="flex items-start gap-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <Check className="h-5 w-5 text-green-600" strokeWidth={2.5} />
+                      </div>
+                      <p className="text-sm sm:text-base text-gray-700 leading-relaxed">{term}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </AnimatedPage>
+  )
+}
+

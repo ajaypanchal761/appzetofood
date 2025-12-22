@@ -1,0 +1,5149 @@
+import { useState, useMemo, useRef, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import { motion, AnimatePresence } from "framer-motion"
+import { DateRangeCalendar } from "@/components/ui/date-range-calendar"
+import { Bell, HelpCircle, Menu, Search, TrendingUp, BarChart3, Users, CalendarRange, Download, MoreVertical, ChevronLeft, ChevronRight, Wand2, X } from "lucide-react"
+import {
+  FaPhone,
+  FaHistory,
+  FaExclamationTriangle,
+  FaStar,
+  FaCommentDots,
+  FaLink,
+  FaCog,
+  FaThLarge
+} from "react-icons/fa"
+import {
+  AreaChart,
+  Area,
+  Line,
+  Bar,
+  ComposedChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  LineChart,
+} from "recharts"
+import { Play } from "lucide-react"
+import BottomNavOrders from "../components/BottomNavOrders"
+
+export default function ToHub() {
+  const navigate = useNavigate()
+  const topTabs = [
+    { id: "my-feed", label: "My feed" },
+    { id: "sales", label: "Sales" },
+    { id: "funnel", label: "Funnel" },
+    { id: "service-quality", label: "Service quality" },
+    { id: "kitchen-efficiency", label: "Kitchen efficiency" },
+    { id: "customers", label: "Customers" },
+    { id: "offers", label: "Offers" },
+    { id: "ads", label: "Ads" },
+  ]
+  const [activeTopTab, setActiveTopTab] = useState("my-feed")
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const topTabBarRef = useRef(null)
+  const contentContainerRef = useRef(null)
+  const touchStartX = useRef(0)
+  const touchEndX = useRef(0)
+  const touchStartY = useRef(0)
+  const isSwiping = useRef(false)
+  const mouseStartX = useRef(0)
+  const mouseEndX = useRef(0)
+  const isMouseDown = useRef(false)
+  
+  // Learn more popup states
+  const [showLearnMoreButton, setShowLearnMoreButton] = useState(null) // cardId
+  const [learnMorePopupOpen, setLearnMorePopupOpen] = useState(false)
+  const [selectedCardInfo, setSelectedCardInfo] = useState(null)
+
+  // Card definitions data
+  const cardDefinitions = {
+    sales: {
+      title: "Sales",
+      metrics: [
+        { name: "Net sales", definition: "Total revenue from delivered orders after deductions" },
+        { name: "Orders delivered", definition: "Number of successfully completed customer orders" },
+        { name: "Avg. order value", definition: "Average amount spent per order by customers" }
+      ]
+    },
+    funnel: {
+      title: "Funnel",
+      metrics: [
+        { name: "Impressions", definition: "Times your restaurant appeared in search results" },
+        { name: "Menu opens", definition: "Number of customers who viewed your menu" },
+        { name: "Orders placed", definition: "Total orders received from customers" }
+      ]
+    },
+    "service-quality": {
+      title: "Service quality",
+      metrics: [
+        { name: "Orders rejected", definition: "Orders you declined or couldn't fulfill" },
+        { name: "Poor rated orders", definition: "Orders with low customer satisfaction ratings" },
+        { name: "Complaints", definition: "Customer complaints about food or service" },
+        { name: "Availability", definition: "Percentage of time your outlet was online" }
+      ]
+    },
+    "kitchen-efficiency": {
+      title: "Kitchen efficiency",
+      metrics: [
+        { name: "Avg. prep. time", definition: "Average time taken to prepare orders" },
+        { name: "Order confirmation time", definition: "Time taken to accept customer orders" },
+        { name: "Order ready by time", definition: "Orders ready within promised time" },
+        { name: "Unattended orders", definition: "Orders not acknowledged for extended time" }
+      ]
+    },
+    customers: {
+      title: "Customers",
+      metrics: [
+        { name: "New customers", definition: "First-time visitors ordering from your restaurant" },
+        { name: "Repeat customers", definition: "Returning customers who ordered before" },
+        { name: "Lapsed customers", definition: "Previous customers who haven't ordered recently" }
+      ]
+    },
+    "orders-by-mealtime": {
+      title: "Orders by mealtime",
+      metrics: [
+        { name: "Breakfast", definition: "Morning orders between 6 AM to 11 AM" },
+        { name: "Lunch", definition: "Afternoon orders between 11 AM to 4 PM" },
+        { name: "Snacks", definition: "Evening orders between 4 PM to 7 PM" },
+        { name: "Dinner", definition: "Night orders between 7 PM onwards" }
+      ]
+    },
+    offers: {
+      title: "Offers",
+      metrics: [
+        { name: "Discount given", definition: "Total amount discounted on orders" },
+        { name: "Orders from offers", definition: "Orders placed using your active offers" },
+        { name: "Effective discount %", definition: "Average discount percentage given to customers" },
+        { name: "Offer orders %", definition: "Percentage of total orders using offers" }
+      ]
+    },
+    ads: {
+      title: "Ads",
+      metrics: [
+        { name: "Ad impressions", definition: "Times your ad was shown to customers" },
+        { name: "Orders from ads", definition: "Orders received through ad campaigns" },
+        { name: "Ad spends", definition: "Total amount spent on advertising" },
+        { name: "ROI", definition: "Return on investment from ad spending" }
+      ]
+    },
+    "sales-orders": {
+      title: "Sales & orders",
+      metrics: [
+        { name: "Net sales", definition: "Total revenue from delivered orders" },
+        { name: "Orders delivered", definition: "Successfully completed customer orders" }
+      ]
+    },
+    "avg-order-value": {
+      title: "Average order value",
+      metrics: [
+        { name: "Avg. order value", definition: "Average amount spent per order" }
+      ]
+    },
+    "find-you": {
+      title: "Where customers find you",
+      metrics: [
+        { name: "Search", definition: "Found through search queries" },
+        { name: "Category", definition: "Found through category browsing" },
+        { name: "Previously ordered", definition: "Found in past orders section" }
+      ]
+    },
+    impressions: {
+      title: "Impressions",
+      metrics: [
+        { name: "Total impressions", definition: "Total times shown in app" }
+      ]
+    },
+    "impressions-by-customer": {
+      title: "Impressions by customer type",
+      metrics: [
+        { name: "New customers", definition: "Impressions to first-time users" },
+        { name: "Repeat customers", definition: "Impressions to returning users" },
+        { name: "Lapsed customers", definition: "Impressions to inactive users" }
+      ]
+    },
+    "menu-opens": {
+      title: "Menu opens",
+      metrics: [
+        { name: "Total menu opens", definition: "Times menu was viewed" }
+      ]
+    },
+    "menu-opens-by-customer": {
+      title: "Menu opens by customer type",
+      metrics: [
+        { name: "New customers", definition: "Menu views by first-timers" },
+        { name: "Repeat customers", definition: "Menu views by returning users" },
+        { name: "Lapsed customers", definition: "Menu views by inactive users" }
+      ]
+    },
+    "orders-placed": {
+      title: "Orders placed",
+      metrics: [
+        { name: "Total orders", definition: "All orders received" }
+      ]
+    },
+    "orders-by-customer": {
+      title: "Orders placed by customer type",
+      metrics: [
+        { name: "New customers", definition: "Orders from first-timers" },
+        { name: "Repeat customers", definition: "Orders from returning users" },
+        { name: "Lapsed customers", definition: "Orders from inactive users" }
+      ]
+    }
+  }
+
+  const handleLearnMoreClick = (cardId, e) => {
+    e.stopPropagation()
+    setSelectedCardInfo(cardDefinitions[cardId])
+    setLearnMorePopupOpen(true)
+    setShowLearnMoreButton(null)
+  }
+
+  const scrollToTopTab = (index) => {
+    if (topTabBarRef.current) {
+      const buttons = topTabBarRef.current.querySelectorAll("button")
+      if (buttons[index]) {
+        const button = buttons[index]
+        const container = topTabBarRef.current
+        const buttonLeft = button.offsetLeft
+        const buttonWidth = button.offsetWidth
+        const containerWidth = container.offsetWidth
+        const scrollLeft = buttonLeft - containerWidth / 2 + buttonWidth / 2
+
+        container.scrollTo({
+          left: scrollLeft,
+          behavior: "smooth",
+        })
+      }
+    }
+  }
+
+  useEffect(() => {
+    const index = topTabs.findIndex((tab) => tab.id === activeTopTab)
+    if (index >= 0) {
+      requestAnimationFrame(() => scrollToTopTab(index))
+    }
+  }, [activeTopTab])
+
+  // Prevent body scroll when popup is open
+  useEffect(() => {
+    if (learnMorePopupOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [learnMorePopupOpen])
+
+  // Handle swipe gestures with smooth animations
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+    touchEndX.current = e.touches[0].clientX
+    isSwiping.current = false
+  }
+
+  const handleTouchMove = (e) => {
+    if (!isSwiping.current) {
+      const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current)
+      const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current)
+      
+      // Determine if this is a horizontal swipe
+      if (deltaX > deltaY && deltaX > 10) {
+        isSwiping.current = true
+      }
+    }
+    
+    if (isSwiping.current) {
+      touchEndX.current = e.touches[0].clientX
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (!isSwiping.current) {
+      touchStartX.current = 0
+      touchEndX.current = 0
+      return
+    }
+
+    const swipeDistance = touchStartX.current - touchEndX.current
+    const minSwipeDistance = 50
+    const swipeVelocity = Math.abs(swipeDistance)
+
+    if (swipeVelocity > minSwipeDistance && !isTransitioning) {
+      const currentIndex = topTabs.findIndex(tab => tab.id === activeTopTab)
+      let newIndex = currentIndex
+      
+      if (swipeDistance > 0 && currentIndex < topTabs.length - 1) {
+        // Swipe left - go to next tab (right side)
+        newIndex = currentIndex + 1
+      } else if (swipeDistance < 0 && currentIndex > 0) {
+        // Swipe right - go to previous tab (left side)
+        newIndex = currentIndex - 1
+      }
+
+      if (newIndex !== currentIndex) {
+        setIsTransitioning(true)
+        
+        // Smooth transition with animation
+        setTimeout(() => {
+          setActiveTopTab(topTabs[newIndex].id)
+          
+          // Reset transition state after animation
+          setTimeout(() => {
+            setIsTransitioning(false)
+          }, 300)
+        }, 50)
+      }
+    }
+    
+    // Reset touch positions
+    touchStartX.current = 0
+    touchEndX.current = 0
+    touchStartY.current = 0
+    isSwiping.current = false
+  }
+
+  const quickLinks = [
+    { id: "growth-helpline", label: "Growth helpline", icon: FaPhone, route: "tel:+911111111111", isPhone: true },
+    { id: "order-history", label: "Order history", icon: FaHistory, route: "/restaurant/orders/all" },
+    { id: "complaints", label: "Complaints", icon: FaExclamationTriangle, route: "/restaurant/feedback?tab=complaints" },
+    { id: "reviews", label: "Reviews", icon: FaStar, route: "/restaurant/feedback" },
+    { id: "feedback", label: "Share your feedback", icon: FaCommentDots, route: "/restaurant/Share-Feedback" },
+    { id: "smart-link", label: "Smart link", icon: FaLink, route: "/restaurant/smart-link" },
+    { id: "settings", label: "Settings", icon: FaCog, route: "/restaurant/delivery-settings" },
+    { id: "show-all", label: "Show all", icon: FaThLarge, route: "/restaurant/explore" },
+  ]
+
+  const [chartData, setChartData] = useState([
+    { hour: "12am", orders: 2, sales: 320 },
+    { hour: "4am", orders: 1, sales: 140 },
+    { hour: "8am", orders: 4, sales: 560 },
+    { hour: "12pm", orders: 6, sales: 980 },
+    { hour: "4pm", orders: 3, sales: 420 },
+    { hour: "8pm", orders: 5, sales: 760 },
+    { hour: "12am", orders: 2, sales: 300 },
+  ])
+
+  const [totalSales, setTotalSales] = useState("₹ 3,480")
+  const [totalOrders, setTotalOrders] = useState("23")
+  const [funnelFindView, setFunnelFindView] = useState("menu")
+  const [impressionsCustomerView, setImpressionsCustomerView] = useState("affinity")
+  const [menuOpensCustomerView, setMenuOpensCustomerView] = useState("affinity")
+  const [ordersPlacedCustomerView, setOrdersPlacedCustomerView] = useState("affinity")
+  const [complaintsView, setComplaintsView] = useState("all")
+  const [rejectionsReasonsView] = useState("all")
+  const [complaintsTabView, setComplaintsTabView] = useState("all")
+  const [isKptVideoOpen, setIsKptVideoOpen] = useState(false)
+  const [offersCustomerView, setOffersCustomerView] = useState("affinity")
+  const [adImpressionsCustomerView, setAdImpressionsCustomerView] = useState("affinity")
+  const [impressionsData] = useState([
+    { hour: "12am", impressions: 1 },
+    { hour: "4am", impressions: 11 },
+    { hour: "8am", impressions: 0 },
+    { hour: "12pm", impressions: 4 },
+    { hour: "4pm", impressions: 2 },
+    { hour: "8pm", impressions: 5 },
+    { hour: "12am", impressions: 1 },
+  ])
+  const [rejectedOrdersData] = useState([
+    { hour: "12am", orders: 0, sales: 0 },
+    { hour: "4am", orders: 1, sales: 120 },
+    { hour: "8am", orders: 0, sales: 0 },
+    { hour: "12pm", orders: 0, sales: 0 },
+    { hour: "4pm", orders: 1, sales: 90 },
+    { hour: "8pm", orders: 0, sales: 0 },
+    { hour: "12am", orders: 0, sales: 0 },
+  ])
+  const [poorRatedData] = useState([
+    { hour: "12am", value: 0 },
+    { hour: "4am", value: 0 },
+    { hour: "8am", value: 0 },
+    { hour: "12pm", value: 0 },
+    { hour: "4pm", value: 0 },
+    { hour: "8pm", value: 0 },
+    { hour: "12am", value: 0 },
+  ])
+  const [complaintsData] = useState([
+    { hour: "12am", value: 0 },
+    { hour: "4am", value: 0 },
+    { hour: "8am", value: 0 },
+    { hour: "12pm", value: 0 },
+    { hour: "4pm", value: 0 },
+    { hour: "8pm", value: 0 },
+    { hour: "12am", value: 0 },
+  ])
+  const [availabilityData] = useState([
+    { hour: "12am", online: 1, offline: 0 },
+    { hour: "4am", online: 1, offline: 0 },
+    { hour: "8am", online: 1, offline: 0 },
+    { hour: "12pm", online: 1, offline: 0 },
+    { hour: "4pm", online: 1, offline: 0 },
+    { hour: "8pm", online: 1, offline: 0 },
+    { hour: "12am", online: 1, offline: 0 },
+  ])
+  const [offersWeeklyData] = useState([
+    { day: "M", totalGross: 0, offersGross: 0, discountGiven: 0, effectiveDiscount: 0, ordersFromOffers: 0, totalOrders: 0 },
+    { day: "T", totalGross: 0, offersGross: 0, discountGiven: 0, effectiveDiscount: 0, ordersFromOffers: 0, totalOrders: 0 },
+    { day: "W", totalGross: 0, offersGross: 0, discountGiven: 0, effectiveDiscount: 0, ordersFromOffers: 0, totalOrders: 0 },
+    { day: "T", totalGross: 0, offersGross: 0, discountGiven: 0, effectiveDiscount: 0, ordersFromOffers: 0, totalOrders: 0 },
+    { day: "F", totalGross: 0, offersGross: 0, discountGiven: 0, effectiveDiscount: 0, ordersFromOffers: 0, totalOrders: 0 },
+    { day: "S", totalGross: 0, offersGross: 0, discountGiven: 0, effectiveDiscount: 0, ordersFromOffers: 0, totalOrders: 0 },
+    { day: "S", totalGross: 0, offersGross: 0, discountGiven: 0, effectiveDiscount: 0, ordersFromOffers: 0, totalOrders: 0 },
+  ])
+  const [adsSalesWeeklyData] = useState([
+    { day: "M", salesFromAds: 0, totalSales: 0 },
+    { day: "T", salesFromAds: 0, totalSales: 0 },
+    { day: "W", salesFromAds: 0, totalSales: 0 },
+    { day: "T", salesFromAds: 0, totalSales: 0 },
+    { day: "F", salesFromAds: 0, totalSales: 0 },
+    { day: "S", salesFromAds: 0, totalSales: 0 },
+    { day: "S", salesFromAds: 0, totalSales: 0 },
+  ])
+  const [adsSpendsROIWeeklyData] = useState([
+    { day: "M", adSpends: 0, roi: 0 },
+    { day: "T", adSpends: 0, roi: 0 },
+    { day: "W", adSpends: 0, roi: 0 },
+    { day: "T", adSpends: 0, roi: 0 },
+    { day: "F", adSpends: 0, roi: 0 },
+    { day: "S", adSpends: 0, roi: 0 },
+    { day: "S", adSpends: 0, roi: 0 },
+  ])
+  const [percentageOrdersFromAdsWeeklyData] = useState([
+    { day: "M", percentageOrdersFromAds: 0 },
+    { day: "T", percentageOrdersFromAds: 0 },
+    { day: "W", percentageOrdersFromAds: 0 },
+    { day: "T", percentageOrdersFromAds: 0 },
+    { day: "F", percentageOrdersFromAds: 0 },
+    { day: "S", percentageOrdersFromAds: 0 },
+    { day: "S", percentageOrdersFromAds: 0 },
+  ])
+  const [adImpressionsWeeklyData] = useState([
+    { day: "M", adImpressions: 0 },
+    { day: "T", adImpressions: 0 },
+    { day: "W", adImpressions: 0 },
+    { day: "T", adImpressions: 0 },
+    { day: "F", adImpressions: 0 },
+    { day: "S", adImpressions: 0 },
+    { day: "S", adImpressions: 0 },
+  ])
+  const [adCTRM2OWeeklyData] = useState([
+    { day: "M", adCTR: 0, adM2O: 0 },
+    { day: "T", adCTR: 0, adM2O: 0 },
+    { day: "W", adCTR: 0, adM2O: 0 },
+    { day: "T", adCTR: 0, adM2O: 0 },
+    { day: "F", adCTR: 0, adM2O: 0 },
+    { day: "S", adCTR: 0, adM2O: 0 },
+    { day: "S", adCTR: 0, adM2O: 0 },
+  ])
+  const discountTypeBreakup = [
+    { title: "Promo discounts", value: "₹0", change: "- 0%", color: "#111827" },
+    { title: "Dish discounts", value: "₹0", change: "- 0%", color: "#ef4444" },
+    { title: "Buy 1 Get 1, etc.", value: "₹0", change: "- 0%", color: "#2563eb" },
+    { title: "Freebie", value: "₹0", change: "- 0%", color: "#f59e0b" },
+    { title: "Gold discount", value: "₹0", change: "- 0%", color: "#10b981" },
+    { title: "Winback discount", value: "₹0", change: "- 0%", color: "#d1d5db" },
+  ]
+  const offersCustomerAffinity = [
+    { title: "New customers", sub: "No orders in last 90 days", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Repeat customers", sub: "Ordered in last 60 days", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Lapsed customers", sub: "Last order 60 to 90 days ago", value: "0", change: "- 0%", color: "#2563eb" },
+  ]
+  const offersCustomerSpending = [
+    { title: "Mass market customers", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Mid premium customers", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Premium customers", value: "0", change: "- 0%", color: "#2563eb" },
+  ]
+  const adsBreakup = [
+    { title: "Visit pack", value: "0%", change: "- 0%", color: "#111827" },
+    { title: "Video ads", value: "0%", change: "- 0%", color: "#ef4444" },
+    { title: "Branding on Search (BoS)", value: "0%", change: "- 0%", color: "#2563eb" },
+    { title: "Others", value: "0%", change: "- 0%", color: "#f59e0b" },
+  ]
+  const adImpressionsCustomerAffinity = [
+    { title: "New customers", sub: "No orders in last 365 days", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Repeat customers", sub: "Ordered in last 60 days", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Lapsed customers", sub: "Last order 60 to 365 days ago", value: "0", change: "- 0%", color: "#2563eb" },
+  ]
+  const adImpressionsCustomerSpending = [
+    { title: "Mass market customers", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Mid premium customers", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Premium customers", value: "0", change: "- 0%", color: "#2563eb" },
+  ]
+  const [menuOpensData] = useState([
+    { hour: "12am", opens: 0, i2m: 0 },
+    { hour: "4am", opens: 2, i2m: 0.2 },
+    { hour: "8am", opens: 0, i2m: 0 },
+    { hour: "12pm", opens: 0, i2m: 0 },
+    { hour: "4pm", opens: 1, i2m: 0.6 },
+    { hour: "8pm", opens: 1, i2m: 1.1 },
+    { hour: "12am", opens: 0, i2m: 0.1 },
+  ])
+  const [isDateSelectorOpen, setIsDateSelectorOpen] = useState(false)
+  const [isCustomDateOpen, setIsCustomDateOpen] = useState(false)
+  const [selectedDateRange, setSelectedDateRange] = useState("yesterday")
+  const [customDateRange, setCustomDateRange] = useState({ start: null, end: null })
+  const [isDateLoading, setIsDateLoading] = useState(false)
+  const applyDummyData = (rangeId) => {
+    setIsDateLoading(true)
+    setTimeout(() => {
+      const base = rangeId === "today" ? 300 : rangeId === "thisWeek" ? 1200 : 800
+      const orders = Math.max(1, Math.floor(base / 50))
+      setChartData([
+        { hour: "12am", orders: Math.floor(orders * 0.1), sales: base * 0.1 },
+        { hour: "4am", orders: Math.floor(orders * 0.05), sales: base * 0.05 },
+        { hour: "8am", orders: Math.floor(orders * 0.2), sales: base * 0.2 },
+        { hour: "12pm", orders: Math.floor(orders * 0.25), sales: base * 0.25 },
+        { hour: "4pm", orders: Math.floor(orders * 0.2), sales: base * 0.2 },
+        { hour: "8pm", orders: Math.floor(orders * 0.15), sales: base * 0.15 },
+        { hour: "12am", orders: Math.floor(orders * 0.05), sales: base * 0.05 },
+      ])
+      setTotalSales(`₹ ${base.toLocaleString("en-IN")}`)
+      setTotalOrders(orders.toString())
+      setIsDateLoading(false)
+    }, 450)
+  }
+
+  const handleDateRangeSelect = (id) => {
+    if (id === "custom") {
+      setIsCustomDateOpen(true)
+      setIsDateSelectorOpen(false)
+      return
+    }
+    setSelectedDateRange(id)
+    setIsDateSelectorOpen(false)
+    applyDummyData(id)
+  }
+
+  const handleCustomDateApply = () => {
+    if (customDateRange.start && customDateRange.end) {
+      setSelectedDateRange("custom")
+      setIsCustomDateOpen(false)
+      applyDummyData("custom")
+    }
+  }
+
+  const formatDateShort = (date) =>
+    date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+  const formatDateLong = (date) =>
+    date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })
+
+  const getDateRanges = () => {
+    const now = new Date()
+    const today = new Date(now)
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+
+    const thisWeekStart = new Date(now)
+    thisWeekStart.setDate(now.getDate() - now.getDay() + 1)
+    const thisWeekEnd = new Date(thisWeekStart)
+    thisWeekEnd.setDate(thisWeekStart.getDate() + 6)
+ 
+    const lastWeekEnd = new Date(thisWeekStart)
+    lastWeekEnd.setDate(thisWeekStart.getDate() - 1)
+    const lastWeekStart = new Date(lastWeekEnd)
+    lastWeekStart.setDate(lastWeekEnd.getDate() - 6)
+
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+
+    const last5DaysEnd = new Date(now)
+    const last5DaysStart = new Date(now)
+    last5DaysStart.setDate(now.getDate() - 4)
+
+    return {
+      today,
+      yesterday,
+      thisWeekStart,
+      thisWeekEnd,
+      lastWeekStart,
+      lastWeekEnd,
+      thisMonthStart,
+      thisMonthEnd,
+      lastMonthStart,
+      lastMonthEnd,
+      last5DaysStart,
+      last5DaysEnd,
+    }
+  }
+
+  const selectedRangeLabel = useMemo(() => {
+    const r = getDateRanges()
+    switch (selectedDateRange) {
+      case "today":
+        return `Today • ${formatDateLong(r.today)}`
+      case "yesterday":
+        return `Yesterday • ${formatDateLong(r.yesterday)}`
+      case "thisWeek":
+        return `This week • ${formatDateShort(r.thisWeekStart)} - ${formatDateShort(r.thisWeekEnd)}`
+      case "lastWeek":
+        return `Last week • ${formatDateShort(r.lastWeekStart)} - ${formatDateShort(r.lastWeekEnd)}`
+      case "thisMonth":
+        return `This month • ${formatDateShort(r.thisMonthStart)} - ${formatDateShort(r.thisMonthEnd)}`
+      case "lastMonth":
+        return `Last month • ${formatDateShort(r.lastMonthStart)} - ${formatDateShort(r.lastMonthEnd)}`
+      case "last5days":
+        return `Last 5 days • ${formatDateShort(r.last5DaysStart)} - ${formatDateShort(r.last5DaysEnd)}`
+      case "custom":
+        if (customDateRange.start && customDateRange.end) {
+          return `${formatDateShort(customDateRange.start)} - ${formatDateShort(customDateRange.end)}`
+        }
+        return "Custom range"
+      default:
+        return "Yesterday"
+    }
+  }, [selectedDateRange, customDateRange])
+  const funnelMetrics = [
+    { id: "impressions", label: "Impressions (I)", value: 74, secondary: "12M", change: "8.1%", bar: 70, subLeft: "- 0%", subRight: "- 0%" },
+    { id: "menu-opens", label: "Menu opens (M)", value: 6, secondary: "M2C", change: "16.7%", bar: 45, subLeft: "- 0%", subRight: "- 0%" },
+    { id: "cart-builds", label: "Cart builds (C)", value: 1, secondary: "C2O", change: "0%", bar: 15, subLeft: "- 0%", subRight: "- 0%" },
+    { id: "orders-placed", label: "Orders placed (O)", value: 0, secondary: "Delivered", change: "0%", bar: 5, subLeft: "- 0%", subRight: "- 0%" },
+  ]
+  const serviceQualityMetrics = [
+    { title: "Rejected orders", value: "0%", change: "- 0%", sub: "Rejected sales ₹0" },
+    { title: "Complaints", value: "0%", change: "- 0%", sub: "0% refunded" },
+    { title: "Poor rated orders", value: "0%", change: "- 0%", sub: "1 or 2 star rated" },
+    { title: "Online time %", value: "100%", change: "- 0%", sub: "Est. lost sales ₹0" },
+  ]
+  const kitchenEfficiencyMetrics = [
+    { title: "Avg. kitchen preparation time", value: "0 sec", change: "- 0%", sub: "" },
+    { title: "KPT delayed orders", value: "0%", change: "- 0%", sub: "0 min avg. delay" },
+    { title: "Food order ready accuracy", value: "0%", change: "- 0%", sub: "" },
+    { title: "Orders with high rider handover time", value: "0", change: "- 0%", sub: "" },
+  ]
+  const findSourcesMetrics = [
+    { title: "Dish/cuisine search", color: "#111827", impressions: "0", menu: "0", change: "- 0%" },
+    { title: "Recommended for you", color: "#ef4444", impressions: "0", menu: "0", change: "- 0%" },
+    { title: "Restaurant search", color: "#2563eb", impressions: "0", menu: "0", change: "- 0%" },
+    { title: "Home page listing", color: "#f59e0b", impressions: "0", menu: "0", change: "- 0%" },
+    { title: "Offers page", color: "#10b981", impressions: "0", menu: "0", change: "- 0%" },
+    { title: "Campaign page", color: "#d1d5db", impressions: "0", menu: "0", change: "- 0%" },
+    { title: "Others", color: "#4b5563", impressions: "0", menu: "0", change: "- 0%" },
+  ]
+  const impressionsCustomerTypes = {
+    affinity: [
+      { title: "Mass market customers", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Mid premium customers", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "Premium customers", color: "#2563eb", value: "0", change: "- 0%" },
+    ],
+    spending: [
+      { title: "Mass market customers", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Mid premium customers", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "Premium customers", color: "#2563eb", value: "0", change: "- 0%" },
+    ],
+  }
+  const menuOpensCustomerTypes = {
+    affinity: [
+      { title: "New customers", sub: "No orders in last 365 days", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Repeat customers", sub: "Ordered in last 60 days", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "Lapsed customers", sub: "Last order 60 to 365 days ago", color: "#2563eb", value: "0", change: "- 0%" },
+    ],
+    spending: [
+      { title: "Value seekers", sub: "Orders under ₹300", color: "#111827", value: "2", change: "- 0%" },
+      { title: "Mid spenders", sub: "Orders ₹300 - ₹800", color: "#ef4444", value: "1", change: "- 0%" },
+      { title: "High spenders", sub: "Orders above ₹800", color: "#2563eb", value: "0", change: "- 0%" },
+    ],
+  }
+  const ordersPlacedCustomerTypes = {
+    affinity: [
+      { title: "New customers", sub: "No orders in last 365 days", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Repeat customers", sub: "Ordered in last 60 days", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "Lapsed customers", sub: "Last order 60 to 365 days ago", color: "#2563eb", value: "0", change: "- 0%" },
+    ],
+    spending: [
+      { title: "Value seekers", sub: "Orders under ₹300", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Mid spenders", sub: "Orders ₹300 - ₹800", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "High spenders", sub: "Orders above ₹800", color: "#2563eb", value: "0", change: "- 0%" },
+    ],
+  }
+  const complaintsReasons = {
+    all: [
+      { title: "Poor packaging & spillage", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Poor taste & quality", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "Wrong item delivered", color: "#2563eb", value: "0", change: "- 0%" },
+      { title: "Missing items", color: "#f59e0b", value: "0", change: "- 0%" },
+    ],
+    refunded: [
+      { title: "Poor packaging & spillage", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Poor taste & quality", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "Wrong item delivered", color: "#2563eb", value: "0", change: "- 0%" },
+      { title: "Missing items", color: "#f59e0b", value: "0", change: "- 0%" },
+    ],
+    resolved: [
+      { title: "Poor packaging & spillage", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Poor taste & quality", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "Wrong item delivered", color: "#2563eb", value: "0", change: "- 0%" },
+      { title: "Missing items", color: "#f59e0b", value: "0", change: "- 0%" },
+    ],
+    winback: [
+      { title: "Poor packaging & spillage", color: "#111827", value: "0", change: "- 0%" },
+      { title: "Poor taste & quality", color: "#ef4444", value: "0", change: "- 0%" },
+      { title: "Wrong item delivered", color: "#2563eb", value: "0", change: "- 0%" },
+      { title: "Missing items", color: "#f59e0b", value: "0", change: "- 0%" },
+    ],
+  }
+  const rejectionsReasons = [
+    { title: "Items out of stock", color: "#111827", value: "0", change: "- 0%" },
+    { title: "Kitchen is full", color: "#ef4444", value: "0", change: "- 0%" },
+    { title: "Outlet closed", color: "#2563eb", value: "0", change: "- 0%" },
+    { title: "Others", color: "#f59e0b", value: "0", change: "- 0%" },
+  ]
+  const offersMetrics = [
+    { title: "Offer clicks", value: "0", change: "- 0%", sub: "Clicks on offers" },
+    { title: "Offer redemptions", value: "0", change: "- 0%", sub: "Total redeemed" },
+    { title: "Conversion rate", value: "0%", change: "- 0%", sub: "Redemptions / clicks" },
+    { title: "Cost per redemption", value: "₹0", change: "- 0%", sub: "Est. cost" },
+  ]
+  const offersCardSummary = {
+    grossSales: "₹0",
+    grossPct: "0%",
+    grossShare: "0% of total gross sales",
+    discountGiven: "₹0",
+    discountPct: "0%",
+    discountPerOrder: "₹0 discount per order",
+    ordersFromOffers: "0",
+    ordersPct: "0%",
+    ordersShare: "0% of total orders",
+    effectiveDiscount: "0%",
+    effectivePct: "0%",
+    effectiveDesc: "Discount given/Gross sales from offers",
+  }
+  const adsMetrics = [
+    { title: "Ad impressions", value: "0", change: "- 0%", sub: "Served impressions" },
+    { title: "Ad clicks", value: "0", change: "- 0%", sub: "Total clicks" },
+    { title: "CTR", value: "0%", change: "- 0%", sub: "Click-through rate" },
+    { title: "Spend", value: "₹0", change: "- 0%", sub: "Total spend" },
+  ]
+  const customersMetrics = [
+    { title: "New customers", sub: "No orders in last 365 days", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Repeat customers", sub: "Ordered in last 60 days", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Lapsed customers", sub: "Last order 60 to 365 days ago", value: "0", change: "- 0%", color: "#2563eb" },
+  ]
+  const customerAffinityBreakup = [
+    { title: "New customers", sub: "No orders in last 365 days", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Repeat customers", sub: "Ordered in last 60 days", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Lapsed customers", sub: "Last order 60 to 365 days ago", value: "0", change: "- 0%", color: "#2563eb" },
+  ]
+  const customerSpendingBreakup = [
+    { title: "Mass market customers", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Mid premium customers", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Premium customers", value: "0", change: "- 0%", color: "#2563eb" },
+  ]
+  const customerDistanceBreakup = [
+    { title: "Within 4 km", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Between 4 and 6 km", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Between 6 and 10 km", value: "0", change: "- 0%", color: "#2563eb" },
+    { title: "Above 10 km", value: "0", change: "- 0%", color: "#f59e0b" },
+  ]
+  const mealtimeMetrics = [
+    { title: "Breakfast", window: "7:00 am - 11:00 am", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Lunch", window: "11:00 am - 4:00 pm", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Evening snacks", window: "4:00 pm - 7:00 pm", value: "0", change: "- 0%", color: "#2563eb" },
+    { title: "Dinner", window: "7:00 pm - 11:00 pm", value: "0", change: "- 0%", color: "#f59e0b" },
+    { title: "Late night", window: "11:00 pm - 7:00 am", value: "0", change: "- 0%", color: "#10b981" },
+  ]
+  const { headerPrimary, compareLabel } = useMemo(() => {
+    const ranges = getDateRanges()
+    let primary = selectedRangeLabel
+    let baseEnd = ranges.yesterday
+    switch (selectedDateRange) {
+      case "today":
+        baseEnd = ranges.today
+        break
+      case "thisWeek":
+        baseEnd = ranges.thisWeekEnd
+        break
+      case "lastWeek":
+        baseEnd = ranges.lastWeekEnd
+        break
+      case "thisMonth":
+        baseEnd = ranges.thisMonthEnd
+        break
+      case "lastMonth":
+        baseEnd = ranges.lastMonthEnd
+        break
+      case "last5days":
+        baseEnd = ranges.last5DaysEnd
+        break
+      case "custom":
+        baseEnd = customDateRange.end || ranges.yesterday
+        break
+      default:
+        baseEnd = ranges.yesterday
+    }
+    const compare = new Date(baseEnd)
+    compare.setDate(compare.getDate() - 7)
+    return {
+      headerPrimary: primary,
+      compareLabel: formatDateLong(compare),
+    }
+  }, [selectedRangeLabel, selectedDateRange, customDateRange])
+
+  const HelpSection = () => (
+    <div className="px-4 pb-4">
+      <h3 className="text-lg font-bold text-gray-900 mb-3">How can we help you?</h3>
+      <div className="bg-white rounded-lg px-4 ">
+        <div className="divide-y divide-gray-200">
+          {["Manage outlets", "Payouts", "See all options"].map((item, idx) => (
+            <button
+              key={item}
+              onClick={() => {
+                if (item === "Manage outlets") {
+                  navigate("/restaurant/manage-outlets")
+                } else if (item === "Payouts") {
+                  navigate("/restaurant/hub-finance")
+                } else if (item === "See all options") {
+                  navigate("/restaurant/help-centre")
+                }
+              }}
+              className={`w-full flex items-center justify-between py-3 text-left ${idx === 0 ? "pt-0" : ""}`}
+            >
+              <span className="text-sm font-semibold text-gray-900">{item}</span>
+              <span className="text-gray-500">
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
+  const MyFeedContent = () => (
+    <div className="space-y-4">
+
+      <div className="px-4">
+        <div className="bg-white rounded-lg space-y-4">
+          <div className="flex items-center justify-between p-4">
+            <div className="text-sm text-gray-600">Total sales</div>
+            <span className="text-xs text-green-700 bg-green-100 px-3 rounded-full">Live</span>
+          </div>
+          <div className="px-4 flex items-center justify-between text-md font-semibold text-gray-700">
+            <span>{totalSales}</span>
+            <span>Total orders {totalOrders}</span>
+          </div>
+          <div className="h-48 chart-shell">
+            <style>{`
+              .chart-shell *:focus {
+                outline: none !important;
+                box-shadow: none !important;
+              }
+              .recharts-wrapper:focus,
+              .recharts-surface:focus,
+              .recharts-responsive-container:focus {
+                outline: none !important;
+              }
+            `}</style>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="ordersGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#111827" stopOpacity={0.6} />
+                    <stop offset="95%" stopColor="#111827" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.6} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="hour" tick={{ fontSize: 11, fill: "#6b7280" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} />
+                <Tooltip />
+                <Legend />
+                <Area type="monotone" dataKey="orders" stroke="#111827" fill="url(#ordersGradient)" />
+                <Area type="monotone" dataKey="sales" stroke="#10b981" fill="url(#salesGradient)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4">
+        <h3 className="text-lg font-bold text-gray-900 mb-3">Quick links</h3>
+        <div className="grid grid-cols-4 gap-3">
+          {quickLinks.map((link) => {
+            const Icon = link.icon
+            return (
+              <button 
+                key={link.id} 
+                onClick={() => {
+                  if (link.isPhone) {
+                    window.location.href = link.route
+                  } else {
+                    navigate(link.route)
+                  }
+                }}
+                className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center shadow-sm hover:shadow-md transition-shadow">
+                  <Icon className="w-5 h-5 text-black" />
+                </div>
+                <span className="text-[12px] text-center text-gray-800 leading-tight">
+                  {link.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+
+
+      {/* Business insights + filters */}
+      <div className="px-4 space-y-3">
+        <p className="text-lg font-bold text-gray-900 mb-3">Business insights</p>
+        <div className="rounded-lg flex items-stretch gap-2">
+          <div className="flex-[9] bg-white rounded-lg px-4 py-3 flex items-center justify-between">
+            <div className="flex flex-col">
+              <p className="text-xs font-semibold text-gray-800">{headerPrimary}</p>
+              <p className="text-xs text-gray-500">Compared against: {compareLabel}</p>
+            </div>
+            <button
+              className="flex items-center gap-2 bg-white text-gray-900 text-sm font-medium px-3 py-2 rounded-xl"
+              onClick={() => {
+                setIsDateSelectorOpen(true)
+                setIsCustomDateOpen(false)
+              }}
+            >
+              <CalendarRange className="w-4 h-4" />
+              <span className="sr-only">Change date</span>
+              <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          </div>
+
+          <button
+            className="flex-[2] bg-white text-gray-900 text-sm font-medium rounded-lg border border-gray-200 flex items-center justify-center"
+            onClick={() => navigate("/restaurant/download-report")}
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+
+      </div>
+
+
+      {/* Sales card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          {isDateLoading && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="absolute inset-0 bg-white/60 rounded-lg" />
+              <div className="relative text-sm font-semibold text-gray-700 animate-pulse">Refreshing...</div>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Sales</p>
+              <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'sales' ? null : 'sales')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'sales' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('sales', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+
+          </div>
+
+          {[
+            { title: "Net sales", value: "₹0 • 0%", dataKey: "sales", color: "#f97316" },
+            { title: "Orders delivered", value: "0 • 0%", dataKey: "orders", color: "#f97316" },
+            { title: "Avg. order value", value: "₹0 • 0%", dataKey: "sales", color: "#f97316" },
+          ].map((section, idx) => (
+            <div key={section.title} className={idx < 2 ? "pb-3 border-b border-dashed border-gray-200 space-y-2" : "space-y-2"}>
+              <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
+                <span>{section.title}</span>
+                <span>{section.value}</span>
+              </div>
+              <div className="h-16 chart-shell-mini">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id={`mini-${section.dataKey}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={section.color} stopOpacity={0.5} />
+                        <stop offset="95%" stopColor={section.color} stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
+                    <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "#9ca3af" }} />
+                    <YAxis hide />
+                    <Tooltip />
+                    <Area type="monotone" dataKey={section.dataKey} stroke={section.color} fill={`url(#mini-${section.dataKey})`} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ))}
+
+          <div className="pt-2">
+            <div className="flex items-center justify-center gap-4 text-xs text-gray-600">
+              <span className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-900 inline-block"></span>Yesterday</span>
+              <span className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-400 inline-block"></span>Day before yesterday</span>
+            </div>
+            <button 
+              onClick={() => setActiveTopTab("sales")}
+              className="w-full mt-3 bg-black text-white py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition-colors"
+            >
+              Get deeper insights
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Funnel card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Funnel</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'funnel-myfeed' ? null : 'funnel-myfeed')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'funnel-myfeed' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('funnel', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {funnelMetrics.map((metric, idx) => (
+              <div key={metric.id} className={idx < funnelMetrics.length - 1 ? "pb-3 border-b border-dashed border-gray-200" : ""}>
+                <div className="flex items-center justify-between text-sm font-semibold text-gray-900 mb-2">
+                  <span>{metric.label}</span>
+                  <span className="text-xs text-gray-700">{metric.secondary}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold text-gray-900 min-w-[32px]">{metric.value}</span>
+                  <div className="flex-1 ml-4">
+                  <div className="relative h-8 bg-transparent rounded-0 overflow-hidden">
+                    <div className="absolute inset-y-0 left-0 bg-black" style={{ width: `${metric.bar}%` }} />
+                  </div>  
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900">{metric.change}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
+                  <span>{metric.subLeft}</span>
+                  <span>{metric.subRight}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-2">
+            <div className="flex items-center justify-center gap-4 text-xs text-gray-600">
+              <span className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-900 inline-block"></span>Yesterday</span>
+              <span className="flex items-center gap-2"><span className="w-3 h-0.5 bg-gray-400 inline-block"></span>Day before yesterday</span>
+            </div>
+            <button 
+              onClick={() => setActiveTopTab("funnel")}
+              className="w-full mt-3 bg-black text-white py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition-colors"
+            >
+              Get deeper insights
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Service quality card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Service quality</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'service-quality-myfeed' ? null : 'service-quality-myfeed')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'service-quality-myfeed' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('service-quality', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-dashed divide-gray-200">
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {serviceQualityMetrics.slice(0, 2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {serviceQualityMetrics.slice(2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={() => setActiveTopTab("service-quality")}
+            className="w-full bg-black text-white py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Get deeper insights
+          </button>
+        </div>
+      </div>
+
+      {/* Kitchen efficiency card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Kitchen efficiency</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'kitchen-efficiency-myfeed' ? null : 'kitchen-efficiency-myfeed')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'kitchen-efficiency-myfeed' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('kitchen-efficiency', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-dashed divide-gray-200">
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {kitchenEfficiencyMetrics.slice(0, 2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {kitchenEfficiencyMetrics.slice(2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={() => setActiveTopTab("kitchen-efficiency")}
+            className="w-full bg-black text-white py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Get deeper insights
+          </button>
+        </div>
+      </div>
+
+
+
+      {/* Customers card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Customers</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'customers-myfeed' ? null : 'customers-myfeed')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'customers-myfeed' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('customers', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {customersMetrics.map((metric) => (
+              <div key={metric.title} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: metric.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                    <span className="text-xs text-gray-600">{metric.sub}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-gray-900">{metric.value}</p>
+                  <p className="text-xs text-gray-600">{metric.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button 
+            onClick={() => setActiveTopTab("customers")}
+            className="w-full bg-black text-white py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Get deeper insights
+          </button>
+        </div>
+      </div>
+
+      {/* Orders by mealtime */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Orders by mealtime</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'orders-by-mealtime-myfeed' ? null : 'orders-by-mealtime-myfeed')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'orders-by-mealtime-myfeed' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('orders-by-mealtime', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {mealtimeMetrics.map((slot) => (
+              <div key={slot.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: slot.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{slot.title}</span>
+                    <span className="text-xs text-gray-600">{slot.window}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{slot.value}</p>
+                  <p className="text-xs text-gray-600">{slot.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Offers card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Offers</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'offers-myfeed' ? null : 'offers-myfeed')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'offers-myfeed' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('offers', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-dashed divide-gray-200">
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {offersMetrics.slice(0, 2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {offersMetrics.slice(2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={() => setActiveTopTab("offers")}
+            className="w-full bg-black text-white py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Get deeper insights
+          </button>
+        </div>
+      </div>
+
+      {/* Ads card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Ads</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ads-myfeed' ? null : 'ads-myfeed')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'ads-myfeed' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('ads', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-dashed divide-gray-200">
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {adsMetrics.slice(0, 2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {adsMetrics.slice(2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={() => setActiveTopTab("ads")}
+            className="w-full bg-black text-white py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Get deeper insights
+          </button>
+        </div>
+      </div>
+
+
+      <HelpSection />
+    </div>
+  )
+
+  const KitchenVideoModal = () => (
+    <AnimatePresence>
+      {isKptVideoOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[13000] bg-black/80 backdrop-blur-sm flex flex-col"
+        >
+          <div className="flex items-center justify-between px-4 py-3 text-white">
+            <button
+              onClick={() => setIsKptVideoOpen(false)}
+              className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm font-semibold"
+            >
+              Back
+            </button>
+            <span className="text-sm font-semibold">Kitchen prep tips</span>
+            <button
+              onClick={() => setIsKptVideoOpen(false)}
+              className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm font-semibold"
+            >
+              Close
+            </button>
+          </div>
+          <div className="flex-1 flex items-center justify-center px-4 pb-6">
+            <div className="w-full max-w-5xl aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-white/10">
+              <video
+                key={isKptVideoOpen ? "open" : "closed"}
+                className="w-full h-full object-cover"
+                controls
+                autoPlay
+                playsInline
+              >
+                <source src="https://assets.mixkit.co/videos/preview/mixkit-cooking-a-vegetable-stir-fry-in-a-wok-4782-large.mp4" type="video/mp4" />
+              </video>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
+  const SalesTabContent = () => {
+    const salesMax = Math.max(...chartData.map((d) => d.sales || 0), 1)
+    const ordersMax = Math.max(...chartData.map((d) => d.orders || 0), 1)
+    const aovData = useMemo(
+      () =>
+        chartData.map((d) => ({
+          ...d,
+          aov: d.orders ? d.sales / d.orders : 0,
+        })),
+      [chartData]
+    )
+    const aovMax = Math.max(...aovData.map((d) => d.aov || 0), 1)
+
+    return (
+      <div className="space-y-4">
+        <div className="px-4">
+          <div className="bg-white rounded-lg p-4 space-y-4 relative">
+            {isDateLoading && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="absolute inset-0 bg-white/60 rounded-lg" />
+                <div className="relative text-sm font-semibold text-gray-700 animate-pulse">Refreshing...</div>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-base font-bold text-gray-900">Sales</p>
+                <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
+              </div>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'sales-tab' ? null : 'sales-tab')}
+                  className="p-2 rounded-full hover:bg-gray-100"
+                >
+                  <MoreVertical className="w-5 h-5 text-gray-600" />
+                </button>
+                {showLearnMoreButton === 'sales-tab' && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="absolute right-0 top-full mt-1 z-10"
+                  >
+                    <button
+                      onClick={(e) => handleLearnMoreClick('sales', e)}
+                      className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      Learn more
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+
+            {[
+              { title: "Net sales", value: "₹0 • 0%", dataKey: "sales", color: "#f97316" },
+              { title: "Orders delivered", value: "0 • 0%", dataKey: "orders", color: "#f97316" },
+              { title: "Avg. order value", value: "₹0 • 0%", dataKey: "sales", color: "#f97316" },
+            ].map((section, idx) => (
+              <div key={section.title} className={idx < 2 ? "pb-3 border-b border-dashed border-gray-200 space-y-2" : "space-y-2"}>
+                <div className="flex items-center justify-between text-sm font-semibold text-gray-900">
+                  <span>{section.title}</span>
+                  <span>{section.value}</span>
+                </div>
+                <div className="h-16 chart-shell-mini">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id={`mini-${section.dataKey}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={section.color} stopOpacity={0.5} />
+                          <stop offset="95%" stopColor={section.color} stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
+                      <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "#9ca3af" }} />
+                      <YAxis hide />
+                      <Tooltip />
+                      <Area type="monotone" dataKey={section.dataKey} stroke={section.color} fill={`url(#mini-${section.dataKey})`} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Sales & orders combined card */}
+        <div className="px-4">
+          <div className="bg-white rounded-lg p-4 space-y-4 relative">
+            {isDateLoading && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="absolute inset-0 bg-white/60 rounded-lg" />
+                <div className="relative text-sm font-semibold text-gray-700 animate-pulse">Refreshing...</div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-base font-bold text-gray-900">Sales & orders</p>
+                <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
+              </div>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'sales-orders' ? null : 'sales-orders')}
+                  className="p-2 rounded-full hover:bg-gray-100"
+                >
+                  <MoreVertical className="w-5 h-5 text-gray-600" />
+                </button>
+                {showLearnMoreButton === 'sales-orders' && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="absolute right-0 top-full mt-1 z-10"
+                  >
+                    <button
+                      onClick={(e) => handleLearnMoreClick('sales-orders', e)}
+                      className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      Learn more
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900 text-center items-center">
+              <div className="space-y-1 flex flex-col items-center">
+                <p className="text-xs text-gray-500">Net sales</p>
+                <p className="text-lg font-bold text-gray-900">{totalSales || "₹0"}</p>
+                <p className="text-xs text-gray-500">- 0%</p>
+              </div>
+              <div className="space-y-1 flex flex-col items-center">
+                <p className="text-xs text-gray-500">Orders delivered</p>
+                <p className="text-lg font-bold text-gray-900">{totalOrders || "0"}</p>
+                <p className="text-xs text-gray-500">- 0%</p>
+              </div>
+            </div>
+
+            <div className="h-64 chart-shell -mx-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={chartData}
+                  margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fontSize: 10, fill: "#9ca3af" }}
+                    tickLine={false}
+                    axisLine={{ stroke: "#e5e7eb" }}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fontSize: 10, fill: "#9ca3af" }}
+                    tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`}
+                    tickLine={false}
+                    axisLine={{ stroke: "#e5e7eb" }}
+                    allowDecimals={false}
+                    domain={[0, salesMax]}
+                    tickCount={5}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={false}
+                    axisLine={false}
+                    domain={[0, ordersMax]}
+                  />
+                  <Tooltip contentStyle={{ fontSize: "0.75rem" }} />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="sales"
+                    stroke="#111827"
+                    strokeWidth={2}
+                    fill="rgba(17,24,39,0.12)"
+                    dot={{ r: 3, fill: "#111827" }}
+                    activeDot={{ r: 4 }}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="orders"
+                    stroke="#6b7280"
+                    strokeWidth={2}
+                    dot={{ r: 6, fill: "#9ca3af", stroke: "#6b7280", strokeWidth: 1.5 }}
+                    activeDot={{ r: 7 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 bg-gray-900 inline-block rounded-[2px]" />
+                Net sales
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full border border-gray-400 bg-gray-200 inline-block" />
+                Orders delivered
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Average order value card */}
+        <div className="px-4">
+          <div className="bg-white rounded-lg p-4 space-y-4 relative">
+            {isDateLoading && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="absolute inset-0 bg-white/60 rounded-lg" />
+                <div className="relative text-sm font-semibold text-gray-700 animate-pulse">Refreshing...</div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-base font-bold text-gray-900">Average order value</p>
+                <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
+              </div>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'avg-order-value' ? null : 'avg-order-value')}
+                  className="p-2 rounded-full hover:bg-gray-100"
+                >
+                  <MoreVertical className="w-5 h-5 text-gray-600" />
+                </button>
+                {showLearnMoreButton === 'avg-order-value' && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="absolute right-0 top-full mt-1 z-10"
+                  >
+                    <button
+                      onClick={(e) => handleLearnMoreClick('avg-order-value', e)}
+                      className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      Learn more
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">AOV</p>
+              <p className="text-lg font-bold text-gray-900">
+                ₹0 <span className="text-xs font-normal text-gray-500">- 0%</span>
+              </p>
+            </div>
+
+            <div className="h-64 chart-shell -mx-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={aovData}
+                  margin={{ top: 10, right: 8, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fontSize: 10, fill: "#9ca3af" }}
+                    tickLine={false}
+                    axisLine={{ stroke: "#e5e7eb" }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "#9ca3af" }}
+                    tickFormatter={(value) => `₹${value.toLocaleString("en-IN")}`}
+                    tickLine={false}
+                    axisLine={{ stroke: "#e5e7eb" }}
+                    allowDecimals={false}
+                    domain={[0, aovMax]}
+                    tickCount={5}
+                  />
+                  <Tooltip contentStyle={{ fontSize: "0.75rem" }} />
+                  <Area
+                    type="monotone"
+                    dataKey="aov"
+                    stroke="#111827"
+                    strokeWidth={2}
+                    fill="rgba(17,24,39,0.08)"
+                    dot={{ r: 3, fill: "#111827" }}
+                    activeDot={{ r: 4 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* Orders by mealtime (sales tab) */}
+        <div className="px-4">
+          <div className="bg-white rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-base font-bold text-gray-900">Orders by mealtime</p>
+                <p className="text-xs text-gray-500">Last updated: a day ago</p>
+              </div>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'orders-by-mealtime-sales' ? null : 'orders-by-mealtime-sales')}
+                  className="p-2 rounded-full hover:bg-gray-100"
+                >
+                  <MoreVertical className="w-5 h-5 text-gray-600" />
+                </button>
+                {showLearnMoreButton === 'orders-by-mealtime-sales' && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="absolute right-0 top-full mt-1 z-10"
+                  >
+                    <button
+                      onClick={(e) => handleLearnMoreClick('orders-by-mealtime', e)}
+                      className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      Learn more
+                    </button>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {mealtimeMetrics.map((slot) => (
+                <div key={slot.title} className="flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full mt-1"
+                      style={{ backgroundColor: slot.color }}
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-sm font-semibold text-gray-900">{slot.title}</span>
+                      <span className="text-xs text-gray-600">{slot.window}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-gray-900">{slot.value}</p>
+                    <p className="text-xs text-gray-600">{slot.change}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <HelpSection />
+
+      </div>
+    )
+  }
+
+  const FunnelTabContent = () => {
+    const ordersMax = Math.max(...chartData.map((d) => d.orders || 0), 1)
+
+    return (
+    <div className="space-y-4">
+    {/* funnel main card */}
+
+
+
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Funnel</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'funnel' ? null : 'funnel')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'funnel' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('funnel', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {funnelMetrics.map((metric, idx) => (
+              <div key={metric.id} className={idx < funnelMetrics.length - 1 ? "pb-3 border-b border-dashed border-gray-200" : ""}>
+                <div className="flex items-center justify-between text-sm font-semibold text-gray-900 mb-2">
+                  <span>{metric.label}</span>
+                  <span className="text-xs text-gray-700">{metric.secondary}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold text-gray-900 min-w-[32px]">{metric.value}</span>
+                  <div className="flex-1 ml-4">
+                    <div className="relative h-8 bg-transparent rounded-0 overflow-hidden">
+                      <div className="absolute inset-y-0 left-0 bg-black" style={{ width: `${metric.bar}%` }} />
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900">{metric.change}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
+                  <span>{metric.subLeft}</span>
+                  <span>{metric.subRight}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    
+      {/* Where customers find you */}
+    
+    
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Where customers find you on Zomato app?</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'find-you' ? null : 'find-you')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'find-you' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('find-you', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: "impressions", label: "Impressions" },
+              { id: "menu", label: "Menu opens" },
+            ].map((tab) => {
+              const active = funnelFindView === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setFunnelFindView(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    active ? "bg-black text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="space-y-3">
+            {findSourcesMetrics.map((slot) => (
+              <div key={slot.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: slot.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{slot.title}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {slot[funnelFindView]}
+                  </p>
+                  <p className="text-xs text-gray-600">{slot.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Impressions chart */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Impressions</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'impressions' ? null : 'impressions')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'impressions' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('impressions', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">Impressions</p>
+            <p className="text-lg font-bold text-gray-900">
+              74 <span className="text-xs font-normal text-gray-500">- 0%</span>
+            </p>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={impressionsData}
+                margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="impressionsGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#111827" stopOpacity={0.6} />
+                    <stop offset="100%" stopColor="#111827" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickCount={6}
+                  domain={[0, Math.max(...impressionsData.map((d) => d.impressions || 0), 1)]}
+                  allowDecimals={false}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} />
+                <Area
+                  type="monotone"
+                  dataKey="impressions"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  fill="url(#impressionsGradient)"
+                  dot={{ r: 2.5, fill: "#111827" }}
+                  activeDot={{ r: 3.5 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Impressions by customer type */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Impressions by customer type</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'impressions-by-customer' ? null : 'impressions-by-customer')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'impressions-by-customer' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('impressions-by-customer', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: "affinity", label: "Customer affinity" },
+              { id: "spending", label: "Spending potential" },
+            ].map((tab) => {
+              const active = impressionsCustomerView === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setImpressionsCustomerView(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    active ? "bg-black text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="space-y-3">
+            {(impressionsCustomerTypes[impressionsCustomerView] || []).map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Menu opens */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Menu opens</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'menu-opens' ? null : 'menu-opens')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'menu-opens' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('menu-opens', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Menu opens</p>
+              <p className="text-lg font-bold text-gray-900">6 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">I2M</p>
+              <p className="text-lg font-bold text-gray-900">8.1% <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={menuOpensData}
+                margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  allowDecimals={false}
+                  domain={[0, Math.max(...menuOpensData.map(d => d.opens || 0), 1)]}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickFormatter={(v) => `${Math.round(v * 1000) / 10}%`}
+                  domain={[0, 1.1]}
+                  tickCount={5}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: "0.75rem" }}
+                  formatter={(value, name) => {
+                    if (name === "i2m") return [`${Math.round(value * 1000) / 10}%`, "I2M"]
+                    return [value, "Menu opens"]
+                  }}
+                  labelFormatter={(label) => label}
+                />
+                <Bar
+                  yAxisId="left"
+                  dataKey="opens"
+                  barSize={12}
+                  fill="#111827"
+                  radius={[2, 2, 0, 0]}
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="i2m"
+                  stroke="#9ca3af"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#9ca3af" }}
+                  activeDot={{ r: 4 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-gray-900 inline-block rounded-[2px]" />
+              Menu opens
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full border border-gray-400 bg-gray-200 inline-block" />
+              I2M
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Menu opens by customer type */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Menu opens by customer type</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'menu-opens-by-customer' ? null : 'menu-opens-by-customer')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'menu-opens-by-customer' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('menu-opens-by-customer', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: "affinity", label: "Customer affinity" },
+              { id: "spending", label: "Spending potential" },
+            ].map((tab) => {
+              const active = menuOpensCustomerView === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setMenuOpensCustomerView(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    active ? "bg-black text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="space-y-3">
+            {(menuOpensCustomerTypes[menuOpensCustomerView] || []).map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                    <span className="text-xs text-gray-600">{item.sub}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Orders placed */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Orders placed</p>
+              <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'orders-placed' ? null : 'orders-placed')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'orders-placed' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('orders-placed', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">Orders placed</p>
+            <p className="text-lg font-bold text-gray-900">
+              {totalOrders || "0"} <span className="text-xs font-normal text-gray-500">- 0%</span>
+            </p>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={chartData}
+                margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="ordersPlacedGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#111827" stopOpacity={0.6} />
+                    <stop offset="100%" stopColor="#111827" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  allowDecimals={false}
+                  domain={[0, ordersMax]}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} />
+                <Area
+                  type="monotone"
+                  dataKey="orders"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  fill="url(#ordersPlacedGradient)"
+                  dot={{ r: 3, fill: "#111827" }}
+                  activeDot={{ r: 4 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Order placed by customer type */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Order placed by customer type</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'orders-by-customer' ? null : 'orders-by-customer')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'orders-by-customer' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('orders-by-customer', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: "affinity", label: "Customer affinity" },
+              { id: "spending", label: "Spending potential" },
+            ].map((tab) => {
+              const active = ordersPlacedCustomerView === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setOrdersPlacedCustomerView(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    active ? "bg-black text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="space-y-3">
+            {(ordersPlacedCustomerTypes[ordersPlacedCustomerView] || []).map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                    <span className="text-xs text-gray-600">{item.sub}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <HelpSection />
+    </div>
+  )}
+
+  const ServiceQualityTabContent = () => (
+    <div className="space-y-4">
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Service quality</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'service-quality' ? null : 'service-quality')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'service-quality' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('service-quality', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-dashed divide-gray-200">
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {serviceQualityMetrics.slice(0, 2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {serviceQualityMetrics.slice(2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Rejected orders & sales */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Rejected orders & sales</p>
+              <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'rejected-orders' ? null : 'rejected-orders')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'rejected-orders' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('rejected-orders', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Rejected orders</p>
+              <p className="text-lg font-bold text-gray-900">
+                0 <span className="text-xs font-normal text-gray-500">- 0%</span>
+              </p>
+              <p className="text-xs text-gray-500">0% of total orders</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Rejected sales</p>
+              <p className="text-lg font-bold text-gray-900">
+                ₹0 <span className="text-xs font-normal text-gray-500">- 0%</span>
+              </p>
+              <p className="text-xs text-gray-500">0% of total sales</p>
+            </div>
+          </div>
+
+          {(() => {
+            const salesMax = Math.max(...rejectedOrdersData.map((d) => d.sales || 0), 1)
+            const ordersMax = Math.max(...rejectedOrdersData.map((d) => d.orders || 0), 1)
+            return (
+              <div className="h-64 chart-shell -mx-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart
+                    data={rejectedOrdersData}
+                    margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                    <XAxis
+                      dataKey="hour"
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e5e7eb" }}
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      tickFormatter={(v) => `₹${v}`}
+                      allowDecimals={false}
+                      domain={[0, salesMax]}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e5e7eb" }}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fontSize: 10, fill: "#9ca3af" }}
+                      allowDecimals={false}
+                      domain={[0, ordersMax]}
+                      tickLine={false}
+                      axisLine={{ stroke: "#e5e7eb" }}
+                    />
+                    <Tooltip
+                      contentStyle={{ fontSize: "0.75rem" }}
+                      formatter={(value, name) =>
+                        name === "orders"
+                          ? [value, "Rejected orders"]
+                          : [`₹${value}`, "Rejected sales"]
+                      }
+                    />
+                    <Bar
+                      yAxisId="right"
+                      dataKey="orders"
+                      barSize={14}
+                      fill="#111827"
+                      radius={[2, 2, 0, 0]}
+                    />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="sales"
+                      stroke="#6b7280"
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: "#6b7280" }}
+                      activeDot={{ r: 4 }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )
+          })()}
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-gray-900 inline-block rounded-[2px]" />
+              Rejected orders
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full border border-gray-400 bg-gray-200 inline-block" />
+              Rejected sales
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Reasons for complaints */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Reasons for complaints</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'complaint-reasons' ? null : 'complaint-reasons')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'complaint-reasons' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('complaint-reasons', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: "all", label: "All" },
+              { id: "refunded", label: "Refunded" },
+              { id: "resolved", label: "Resolved" },
+              { id: "winback", label: "Winback" },
+            ].map((tab) => {
+              const active = complaintsView === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setComplaintsView(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    active ? "bg-black text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="border-t border-gray-200 pt-3 space-y-3">
+            {(complaintsReasons[complaintsView] || []).map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Poor rated orders */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Poor rated orders</p>
+              <p className="text-xs text-gray-500">Last updated: few seconds ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'poor-rated-orders' ? null : 'poor-rated-orders')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'poor-rated-orders' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('poor-rated-orders', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">Poor rated orders (1 or 2 stars rated)</p>
+            <p className="text-lg font-bold text-gray-900">
+              0 <span className="text-xs font-normal text-gray-500">- 0%</span>
+            </p>
+            <p className="text-xs text-gray-500">0% of total orders</p>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={poorRatedData}
+                margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="poorRatedGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#111827" stopOpacity={0.6} />
+                    <stop offset="100%" stopColor="#111827" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  allowDecimals={false}
+                  domain={[0, Math.max(...poorRatedData.map((d) => d.value || 0), 1)]}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  fill="url(#poorRatedGradient)"
+                  dot={{ r: 2.5, fill: "#111827" }}
+                  activeDot={{ r: 3.5 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Reasons for rejections */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Reasons for rejections</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'rejection-reasons' ? null : 'rejection-reasons')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'rejection-reasons' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('rejection-reasons', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-3 space-y-3">
+            {rejectionsReasons.map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Complaints */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Complaints</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'complaints' ? null : 'complaints')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'complaints' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('complaints', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: "all", label: "All" },
+              { id: "refunded", label: "Refunded" },
+              { id: "resolved", label: "Resolved" },
+              { id: "winback", label: "Winback" },
+            ].map((tab) => {
+              const active = complaintsTabView === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setComplaintsTabView(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    active ? "bg-black text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">Complaints</p>
+            <p className="text-lg font-bold text-gray-900">
+              0 <span className="text-xs font-normal text-gray-500">- 0%</span>
+            </p>
+            <p className="text-xs text-gray-500">0% of total orders</p>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={complaintsData}
+                margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  allowDecimals={false}
+                  domain={[0, Math.max(...complaintsData.map((d) => d.value || 0), 1)]}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  fill="rgba(17,24,39,0.08)"
+                  dot={{ r: 2.5, fill: "#111827" }}
+                  activeDot={{ r: 3.5 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Availability */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Availability</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'availability' ? null : 'availability')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'availability' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('availability', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Online time %</p>
+              <p className="text-lg font-bold text-gray-900">100% <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Offline time</p>
+              <p className="text-lg font-bold text-gray-900">0 sec <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={availabilityData}
+                margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                  domain={[0, 1.1]}
+                  tickCount={5}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                  domain={[0, 1.1]}
+                  tickCount={5}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: "0.75rem" }}
+                  formatter={(value, name) => {
+                    if (name === "offline") return [`${Math.round(value * 1000) / 10}%`, "Offline time"]
+                    return [`${Math.round(value * 1000) / 10}%`, "Online time %"]
+                  }}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="online"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Bar
+                  yAxisId="right"
+                  dataKey="offline"
+                  barSize={12}
+                  fill="#9ca3af"
+                  radius={[2, 2, 0, 0]}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-gray-900 inline-block rounded-[2px]" />
+              Online time %
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full border border-gray-400 bg-gray-200 inline-block" />
+              Offline time
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <HelpSection />
+    </div>
+  )
+
+  const KitchenEfficiencyTabContent = () => (
+    <div className="space-y-4">
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Kitchen efficiency</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'kitchen-efficiency' ? null : 'kitchen-efficiency')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'kitchen-efficiency' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('kitchen-efficiency', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-dashed divide-gray-200">
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {kitchenEfficiencyMetrics.slice(0, 2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {kitchenEfficiencyMetrics.slice(2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Kitchen prep video card */}
+      <div className="px-4">
+        <button
+          onClick={() => setIsKptVideoOpen(true)}
+          className="w-full text-left"
+        >
+          <div className="bg-white rounded-lg flex items-center gap-3">
+            <div className="relative w-28 h-20 rounded-l-md overflow-hidden">
+              <img
+                src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80"
+                alt="Kitchen prep tips"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/20" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="flex items-center justify-center w-9 h-9 rounded-full bg-white/90 shadow">
+                  <Play className="w-4 h-4 text-gray-900 fill-gray-900" />
+                </span>
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-md p-3 font-semibold text-gray-700 leading-snug">
+                How to reduce your kitchen preparation time?
+              </p>
+            </div>
+          </div>
+        </button>
+      </div>
+
+
+
+      {/* KPT & Deplayed Orders */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">KPT & Delayed Orders</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'kpt-delayed-orders' ? null : 'kpt-delayed-orders')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'kpt-delayed-orders' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('kpt-delayed-orders', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Avg. KPT</p>
+              <p className="text-lg font-bold text-gray-900">0 sec<span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">KPT delayed orders</p>
+              <p className="text-lg font-bold text-gray-900">0 %<span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={availabilityData}
+                margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                  domain={[0, 1.1]}
+                  tickCount={5}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                  domain={[0, 1.1]}
+                  tickCount={5}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: "0.75rem" }}
+                  formatter={(value, name) => {
+                    if (name === "offline") return [`${Math.round(value * 1000) / 10}%`, "Offline time"]
+                    return [`${Math.round(value * 1000) / 10}%`, "Online time %"]
+                  }}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="online"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Bar
+                  yAxisId="right"
+                  dataKey="offline"
+                  barSize={12}
+                  fill="#9ca3af"
+                  radius={[2, 2, 0, 0]}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-gray-900 inline-block rounded-[2px]" />
+                  Avg. KPT
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full border border-gray-400 bg-gray-200 inline-block" />
+              Delayed Orders
+            </span>
+          </div>
+        </div>
+      </div>
+
+
+
+{/* Delayed Orders by meantime */}
+<div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Delayed Orders by Mealtime</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'delayed-by-mealtime' ? null : 'delayed-by-mealtime')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'delayed-by-mealtime' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('delayed-by-mealtime', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {mealtimeMetrics.map((slot) => (
+              <div key={slot.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: slot.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{slot.title}</span>
+                    <span className="text-xs text-gray-600">{slot.window}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{slot.value}</p>
+                  <p className="text-xs text-gray-600">{slot.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+
+
+      {/* KPT & Deplayed Orders */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Accuracy of FOR marked</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'accuracy-for' ? null : 'accuracy-for')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'accuracy-for' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('accuracy-for', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Food order ready accuracy</p>
+              <p className="text-lg font-bold text-gray-900">0%<span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500">Orders with high rider handover time</p>
+              <p className="text-lg font-bold text-gray-900">0<span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={availabilityData}
+                margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                  domain={[0, 1.1]}
+                  tickCount={5}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 10, fill: "#9ca3af" }}
+                  tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                  domain={[0, 1.1]}
+                  tickCount={5}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: "0.75rem" }}
+                  formatter={(value, name) => {
+                    if (name === "offline") return [`${Math.round(value * 1000) / 10}%`, "Offline time"]
+                    return [`${Math.round(value * 1000) / 10}%`, "Online time %"]
+                  }}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="online"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={false}
+                />
+                <Bar
+                  yAxisId="right"
+                  dataKey="offline"
+                  barSize={12}
+                  fill="#9ca3af"
+                  radius={[2, 2, 0, 0]}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-gray-900 inline-block rounded-[2px]" />
+                  FOR accuracy
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full border border-gray-400 bg-gray-200 inline-block" />
+              Orders with high RHT
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <HelpSection />
+    </div>
+  )
+
+  const CustomersTabContent = () => (
+    <div className="space-y-4 pb-8">
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Customer affinity breakup</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'customers' ? null : 'customers')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'customers' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('customers', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {customerAffinityBreakup.map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                    <span className="text-xs text-gray-600">{item.sub}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Customer spending potential breakup</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'customer-spending' ? null : 'customer-spending')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'customer-spending' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('customer-spending', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {customerSpendingBreakup.map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 pb-8">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Customer distance breakup</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'customer-distance' ? null : 'customer-distance')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'customer-distance' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('customer-distance', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {customerDistanceBreakup.map((item) => (
+              <div key={item.title} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <HelpSection />
+
+    </div>
+  )
+
+  const OffersTabContent = () => (
+    <div className="space-y-4 pb-8">
+
+
+       {/* Offers card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Offers</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'offers' ? null : 'offers')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'offers' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('offers', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-dashed divide-gray-200">
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {offersMetrics.slice(0, 2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {offersMetrics.slice(2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
+      {/* Gross sales from offers */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Gross sales from offers</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'gross-sales-offers' ? null : 'gross-sales-offers')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'gross-sales-offers' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('gross-sales-offers', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Total gross sales</p>
+              <p className="text-lg font-bold text-gray-900">₹0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Gross sales from offers</p>
+              <p className="text-lg font-bold text-gray-900">₹0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={offersWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `₹${v}`} domain={[0, Math.max(...offersWeeklyData.map(d => Math.max(d.totalGross, d.offersGross)), 1)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value, name) => [`₹${value}`, name === "totalGross" ? "Total gross sales" : "Gross sales from offers"]} />
+                <Line type="monotone" dataKey="totalGross" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+                <Line type="monotone" dataKey="offersGross" stroke="#9ca3af" strokeWidth={2} strokeDasharray="6 6" dot={{ r: 2.5, fill: "#9ca3af" }} activeDot={{ r: 3.5 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-900 inline-block rounded-[2px]" />
+              Total gross sales
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-400 inline-block rounded-[2px]" />
+              Gross sales from offers
+            </span>
+          </div>
+        </div>
+      </div>
+
+  {/* Customer type breakup */}
+      <div className="px-4 pb-10">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Customer type breakup</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'customer-type-breakup' ? null : 'customer-type-breakup')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'customer-type-breakup' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('customer-type-breakup', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: "affinity", label: "Customer affinity" },
+              { id: "spending", label: "Spending potential" },
+            ].map((tab) => {
+              const active = offersCustomerView === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setOffersCustomerView(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    active ? "bg-black text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="space-y-3">
+            {(offersCustomerView === "affinity" ? offersCustomerAffinity : offersCustomerSpending).map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                    {item.sub && <span className="text-xs text-gray-600">{item.sub}</span>}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      
+      {/* Gross sales & Discount */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Gross sales & Discount</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'gross-sales-discount' ? null : 'gross-sales-discount')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'gross-sales-discount' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('gross-sales-discount', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Discount given</p>
+              <p className="text-lg font-bold text-gray-900">₹0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Gross sales from Offers</p>
+              <p className="text-lg font-bold text-gray-900">₹0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={offersWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `₹${v}`} domain={[0, Math.max(...offersWeeklyData.map(d => Math.max(d.discountGiven, d.offersGross)), 1)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value, name) => [`₹${value}`, name === "discountGiven" ? "Discount given" : "Gross sales from offers"]} />
+                <Line type="monotone" dataKey="discountGiven" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+                <Line type="monotone" dataKey="offersGross" stroke="#9ca3af" strokeWidth={2} strokeDasharray="6 6" dot={{ r: 2.5, fill: "#9ca3af" }} activeDot={{ r: 3.5 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-900 inline-block rounded-[2px]" />
+              Discount given
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-400 inline-block rounded-[2px]" />
+              Gross sales from offers
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Effective discount */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Effective discount</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'effective-discount' ? null : 'effective-discount')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'effective-discount' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('effective-discount', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-gray-800">Effective discount</p>
+            <p className="text-lg font-bold text-gray-900">0% <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={offersWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value) => [`${(value * 100).toFixed(1)}%`, "Effective discount"]} />
+                <Line type="monotone" dataKey="effectiveDiscount" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-900 inline-block rounded-[2px]" />
+              Effective discount
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Orders from offers */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Orders from offers</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'orders-from-offers' ? null : 'orders-from-offers')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'orders-from-offers' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('orders-from-offers', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Orders from offers</p>
+              <p className="text-lg font-bold text-gray-900">0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Total orders</p>
+              <p className="text-lg font-bold text-gray-900">0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={offersWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} domain={[0, Math.max(...offersWeeklyData.map(d => Math.max(d.ordersFromOffers, d.totalOrders)), 1)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} allowDecimals={false} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value, name) => [value, name === "ordersFromOffers" ? "Orders from offers" : "Total orders"]} />
+                <Line type="monotone" dataKey="ordersFromOffers" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+                <Line type="monotone" dataKey="totalOrders" stroke="#9ca3af" strokeWidth={2} strokeDasharray="6 6" dot={{ r: 2.5, fill: "#9ca3af" }} activeDot={{ r: 3.5 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-900 inline-block rounded-[2px]" />
+              Orders from offers
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-400 inline-block rounded-[2px]" />
+              Total orders
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Discount type breakup */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Discount type breakup</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'discount-type-breakup' ? null : 'discount-type-breakup')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'discount-type-breakup' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('discount-type-breakup', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {discountTypeBreakup.map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value}</p>
+                  <p className="text-xs text-gray-600">{item.change}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <HelpSection />
+    </div>
+  )
+
+  const AdsTabContent = () => (
+    <div className="space-y-4 pb-8">
+      {/* Ads card */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Ads</p>
+              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ads' ? null : 'ads')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'ads' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('ads', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-dashed divide-gray-200">
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {adsMetrics.slice(0, 2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-y-4 py-3">
+              {adsMetrics.slice(2).map((metric) => (
+                <div key={metric.title} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
+                  </div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
+                  </div>
+                  <div className="text-xs text-gray-600">{metric.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Ad sales vs Total sales */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Ad sales vs Total sales</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ad-sales-vs-total' ? null : 'ad-sales-vs-total')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'ad-sales-vs-total' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('ad-sales-vs-total', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Sales from ads</p>
+              <p className="text-lg font-bold text-gray-900">₹0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+              <p className="text-xs text-gray-500">0% of total sales</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Total sales</p>
+              <p className="text-lg font-bold text-gray-900">₹0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={adsSalesWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `₹${v}`} domain={[0, Math.max(...adsSalesWeeklyData.map(d => Math.max(d.salesFromAds, d.totalSales)), 1)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value, name) => [`₹${value}`, name === "totalSales" ? "Total sales" : "Sales from ads"]} />
+                <Line type="monotone" dataKey="salesFromAds" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+                <Line type="monotone" dataKey="totalSales" stroke="#9ca3af" strokeWidth={2} strokeDasharray="6 6" dot={{ r: 2.5, fill: "#9ca3af" }} activeDot={{ r: 3.5 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-900 inline-block rounded-[2px]" />
+              Sales from ads
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-400 inline-block rounded-[2px]" />
+              Total sales
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Ad spends & ROI */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Ad spends & ROI</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ad-spends-roi' ? null : 'ad-spends-roi')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'ad-spends-roi' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('ad-spends-roi', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Ad spends</p>
+              <p className="text-lg font-bold text-gray-900">₹0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">ROI</p>
+              <p className="text-lg font-bold text-gray-900">0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={adsSpendsROIWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `₹${v}`} domain={[0, Math.max(...adsSpendsROIWeeklyData.map(d => d.adSpends), 1)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: "#9ca3af" }} domain={[0, Math.max(...adsSpendsROIWeeklyData.map(d => d.roi), 1)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value, name) => [name === "adSpends" ? `₹${value}` : value, name === "adSpends" ? "Ad spends" : "ROI"]} />
+                <Line yAxisId="left" type="monotone" dataKey="adSpends" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+                <Line yAxisId="right" type="monotone" dataKey="roi" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 bg-gray-900 inline-block rounded-[2px]" />
+              Ad spends
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-900 inline-block rounded-[2px]" />
+              ROI
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Percentage orders from ads */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Percentage orders from ads</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'percentage-orders-ads' ? null : 'percentage-orders-ads')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'percentage-orders-ads' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('percentage-orders-ads', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-gray-800">Percentage orders from ads</p>
+            <p className="text-lg font-bold text-gray-900">0% <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={percentageOrdersFromAdsWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `${v}%`} domain={[0, Math.max(...percentageOrdersFromAdsWeeklyData.map(d => d.percentageOrdersFromAds), 0.01)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value) => [`${value}%`, "Percentage orders from ads"]} />
+                <Line type="monotone" dataKey="percentageOrdersFromAds" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+
+      {/* Ads breakup */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Ads breakup</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ads-breakup' ? null : 'ads-breakup')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'ads-breakup' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('ads-breakup', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {adsBreakup.map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value} <span className="text-xs font-normal text-gray-500">{item.change}</span></p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+    
+
+      {/* Ad impressions */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Ad impressions</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ad-impressions' ? null : 'ad-impressions')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'ad-impressions' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('ad-impressions', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-gray-800">Ad impressions</p>
+            <p className="text-lg font-bold text-gray-900">0 <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={adImpressionsWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} domain={[0, Math.max(...adImpressionsWeeklyData.map(d => d.adImpressions), 1)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value) => [value, "Ad impressions"]} />
+                <Line type="monotone" dataKey="adImpressions" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-900 inline-block rounded-[2px]" />
+              Ad impressions
+            </span>
+          </div>
+        </div>
+      </div>
+
+  {/* Ad impressions breakup */}
+  <div className="px-4 pb-10">
+        <div className="bg-white rounded-lg p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Ad impressions breakup</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ad-impressions-breakup' ? null : 'ad-impressions-breakup')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'ad-impressions-breakup' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('ad-impressions-breakup', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: "affinity", label: "Customer affinity" },
+              { id: "spending", label: "Spending potential" },
+            ].map((tab) => {
+              const active = adImpressionsCustomerView === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setAdImpressionsCustomerView(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
+                    active ? "bg-black text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="space-y-3">
+            {(adImpressionsCustomerView === "affinity" ? adImpressionsCustomerAffinity : adImpressionsCustomerSpending).map((item) => (
+              <div key={item.title} className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full mt-1"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-gray-900">{item.title}</span>
+                    {item.sub && <span className="text-xs text-gray-600">{item.sub}</span>}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{item.value} <span className="text-xs font-normal text-gray-500">{item.change}</span></p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Ad CTR & M2O */}
+      <div className="px-4">
+        <div className="bg-white rounded-lg p-4 space-y-4 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-base font-bold text-gray-900">Ad CTR & M2O</p>
+              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+            </div>
+            <div className="relative">
+              <button 
+                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ad-ctr-m2o' ? null : 'ad-ctr-m2o')}
+                className="p-2 rounded-full hover:bg-gray-100"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              {showLearnMoreButton === 'ad-ctr-m2o' && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute right-0 top-full mt-1 z-10"
+                >
+                  <button
+                    onClick={(e) => handleLearnMoreClick('ad-ctr-m2o', e)}
+                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Learn more
+                  </button>
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm font-semibold text-gray-900">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Ad CTR</p>
+              <p className="text-lg font-bold text-gray-900">0% <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">Ad M2O</p>
+              <p className="text-lg font-bold text-gray-900">0% <span className="text-xs font-normal text-gray-500">- 0%</span></p>
+            </div>
+          </div>
+
+          <div className="h-64 chart-shell -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={adCTRM2OWeeklyData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke="#e5e7eb" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickFormatter={(v) => `${v}%`} domain={[0, Math.max(...adCTRM2OWeeklyData.map(d => Math.max(d.adCTR, d.adM2O)), 0.01)]} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+                <Tooltip contentStyle={{ fontSize: "0.75rem" }} formatter={(value, name) => [`${value}%`, name === "adCTR" ? "Ad CTR" : "Ad M2O"]} />
+                <Line type="monotone" dataKey="adCTR" stroke="#111827" strokeWidth={2} dot={{ r: 2.5, fill: "#111827" }} activeDot={{ r: 3.5 }} />
+                <Line type="monotone" dataKey="adM2O" stroke="#9ca3af" strokeWidth={2} strokeDasharray="6 6" dot={{ r: 2.5, fill: "#9ca3af" }} activeDot={{ r: 3.5 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-600">
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-900 inline-block rounded-[2px]" />
+              Ad CTR
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-0.5 bg-gray-400 inline-block rounded-[2px]" />
+              Ad M2O
+            </span>
+          </div>
+        </div>
+      </div>
+
+
+      <HelpSection />
+    </div>
+  )
+
+  const EmptyTab = ({ label }) => (
+    <div className="flex-1 flex items-center justify-center text-gray-500 text-sm px-4">
+      {label} is empty for now.
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      <style>{`
+        .chart-shell *, .chart-shell, .chart-shell-mini *, .chart-shell-mini,
+        .recharts-wrapper:focus, .recharts-surface:focus, .recharts-responsive-container:focus {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+      `}</style>
+      <div className="">
+        {/* Reuse Feedback-like navbar */}
+        <div className="sticky bg-white top-0 z-40 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] tracking-[0.12em] text-gray-500 uppercase">
+              Showing data for
+            </p>
+            <p className="text-md font-semibold text-gray-900 mt-0.5">
+              Kadhai Chammach Restaurant
+            </p>
+          </div>
+
+          <div className="flex items-center">
+            <button
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              onClick={() => navigate("/restaurant/notifications")}
+            >
+              <Bell className="w-5 h-5 text-gray-700" />
+            </button>
+            <button
+              className="p-2 ml-1 hover:bg-gray-100 rounded-full transition-colors"
+              onClick={() => navigate("/restaurant/help-centre")}
+            >
+              <HelpCircle className="w-5 h-5 text-gray-700" />
+            </button>
+            <button
+              className="p-2 ml-1 hover:bg-gray-100 rounded-full transition-colors"
+              onClick={() => navigate("/restaurant/explore")}
+            >
+              <Menu className="w-5 h-5 text-gray-700" />
+            </button>
+          </div>
+        </div>
+
+        {/* Top tabs (matching Orders tab style) */}
+        <div className="sticky top-[50px] z-40 pb-2 bg-gray-100">
+          <div
+            ref={topTabBarRef}
+            className="flex gap-2 overflow-x-auto scrollbar-hide bg-transparent rounded-full px-3 py-2 mt-2"
+            style={{
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch'
+            }}
+          >
+            <style>{`
+            .scrollbar-hide::-webkit-scrollbar {
+              display: none;
+            }
+          `}</style>
+            {topTabs.map((tab) => {
+              const isActive = activeTopTab === tab.id
+              return (
+                <motion.button
+                  key={tab.id}
+                  onClick={() => {
+                    if (!isTransitioning) {
+                      setIsTransitioning(true)
+                      setActiveTopTab(tab.id)
+                      setTimeout(() => setIsTransitioning(false), 300)
+                    }
+                  }}
+                  className={`shrink-0 px-6 py-3.5 rounded-full font-medium text-sm whitespace-nowrap relative overflow-hidden ${isActive ? 'text-white' : 'bg-white text-black'}`}
+                  animate={{ scale: isActive ? 1.05 : 1, opacity: isActive ? 1 : 0.7 }}
+                  transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="hubTopTabActive"
+                      className="absolute inset-0 bg-black rounded-full -z-10"
+                      initial={false}
+                      transition={{
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 30,
+                      }}
+                    />
+                  )}
+                  <span className="relative z-10">{tab.label}</span>
+                </motion.button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Global date/download bar for all tabs except my-feed */}
+      {activeTopTab !== "my-feed" && (
+        <div className="px-4 pb-3">
+          <div className="rounded-lg flex items-stretch gap-2">
+            <div className="flex-[9] bg-white rounded-lg px-4 py-3 flex items-center justify-between">
+              <div className="flex flex-col">
+                <p className="text-xs font-semibold text-gray-800">{headerPrimary}</p>
+                <p className="text-xs text-gray-500">Compared against: {compareLabel}</p>
+              </div>
+              <button
+                className="flex items-center gap-2 bg-white text-gray-900 text-sm font-medium px-3 py-2 "
+                onClick={() => {
+                  setIsDateSelectorOpen(true)
+                  setIsCustomDateOpen(false)
+                }}
+              >
+                <CalendarRange className="w-4 h-4" />
+                <span className="sr-only">Change date</span>
+                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+                </svg>
+              </button> 
+            </div>
+
+            <button
+              className="flex-[2] bg-white text-gray-900 text-sm font-medium rounded-lg border border-gray-200 flex items-center justify-center"
+              onClick={() => navigate("/restaurant/download-report")}
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          ref={contentContainerRef}
+          key={activeTopTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          transition={{ duration: 0.2 }}
+          className="flex-1"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={(e) => {
+            const target = e.target
+            // Don't handle swipe if starting on topbar or chart
+            if (topTabBarRef.current?.contains(target)) return
+            if (target.closest('.chart-shell, .chart-shell-mini')) return
+            
+            mouseStartX.current = e.clientX
+            mouseEndX.current = e.clientX
+            isMouseDown.current = true
+            isSwiping.current = false
+          }}
+          onMouseMove={(e) => {
+            if (isMouseDown.current) {
+              if (!isSwiping.current) {
+                const deltaX = Math.abs(e.clientX - mouseStartX.current)
+                if (deltaX > 10) {
+                  isSwiping.current = true
+                }
+              }
+              if (isSwiping.current) {
+                mouseEndX.current = e.clientX
+              }
+            }
+          }}
+          onMouseUp={() => {
+            if (isMouseDown.current && isSwiping.current) {
+              const swipeDistance = mouseStartX.current - mouseEndX.current
+              const minSwipeDistance = 50
+
+              if (Math.abs(swipeDistance) > minSwipeDistance && !isTransitioning) {
+                const currentIndex = topTabs.findIndex(tab => tab.id === activeTopTab)
+                let newIndex = currentIndex
+                
+                if (swipeDistance > 0 && currentIndex < topTabs.length - 1) {
+                  newIndex = currentIndex + 1
+                } else if (swipeDistance < 0 && currentIndex > 0) {
+                  newIndex = currentIndex - 1
+                }
+
+                if (newIndex !== currentIndex) {
+                  setIsTransitioning(true)
+                  setTimeout(() => {
+                    setActiveTopTab(topTabs[newIndex].id)
+                    setTimeout(() => setIsTransitioning(false), 300)
+                  }, 50)
+                }
+              }
+            }
+            
+            isMouseDown.current = false
+            isSwiping.current = false
+            mouseStartX.current = 0
+            mouseEndX.current = 0
+          }}
+          onMouseLeave={() => {
+            isMouseDown.current = false
+            isSwiping.current = false
+          }}
+        >
+          {activeTopTab === "my-feed" ? (
+            <MyFeedContent />
+          ) : activeTopTab === "sales" ? (
+            <SalesTabContent />
+          ) : activeTopTab === "funnel" ? (
+            <FunnelTabContent />
+          ) : activeTopTab === "service-quality" ? (
+            <ServiceQualityTabContent />
+          ) : activeTopTab === "kitchen-efficiency" ? (
+            <KitchenEfficiencyTabContent />
+          ) : activeTopTab === "offers" ? (
+            <OffersTabContent />
+          ) : activeTopTab === "customers" ? (
+            <CustomersTabContent />
+          ) : activeTopTab === "ads" ? (
+            <AdsTabContent />
+          ) : (
+            <EmptyTab label={topTabs.find(t => t.id === activeTopTab)?.label || "This tab"} />
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      <KitchenVideoModal />
+
+      {/* Date Selector Popup (from Feedback) */}
+      <AnimatePresence>
+        {isDateSelectorOpen && !isCustomDateOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-[9999]"
+              onClick={() => setIsDateSelectorOpen(false)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[9999] max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-bold text-gray-900 text-center">Date range selection</h2>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4">
+                {(() => {
+                  const ranges = getDateRanges()
+                  const dateOptions = [
+                    { id: "today", label: "Today so far", date: formatDateShort(ranges.today) },
+                    { id: "yesterday", label: "Yesterday", date: formatDateShort(ranges.yesterday) },
+                    { id: "thisWeek", label: "This week so far", date: `${formatDateShort(ranges.thisWeekStart)} - ${formatDateShort(ranges.thisWeekEnd)}` },
+                    { id: "lastWeek", label: "Last week", date: `${formatDateShort(ranges.lastWeekStart)} - ${formatDateShort(ranges.lastWeekEnd)}` },
+                    { id: "thisMonth", label: "This month so far", date: `${formatDateShort(ranges.thisMonthStart)} - ${formatDateShort(ranges.thisMonthEnd)}` },
+                    { id: "lastMonth", label: "Last month", date: `${formatDateShort(ranges.lastMonthStart)} - ${formatDateShort(ranges.lastMonthEnd)}` },
+                    { id: "last5days", label: "Last 5 days", date: `${formatDateShort(ranges.last5DaysStart)} - ${formatDateShort(ranges.last5DaysEnd)}` }
+                  ]
+                  return (
+                    <div className="space-y-4">
+                      {dateOptions.map((option) => (
+                        <label
+                          key={option.id}
+                          className="flex items-center justify-between cursor-pointer py-2"
+                          onClick={() => handleDateRangeSelect(option.id)}
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-900">{option.label}</span>
+                            <span className="text-xs text-gray-500 mt-0.5">{option.date}</span>
+                          </div>
+                          <input
+                            type="radio"
+                            name="dateRange"
+                            checked={selectedDateRange === option.id}
+                            onChange={() => handleDateRangeSelect(option.id)}
+                            className="w-5 h-5 text-black border-gray-300 focus:ring-black"
+                          />
+                        </label>
+                      ))}
+                      <button
+                        onClick={() => handleDateRangeSelect("custom")}
+                        className="w-full flex items-center justify-between py-2 cursor-pointer"
+                      >
+                        <div className="flex flex-col text-start">
+                          <span className="text-sm font-medium text-start text-gray-900">Custom date</span>
+                          <span className="text-xs text-gray-500 mt-0.5">Select your own date range</span>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+                    </div>
+                  )
+                })()}
+              </div>
+              <div className="border-t border-gray-200 px-4 py-4 flex gap-3">
+                <button
+                  onClick={() => setIsDateSelectorOpen(false)}
+                  className="flex-1 py-3 text-sm font-medium text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setIsDateSelectorOpen(false)
+                    applyDummyData(selectedDateRange)
+                  }}
+                  className="flex-1 bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                >
+                  Apply
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Date Calendar Popup */}
+      <AnimatePresence>
+        {isCustomDateOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-[10000]"
+              onClick={() => {
+                setIsCustomDateOpen(false)
+                setIsDateSelectorOpen(true)
+              }}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[10000] max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-4 py-4 border-b border-gray-200 flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    setIsCustomDateOpen(false)
+                    setIsDateSelectorOpen(true)
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <ChevronLeft className="w-6 h-6 text-gray-900" />
+                </button>
+                <h2 className="text-lg font-bold text-gray-900">Custom date</h2>
+                <div className="w-8" />
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <DateRangeCalendar
+                  startDate={customDateRange.start}
+                  endDate={customDateRange.end}
+                  onDateRangeChange={(start, end) => {
+                    setCustomDateRange({ start, end })
+                    setSelectedDateRange("custom")
+                  }}
+                  onClose={() => {
+                    setIsCustomDateOpen(false)
+                    setIsDateSelectorOpen(true)
+                  }}
+                />
+              </div>
+              <div className="border-t border-gray-200 px-4 py-4 flex gap-3">
+                <button
+                  onClick={() => {
+                    setIsCustomDateOpen(false)
+                    setIsDateSelectorOpen(true)
+                  }}
+                  className="flex-1 py-3 text-sm font-medium text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCustomDateApply}
+                  className="flex-1 bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors"
+                >
+                  Apply
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Learn More Popup */}
+      <AnimatePresence>
+        {learnMorePopupOpen && selectedCardInfo && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setLearnMorePopupOpen(false)}
+              className="fixed inset-0 bg-black/50 z-50"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[70vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-bold text-gray-900">{selectedCardInfo.title}</h2>
+                <button
+                  onClick={() => setLearnMorePopupOpen(false)}
+                  className="p-1 rounded-full hover:bg-gray-100"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4">
+                <div className="space-y-4">
+                  {selectedCardInfo.metrics.map((metric, index) => (
+                    <div key={index} className="pb-3 border-b border-gray-100 last:border-0">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                        {metric.name}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {metric.definition}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="px-4 py-4 border-t border-gray-200">
+                <button
+                  onClick={() => setLearnMorePopupOpen(false)}
+                  className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+                >
+                  Okay
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <BottomNavOrders />
+    </div>
+  )
+}
+
+// Simple icon placeholders
+function PhoneIcon(props) { return <Wand2 {...props} /> }
+function HistoryIcon(props) { return <BarChart3 {...props} /> }
+function AlertIcon(props) { return <TrendingUp {...props} /> }
+function StarIcon(props) { return <Users {...props} /> }
+function MessageIcon(props) { return <BarChart3 {...props} /> }
+function LinkIcon(props) { return <TrendingUp {...props} /> }
+function SettingsIcon(props) { return <Wand2 {...props} /> }
+function GridIcon(props) { return <Users {...props} /> }

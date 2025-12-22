@@ -1,0 +1,281 @@
+import { useEffect, useRef, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { X } from "lucide-react"
+
+/**
+ * BottomPopup Component
+ * A reusable animated bottom popup that can be dismissed by swiping down
+ * 
+ * @param {boolean} isOpen - Controls popup visibility
+ * @param {function} onClose - Callback when popup is closed
+ * @param {ReactNode} children - Content to display in popup
+ * @param {string} title - Optional title for the popup
+ * @param {boolean} showCloseButton - Show close button (default: true)
+ * @param {boolean} closeOnBackdropClick - Close when backdrop is clicked (default: true)
+ * @param {string} maxHeight - Maximum height of popup (default: "90vh")
+ * @param {boolean} showHandle - Show drag handle (default: true)
+ */
+export default function BottomPopup({
+  isOpen,
+  onClose,
+  children,
+  title,
+  showCloseButton = true,
+  closeOnBackdropClick = true,
+  maxHeight = "90vh",
+  showHandle = true
+}) {
+  const popupRef = useRef(null)
+  const handleRef = useRef(null)
+  const swipeStartY = useRef(0)
+  const isSwiping = useRef(false)
+  const [dragY, setDragY] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+
+  // Reset drag state when popup closes
+  useEffect(() => {
+    if (!isOpen) {
+      setDragY(0)
+      setIsDragging(false)
+      isSwiping.current = false
+    }
+  }, [isOpen])
+
+  // Handle touch start for swipe detection
+  const handleTouchStart = (e) => {
+    const target = e.target
+    const isHandle = handleRef.current?.contains(target)
+    
+    // Check if touch is in handle area or top portion of popup
+    const rect = popupRef.current?.getBoundingClientRect()
+    if (!rect) return
+    
+    const touchY = e.touches[0].clientY
+    const handleArea = rect.top + 80 // Top 80px is swipeable area
+    
+    // Allow swipe if touching handle or top area
+    if (isHandle || touchY <= handleArea) {
+      e.stopPropagation()
+      swipeStartY.current = touchY
+      isSwiping.current = true
+      setIsDragging(true)
+    }
+  }
+
+  // Handle touch move for swipe
+  const handleTouchMove = (e) => {
+    if (!isSwiping.current || !isOpen) return
+    
+    const currentY = e.touches[0].clientY
+    const deltaY = currentY - swipeStartY.current
+    
+    // Only allow downward swipe (positive deltaY)
+    if (deltaY > 0) {
+      e.preventDefault()
+      e.stopPropagation()
+      setDragY(deltaY)
+    }
+  }
+
+  // Handle touch end - determine if should close
+  const handleTouchEnd = (e) => {
+    if (!isSwiping.current) {
+      isSwiping.current = false
+      setIsDragging(false)
+      return
+    }
+    
+    e.stopPropagation()
+    
+    const deltaY = swipeStartY.current - e.changedTouches[0].clientY
+    const threshold = 100 // Minimum swipe distance to close
+    
+    // If swiped down enough, close the popup
+    if (deltaY < -threshold) {
+      handleClose()
+    } else {
+      // Reset position with animation
+      setDragY(0)
+      setIsDragging(false)
+    }
+    
+    isSwiping.current = false
+    swipeStartY.current = 0
+  }
+
+  // Handle mouse events for desktop drag support
+  const handleMouseDown = (e) => {
+    const target = e.target
+    const isHandle = handleRef.current?.contains(target)
+    
+    const rect = popupRef.current?.getBoundingClientRect()
+    if (!rect) return
+    
+    const mouseY = e.clientY
+    const handleArea = rect.top + 80
+    
+    if (isHandle || mouseY <= handleArea) {
+      e.preventDefault()
+      e.stopPropagation()
+      swipeStartY.current = mouseY
+      isSwiping.current = true
+      setIsDragging(true)
+    }
+  }
+
+  const handleMouseMove = (e) => {
+    if (!isSwiping.current || !isOpen) return
+    
+    const currentY = e.clientY
+    const deltaY = currentY - swipeStartY.current
+    
+    if (deltaY > 0) {
+      e.preventDefault()
+      setDragY(deltaY)
+    }
+  }
+
+  const handleMouseUp = (e) => {
+    if (!isSwiping.current) {
+      isSwiping.current = false
+      setIsDragging(false)
+      return
+    }
+    
+    const deltaY = swipeStartY.current - e.clientY
+    const threshold = 100
+    
+    if (deltaY < -threshold) {
+      handleClose()
+    } else {
+      setDragY(0)
+      setIsDragging(false)
+    }
+    
+    isSwiping.current = false
+    swipeStartY.current = 0
+  }
+
+  // Prevent body scroll when popup is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
+
+  // Handle backdrop click - close only when clicking the backdrop itself
+  const handleBackdropClick = (e) => {
+    if (closeOnBackdropClick && e.target === e.currentTarget) {
+      handleClose()
+    }
+  }
+
+  // Prevent clicks inside popup from closing it
+  const handlePopupClick = (e) => {
+    e.stopPropagation()
+  }
+
+  // Close handler
+  const handleClose = () => {
+    setDragY(0)
+    setIsDragging(false)
+    isSwiping.current = false
+    if (onClose) {
+      onClose()
+    }
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={handleBackdropClick}
+            className="fixed inset-0 bg-black/50 z-[100] backdrop-blur-sm"
+          />
+
+          {/* Popup */}
+          <motion.div
+            ref={popupRef}
+            initial={{ y: "100%" }}
+            animate={{ 
+              y: isDragging ? dragY : 0,
+              transition: isDragging ? { duration: 0 } : { 
+                type: "spring", 
+                damping: 30, 
+                stiffness: 300 
+              }
+            }}
+            exit={{ y: "100%" }}
+            transition={{ 
+              type: "spring", 
+              damping: 30, 
+              stiffness: 300 
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onClick={handlePopupClick}
+            className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-[110] overflow-hidden flex flex-col"
+            style={{ 
+              maxHeight: maxHeight,
+              touchAction: 'none'
+            }}
+          >
+            {/* Top Drag Handle Bar - Always visible for dragging */}
+            {showHandle && (
+              <div
+                ref={handleRef}
+                className="flex items-center justify-center pt-4 pb-3 cursor-grab active:cursor-grabbing select-none bg-white sticky top-0 z-10"
+                style={{ touchAction: 'none' }}
+              >
+                <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
+              </div>
+            )}
+
+            {/* Header */}
+            {(title || showCloseButton) && (
+              <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-100">
+                {title && (
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {title}
+                  </h3>
+                )}
+                {showCloseButton && (
+                  <button
+                    onClick={handleClose}
+                    className="ml-auto p-2 rounded-full hover:bg-gray-100 transition-colors"
+                    aria-label="Close"
+                  >
+                    <X className="w-5 h-5 text-gray-600" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              {children}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+

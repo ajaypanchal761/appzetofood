@@ -1,0 +1,1032 @@
+import { useState, useEffect, useRef } from "react"
+import { useNavigate } from "react-router-dom"
+import { motion, AnimatePresence } from "framer-motion"
+import Lenis from "lenis"
+import { Printer, Volume2, VolumeX, ChevronDown, ChevronUp, Minus, Plus, X } from "lucide-react"
+import BottomNavOrders from "../components/BottomNavOrders"
+import RestaurantNavbar from "../components/RestaurantNavbar"
+import notificationSound from "@/assets/audio/alert.mp3"
+
+// Top filter tabs
+const filterTabs = [
+  { id: "preparing", label: "Preparing" },
+  { id: "ready", label: "Ready" },
+  { id: "out-for-delivery", label: "Out for delivery" },
+  { id: "scheduled", label: "Scheduled" },
+  { id: "completed", label: "Completed" },
+]
+
+export default function OrdersMain() {
+  const navigate = useNavigate()
+  const [activeFilter, setActiveFilter] = useState("preparing")
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState(null)
+  const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const contentRef = useRef(null)
+  const filterBarRef = useRef(null)
+  const touchStartX = useRef(0)
+  const touchEndX = useRef(0)
+  const touchStartY = useRef(0)
+  const isSwiping = useRef(false)
+  const mouseStartX = useRef(0)
+  const mouseEndX = useRef(0)
+  const isMouseDown = useRef(false)
+
+  // New order popup states
+  const [showNewOrderPopup, setShowNewOrderPopup] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+  const [prepTime, setPrepTime] = useState(11)
+  const [countdown, setCountdown] = useState(240) // 4 minutes in seconds
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(true)
+  const [showRejectPopup, setShowRejectPopup] = useState(false)
+  const [rejectReason, setRejectReason] = useState("")
+  const audioRef = useRef(null)
+
+  const rejectReasons = [
+    "Restaurant is too busy",
+    "Item not available",
+    "Outside delivery area",
+    "Kitchen closing soon",
+    "Technical issue",
+    "Other reason"
+  ]
+
+  // Lenis smooth scrolling
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+    })
+
+    function raf(time) {
+      lenis.raf(time)
+      requestAnimationFrame(raf)
+    }
+
+    requestAnimationFrame(raf)
+
+    return () => {
+      lenis.destroy()
+    }
+  }, [])
+
+  // Show new order popup after 15 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowNewOrderPopup(true)
+    }, 15000)
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Play audio when popup opens
+  useEffect(() => {
+    if (showNewOrderPopup && !isMuted) {
+      if (audioRef.current) {
+        audioRef.current.loop = true
+        audioRef.current.play().catch(err => console.log("Audio play failed:", err))
+      }
+    } else if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+  }, [showNewOrderPopup, isMuted])
+
+  // Countdown timer
+  useEffect(() => {
+    if (showNewOrderPopup && countdown > 0) {
+      const timer = setInterval(() => {
+        setCountdown(prev => prev - 1)
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [showNewOrderPopup, countdown])
+
+  // Format countdown time
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Handle accept order
+  const handleAcceptOrder = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+    setShowNewOrderPopup(false)
+    setCountdown(240)
+    setPrepTime(11)
+  }
+
+  // Handle reject order
+  const handleRejectClick = () => {
+    setShowRejectPopup(true)
+  }
+
+  const handleRejectConfirm = () => {
+    if (!rejectReason) return
+    
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+    setShowRejectPopup(false)
+    setShowNewOrderPopup(false)
+    setRejectReason("")
+    setCountdown(240)
+    setPrepTime(11)
+    // Here you would typically send the rejection to your backend
+    console.log("Order rejected with reason:", rejectReason)
+  }
+
+  const handleRejectCancel = () => {
+    setShowRejectPopup(false)
+    setRejectReason("")
+  }
+
+  // Toggle mute
+  const toggleMute = () => {
+    setIsMuted(!isMuted)
+    if (audioRef.current) {
+      if (!isMuted) {
+        audioRef.current.pause()
+      } else {
+        audioRef.current.play().catch(err => console.log("Audio play failed:", err))
+      }
+    }
+  }
+
+  // Handle PDF print
+  const handlePrint = () => {
+    window.print()
+  }
+
+  // Handle swipe gestures with smooth animations
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+    touchEndX.current = e.touches[0].clientX
+    isSwiping.current = false
+  }
+
+  const handleTouchMove = (e) => {
+    if (!isSwiping.current) {
+      const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current)
+      const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current)
+      
+      // Determine if this is a horizontal swipe
+      if (deltaX > deltaY && deltaX > 10) {
+        isSwiping.current = true
+      }
+    }
+    
+    if (isSwiping.current) {
+      touchEndX.current = e.touches[0].clientX
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (!isSwiping.current) {
+      touchStartX.current = 0
+      touchEndX.current = 0
+      return
+    }
+
+    const swipeDistance = touchStartX.current - touchEndX.current
+    const minSwipeDistance = 50
+    const swipeVelocity = Math.abs(swipeDistance)
+
+    if (swipeVelocity > minSwipeDistance && !isTransitioning) {
+      const currentIndex = filterTabs.findIndex(tab => tab.id === activeFilter)
+      let newIndex = currentIndex
+      
+      if (swipeDistance > 0 && currentIndex < filterTabs.length - 1) {
+        // Swipe left - go to next filter (right side)
+        newIndex = currentIndex + 1
+      } else if (swipeDistance < 0 && currentIndex > 0) {
+        // Swipe right - go to previous filter (left side)
+        newIndex = currentIndex - 1
+      }
+
+      if (newIndex !== currentIndex) {
+        setIsTransitioning(true)
+        
+        // Smooth transition with animation
+        setTimeout(() => {
+          setActiveFilter(filterTabs[newIndex].id)
+          scrollToFilter(newIndex)
+          
+          // Reset transition state after animation
+          setTimeout(() => {
+            setIsTransitioning(false)
+          }, 300)
+        }, 50)
+      }
+    }
+    
+    // Reset touch positions
+    touchStartX.current = 0
+    touchEndX.current = 0
+    touchStartY.current = 0
+    isSwiping.current = false
+  }
+
+  // Scroll filter bar to show active button with smooth animation
+  const scrollToFilter = (index) => {
+    if (filterBarRef.current) {
+      const buttons = filterBarRef.current.querySelectorAll('button')
+      if (buttons[index]) {
+        const button = buttons[index]
+        const container = filterBarRef.current
+        const buttonLeft = button.offsetLeft
+        const buttonWidth = button.offsetWidth
+        const containerWidth = container.offsetWidth
+        const scrollLeft = buttonLeft - (containerWidth / 2) + (buttonWidth / 2)
+        
+        container.scrollTo({
+          left: scrollLeft,
+          behavior: 'smooth'
+        })
+      }
+    }
+  }
+
+  // Scroll to active filter on change with smooth animation
+  useEffect(() => {
+    const index = filterTabs.findIndex(tab => tab.id === activeFilter)
+    if (index >= 0) {
+      // Use requestAnimationFrame for smoother scrolling
+      requestAnimationFrame(() => {
+        scrollToFilter(index)
+      })
+    }
+  }, [activeFilter])
+
+
+  const handleSelectOrder = (order) => {
+    setSelectedOrder(order)
+    setIsSheetOpen(true)
+  }
+
+  const renderContent = () => {
+    switch (activeFilter) {
+      case "preparing":
+        return <PreparingOrders onSelectOrder={handleSelectOrder} />
+      case "ready":
+        return <ReadyOrders onSelectOrder={handleSelectOrder} />
+      case "out-for-delivery":
+        return <EmptyState message="Out for delivery orders will appear here" />
+      case "scheduled":
+        return <EmptyState message="Scheduled orders will appear here" />
+      default:
+        return <EmptyState />
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      {/* Restaurant Navbar - Sticky at top */}
+      <div className="sticky top-0 z-50 bg-white">
+        <RestaurantNavbar showNotifications={false} />
+      </div>
+
+      {/* Top Filter Bar - Sticky below navbar */}
+      <div className="sticky top-[50px] z-40 pb-2 bg-gray-100">
+        <div 
+          ref={filterBarRef}
+          className="flex gap-2 overflow-x-auto scrollbar-hide bg-transparent rounded-full px-3 py-2 mt-2"
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          <style>{`
+            .scrollbar-hide::-webkit-scrollbar {
+              display: none;
+            }
+          `}</style>
+          {filterTabs.map((tab, index) => {
+            const isActive = activeFilter === tab.id
+            
+            return (
+              <motion.button
+                key={tab.id}
+                onClick={() => {
+                  if (!isTransitioning) {
+                    setIsTransitioning(true)
+                    setActiveFilter(tab.id)
+                    scrollToFilter(index)
+                    setTimeout(() => setIsTransitioning(false), 300)
+                  }
+                }}
+                className={`shrink-0 px-6 py-3.5 rounded-full font-medium text-sm whitespace-nowrap relative overflow-hidden ${
+                  isActive
+                    ? 'text-white'
+                    : 'bg-white text-black'
+                }`}
+                animate={{
+                  scale: isActive ? 1.05 : 1,
+                  opacity: isActive ? 1 : 0.7,
+                }}
+                transition={{
+                  duration: 0.3,
+                  ease: [0.25, 0.1, 0.25, 1],
+                }}
+                whileTap={{ scale: 0.95 }}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="activeFilterBackground"
+                    className="absolute inset-0 bg-black rounded-full -z-10"
+                    initial={false}
+                    transition={{
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 30
+                    }}
+                  />
+                )}
+                <span className="relative z-10">{tab.label}</span>
+              </motion.button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Content Area - Scrollable */}
+      <div 
+        ref={contentRef}
+        className="flex-1 overflow-y-auto px-4 pb-24 content-scroll"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={(e) => {
+          mouseStartX.current = e.clientX
+          mouseEndX.current = e.clientX
+          isMouseDown.current = true
+          isSwiping.current = false
+        }}
+        onMouseMove={(e) => {
+          if (isMouseDown.current) {
+            if (!isSwiping.current) {
+              const deltaX = Math.abs(e.clientX - mouseStartX.current)
+              if (deltaX > 10) {
+                isSwiping.current = true
+              }
+            }
+            if (isSwiping.current) {
+              mouseEndX.current = e.clientX
+            }
+          }
+        }}
+        onMouseUp={() => {
+          if (isMouseDown.current && isSwiping.current) {
+            const swipeDistance = mouseStartX.current - mouseEndX.current
+            const minSwipeDistance = 50
+
+            if (Math.abs(swipeDistance) > minSwipeDistance && !isTransitioning) {
+              const currentIndex = filterTabs.findIndex(tab => tab.id === activeFilter)
+              let newIndex = currentIndex
+              
+              if (swipeDistance > 0 && currentIndex < filterTabs.length - 1) {
+                newIndex = currentIndex + 1
+              } else if (swipeDistance < 0 && currentIndex > 0) {
+                newIndex = currentIndex - 1
+              }
+
+              if (newIndex !== currentIndex) {
+                setIsTransitioning(true)
+                setTimeout(() => {
+                  setActiveFilter(filterTabs[newIndex].id)
+                  scrollToFilter(newIndex)
+                  setTimeout(() => setIsTransitioning(false), 300)
+                }, 50)
+              }
+            }
+          }
+          
+          isMouseDown.current = false
+          isSwiping.current = false
+          mouseStartX.current = 0
+          mouseEndX.current = 0
+        }}
+        onMouseLeave={() => {
+          isMouseDown.current = false
+          isSwiping.current = false
+        }}
+      >
+        <style>{`
+          .content-scroll {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          .content-scroll::-webkit-scrollbar {
+            display: none;
+          }
+        `}</style>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeFilter}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderContent()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Audio element */}
+      <audio ref={audioRef} src={notificationSound} />
+
+      {/* New Order Popup */}
+      <AnimatePresence>
+        {showNewOrderPopup && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="w-[95%] max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-gray-900">#2071</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Kadhai Chammach Restaurant, By Pass Road (South)</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handlePrint}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      aria-label="Print"
+                    >
+                      <Printer className="w-5 h-5 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={toggleMute}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      aria-label={isMuted ? "Unmute" : "Mute"}
+                    >
+                      {isMuted ? (
+                        <VolumeX className="w-5 h-5 text-gray-700" />
+                      ) : (
+                        <Volume2 className="w-5 h-5 text-gray-700" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="px-4 py-4 max-h-[60vh] overflow-y-auto">
+                  {/* Customer info */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold text-gray-900">Mantavya's 1st order</h4>
+                    <p className="text-xs text-gray-500 mt-1">18 Dec, 4:04 am</p>
+                  </div>
+
+                  {/* Details Accordion */}
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
+                      className="w-full flex items-center justify-between py-2 border-b border-gray-200"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="text-sm font-semibold text-gray-900">Details</span>
+                        <span className="text-xs text-gray-500">2 items</span>
+                      </div>
+                      {isDetailsExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-gray-600" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-gray-600" />
+                      )}
+                    </button>
+
+                    <AnimatePresence>
+                      {isDetailsExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="py-3 space-y-3">
+                            {/* Item 1 */}
+                            <div className="flex items-start gap-3">
+                              <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 shrink-0"></div>
+                              <div className="flex-1">
+                                <div className="flex items-start justify-between">
+                                  <p className="text-sm font-medium text-gray-900">1 x Egg Biryani</p>
+                                  <p className="text-xs text-gray-600 ml-2">Half</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Item 2 */}
+                            <div className="flex items-start gap-3">
+                              <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 shrink-0"></div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">1 x Manchurian with Rice</p>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Send cutlery */}
+                  <div className="mb-4 flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span className="text-sm text-gray-700">Send cutlery</span>
+                  </div>
+
+                  {/* Total bill */}
+                  <div className="mb-4 flex items-center justify-between py-3 border-y border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                      </svg>
+                      <span className="text-sm font-semibold text-gray-900">Total bill</span>
+                    </div>
+                    <span className="text-base font-bold text-gray-900">₹258</span>
+                  </div>
+
+                  {/* Preparation time */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-gray-700">Preparation time</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setPrepTime(Math.max(1, prepTime - 1))}
+                          className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                        >
+                          <Minus className="w-4 h-4 text-gray-700" />
+                        </button>
+                        <span className="text-base font-semibold text-gray-900 min-w-[60px] text-center">
+                          {prepTime} mins
+                        </span>
+                        <button
+                          onClick={() => setPrepTime(prepTime + 1)}
+                          className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                        >
+                          <Plus className="w-4 h-4 text-gray-700" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Accept and Reject buttons */}
+                  <div className="space-y-3">
+                    {/* Accept button with countdown */}
+                    <div className="relative">
+                      <button
+                        onClick={handleAcceptOrder}
+                        className="w-full bg-black text-white py-3.5 rounded-lg font-semibold text-sm hover:bg-gray-800 transition-colors relative overflow-hidden"
+                      >
+                        {/* Loading background */}
+                        <motion.div
+                          className="absolute inset-0 bg-blue-600"
+                          initial={{ width: "100%" }}
+                          animate={{ width: `${(countdown / 240) * 100}%` }}
+                          transition={{ duration: 1, ease: "linear" }}
+                        />
+                        <span className="relative z-10">Accept ({formatTime(countdown)})</span>
+                      </button>
+                    </div>
+
+                    {/* Reject button */}
+                    <button
+                      onClick={handleRejectClick}
+                      className="w-full bg-white border-2 border-red-500 text-red-600 py-3 rounded-lg font-semibold text-sm hover:bg-red-50 transition-colors"
+                    >
+                      Reject Order
+                    </button>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
+                  <button className="text-sm text-gray-600 hover:text-gray-900 transition-colors underline mx-auto block">
+                    Need help with this order?
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Reject Order Popup */}
+      <AnimatePresence>
+        {showRejectPopup && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleRejectCancel}
+            >
+              <motion.div
+                className="w-[95%] max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="px-4 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-bold text-gray-900">Reject Order #2071</h3>
+                  <p className="text-sm text-gray-500 mt-1">Please select a reason for rejecting this order</p>
+                </div>
+
+                {/* Content */}
+                <div className="px-4 py-4 max-h-[60vh] overflow-y-auto">
+                  <div className="space-y-2">
+                    {rejectReasons.map((reason) => (
+                      <button
+                        key={reason}
+                        onClick={() => setRejectReason(reason)}
+                        className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                          rejectReason === reason
+                            ? "border-black bg-black/5"
+                            : "border-gray-200 bg-white hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`text-sm font-medium ${
+                            rejectReason === reason ? "text-black" : "text-gray-900"
+                          }`}>
+                            {reason}
+                          </span>
+                          {rejectReason === reason && (
+                            <div className="w-5 h-5 rounded-full bg-black flex items-center justify-center">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-4 py-4 bg-gray-50 border-t border-gray-200 flex gap-3">
+                  <button
+                    onClick={handleRejectCancel}
+                    className="flex-1 bg-white border-2 border-gray-300 text-gray-700 py-3 rounded-lg font-semibold text-sm hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleRejectConfirm}
+                    disabled={!rejectReason}
+                    className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-colors ${
+                      rejectReason
+                        ? "!bg-black !text-white"
+                        : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    }`}
+                  >
+                    Confirm Rejection
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom Sheet for Order Details */}
+      <AnimatePresence>
+        {isSheetOpen && selectedOrder && (
+          <motion.div
+            className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSheetOpen(false)}
+          >
+            <motion.div
+              className="w-full max-w-md mx-auto bg-white rounded-t-3xl p-4 pb-6 shadow-lg"
+              initial={{ y: 80 }}
+              animate={{ y: 0 }}
+              exit={{ y: 80 }}
+              transition={{ duration: 0.25 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center mb-3">
+                <div className="h-1 w-10 rounded-full bg-gray-300" />
+              </div>
+
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div>
+                  <p className="text-sm font-semibold text-black">
+                    Order #{selectedOrder.orderId}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {selectedOrder.customerName}
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    {selectedOrder.type}
+                    {selectedOrder.tableOrToken
+                      ? ` • ${selectedOrder.tableOrToken}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
+                      selectedOrder.status === "Ready"
+                        ? "border-green-500 text-green-600"
+                        : "border-gray-800 text-gray-900"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        selectedOrder.status === "Ready"
+                          ? "bg-green-500"
+                          : "bg-gray-800"
+                      }`}
+                    />
+                    {selectedOrder.status}
+                  </span>
+                  <span className="text-[11px] text-gray-500">
+                    {selectedOrder.timePlaced}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 my-3" />
+
+              <div className="mb-3">
+                <p className="text-xs font-medium text-gray-700 mb-1">
+                  Items
+                </p>
+                <p className="text-xs text-gray-600">
+                  {selectedOrder.itemsSummary}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-gray-500 mb-4">
+                <span>ETA: <span className="font-medium text-black">{selectedOrder.eta}</span></span>
+                <span>Payment: <span className="font-medium text-black">Paid online</span></span>
+              </div>
+
+              <button
+                className="w-full bg-black text-white py-2.5 rounded-xl text-sm font-medium"
+                onClick={() => setIsSheetOpen(false)}
+              >
+                Close
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom Navigation - Sticky */}
+      <BottomNavOrders />
+    </div>
+  )
+}
+
+// Order Card Component
+function OrderCard({
+  orderId,
+  status,
+  customerName,
+  type,
+  tableOrToken,
+  timePlaced,
+  eta,
+  itemsSummary,
+  photoUrl,
+  photoAlt,
+  onSelect,
+}) {
+  const isReady = status === "Ready"
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onSelect?.({
+          orderId,
+          status,
+          customerName,
+          type,
+          tableOrToken,
+          timePlaced,
+          eta,
+          itemsSummary,
+        })
+      }
+      className="w-full text-left bg-white rounded-2xl p-4 mb-3 border border-gray-200 flex gap-3 items-stretch hover:border-gray-400 transition-colors"
+    >
+      {/* Photo */}
+      <div className="h-20 w-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 my-auto">
+        {photoUrl ? (
+          <img
+            src={photoUrl}
+            alt={photoAlt}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center px-2">
+            <span className="text-[11px] font-medium text-gray-500 text-center leading-tight">
+              {photoAlt}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 flex flex-col justify-between min-h-[80px]">
+        {/* Top row */}
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-black leading-tight">
+              Order #{orderId}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-1">
+              {customerName}
+            </p>
+          </div>
+
+          <div className="flex flex-col items-end gap-1">
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
+                isReady
+                  ? "border-green-500 text-green-600"
+                  : "border-gray-800 text-gray-900"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isReady ? "bg-green-500" : "bg-gray-800"
+                }`}
+              />
+              {status}
+            </span>
+            <span className="text-[11px] text-gray-500 text-right">
+              {timePlaced}
+            </span>
+          </div>
+        </div>
+
+        {/* Middle row */}
+        <div className="mt-2">
+          <p className="text-xs text-gray-600 line-clamp-1">
+            {itemsSummary}
+          </p>
+        </div>
+
+        {/* Bottom row */}
+        <div className="mt-2 flex items-end justify-between gap-2">
+          <p className="text-[11px] text-gray-500">
+            {type}
+            {tableOrToken ? ` • ${tableOrToken}` : ""}
+          </p>
+          <div className="flex items-baseline gap-1">
+            <span className="text-[11px] text-gray-500">ETA</span>
+            <span className="text-xs font-medium text-black">
+              {eta}
+            </span>
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// Preparing Orders List
+function PreparingOrders({ onSelectOrder }) {
+  return (
+    <div className="pt-4 pb-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-base font-semibold text-black">
+          Preparing orders
+        </h2>
+        <span className="text-xs text-gray-500">2 active</span>
+      </div>
+      <OrderCard
+        orderId="1047"
+        status="Preparing"
+        customerName="Rahul Mehta"
+        type="Dine-in"
+        tableOrToken="Table 6"
+        timePlaced="Placed 2 min ago"
+        eta="8–10 min"
+        itemsSummary="Paneer Butter Masala x1, Garlic Naan x2, Masala Coke x1"
+        photoUrl="https://images.pexels.com/photos/1117862/pexels-photo-1117862.jpeg?auto=compress&cs=tinysrgb&w=400"
+        photoAlt="North Indian thali with naan and curry"
+        onSelect={onSelectOrder}
+      />
+      <OrderCard
+        orderId="1048"
+        status="Preparing"
+        customerName="Sneha Singh"
+        type="Delivery"
+        tableOrToken="Token 21"
+        timePlaced="Placed 5 min ago"
+        eta="12–15 min"
+        itemsSummary="Veg Loaded Pizza (Medium) x1, Cheese Garlic Bread x1, Cold Coffee x1"
+        photoUrl="https://images.pexels.com/photos/825661/pexels-photo-825661.jpeg?auto=compress&cs=tinysrgb&w=400"
+        photoAlt="Pizza box with slices and dip"
+        onSelect={onSelectOrder}
+      />
+    </div>
+  )
+}
+
+// Ready Orders List
+function ReadyOrders({ onSelectOrder }) {
+  return (
+    <div className="pt-4 pb-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-base font-semibold text-black">
+          Ready for pickup
+        </h2>
+        <span className="text-xs text-gray-500">1 active</span>
+      </div>
+      <OrderCard
+        orderId="1043"
+        status="Ready"
+        customerName="Amit Verma"
+        type="Delivery"
+        tableOrToken="Token 14"
+        timePlaced="Ready since 1 min"
+        eta="Hand over now"
+        itemsSummary="Chicken Biryani x1, Raita x1, Gulab Jamun x2"
+        photoUrl="https://images.pexels.com/photos/7245463/pexels-photo-7245463.jpeg?auto=compress&cs=tinysrgb&w=400"
+        photoAlt="Biryani bowl with raita on the side"
+        onSelect={onSelectOrder}
+      />
+    </div>
+  )
+}
+
+// Empty State Component
+function EmptyState({ message = "Temporarily closed" }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] py-12">
+      {/* Store Illustration */}
+      <div className="mb-6">
+        <svg 
+          width="200" 
+          height="200" 
+          viewBox="0 0 200 200" 
+          className="text-gray-300"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {/* Storefront */}
+          <rect x="40" y="80" width="120" height="80" stroke="currentColor" strokeWidth="2" fill="white" />
+          {/* Awning */}
+          <path d="M30 80 L100 50 L170 80" stroke="currentColor" strokeWidth="2" fill="white" />
+          {/* Doors */}
+          <rect x="60" y="100" width="30" height="60" stroke="currentColor" strokeWidth="2" fill="white" />
+          <rect x="110" y="100" width="30" height="60" stroke="currentColor" strokeWidth="2" fill="white" />
+          {/* Laptop */}
+          <rect x="70" y="140" width="40" height="25" stroke="currentColor" strokeWidth="1.5" fill="white" />
+          <text x="85" y="155" fontSize="8" fill="currentColor" textAnchor="middle">CLOSED</text>
+          {/* Sign */}
+          <rect x="80" y="170" width="40" height="20" stroke="currentColor" strokeWidth="1.5" fill="white" />
+        </svg>
+      </div>
+      
+      {/* Message */}
+      <h2 className="text-lg font-semibold text-gray-600 mb-4 text-center">
+        {message}
+      </h2>
+      
+      {/* View Status Button */}
+      <button className="bg-black text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-800 transition-colors">
+        View status
+      </button>
+    </div>
+  )
+}

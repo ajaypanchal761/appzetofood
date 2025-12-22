@@ -1,0 +1,679 @@
+import { useState, useMemo, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
+import { motion, AnimatePresence } from "framer-motion"
+import { Search, Download, ChevronDown, Plus, Edit, Trash2, Info, MapPin, SlidersHorizontal, ArrowDownUp, Timer, Star, IndianRupee, UtensilsCrossed, BadgePercent, ShieldCheck, X } from "lucide-react"
+import { categoriesDummy } from "../../data/categoriesDummy"
+import { Button } from "@/components/ui/button"
+
+export default function Category() {
+  const [searchQuery, setSearchQuery] = useState("")
+  const [categories, setCategories] = useState(categoriesDummy)
+  const [selectedPriority, setSelectedPriority] = useState("")
+  const [activeFilters, setActiveFilters] = useState(new Set())
+  const [sortBy, setSortBy] = useState(null)
+  const [selectedCuisine, setSelectedCuisine] = useState(null)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [activeFilterTab, setActiveFilterTab] = useState('sort')
+  const [activeScrollSection, setActiveScrollSection] = useState('sort')
+  const filterSectionRefs = useRef({})
+  const rightContentRef = useRef(null)
+
+  // Simple filter toggle function
+  const toggleFilter = (filterId) => {
+    setActiveFilters(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(filterId)) {
+        newSet.delete(filterId)
+      } else {
+        newSet.add(filterId)
+      }
+      return newSet
+    })
+  }
+
+  // Scroll tracking effect for filter modal
+  useEffect(() => {
+    if (!isFilterOpen || !rightContentRef.current) return
+
+    const observerOptions = {
+      root: rightContentRef.current,
+      rootMargin: '-20% 0px -70% 0px',
+      threshold: 0
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const sectionId = entry.target.getAttribute('data-section-id')
+          if (sectionId) {
+            setActiveScrollSection(sectionId)
+            setActiveFilterTab(sectionId)
+          }
+        }
+      })
+    }, observerOptions)
+
+    Object.values(filterSectionRefs.current).forEach(ref => {
+      if (ref) observer.observe(ref)
+    })
+
+    return () => observer.disconnect()
+  }, [isFilterOpen])
+
+  const filteredCategories = useMemo(() => {
+    let result = [...categories]
+    
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      result = result.filter(cat =>
+        cat.name.toLowerCase().includes(query) ||
+        cat.id.toString().includes(query)
+      )
+    }
+
+    if (selectedPriority) {
+      result = result.filter(cat => cat.priority === selectedPriority)
+    }
+
+    return result
+  }, [categories, searchQuery, selectedPriority])
+
+  const handleToggleStatus = (id) => {
+    setCategories(categories.map(cat =>
+      cat.id === id ? { ...cat, status: !cat.status } : cat
+    ))
+  }
+
+  const handlePriorityChange = (id, newPriority) => {
+    setCategories(categories.map(cat =>
+      cat.id === id ? { ...cat, priority: newPriority } : cat
+    ))
+  }
+
+  const handleDelete = (id) => {
+    if (window.confirm("Are you sure you want to delete this category?")) {
+      setCategories(categories.filter(cat => cat.id !== id))
+    }
+  }
+
+  return (
+    <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
+      {/* Header Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center">
+            <div className="grid grid-cols-2 gap-0.5">
+              <div className="w-2 h-2 bg-white rounded-sm"></div>
+              <div className="w-2 h-2 bg-white rounded-sm"></div>
+              <div className="w-2 h-2 bg-white rounded-sm"></div>
+              <div className="w-2 h-2 bg-white rounded-sm"></div>
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900">Category</h1>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-slate-900">Category List</h2>
+            <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
+              {filteredCategories.length}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative">
+              <select
+                value={selectedPriority}
+                onChange={(e) => setSelectedPriority(e.target.value)}
+                className="px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-400"
+              >
+                <option value="">Select priority</option>
+                <option value="High">High</option>
+                <option value="Normal">Normal</option>
+                <option value="Low">Low</option>
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+            </div>
+
+            <div className="relative flex-1 sm:flex-initial min-w-[200px]">
+              <input
+                type="text"
+                placeholder="Ex : Categories"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            </div>
+
+            <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
+              <Download className="w-4 h-4" />
+              <span>Export</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+
+            <button className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 transition-all shadow-sm">
+              <Plus className="w-4 h-4" />
+              <span>Add New Category</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-6">
+        <div className="flex flex-col gap-1.5">
+          {/* Row 1 */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => setIsFilterOpen(true)}
+              className="h-5 px-1.5 rounded-md flex items-center gap-1 whitespace-nowrap shrink-0 transition-all bg-white border border-gray-200 hover:bg-gray-50"
+            >
+              <SlidersHorizontal className="h-2.5 w-2.5" />
+              <span className="text-[10px] font-bold text-black">Filters</span>
+            </Button>
+            {[
+              { id: 'delivery-under-30', label: 'Under 30 mins' },
+              { id: 'delivery-under-45', label: 'Under 45 mins' },
+            ].map((filter) => {
+              const isActive = activeFilters.has(filter.id)
+              return (
+                <Button
+                  key={filter.id}
+                  variant="outline"
+                  onClick={() => toggleFilter(filter.id)}
+                  className={`h-5 px-1.5 rounded-md flex items-center gap-1 whitespace-nowrap shrink-0 transition-all ${
+                    isActive
+                      ? 'bg-green-600 text-white border border-green-600 hover:bg-green-600/90'
+                      : 'bg-white border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-black'}`}>{filter.label}</span>
+                </Button>
+              )
+            })}
+          </div>
+          
+          {/* Row 2 */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {[
+              { id: 'distance-under-1km', label: 'Under 1km', icon: MapPin },
+              { id: 'distance-under-2km', label: 'Under 2km', icon: MapPin },
+            ].map((filter) => {
+              const Icon = filter.icon
+              const isActive = activeFilters.has(filter.id)
+              return (
+                <Button
+                  key={filter.id}
+                  variant="outline"
+                  onClick={() => toggleFilter(filter.id)}
+                  className={`h-5 px-1.5 rounded-md flex items-center gap-1 whitespace-nowrap shrink-0 transition-all ${
+                    isActive
+                      ? 'bg-green-600 text-white border border-green-600 hover:bg-green-600/90'
+                      : 'bg-white border border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {Icon && <Icon className={`h-2.5 w-2.5 ${isActive ? 'text-white' : 'text-gray-900'}`} />}
+                  <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-black'}`}>{filter.label}</span>
+                </Button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-hidden">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  SL
+                </th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Image
+                </th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Title
+                </th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  <div className="flex items-center gap-1">
+                    <span>Priority Level</span>
+                    <Info className="w-3 h-3 text-slate-400" />
+                  </div>
+                </th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Action
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-slate-100">
+              {filteredCategories.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-20 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
+                      <p className="text-sm text-slate-500">No categories match your search</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredCategories.map((category, index) => (
+                  <tr
+                    key={category.id}
+                    className="hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm font-medium text-slate-700">{index + 1}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center">
+                        <img
+                          src={category.image}
+                          alt={category.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.src = "https://via.placeholder.com/40"
+                          }}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-slate-900">{category.name}</span>
+                        <span className="text-xs text-slate-500">ID #{category.id}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="relative">
+                        <select
+                          value={category.priority}
+                          onChange={(e) => handlePriorityChange(category.id, e.target.value)}
+                          className="px-3 py-1.5 pr-6 text-xs rounded-md border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-400"
+                        >
+                          <option value="High">High</option>
+                          <option value="Normal">Normal</option>
+                          <option value="Low">Low</option>
+                        </select>
+                        <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => handleToggleStatus(category.id)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
+                          category.status
+                            ? "bg-blue-600"
+                            : category.id === 14
+                            ? "bg-slate-300"
+                            : "bg-slate-300"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            category.status ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                        {category.id === 14 && !category.status && (
+                          <span className="absolute left-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-slate-500"></span>
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(category.id)}
+                          className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Filter Modal - Bottom Sheet */}
+      {typeof window !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isFilterOpen && (
+              <div className="fixed inset-0 z-[100]">
+                {/* Backdrop */}
+                <div 
+                  className="absolute inset-0 bg-black/50" 
+                  onClick={() => setIsFilterOpen(false)}
+                />
+                
+                {/* Modal Content */}
+                <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-4 border-b">
+                    <h2 className="text-lg font-bold text-gray-900">Filters and sorting</h2>
+                    <button 
+                      onClick={() => {
+                        setActiveFilters(new Set())
+                        setSortBy(null)
+                        setSelectedCuisine(null)
+                      }}
+                      className="text-green-600 font-medium text-sm"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  
+                  {/* Body */}
+                  <div className="flex flex-1 overflow-hidden">
+                    {/* Left Sidebar - Tabs */}
+                    <div className="w-24 sm:w-28 bg-gray-50 border-r flex flex-col">
+                      {[
+                        { id: 'sort', label: 'Sort By', icon: ArrowDownUp },
+                        { id: 'time', label: 'Time', icon: Timer },
+                        { id: 'rating', label: 'Rating', icon: Star },
+                        { id: 'distance', label: 'Distance', icon: MapPin },
+                        { id: 'price', label: 'Dish Price', icon: IndianRupee },
+                        { id: 'cuisine', label: 'Cuisine', icon: UtensilsCrossed },
+                        { id: 'offers', label: 'Offers', icon: BadgePercent },
+                        { id: 'trust', label: 'Trust', icon: ShieldCheck },
+                      ].map((tab) => {
+                        const Icon = tab.icon
+                        const isActive = activeScrollSection === tab.id || activeFilterTab === tab.id
+                        return (
+                          <button
+                            key={tab.id}
+                            onClick={() => {
+                              setActiveFilterTab(tab.id)
+                              const section = filterSectionRefs.current[tab.id]
+                              if (section) {
+                                section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                              }
+                            }}
+                            className={`flex flex-col items-center gap-1 py-4 px-2 text-center relative transition-colors ${
+                              isActive ? 'bg-white text-green-600' : 'text-gray-500 hover:bg-gray-100'
+                            }`}
+                          >
+                            {isActive && (
+                              <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-600 rounded-r" />
+                            )}
+                            <Icon className="h-5 w-5" strokeWidth={1.5} />
+                            <span className="text-xs font-medium leading-tight">{tab.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    
+                    {/* Right Content Area - Scrollable */}
+                    <div ref={rightContentRef} className="flex-1 overflow-y-auto p-4">
+                      {/* Sort By Tab */}
+                      <div 
+                        ref={el => filterSectionRefs.current['sort'] = el}
+                        data-section-id="sort"
+                        className="space-y-4 mb-8"
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Sort by</h3>
+                        <div className="flex flex-col gap-3">
+                          {[
+                            { id: null, label: 'Relevance' },
+                            { id: 'price-low', label: 'Price: Low to High' },
+                            { id: 'price-high', label: 'Price: High to Low' },
+                            { id: 'rating-high', label: 'Rating: High to Low' },
+                            { id: 'rating-low', label: 'Rating: Low to High' },
+                          ].map((option) => (
+                            <button
+                              key={option.id || 'relevance'}
+                              onClick={() => setSortBy(option.id)}
+                              className={`px-4 py-3 rounded-xl border text-left transition-colors ${
+                                sortBy === option.id
+                                  ? 'border-green-600 bg-green-50'
+                                  : 'border-gray-200 hover:border-green-600'
+                              }`}
+                            >
+                              <span className={`text-sm font-medium ${sortBy === option.id ? 'text-green-600' : 'text-gray-700'}`}>
+                                {option.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Time Tab */}
+                      <div 
+                        ref={el => filterSectionRefs.current['time'] = el}
+                        data-section-id="time"
+                        className="space-y-4 mb-8"
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Delivery Time</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button 
+                            onClick={() => toggleFilter('delivery-under-30')}
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                              activeFilters.has('delivery-under-30') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-30') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
+                            <span className={`text-sm font-medium ${activeFilters.has('delivery-under-30') ? 'text-green-600' : 'text-gray-700'}`}>Under 30 mins</span>
+                          </button>
+                          <button 
+                            onClick={() => toggleFilter('delivery-under-45')}
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                              activeFilters.has('delivery-under-45') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-45') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
+                            <span className={`text-sm font-medium ${activeFilters.has('delivery-under-45') ? 'text-green-600' : 'text-gray-700'}`}>Under 45 mins</span>
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Rating Tab */}
+                      <div 
+                        ref={el => filterSectionRefs.current['rating'] = el}
+                        data-section-id="rating"
+                        className="space-y-4 mb-8"
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Restaurant Rating</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button 
+                            onClick={() => toggleFilter('rating-35-plus')}
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                              activeFilters.has('rating-35-plus') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <Star className={`h-6 w-6 ${activeFilters.has('rating-35-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
+                            <span className={`text-sm font-medium ${activeFilters.has('rating-35-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 3.5+</span>
+                          </button>
+                          <button 
+                            onClick={() => toggleFilter('rating-4-plus')}
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                              activeFilters.has('rating-4-plus') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <Star className={`h-6 w-6 ${activeFilters.has('rating-4-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
+                            <span className={`text-sm font-medium ${activeFilters.has('rating-4-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 4.0+</span>
+                          </button>
+                          <button 
+                            onClick={() => toggleFilter('rating-45-plus')}
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                              activeFilters.has('rating-45-plus') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <Star className={`h-6 w-6 ${activeFilters.has('rating-45-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
+                            <span className={`text-sm font-medium ${activeFilters.has('rating-45-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 4.5+</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Distance Tab */}
+                      <div 
+                        ref={el => filterSectionRefs.current['distance'] = el}
+                        data-section-id="distance"
+                        className="space-y-4 mb-8"
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Distance</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button 
+                            onClick={() => toggleFilter('distance-under-1km')}
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                              activeFilters.has('distance-under-1km') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-1km') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
+                            <span className={`text-sm font-medium ${activeFilters.has('distance-under-1km') ? 'text-green-600' : 'text-gray-700'}`}>Under 1 km</span>
+                          </button>
+                          <button 
+                            onClick={() => toggleFilter('distance-under-2km')}
+                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
+                              activeFilters.has('distance-under-2km') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-2km') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
+                            <span className={`text-sm font-medium ${activeFilters.has('distance-under-2km') ? 'text-green-600' : 'text-gray-700'}`}>Under 2 km</span>
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Price Tab */}
+                      <div 
+                        ref={el => filterSectionRefs.current['price'] = el}
+                        data-section-id="price"
+                        className="space-y-4 mb-8"
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Dish Price</h3>
+                        <div className="flex flex-col gap-3">
+                          <button 
+                            onClick={() => toggleFilter('price-under-200')}
+                            className={`px-4 py-3 rounded-xl border text-left transition-colors ${
+                              activeFilters.has('price-under-200') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <span className={`text-sm font-medium ${activeFilters.has('price-under-200') ? 'text-green-600' : 'text-gray-700'}`}>Under ₹200</span>
+                          </button>
+                          <button 
+                            onClick={() => toggleFilter('price-under-500')}
+                            className={`px-4 py-3 rounded-xl border text-left transition-colors ${
+                              activeFilters.has('price-under-500') 
+                                ? 'border-green-600 bg-green-50' 
+                                : 'border-gray-200 hover:border-green-600'
+                            }`}
+                          >
+                            <span className={`text-sm font-medium ${activeFilters.has('price-under-500') ? 'text-green-600' : 'text-gray-700'}`}>Under ₹500</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Cuisine Tab */}
+                      <div 
+                        ref={el => filterSectionRefs.current['cuisine'] = el}
+                        data-section-id="cuisine"
+                        className="space-y-4 mb-8"
+                      >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Cuisine</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          {['Chinese', 'American', 'Japanese', 'Italian', 'Mexican', 'Indian', 'Asian', 'Seafood', 'Desserts', 'Cafe', 'Healthy'].map((cuisine) => (
+                            <button
+                              key={cuisine}
+                              onClick={() => setSelectedCuisine(selectedCuisine === cuisine ? null : cuisine)}
+                              className={`px-4 py-3 rounded-xl border text-center transition-colors ${
+                                selectedCuisine === cuisine
+                                  ? 'border-green-600 bg-green-50'
+                                  : 'border-gray-200 hover:border-green-600'
+                              }`}
+                            >
+                              <span className={`text-sm font-medium ${selectedCuisine === cuisine ? 'text-green-600' : 'text-gray-700'}`}>
+                                {cuisine}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Trust Markers Tab */}
+                      {activeFilterTab === 'trust' && (
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gray-900">Trust Markers</h3>
+                          <div className="flex flex-col gap-3">
+                            <button className="px-4 py-3 rounded-xl border border-gray-200 hover:border-green-600 text-left transition-colors">
+                              <span className="text-sm font-medium text-gray-700">Top Rated</span>
+                            </button>
+                            <button className="px-4 py-3 rounded-xl border border-gray-200 hover:border-green-600 text-left transition-colors">
+                              <span className="text-sm font-medium text-gray-700">Trusted by 1000+ users</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Footer */}
+                  <div className="flex items-center gap-4 px-4 py-4 border-t bg-white">
+                    <button 
+                      onClick={() => setIsFilterOpen(false)}
+                      className="flex-1 py-3 text-center font-semibold text-gray-700"
+                    >
+                      Close
+                    </button>
+                    <button 
+                      onClick={() => setIsFilterOpen(false)}
+                      className={`flex-1 py-3 font-semibold rounded-xl transition-colors ${
+                        activeFilters.size > 0 || sortBy || selectedCuisine
+                          ? 'bg-green-600 text-white hover:bg-green-700'
+                          : 'bg-gray-200 text-gray-500'
+                      }`}
+                    >
+                      {activeFilters.size > 0 || sortBy || selectedCuisine
+                        ? 'Show results'
+                        : 'Show results'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+
+      <style>{`
+        @keyframes slideUp {
+          0% {
+            transform: translateY(100%);
+          }
+          100% {
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+    </div>
+  )
+}

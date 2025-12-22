@@ -1,0 +1,197 @@
+import { Link } from "react-router-dom"
+
+import { ArrowLeft, Clock, MapPin, Heart, Star } from "lucide-react"
+import AnimatedPage from "../../components/AnimatedPage"
+import Footer from "../../components/Footer"
+import ScrollReveal from "../../components/ScrollReveal"
+import TextReveal from "../../components/TextReveal"
+import { Card, CardTitle, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { useProfile } from "../../context/ProfileContext"
+
+// All restaurants data - same as Home page
+const restaurants = [
+  {
+    id: 1,
+    name: "Golden Dragon",
+    cuisine: "Chinese",
+    rating: 4.8,
+    deliveryTime: "25-30 min",
+    distance: "1.2 km",
+    image: "https://images.unsplash.com/photo-1525755662778-989d0524087e?w=800&h=600&fit=crop",
+    priceRange: "$$",
+  },
+  {
+    id: 2,
+    name: "Burger Paradise",
+    cuisine: "American",
+    rating: 4.6,
+    deliveryTime: "20-25 min",
+    distance: "0.8 km",
+    image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=600&fit=crop",
+    priceRange: "$",
+  },
+  {
+    id: 3,
+    name: "Sushi Master",
+    cuisine: "Japanese",
+    rating: 4.9,
+    deliveryTime: "30-35 min",
+    distance: "2.1 km",
+    image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&h=600&fit=crop",
+    priceRange: "$$$",
+  },
+  {
+    id: 4,
+    name: "Pizza Corner",
+    cuisine: "Italian",
+    rating: 4.7,
+    deliveryTime: "15-20 min",
+    distance: "0.5 km",
+    image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800&h=600&fit=crop",
+    priceRange: "$$",
+  },
+  {
+    id: 5,
+    name: "Taco Fiesta",
+    cuisine: "Mexican",
+    rating: 4.5,
+    deliveryTime: "20-25 min",
+    distance: "1.5 km",
+    image: "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=800&h=600&fit=crop",
+    priceRange: "$",
+  },
+  {
+    id: 6,
+    name: "Fresh Salad Bar",
+    cuisine: "Healthy",
+    rating: 4.4,
+    deliveryTime: "15-20 min",
+    distance: "0.9 km",
+    image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&h=600&fit=crop",
+    priceRange: "$$",
+  },
+]
+
+export default function Restaurants() {
+  const { addFavorite, removeFavorite, isFavorite } = useProfile()
+
+  return (
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6">
+        {/* Header */}
+        <ScrollReveal>
+          <div className="flex items-center gap-3 sm:gap-4 mb-4">
+            <Link to="/user">
+                <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10">
+                  <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                </Button>
+            </Link>
+            <TextReveal className="flex items-center gap-2 sm:gap-3">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-foreground">
+                All Restaurants
+              </h1>
+            </TextReveal>
+          </div>
+        </ScrollReveal>
+
+        {/* Restaurants Grid */}
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 pt-2 sm:pt-3">
+          {restaurants.map((restaurant, index) => {
+            const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+            const favorite = isFavorite(restaurantSlug)
+
+            const handleToggleFavorite = (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (favorite) {
+                removeFavorite(restaurantSlug)
+              } else {
+                addFavorite({
+                  slug: restaurantSlug,
+                  name: restaurant.name,
+                  cuisine: restaurant.cuisine,
+                  rating: restaurant.rating,
+                  deliveryTime: restaurant.deliveryTime,
+                  distance: restaurant.distance,
+                  priceRange: restaurant.priceRange,
+                  image: restaurant.image
+                })
+              }
+            }
+
+            return (
+              <ScrollReveal key={restaurant.id} delay={index * 0.1}>
+                <Link to={`/user/restaurants/${restaurantSlug}`}>
+                  <Card className="overflow-hidden cursor-pointer border border-gray-200 group bg-white hover:shadow-lg pb-1 sm:pb-2">
+                    <div className="flex flex-row min-h-[120px] sm:min-h-[140px] md:min-h-[160px]">
+                      {/* Left Side - Content */}
+                      <CardContent className="flex-1 flex flex-col justify-between p-3 sm:p-4 md:p-5 min-w-0 overflow-hidden">
+                        <div className="flex-1 flex flex-col justify-between gap-2">
+                          <div className="flex-shrink-0">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div className="flex-1 min-w-0 pr-2">
+                                <CardTitle className="text-base sm:text-lg md:text-xl mb-1 line-clamp-2">
+                                  {restaurant.name}
+                                </CardTitle>
+                                <p className="text-xs sm:text-sm text-muted-foreground font-medium mb-2 line-clamp-1">
+                                  {restaurant.cuisine}
+                                </p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="flex items-center gap-1 bg-yellow-50 px-1.5 py-0.5 rounded-full">
+                                    <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-yellow-400 text-yellow-400" />
+                                    <span className="font-bold text-xs sm:text-sm text-yellow-700">{restaurant.rating}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className={`h-7 w-7 sm:h-8 sm:w-8 rounded-full flex-shrink-0 ${favorite ? "text-red-500" : "text-gray-400 hover:text-red-500"
+                                  }`}
+                                onClick={handleToggleFavorite}
+                              >
+                                <Heart className={`h-4 w-4 sm:h-5 sm:w-5 ${favorite ? "fill-red-500" : ""}`} />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 mt-auto pt-2 border-t flex-shrink-0">
+                            <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground flex-wrap">
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
+                                <span className="font-medium whitespace-nowrap">{restaurant.deliveryTime}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0" />
+                                <span className="font-medium whitespace-nowrap">{restaurant.distance}</span>
+                              </div>
+                            </div>
+                            <Button className="bg-primary-orange hover:opacity-90 text-white text-xs sm:text-sm h-7 sm:h-8 px-3 sm:px-4 flex-shrink-0">
+                              Order Now
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                      
+                      {/* Right Side - Image */}
+                      <div className="w-36 sm:w-44 md:w-64 flex-shrink-0 relative overflow-hidden group/image">
+                        <img
+                          src={restaurant.image}
+                          alt={restaurant.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-l from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+              </ScrollReveal>
+            )
+          })}
+        </div>
+      </div>
+      <Footer />
+    </AnimatedPage>
+  )
+}
+
