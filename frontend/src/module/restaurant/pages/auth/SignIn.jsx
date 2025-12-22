@@ -35,14 +35,13 @@ export default function RestaurantSignIn() {
       const response = await authAPI.login(email, password, "restaurant")
       const data = response?.data?.data || response?.data
       
-      if (data.accessToken) {
-        localStorage.setItem("accessToken", data.accessToken)
-    localStorage.setItem("restaurant_authenticated", "true")
-        localStorage.setItem("restaurant_user", JSON.stringify(data.user))
-
-    // Dispatch custom event for same-tab updates
-    window.dispatchEvent(new Event('restaurantAuthChanged'))
-
+      if (data.accessToken && data.user) {
+        // Replace old token with new one (handles cross-module login)
+        setAuthData("restaurant", data.accessToken, data.user)
+        
+        // Dispatch custom event for same-tab updates
+        window.dispatchEvent(new Event('restaurantAuthChanged'))
+        
         navigate("/restaurant-panel/dashboard", { replace: true })
       } else {
         throw new Error("Login failed. Please try again.")

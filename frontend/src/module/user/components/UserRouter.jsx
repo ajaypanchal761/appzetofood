@@ -1,4 +1,5 @@
 import { Routes, Route } from "react-router-dom"
+import ProtectedRoute from "@/components/ProtectedRoute"
 import UserLayout from "./UserLayout"
 
 // Home & Discovery
@@ -94,14 +95,49 @@ export default function UserRouter() {
       <Route path="/search" element={<SearchResults />} />
       <Route path="/product/:id" element={<ProductDetail />} />
 
-      {/* Cart */}
-      <Route path="/cart" element={<Cart />} />
-      <Route path="/cart/checkout" element={<Checkout />} />
+      {/* Cart - Protected */}
+      <Route 
+        path="/cart" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Cart />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/cart/checkout" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Checkout />
+          </ProtectedRoute>
+        } 
+      />
 
-      {/* Orders */}
-      <Route path="/orders" element={<Orders />} />
-      <Route path="/orders/:orderId" element={<OrderTracking />} />
-      <Route path="/orders/:orderId/invoice" element={<OrderInvoice />} />
+      {/* Orders - Protected */}
+      <Route 
+        path="/orders" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Orders />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/orders/:orderId" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <OrderTracking />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/orders/:orderId/invoice" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <OrderInvoice />
+          </ProtectedRoute>
+        } 
+      />
 
       {/* Offers */}
       <Route path="/offers" element={<Offers />} />
@@ -117,26 +153,152 @@ export default function UserRouter() {
 
       {/* Gift Cards */}
       <Route path="/gift-card" element={<GiftCards />} />
-      <Route path="/gift-card/checkout" element={<GiftCardCheckout />} />
+      <Route 
+        path="/gift-card/checkout" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <GiftCardCheckout />
+          </ProtectedRoute>
+        } 
+      />
 
-      {/* Profile */}
-      <Route path="/profile" element={<Profile />} />
-      <Route path="/profile/edit" element={<EditProfile />} />
-      <Route path="/profile/addresses" element={<Addresses />} />
-      <Route path="/profile/addresses/new" element={<AddAddress />} />
-      <Route path="/profile/addresses/:id/edit" element={<EditAddress />} />
-      <Route path="/profile/payments" element={<Payments />} />
-      <Route path="/profile/payments/new" element={<AddPayment />} />
-      <Route path="/profile/payments/:id/edit" element={<EditPayment />} />
-      <Route path="/profile/favorites" element={<Favorites />} />
-      <Route path="/profile/settings" element={<Settings />} />
-      <Route path="/profile/coupons" element={<Coupons />} />
-      <Route path="/profile/redeem-gold-coupon" element={<RedeemGoldCoupon />} />
-      <Route path="/profile/about" element={<About />} />
-      <Route path="/profile/send-feedback" element={<SendFeedback />} />
-      <Route path="/profile/report-safety-emergency" element={<ReportSafetyEmergency />} />
-      <Route path="/profile/accessibility" element={<Accessibility />} />
-      <Route path="/profile/logout" element={<Logout />} />
+      {/* Profile - Protected */}
+      <Route 
+        path="/profile" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Profile />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/edit" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <EditProfile />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/addresses" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Addresses />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/addresses/new" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <AddAddress />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/addresses/:id/edit" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <EditAddress />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/payments" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Payments />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/payments/new" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <AddPayment />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/payments/:id/edit" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <EditPayment />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/favorites" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Favorites />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/settings" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Settings />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/coupons" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Coupons />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/redeem-gold-coupon" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <RedeemGoldCoupon />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/about" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <About />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/send-feedback" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <SendFeedback />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/report-safety-emergency" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <ReportSafetyEmergency />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/accessibility" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Accessibility />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/logout" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Logout />
+          </ProtectedRoute>
+        } 
+      />
 
       {/* Auth */}
       <Route path="/auth/sign-in" element={<SignIn />} />
@@ -147,11 +309,25 @@ export default function UserRouter() {
       <Route path="/help" element={<Help />} />
       <Route path="/help/orders/:orderId" element={<OrderHelp />} />
 
-      {/* Notifications */}
-      <Route path="/notifications" element={<Notifications />} />
+      {/* Notifications - Protected */}
+      <Route 
+        path="/notifications" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Notifications />
+          </ProtectedRoute>
+        } 
+      />
 
-      {/* Wallet */}
-      <Route path="/wallet" element={<Wallet />} />
+      {/* Wallet - Protected */}
+      <Route 
+        path="/wallet" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Wallet />
+          </ProtectedRoute>
+        } 
+      />
       </Route>
     </Routes>
   )

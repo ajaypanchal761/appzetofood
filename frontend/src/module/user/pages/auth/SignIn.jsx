@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select"
 import { authAPI } from "@/lib/api"
 import { firebaseAuth, googleProvider } from "@/lib/firebase"
+import { setAuthData } from "@/lib/utils/auth"
 import loginBanner from "@/assets/loginbanner.png"
 
 // Common country codes
@@ -218,10 +219,8 @@ export default function SignIn() {
         throw new Error("Invalid response from server")
       }
 
-      // Store auth data for user module
-      localStorage.setItem("accessToken", accessToken)
-      localStorage.setItem("user_authenticated", "true")
-      localStorage.setItem("user_user", JSON.stringify(appUser))
+      // Replace old token with new one (handles cross-module login)
+      setAuthData("user", accessToken, appUser)
 
       // Notify any listeners that auth state has changed
       window.dispatchEvent(new Event("userAuthChanged"))

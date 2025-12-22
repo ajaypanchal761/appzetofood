@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Mail, User, Lock, Eye, EyeOff, ArrowLeft, Shield } from "lucide-react"
 import appzetoLogo from "@/assets/appzetologo.png"
 import { authAPI } from "@/lib/api"
+import { setAuthData } from "@/lib/utils/auth"
 
 export default function AdminSignup() {
   const navigate = useNavigate()
@@ -150,10 +151,9 @@ export default function AdminSignup() {
       const data = response?.data?.data || response?.data
       
       // If registration successful, store tokens and redirect
-      if (data.accessToken) {
-        localStorage.setItem("accessToken", data.accessToken)
-        localStorage.setItem("admin_authenticated", "true")
-        localStorage.setItem("admin_user", JSON.stringify(data.user))
+      if (data.accessToken && data.user) {
+        // Replace old token with new one (handles cross-module login)
+        setAuthData("admin", data.accessToken, data.user)
         
         // Navigate to admin dashboard
         navigate("/admin", { replace: true })

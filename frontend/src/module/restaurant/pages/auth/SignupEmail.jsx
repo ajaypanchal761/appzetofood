@@ -1,5 +1,6 @@
 import { useState, useRef } from "react"
 import { useNavigate } from "react-router-dom"
+import { setAuthData } from "@/lib/utils/auth"
 import { Mail, User, Lock, Eye, EyeOff, ArrowLeft, UtensilsCrossed } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -139,10 +140,9 @@ export default function RestaurantSignupEmail() {
 
       const data = response?.data?.data || response?.data
       
-      if (data.accessToken) {
-        localStorage.setItem("accessToken", data.accessToken)
-        localStorage.setItem("restaurant_authenticated", "true")
-        localStorage.setItem("restaurant_user", JSON.stringify(data.user))
+      if (data.accessToken && data.user) {
+        // Replace old token with new one (handles cross-module login)
+        setAuthData("restaurant", data.accessToken, data.user)
         
         window.dispatchEvent(new Event("restaurantAuthChanged"))
         

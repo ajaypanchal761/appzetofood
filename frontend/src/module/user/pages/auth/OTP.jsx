@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { authAPI } from "@/lib/api"
 import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
+import { setAuthData as setUserAuthData } from "@/lib/utils/auth"
 
 export default function OTP() {
   const navigate = useNavigate()
@@ -209,10 +210,8 @@ export default function OTP() {
       // Clear auth data from sessionStorage
       sessionStorage.removeItem("userAuthData")
 
-      // Store auth data
-      localStorage.setItem("accessToken", accessToken)
-      localStorage.setItem("user_authenticated", "true")
-      localStorage.setItem("user_user", JSON.stringify(user))
+      // Replace old token with new one (handles cross-module login)
+      setUserAuthData("user", accessToken, user)
 
       // Dispatch custom event for same-tab updates
       window.dispatchEvent(new Event("userAuthChanged"))
@@ -275,10 +274,8 @@ export default function OTP() {
       // Clear auth data from sessionStorage
       sessionStorage.removeItem("userAuthData")
 
-      // Store auth data
-      localStorage.setItem("accessToken", accessToken)
-      localStorage.setItem("user_authenticated", "true")
-      localStorage.setItem("user_user", JSON.stringify(user))
+      // Replace old token with new one (handles cross-module login)
+      setUserAuthData("user", accessToken, user)
 
       // Dispatch custom event for same-tab updates
       window.dispatchEvent(new Event("userAuthChanged"))

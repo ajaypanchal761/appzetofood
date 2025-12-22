@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { authAPI } from "@/lib/api"
+import { setAuthData } from "@/lib/utils/auth"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -40,10 +41,9 @@ export default function AdminLogin() {
       const response = await authAPI.login(email, password, "admin")
       const data = response?.data?.data || response?.data
       
-      if (data.accessToken) {
-        localStorage.setItem("accessToken", data.accessToken)
-        localStorage.setItem("admin_authenticated", "true")
-        localStorage.setItem("admin_user", JSON.stringify(data.user))
+      if (data.accessToken && data.user) {
+        // Replace old token with new one (handles cross-module login)
+        setAuthData("admin", data.accessToken, data.user)
         
         // Navigate to admin dashboard after successful login
         navigate("/admin", { replace: true })
