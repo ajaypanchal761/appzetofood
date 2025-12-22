@@ -12,6 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { authAPI } from "@/lib/api"
+import { firebaseAuth, googleProvider } from "@/lib/firebase"
 import loginBanner from "@/assets/loginbanner.png"
 
 // Common country codes
@@ -57,6 +59,7 @@ export default function SignIn() {
     name: "",
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [apiError, setApiError] = useState("")
 
   // Get selected country details dynamically
   const selectedCountry = countryCodes.find(c => c.code === formData.countryCode) || countryCodes[2] // Default to India (+91)
@@ -128,6 +131,7 @@ export default function SignIn() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
+    setApiError("")
 
     // Validate based on auth method
     let hasErrors = false
@@ -157,28 +161,83 @@ export default function SignIn() {
       return
     }
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      const purpose = isSignUp ? "register" : "login"
+      const fullPhone = authMethod === "phone" ? `${formData.countryCode} ${formData.phone}`.trim() : null
+      const email = authMethod === "email" ? formData.email.trim() : null
 
-    // Store auth data in sessionStorage for OTP page
-    const authData = {
-      method: authMethod,
-      phone: authMethod === "phone" ? `${formData.countryCode} ${formData.phone}` : null,
-      email: authMethod === "email" ? formData.email : null,
-      name: isSignUp ? formData.name : null,
-      isSignUp,
+      // Call backend to send OTP
+      await authAPI.sendOTP(fullPhone, purpose, email)
+
+      // Store auth data in sessionStorage for OTP page
+      const authData = {
+        method: authMethod,
+        phone: fullPhone,
+        email: email,
+        name: isSignUp ? formData.name.trim() : null,
+        isSignUp,
+        module: "user",
+      }
+      sessionStorage.setItem("userAuthData", JSON.stringify(authData))
+
+      // Navigate to OTP page
+      navigate("/user/auth/otp")
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Failed to send OTP. Please try again."
+      setApiError(message)
+    } finally {
+      setIsLoading(false)
     }
-    sessionStorage.setItem("authData", JSON.stringify(authData))
-
-    setIsLoading(false)
-    navigate("/user/auth/otp")
   }
 
-  const handleGoogleSignIn = () => {
-    // Redirect to OAuth callback
-    // In a real app, this would redirect to Google OAuth
-    const authUrl = "/user/auth/callback?provider=google"
-    window.location.href = authUrl
+  const handleGoogleSignIn = async () => {
+    setApiError("")
+    setIsLoading(true)
+
+    try {
+      const { signInWithPopup } = await import("firebase/auth")
+
+      // Sign in with Google using Firebase Auth
+      const result = await signInWithPopup(firebaseAuth, googleProvider)
+      const user = result.user
+
+      // Get Firebase ID token
+      const idToken = await user.getIdToken()
+
+      // Call backend to login/register via Firebase Google
+      const response = await authAPI.firebaseGoogleLogin(idToken, "user")
+      const data = response?.data?.data || {}
+
+      const accessToken = data.accessToken
+      const appUser = data.user
+
+      if (!accessToken || !appUser) {
+        throw new Error("Invalid response from server")
+      }
+
+      // Store auth data for user module
+      localStorage.setItem("accessToken", accessToken)
+      localStorage.setItem("user_authenticated", "true")
+      localStorage.setItem("user_user", JSON.stringify(appUser))
+
+      // Notify any listeners that auth state has changed
+      window.dispatchEvent(new Event("userAuthChanged"))
+
+      // Navigate to user dashboard
+      navigate("/user")
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Google sign-in failed. Please try again."
+      setApiError(message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const toggleMode = () => {
@@ -189,8 +248,8 @@ export default function SignIn() {
     setErrors({ phone: "", email: "", name: "" })
   }
 
-  const handleEmailLogin = () => {
-    setAuthMethod("email")
+  const handleLoginMethodChange = () => {
+    setAuthMethod(authMethod === "email" ? "phone" : "email")
   }
 
   return (
@@ -286,6 +345,12 @@ export default function SignIn() {
                     <span>{errors.phone}</span>
                   </div>
                 )}
+                {apiError && authMethod === "phone" && (
+                  <div className="flex items-center gap-1 text-xs text-red-600">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>{apiError}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -308,9 +373,18 @@ export default function SignIn() {
                     <span>{errors.email}</span>
                   </div>
                 )}
+                {apiError && authMethod === "email" && (
+                  <div className="flex items-center gap-1 text-xs text-red-600">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>{apiError}</span>
+                  </div>
+                )}
                 <button
                   type="button"
-                  onClick={() => setAuthMethod("phone")}
+                  onClick={() => {
+                    setAuthMethod("phone")
+                    setApiError("")
+                  }}
                   className="text-xs text-[#E23744] hover:underline text-left"
                 >
                   Use phone instead
@@ -397,11 +471,11 @@ export default function SignIn() {
             {/* Email Login */}
             <button
               type="button"
-              onClick={handleEmailLogin}
+              onClick={handleLoginMethodChange}
               className="w-12 h-12 rounded-full border border-[#E23744] flex items-center justify-center hover:bg-[#d32f3d] transition-colors bg-[#E23744]"
               aria-label="Sign in with Email"
             >
-              <Mail className="h-6 w-6 text-white" />
+              {authMethod == "phone" ? <Mail className="h-5 w-5 text-white" /> : <Phone className="h-5 w-5 text-white" />}
             </button>
           </div>
 

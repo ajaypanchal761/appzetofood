@@ -4,18 +4,72 @@ import AnimatedPage from "../../components/AnimatedPage"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useState } from "react"
+import { authAPI } from "@/lib/api"
+import { firebaseAuth } from "@/lib/firebase"
 
 export default function Logout() {
   const navigate = useNavigate()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsLoggingOut(true)
-    // In a real app, you would clear auth tokens, user data, etc.
-    setTimeout(() => {
-      // Navigate to sign in page
-      navigate("/user/auth/sign-in")
-    }, 1500)
+    setError("")
+
+    try {
+      // Call backend logout API to invalidate refresh token
+      try {
+        await authAPI.logout()
+      } catch (apiError) {
+        // Continue with logout even if API call fails (network issues, etc.)
+        console.warn("Logout API call failed, continuing with local cleanup:", apiError)
+      }
+
+      // Sign out from Firebase if user logged in via Google
+      try {
+        const { signOut } = await import("firebase/auth")
+        const currentUser = firebaseAuth.currentUser
+        if (currentUser) {
+          await signOut(firebaseAuth)
+        }
+      } catch (firebaseError) {
+        // Continue even if Firebase logout fails
+        console.warn("Firebase logout failed, continuing with local cleanup:", firebaseError)
+      }
+
+      // Clear all authentication data from localStorage
+      localStorage.removeItem("accessToken")
+      localStorage.removeItem("user_authenticated")
+      localStorage.removeItem("user_user")
+
+      // Clear sessionStorage
+      sessionStorage.removeItem("userAuthData")
+
+      // Dispatch auth change event to notify other components
+      window.dispatchEvent(new Event("userAuthChanged"))
+
+      // Small delay for UX, then navigate to sign in
+      setTimeout(() => {
+        navigate("/user/auth/sign-in", { replace: true })
+      }, 500)
+    } catch (err) {
+      // Even if there's an error, we should still clear local data and logout
+      console.error("Error during logout:", err)
+      
+      // Clear local data anyway
+      localStorage.removeItem("accessToken")
+      localStorage.removeItem("user_authenticated")
+      localStorage.removeItem("user_user")
+      sessionStorage.removeItem("userAuthData")
+      window.dispatchEvent(new Event("userAuthChanged"))
+
+      setError("An error occurred during logout, but you have been signed out locally.")
+      
+      // Still navigate after showing error
+      setTimeout(() => {
+        navigate("/user/auth/sign-in", { replace: true })
+      }, 2000)
+    }
   }
 
   return (
@@ -91,9 +145,14 @@ export default function Logout() {
                 <Power className="h-10 w-10 text-gray-700 animate-pulse" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Logging out...</h2>
-              <p className="text-gray-600">
+              <p className="text-gray-600 mb-4">
                 Please wait while we sign you out.
               </p>
+              {error && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">{error}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

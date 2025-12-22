@@ -9,6 +9,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { authAPI } from "@/lib/api"
+import { firebaseAuth, googleProvider } from "@/lib/firebase"
 
 // Common country codes
 const countryCodes = [
@@ -50,6 +52,8 @@ export default function RestaurantLogin() {
     phone: false,
     email: false,
   })
+  const [isSending, setIsSending] = useState(false)
+  const [apiError, setApiError] = useState("")
 
   // Get selected country details dynamically
   const selectedCountry = countryCodes.find(c => c.code === formData.countryCode) || countryCodes[2] // Default to India (+91)
@@ -88,9 +92,10 @@ export default function RestaurantLogin() {
     return ""
   }
 
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
     // Mark all fields as touched
     setTouched({ phone: true })
+    setApiError("")
     
     // Validate
     const phoneError = validatePhone(formData.phone, formData.countryCode)
@@ -102,18 +107,37 @@ export default function RestaurantLogin() {
     
     // Clear errors if validation passes
     setErrors({ phone: "" })
-    
-    // Store auth data in sessionStorage for OTP page
-    const authData = {
-      method: "phone",
-      phone: `${formData.countryCode} ${formData.phone}`,
-      isSignUp: false,
-      module: "restaurant",
+
+    // Build full phone in E.164-ish format (e.g. +91xxxxxxxxxx)
+    const fullPhone = `${formData.countryCode} ${formData.phone}`.trim()
+
+    try {
+      setIsSending(true)
+
+      // Call backend to send OTP for login with restaurant role
+      await authAPI.sendOTP(fullPhone, "login")
+
+      // Store auth data in sessionStorage for OTP page
+      const authData = {
+        method: "phone",
+        phone: fullPhone,
+        isSignUp: false,
+        module: "restaurant",
+      }
+      sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
+
+      // Navigate to OTP page
+      navigate("/restaurant/otp")
+    } catch (error) {
+      // Extract backend error message if available
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Failed to send OTP. Please try again."
+      setApiError(message)
+    } finally {
+      setIsSending(false)
     }
-    sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
-    
-    // Navigate to OTP page
-    navigate("/restaurant/otp")
   }
 
   // Email validation
@@ -155,9 +179,10 @@ export default function RestaurantLogin() {
     setLoginMethod("email")
   }
 
-  const handleSendEmailOTP = () => {
+  const handleSendEmailOTP = async () => {
     // Mark email field as touched
     setTouched({ ...touched, email: true })
+    setApiError("")
     
     // Validate
     const emailError = validateEmail(formData.email)
@@ -169,23 +194,81 @@ export default function RestaurantLogin() {
     
     // Clear errors if validation passes
     setErrors({ ...errors, email: "" })
-    
-    // Store auth data in sessionStorage for OTP page
-    const authData = {
-      method: "email",
-      email: formData.email,
-      isSignUp: false,
-      module: "restaurant",
+
+    try {
+      setIsSending(true)
+
+      // Call backend API to send OTP via email
+      await authAPI.sendOTP(null, "login", formData.email)
+
+      // Store auth data in sessionStorage for OTP page
+      const authData = {
+        method: "email",
+        email: formData.email,
+        isSignUp: false,
+        module: "restaurant",
+      }
+      sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
+
+      // Navigate to OTP page
+      navigate("/restaurant/otp")
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Failed to send OTP. Please try again."
+      setApiError(message)
+    } finally {
+      setIsSending(false)
     }
-    sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
-    
-    // Navigate to OTP page
-    navigate("/restaurant/otp")
   }
 
-  const handleGoogleLogin = () => {
-    // TODO: Implement Google OAuth
-    console.log("Google login clicked")
+  const handleGoogleLogin = async () => {
+    setApiError("")
+    setIsSending(true)
+
+    try {
+      const { signInWithPopup } = await import("firebase/auth")
+
+      // Sign in with Google using Firebase Auth
+      const result = await signInWithPopup(firebaseAuth, googleProvider)
+      const user = result.user
+
+      // Get Firebase ID token
+      const idToken = await user.getIdToken()
+
+      // Call backend to login/register via Firebase Google
+      const response = await authAPI.firebaseGoogleLogin(idToken, "restaurant")
+      const data = response?.data?.data || {}
+
+      const accessToken = data.accessToken
+      const appUser = data.user
+
+      if (!accessToken || !appUser) {
+        throw new Error("Invalid response from server")
+      }
+
+      // Store auth data for restaurant module
+      localStorage.setItem("accessToken", accessToken)
+      localStorage.setItem("restaurant_authenticated", "true")
+      localStorage.setItem("restaurant_user", JSON.stringify(appUser))
+
+      // Notify any listeners that auth state has changed
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+
+      // Navigate to restaurant dashboard
+      navigate("/restaurant")
+    } catch (error) {
+      console.error("Firebase Google login error:", error)
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to login with Google. Please try again."
+      setApiError(message)
+    } finally {
+      setIsSending(false)
+    }
   }
 
   const handlePhoneChange = (e) => {
@@ -337,17 +420,22 @@ export default function RestaurantLogin() {
                 </div>
               </div>
 
+              {/* API error */}
+              {apiError && (
+                <p className="text-red-500 text-xs mt-1 ml-1">{apiError}</p>
+              )}
+
               {/* Send OTP Button */}
               <Button
                 onClick={handleSendOTP}
-                disabled={!isValidPhone}
+                disabled={!isValidPhone || isSending}
                 className={`w-full h-12 rounded-lg font-bold text-base transition-colors ${
-                  isValidPhone
+                  isValidPhone && !isSending
                     ? "bg-blue-600 hover:bg-blue-700 text-white"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
               >
-                Send OTP
+                {isSending ? "Sending OTP..." : "Send OTP"}
               </Button>
             </div>
           )}
@@ -375,17 +463,22 @@ export default function RestaurantLogin() {
                 )}
               </div>
 
+              {/* API error */}
+              {apiError && (
+                <p className="text-red-500 text-xs mt-1 ml-1">{apiError}</p>
+              )}
+
               {/* Send OTP Button */}
               <Button
                 onClick={handleSendEmailOTP}
-                disabled={!isValidEmail}
+                disabled={!isValidEmail || isSending}
                 className={`w-full h-12 rounded-lg font-bold text-base transition-colors ${
-                  isValidEmail
+                  isValidEmail && !isSending
                     ? "bg-blue-600 hover:bg-blue-700 text-white"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
               >
-                Send OTP
+                {isSending ? "Sending OTP..." : "Send OTP"}
               </Button>
             </div>
           )}

@@ -2,6 +2,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
 import AdminLayout from "./AdminLayout";
 import AdminLogin from "../pages/auth/AdminLogin";
+import AdminSignup from "../pages/auth/AdminSignup";
+import AdminForgotPassword from "../pages/auth/AdminForgotPassword";
 import AdminHome from "../pages/AdminHome";
 import PointOfSale from "../pages/PointOfSale";
 import SearchingDeliveryMan from "../pages/dispatch/SearchingDeliveryMan";
@@ -25,7 +27,7 @@ import RestaurantsList from "../pages/restaurant/RestaurantsList";
 import JoiningRequest from "../pages/restaurant/JoiningRequest";
 import RestaurantsBulkImport from "../pages/restaurant/RestaurantsBulkImport";
 import RestaurantsBulkExport from "../pages/restaurant/RestaurantsBulkExport";
-// Food Management
+// Food ManagementE
 import AddFood from "../pages/foods/AddFood";
 import FoodsList from "../pages/foods/FoodsList";
 import FoodReview from "../pages/foods/FoodReview";
@@ -127,6 +129,8 @@ export default function AdminRouter() {
     <Routes>
       {/* Public Routes */}
       <Route path="/login" element={<AdminLogin />} />
+      <Route path="/signup" element={<AdminSignup />} />
+      <Route path="/forgot-password" element={<AdminForgotPassword />} />
 
       {/* Protected Routes - With Layout */}
       <Route

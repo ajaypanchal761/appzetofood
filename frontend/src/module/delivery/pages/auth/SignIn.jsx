@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { authAPI } from "@/lib/api"
 
 // Common country codes
 const countryCodes = [
@@ -39,23 +40,73 @@ export default function DeliverySignIn() {
     phone: "",
     countryCode: "+91",
   })
+  const [error, setError] = useState("")
+  const [isSending, setIsSending] = useState(false)
 
   // Get selected country details dynamically
   const selectedCountry = countryCodes.find(c => c.code === formData.countryCode) || countryCodes[2] // Default to India (+91)
 
-  const handleContinue = () => {
-    if (formData.phone.trim().length >= 7) {
+  const validatePhone = (phone, countryCode) => {
+    if (!phone || phone.trim() === "") {
+      return "Phone number is required"
+    }
+
+    const digitsOnly = phone.replace(/\D/g, "")
+
+    if (digitsOnly.length < 7) {
+      return "Phone number must be at least 7 digits"
+    }
+
+    // India-specific validation
+    if (countryCode === "+91") {
+      if (digitsOnly.length !== 10) {
+        return "Indian phone number must be 10 digits"
+      }
+      const firstDigit = digitsOnly[0]
+      if (!["6", "7", "8", "9"].includes(firstDigit)) {
+        return "Invalid Indian mobile number"
+      }
+    }
+
+    return ""
+  }
+
+  const handleSendOTP = async () => {
+    setError("")
+
+    const phoneError = validatePhone(formData.phone, formData.countryCode)
+    if (phoneError) {
+      setError(phoneError)
+      return
+    }
+
+    const fullPhone = `${formData.countryCode} ${formData.phone}`.trim()
+
+    try {
+      setIsSending(true)
+
+      // Call backend to send OTP for delivery login
+      await authAPI.sendOTP(fullPhone, "login")
+
       // Store auth data in sessionStorage for OTP page
       const authData = {
         method: "phone",
-        phone: `${formData.countryCode} ${formData.phone}`,
+        phone: fullPhone,
         isSignUp: false,
         module: "delivery",
       }
       sessionStorage.setItem("deliveryAuthData", JSON.stringify(authData))
-      
+
       // Navigate to OTP page
       navigate("/delivery/otp")
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        "Failed to send OTP. Please try again."
+      setError(message)
+    } finally {
+      setIsSending(false)
     }
   }
 
@@ -75,7 +126,7 @@ export default function DeliverySignIn() {
     })
   }
 
-  const isValid = formData.phone.length >= 7
+  const isValid = !validatePhone(formData.phone, formData.countryCode)
 
   return (
     <div className="max-h-screen h-screen bg-white flex flex-col">
@@ -153,7 +204,9 @@ export default function DeliverySignIn() {
                 placeholder="Enter mobile number"
                 value={formData.phone}
                 onChange={handlePhoneChange}
-                className="flex-1 h-12 px-4 text-gray-900 placeholder-gray-400 focus:outline-none text-base border border-gray-300 rounded-lg min-w-0"
+                className={`flex-1 h-12 px-4 text-gray-900 placeholder-gray-400 focus:outline-none text-base border rounded-lg min-w-0 ${
+                  error ? "border-red-500" : "border-gray-300"
+                }`}
               />
             </div>
 
@@ -161,6 +214,12 @@ export default function DeliverySignIn() {
             <p className="text-sm text-gray-500">
               Enter a valid 10 digit mobile number
             </p>
+
+            {error && (
+              <p className="text-sm text-red-500">
+                {error}
+              </p>
+            )}
 
             {/* Help Link */}
             <p className="text-sm text-gray-600">
@@ -178,15 +237,15 @@ export default function DeliverySignIn() {
         <div className="w-full max-w-md mx-auto space-y-4">
           {/* Continue Button */}
           <button
-            onClick={handleContinue}
-            disabled={!isValid}
+            onClick={handleSendOTP}
+            disabled={!isValid || isSending}
             className={`w-full py-4 rounded-lg font-bold text-base transition-colors ${
-              isValid
+              isValid && !isSending
                 ? "bg-[#00B761] hover:bg-[#00A055] active:bg-[#009049] text-white"
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
           >
-            Continue
+            {isSending ? "Sending OTP..." : "Continue"}
           </button>
 
           {/* Terms and Conditions */}

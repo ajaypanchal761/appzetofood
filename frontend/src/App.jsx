@@ -28,7 +28,10 @@ import OrdersMain from "@/module/restaurant/pages/OrdersMain"
 import RestaurantSignIn from "@/module/restaurant/pages/auth/SignIn"
 import RestaurantLogin from "@/module/restaurant/pages/auth/Login"
 import RestaurantSignup from "@/module/restaurant/pages/auth/Signup"
+import RestaurantSignupEmail from "@/module/restaurant/pages/auth/SignupEmail"
+import RestaurantForgotPassword from "@/module/restaurant/pages/auth/ForgotPassword"
 import RestaurantOTP from "@/module/restaurant/pages/auth/OTP"
+import RestaurantGoogleCallback from "@/module/restaurant/pages/auth/GoogleCallback"
 import RestaurantWelcome from "@/module/restaurant/pages/auth/Welcome"
 
 import RestaurantPanelRouter from "@/module/restaurant/panel/components/RestaurantPanelRouter"
@@ -114,7 +117,10 @@ export default function App() {
       <Route path="/restaurant/auth/sign-in" element={<RestaurantSignIn />} />
       <Route path="/restaurant/login" element={<RestaurantLogin />} />
       <Route path="/restaurant/signup" element={<RestaurantSignup />} />
+      <Route path="/restaurant/signup-email" element={<RestaurantSignupEmail />} />
+      <Route path="/restaurant/forgot-password" element={<RestaurantForgotPassword />} />
       <Route path="/restaurant/otp" element={<RestaurantOTP />} />
+      <Route path="/restaurant/auth/google-callback" element={<RestaurantGoogleCallback />} />
       <Route path="/restaurant-panel/*" element={<RestaurantPanelRouter />} />
 
       <Route path="/usermain" element={<HomePage />} />

@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-
-const DEFAULT_OTP = "123456" // For testing
+import { authAPI } from "@/lib/api"
+import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
 
 export default function RestaurantOTP() {
   const navigate = useNavigate()
@@ -15,6 +15,9 @@ export default function RestaurantOTP() {
   const [contactInfo, setContactInfo] = useState("") // Can be phone or email
   const [contactType, setContactType] = useState("phone") // "phone" or "email"
   const [focusedIndex, setFocusedIndex] = useState(null)
+  const [name, setName] = useState("")
+  const [nameError, setNameError] = useState("")
+  const [showNameInput, setShowNameInput] = useState(false)
   const inputRefs = useRef([])
 
   useEffect(() => {
@@ -37,6 +40,14 @@ export default function RestaurantOTP() {
           setContactInfo(formattedPhone)
         } else {
           setContactInfo(data.phone || "")
+        }
+        
+        // Auto-fill OTP for test phone numbers
+        if (isTestPhoneNumber(data.phone)) {
+          const defaultOtp = getDefaultOTP(data.phone)
+          if (defaultOtp) {
+            setOtp(defaultOtp.split(""))
+          }
         }
       }
     } else {
@@ -136,6 +147,7 @@ export default function RestaurantOTP() {
     setOtp(newOtp)
     if (digits.length === 6) {
       handleVerify(newOtp.join(""))
+      return
     } else {
       inputRefs.current[digits.length]?.focus()
     }
@@ -149,35 +161,91 @@ export default function RestaurantOTP() {
       return
     }
 
+    // For email-based signup, use a two-step UX:
+    // 1) First validate OTP format and show name input
+    // 2) Then, once name is provided, call the backend
+    // For email-based login, skip name input and go directly to verification
+    if (contactType === "email" && authData?.isSignUp && !showNameInput) {
+      // First step: show name input, don't hit backend yet (only for signups)
+      setShowNameInput(true)
+      setError("")
+      return
+    }
+
+    // If we are on step 2 for email signup (or any flow where name input is visible), require name
+    if (showNameInput) {
+      if (!name.trim()) {
+        setNameError("Please enter your name to continue")
+        return
+      }
+      setNameError("")
+    }
+
     setIsLoading(true)
     setError("")
 
     try {
-      await new Promise((resolve, reject) => {
+      if (!authData) {
+        throw new Error("Session expired. Please try logging in again.")
+      }
+
+      // Determine identifier type (phone or email)
+      const phone = authData.method === "phone" ? authData.phone : null
+      const email = authData.method === "email" ? authData.email : null
+      const purpose = authData.isSignUp ? "register" : "login"
+      const nameToSend =
+        // Email-based explicit signup: take name from this screen
+        authData.method === "email" && authData.isSignUp
+          ? name.trim()
+          // Phone-based auto-registration after OTP for login: use name from this screen
+          : authData.method === "phone" && showNameInput
+          ? name.trim()
+          // Phone-based explicit signup (from signup page): name was collected earlier
+          : authData.isSignUp
+          ? authData.name
+          : null
+
+      const response = await authAPI.verifyOTP(phone, code, purpose, nameToSend, email, "restaurant")
+
+      // Extract user and token or special flags (like needsName) from backend response
+      const data = response?.data?.data || response?.data
+
+      // If backend says we need a name (user not found on login), show name input instead of erroring
+      if (data?.needsName) {
+        setShowNameInput(true)
+        setError("")
+        setNameError("")
+        return
+      }
+
+      const accessToken = data?.accessToken
+      const user = data?.user
+
+      if (accessToken) {
+        localStorage.setItem("accessToken", accessToken)
+      }
+      if (user) {
+        localStorage.setItem("restaurant_user", JSON.stringify(user))
+      }
+
+      if (accessToken && user) {
+        // Mark restaurant as authenticated for existing listeners only when we have a valid session
+        localStorage.setItem("restaurant_authenticated", "true")
+        window.dispatchEvent(new Event("restaurantAuthChanged"))
+
+        sessionStorage.removeItem("restaurantAuthData")
+
         setTimeout(() => {
-          if (code === DEFAULT_OTP || code === "000000" || code.length === 6) {
-            resolve()
-          } else {
-            reject(new Error("Invalid OTP. Please try again."))
-          }
-        }, 1500)
-      })
-
-      sessionStorage.removeItem("restaurantAuthData")
-      
-      localStorage.setItem("restaurant_authenticated", "true")
-      localStorage.setItem("restaurant_user", JSON.stringify({
-        [contactType]: contactInfo,
-        name: "Restaurant Partner"
-      }))
-      
-      window.dispatchEvent(new Event('restaurantAuthChanged'))
-
-      setTimeout(() => {
-        navigate("/restaurant")
-      }, 1000)
+          navigate("/restaurant")
+        }, 500)
+      }
     } catch (err) {
-      setError(err.message || "Invalid OTP. Please try again.")
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Invalid OTP. Please try again."
+      setError(message)
       setOtp(["", "", "", "", "", ""])
       inputRefs.current[0]?.focus()
     } finally {
@@ -191,7 +259,24 @@ export default function RestaurantOTP() {
     setIsLoading(true)
     setError("")
 
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      if (!authData) {
+        throw new Error("Session expired. Please go back and try again.")
+      }
+
+      const purpose = authData.isSignUp ? "register" : "login"
+      const phone = authData.method === "phone" ? authData.phone : null
+      const email = authData.method === "email" ? authData.email : null
+      
+      await authAPI.sendOTP(phone, purpose, email)
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to resend OTP. Please try again."
+      setError(message)
+    }
 
     setResendTimer(60)
     const timer = setInterval(() => {
@@ -205,7 +290,6 @@ export default function RestaurantOTP() {
     }, 1000)
 
     setIsLoading(false)
-    setError("")
     setOtp(["", "", "", "", "", ""])
     inputRefs.current[0]?.focus()
   }
@@ -285,6 +369,41 @@ export default function RestaurantOTP() {
               )
             })}
           </div>
+
+          {/* Name input:
+              - Email-based signup (existing behavior)
+              - Phone-based login when backend returns needsName=true (auto-registration)
+          */}
+          {showNameInput && (
+            <div className="mt-6 max-w-sm mx-auto text-left">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {authData?.method === "phone" ? "Restaurant / Owner name" : "Your name"}
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  if (nameError) setNameError("")
+                }}
+                placeholder="Enter your full name"
+                className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 ${
+                  nameError
+                    ? "border-red-500 focus:ring-red-500"
+                    : "border-gray-300 focus:ring-blue-500"
+                }`}
+                disabled={isLoading}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                If you&apos;re new, we&apos;ll use this to create your restaurant account.
+              </p>
+              {nameError && (
+                <p className="mt-1 text-xs text-red-600">
+                  {nameError}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (

@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { useCart } from "../../context/CartContext"
 import { useProfile } from "../../context/ProfileContext"
 import { useOrders } from "../../context/OrdersContext"
+import { orderAPI } from "@/lib/api"
+import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
 // Payment method icons as SVG components
 const GooglePayIcon = () => (
@@ -315,52 +317,104 @@ export default function Cart() {
     }
 
     setIsPlacingOrder(true)
-    setShowPlacingOrder(true)
-    setOrderProgress(0)
 
-    // Animate progress bar over 2 seconds
-    const progressInterval = setInterval(() => {
-      setOrderProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval)
-          return 100
-        }
-        return prev + 2
-      })
-    }, 40)
-
-    // After 2 seconds, create order and show success
-    setTimeout(() => {
-      clearInterval(progressInterval)
-      setOrderProgress(100)
-      
-      const orderId = createOrder({
+    try {
+      // Create order in backend
+      const orderResponse = await orderAPI.createOrder({
         items: cart.map(item => ({
-          id: item.id,
+          itemId: item.id,
           name: item.name,
           price: item.price,
           quantity: item.quantity,
-          image: item.image
+          image: item.image,
+          description: item.description,
+          isVeg: item.isVeg !== false
         })),
         address: defaultAddress,
-        paymentMethod: defaultPayment,
-        subtotal,
-        deliveryFee,
-        tax: gstCharges,
-        total,
-        discount,
+        restaurantId: cart[0]?.restaurant?.toLowerCase().replace(/\s+/g, "-") || "unknown",
+        restaurantName: cart[0]?.restaurant || "Unknown Restaurant",
+        pricing: {
+          subtotal,
+          deliveryFee,
+          tax: gstCharges,
+          discount,
+          total,
+          couponCode: appliedCoupon?.code
+        },
+        deliveryFleet,
         note,
         sendCutlery,
-        deliveryFleet,
-        restaurant: "Apna Sweets"
+        paymentMethod: "razorpay"
       })
 
-      setPlacedOrderId(orderId)
-      setShowPlacingOrder(false)
-      setShowOrderSuccess(true)
-      clearCart()
+      const { order, razorpay } = orderResponse.data.data
+
+      if (!razorpay || !razorpay.orderId) {
+        throw new Error("Failed to initialize payment")
+      }
+
+      // Get user info for Razorpay prefill
+      const userInfo = userProfile || {}
+      const userPhone = userInfo.phone || defaultAddress?.phone || ""
+      const userEmail = userInfo.email || ""
+      const userName = userInfo.name || ""
+
+      // Initialize Razorpay payment
+      await initRazorpayPayment({
+        key: razorpay.key,
+        amount: razorpay.amount,
+        currency: razorpay.currency,
+        order_id: razorpay.orderId,
+        name: "Appzeto Food",
+        description: `Order ${order.orderId}`,
+        prefill: {
+          name: userName,
+          email: userEmail,
+          contact: userPhone.replace(/\D/g, "").slice(-10)
+        },
+        notes: {
+          orderId: order.orderId,
+          userId: userInfo.id || ""
+        },
+        handler: async (response) => {
+          try {
+            // Verify payment with backend
+            const verifyResponse = await orderAPI.verifyPayment({
+              orderId: order.id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature
+            })
+
+            if (verifyResponse.data.success) {
+              // Payment successful
+              setPlacedOrderId(order.orderId)
+              setShowOrderSuccess(true)
+              clearCart()
+              setIsPlacingOrder(false)
+            } else {
+              throw new Error("Payment verification failed")
+            }
+          } catch (error) {
+            console.error("Payment verification error:", error)
+            alert(error?.response?.data?.message || "Payment verification failed. Please contact support.")
+            setIsPlacingOrder(false)
+          }
+        },
+        onError: (error) => {
+          console.error("Razorpay error:", error)
+          alert(error?.description || "Payment failed. Please try again.")
+          setIsPlacingOrder(false)
+        },
+        onClose: () => {
+          setIsPlacingOrder(false)
+        }
+      })
+    } catch (error) {
+      console.error("Order creation error:", error)
+      alert(error?.response?.data?.message || "Failed to create order. Please try again.")
       setIsPlacingOrder(false)
-    }, 2000)
+    }
   }
 
   const handleGoToOrders = () => {
@@ -499,10 +553,23 @@ export default function Cart() {
           </div>
 
           {/* Add more items */}
-          <Link to="/user" className="flex items-center gap-2 mt-4 text-red-600">
-            <Plus className="h-4 w-4" />
-            <span className="text-sm font-medium">Add more items</span>
-          </Link>
+          {cart.length > 0 && cart[0]?.restaurant ? (
+            <Link 
+              to={`/user/restaurants/${cart[0].restaurant.toLowerCase().replace(/\s+/g, "-")}`} 
+              className="flex items-center gap-2 mt-4 text-red-600"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="text-sm font-medium">Add more items</span>
+            </Link>
+          ) : (
+            <button 
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 mt-4 text-red-600"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="text-sm font-medium">Add more items</span>
+            </button>
+          )}
         </div>
 
         {/* Note & Cutlery */}
@@ -827,22 +894,23 @@ export default function Cart() {
               <p className="text-xs text-gray-500 flex items-center gap-1">
                 PAY USING <ChevronUp className="h-3 w-3" />
               </p>
-              <p className="text-sm font-medium text-gray-800">
-                {selectedPayment?.name || defaultPayment?.type || "Select Payment"}
+              <p className="text-sm font-medium text-gray-800 text-start">
+                {"Razorpay"}
               </p>
             </div>
           </button>
-          <Button 
-            onClick={selectedPayment ? handlePlaceOrder : () => setShowPaymentSelection(true)}
+          <Button
+            size="lg"
+            onClick={handlePlaceOrder}
             disabled={isPlacingOrder}
-            className="bg-green-600 hover:bg-green-700 text-white px-6 h-11 rounded-lg"
+            className="bg-green-700 hover:bg-green-800 text-white px-7 h-11 rounded-sm"
           >
             <div className="text-left mr-3">
               <p className="text-xs opacity-90">₹{total.toFixed(0)}</p>
               <p className="text-xs opacity-75">TOTAL</p>
             </div>
-            <span className="font-semibold">
-              {isPlacingOrder ? "Placing..." : selectedPayment ? "Place Order" : "Select Payment"}
+            <span className="font-semibold text-md">
+              {isPlacingOrder ? "Processing..." : "Place Order"}
             </span>
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>

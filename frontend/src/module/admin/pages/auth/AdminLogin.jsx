@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { authAPI } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -34,14 +35,31 @@ export default function AdminLogin() {
       return
     }
 
-    // Mock login - in real app, this would call an API
-    setTimeout(() => {
+    try {
+      // Login with admin role
+      const response = await authAPI.login(email, password, "admin")
+      const data = response?.data?.data || response?.data
+      
+      if (data.accessToken) {
+        localStorage.setItem("accessToken", data.accessToken)
+        localStorage.setItem("admin_authenticated", "true")
+        localStorage.setItem("admin_user", JSON.stringify(data.user))
+        
+        // Navigate to admin dashboard after successful login
+        navigate("/admin", { replace: true })
+      } else {
+        throw new Error("Login failed. Please try again.")
+      }
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Login failed. Please check your credentials."
+      setError(message)
+    } finally {
       setIsLoading(false)
-      // Set authentication flag
-      localStorage.setItem("admin_authenticated", "true")
-      // Navigate to admin dashboard after successful login
-      navigate("/admin")
-    }, 1000)
+    }
   }
 
   return (
@@ -147,7 +165,14 @@ export default function AdminLogin() {
           </CardContent>
 
           <CardFooter className="flex-col items-start gap-2 text-sm text-gray-500">
-            <span>Need access? Contact your Appzeto administrator.</span>
+            <span>Don't have an account?{" "}
+              <button
+                onClick={() => navigate("/admin/signup")}
+                className="text-black hover:underline font-medium"
+              >
+                Sign up
+              </button>
+            </span>
             <span>Secure sign-in helps protect admin tools.</span>
           </CardFooter>
         </Card>

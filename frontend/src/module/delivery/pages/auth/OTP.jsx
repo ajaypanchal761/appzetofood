@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import AnimatedPage from "../../../user/components/AnimatedPage"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { authAPI } from "@/lib/api"
+import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
 
 export default function DeliveryOTP() {
   const navigate = useNavigate()
@@ -12,6 +15,10 @@ export default function DeliveryOTP() {
   const [success, setSuccess] = useState(false)
   const [resendTimer, setResendTimer] = useState(0)
   const [authData, setAuthData] = useState(null)
+  const [showNameInput, setShowNameInput] = useState(false)
+  const [name, setName] = useState("")
+  const [nameError, setNameError] = useState("")
+  const [verifiedOtp, setVerifiedOtp] = useState("")
   const inputRefs = useRef([])
 
   useEffect(() => {
@@ -29,7 +36,16 @@ export default function DeliveryOTP() {
       navigate("/delivery/sign-in", { replace: true })
       return
     }
-    setAuthData(JSON.parse(stored))
+    const data = JSON.parse(stored)
+    setAuthData(data)
+
+    // Auto-fill OTP for test phone numbers
+    if (data.phone && isTestPhoneNumber(data.phone)) {
+      const defaultOtp = getDefaultOTP(data.phone)
+      if (defaultOtp) {
+        setOtp(defaultOtp.split(""))
+      }
+    }
 
     // Start resend timer (60 seconds)
     setResendTimer(60)
@@ -69,8 +85,8 @@ export default function DeliveryOTP() {
       inputRefs.current[index + 1]?.focus()
     }
 
-    // Auto-submit when all 6 digits are entered
-    if (newOtp.every((digit) => digit !== "") && newOtp.length === 6) {
+    // Auto-submit when all 6 digits are entered and we are in OTP step
+    if (!showNameInput && newOtp.every((digit) => digit !== "") && newOtp.length === 6) {
       handleVerify(newOtp.join(""))
     }
   }
@@ -123,14 +139,19 @@ export default function DeliveryOTP() {
       }
     })
     setOtp(newOtp)
-    if (digits.length === 6) {
+    if (!showNameInput && digits.length === 6) {
       handleVerify(newOtp.join(""))
-    } else {
-      inputRefs.current[digits.length]?.focus()
-    }
+      return
+    } 
+    inputRefs.current[digits.length]?.focus()
   }
 
   const handleVerify = async (otpValue = null) => {
+    if (showNameInput) {
+      // In name collection step, ignore OTP auto-submit
+      return
+    }
+
     const code = otpValue || otp.join("")
     
     if (code.length !== 6) {
@@ -140,37 +161,153 @@ export default function DeliveryOTP() {
     setIsLoading(true)
     setError("")
 
-    // Dummy verification - accept any OTP
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      const phone = authData?.phone
+      if (!phone) {
+        setError("Phone number not found. Please try again.")
+        setIsLoading(false)
+        return
+      }
 
-    setSuccess(true)
+      // First attempt: verify OTP for login with delivery role
+      const response = await authAPI.verifyOTP(phone, code, "login", null, null, "delivery")
+      const data = response?.data?.data || {}
 
-    // Clear auth data from sessionStorage
-    sessionStorage.removeItem("deliveryAuthData")
+      // If backend tells us this is a new user, ask for name
+      if (data.needsName) {
+        setShowNameInput(true)
+        setVerifiedOtp(code)
+        setOtp(["", "", "", "", "", ""])
+        setSuccess(false)
+        setIsLoading(false)
+        return
+      }
 
-    // Set authentication state in localStorage
-    localStorage.setItem("delivery_authenticated", "true")
-    localStorage.setItem("delivery_user", JSON.stringify({
-      phone: authData.phone,
-      name: authData.name || "Delivery Partner"
-    }))
+      // Otherwise, OTP verified and user logged in
+      const accessToken = data.accessToken
+      const user = data.user
 
-    // Dispatch custom event for same-tab updates
-    window.dispatchEvent(new Event('deliveryAuthChanged'))
+      if (!accessToken || !user) {
+        throw new Error("Invalid response from server")
+      }
 
-    // Redirect to welcome page after short delay
-    setTimeout(() => {
-      navigate("/delivery/welcome")
-    }, 500)
+      // Clear auth data from sessionStorage
+      sessionStorage.removeItem("deliveryAuthData")
+
+      // Store auth data
+      localStorage.setItem("accessToken", accessToken)
+      localStorage.setItem("delivery_authenticated", "true")
+      localStorage.setItem("delivery_user", JSON.stringify(user))
+
+      // Dispatch custom event for same-tab updates
+      window.dispatchEvent(new Event("deliveryAuthChanged"))
+
+      setSuccess(true)
+
+      // Redirect to welcome page after short delay
+      setTimeout(() => {
+        navigate("/delivery/welcome")
+      }, 500)
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to verify OTP. Please try again."
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSubmitName = async () => {
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      setNameError("Name is required")
+      return
+    }
+
+    if (!verifiedOtp) {
+      setError("OTP verification step missing. Please request a new OTP.")
+      return
+    }
+
+    setIsLoading(true)
+    setError("")
+    setNameError("")
+
+    try {
+      const phone = authData?.phone
+      if (!phone) {
+        setError("Phone number not found. Please try again.")
+        return
+      }
+
+      // Second call with name to auto-register and login
+      const response = await authAPI.verifyOTP(phone, verifiedOtp, "login", trimmedName, null, "delivery")
+      const data = response?.data?.data || {}
+
+      const accessToken = data.accessToken
+      const user = data.user
+
+      if (!accessToken || !user) {
+        throw new Error("Invalid response from server")
+      }
+
+      // Clear auth data from sessionStorage
+      sessionStorage.removeItem("deliveryAuthData")
+
+      // Store auth data
+      localStorage.setItem("accessToken", accessToken)
+      localStorage.setItem("delivery_authenticated", "true")
+      localStorage.setItem("delivery_user", JSON.stringify(user))
+
+      // Dispatch custom event for same-tab updates
+      window.dispatchEvent(new Event("deliveryAuthChanged"))
+
+      setSuccess(true)
+
+      // Redirect to welcome page after short delay
+      setTimeout(() => {
+        navigate("/delivery/welcome")
+      }, 500)
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to complete registration. Please try again."
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleResend = async () => {
     if (resendTimer > 0) return
 
     setIsLoading(true)
+    setError("")
 
-    // Simulate resend API call
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    try {
+      const phone = authData?.phone
+      if (!phone) {
+        setError("Phone number not found. Please go back and try again.")
+        return
+      }
+
+      // Call backend to resend OTP
+      await authAPI.sendOTP(phone, "login")
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to resend OTP. Please try again."
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
 
     // Reset timer to 60 seconds
     setResendTimer(60)
@@ -184,8 +321,11 @@ export default function DeliveryOTP() {
       })
     }, 1000)
 
-    setIsLoading(false)
     setOtp(["", "", "", "", "", ""])
+    setShowNameInput(false)
+    setName("")
+    setNameError("")
+    setVerifiedOtp("")
     inputRefs.current[0]?.focus()
   }
 
@@ -229,55 +369,107 @@ export default function DeliveryOTP() {
           {/* Message */}
           <div className="text-center space-y-2">
             <p className="text-base text-black">
-              We have sent a verification code to
+              {showNameInput
+                ? "You're almost done! Please tell us your name to complete registration."
+                : "We have sent a verification code to"}
             </p>
-            <p className="text-base text-black font-medium">
-              {getPhoneNumber()}
-            </p>
-          </div>
-
-          {/* OTP Input Fields */}
-          <div className="flex justify-center gap-2">
-            {otp.map((digit, index) => (
-              <Input
-                key={index}
-                ref={(el) => (inputRefs.current[index] = el)}
-                type="text"
-                inputMode="numeric"
-                maxLength={1}
-                value={digit}
-                onChange={(e) => handleChange(index, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(index, e)}
-                onPaste={index === 0 ? handlePaste : undefined}
-                disabled={isLoading}
-                className="w-12 h-12 text-center text-lg font-semibold p-0 border border-black rounded-md focus-visible:ring-0 focus-visible:border-black bg-white"
-              />
-            ))}
-          </div>
-
-          {/* Resend Section */}
-          <div className="text-center space-y-1">
-            <p className="text-sm text-black">
-              Didn't get the OTP?
-            </p>
-            {resendTimer > 0 ? (
-              <p className="text-sm text-gray-500">
-                Resend SMS in {resendTimer}s
+            {!showNameInput && (
+              <p className="text-base text-black font-medium">
+                {getPhoneNumber()}
               </p>
-            ) : (
-              <button
-                type="button"
-                onClick={handleResend}
-                disabled={isLoading}
-                className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
-              >
-                Resend SMS
-              </button>
             )}
           </div>
 
+          {/* Error message */}
+          {error && (
+            <p className="text-sm text-red-500 text-center">
+              {error}
+            </p>
+          )}
+
+          {/* OTP Input Fields */}
+          {!showNameInput && (
+            <>
+              <div className="flex justify-center gap-2">
+                {otp.map((digit, index) => (
+                  <Input
+                    key={index}
+                    ref={(el) => (inputRefs.current[index] = el)}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleChange(index, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(index, e)}
+                    onPaste={index === 0 ? handlePaste : undefined}
+                    disabled={isLoading}
+                    className="w-12 h-12 text-center text-lg font-semibold p-0 border border-black rounded-md focus-visible:ring-0 focus-visible:border-black bg-white"
+                  />
+                ))}
+              </div>
+
+              {/* Resend Section */}
+              <div className="text-center space-y-1">
+                <p className="text-sm text-black">
+                  Didn't get the OTP?
+                </p>
+                {resendTimer > 0 ? (
+                  <p className="text-sm text-gray-500">
+                    Resend SMS in {resendTimer}s
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={isLoading}
+                    className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                  >
+                    Resend SMS
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Name Input (shown only after OTP verified and user is new) */}
+          {showNameInput && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="block text-sm font-medium text-black text-left">
+                  Full name
+                </label>
+                <Input
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value)
+                    if (nameError) setNameError("")
+                  }}
+                  disabled={isLoading}
+                  placeholder="Enter your name"
+                  className={`h-11 border ${
+                    nameError ? "border-red-500" : "border-gray-300"
+                  }`}
+                />
+                {nameError && (
+                  <p className="text-xs text-red-500 text-left">
+                    {nameError}
+                  </p>
+                )}
+              </div>
+
+              <Button
+                onClick={handleSubmitName}
+                disabled={isLoading}
+                className="w-full h-11 bg-[#00B761] hover:bg-[#00A055] text-white font-semibold"
+              >
+                {isLoading ? "Continuing..." : "Continue"}
+              </Button>
+            </div>
+          )}
+
           {/* Loading Spinner */}
-          {isLoading && (
+          {isLoading && !showNameInput && (
             <div className="flex justify-center pt-4">
               <Loader2 className="h-6 w-6 text-green-500 animate-spin" />
             </div>

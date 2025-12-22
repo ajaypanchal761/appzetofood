@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Phone, User, AlertCircle, Loader2, UtensilsCrossed } from "lucide-react"
+import { authAPI } from "@/lib/api"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,6 +51,7 @@ export default function RestaurantSignup() {
     name: "",
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [apiError, setApiError] = useState("")
 
   const validatePhone = (phone) => {
     if (!phone.trim()) {
@@ -101,6 +103,7 @@ export default function RestaurantSignup() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
+    setApiError("")
 
     // Validate
     let hasErrors = false
@@ -121,21 +124,33 @@ export default function RestaurantSignup() {
       return
     }
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    // Build full phone number
+    const fullPhone = `${formData.countryCode} ${formData.phone}`.trim()
 
-    // Store auth data in sessionStorage for OTP page
-    const authData = {
-      method: "phone",
-      phone: `${formData.countryCode} ${formData.phone}`,
-      name: formData.name,
-      isSignUp: true,
-      module: "restaurant",
+    try {
+      // Send OTP with purpose 'register' and role 'restaurant'
+      await authAPI.sendOTP(fullPhone, "register")
+
+      // Store auth data in sessionStorage for OTP page
+      const authData = {
+        method: "phone",
+        phone: fullPhone,
+        name: formData.name,
+        isSignUp: true,
+        module: "restaurant",
+      }
+      sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
+
+      navigate("/restaurant/otp")
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Failed to send OTP. Please try again."
+      setApiError(message)
+    } finally {
+      setIsLoading(false)
     }
-    sessionStorage.setItem("restaurantAuthData", JSON.stringify(authData))
-
-    setIsLoading(false)
-    navigate("/restaurant/otp")
   }
 
   return (
@@ -284,6 +299,12 @@ export default function RestaurantSignup() {
                 <div className="flex items-center gap-1 text-xs sm:text-sm text-red-600">
                   <AlertCircle className="h-3 w-3" />
                   <span>{errors.phone}</span>
+                </div>
+              )}
+              {apiError && !errors.phone && (
+                <div className="flex items-center gap-1 text-xs sm:text-sm text-red-600 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>{apiError}</span>
                 </div>
               )}
             </div>

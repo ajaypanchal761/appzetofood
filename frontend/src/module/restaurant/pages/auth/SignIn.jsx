@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { authAPI } from "@/lib/api"
 import { Mail, Lock, EyeOff, Eye, CheckSquare, UtensilsCrossed } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +15,7 @@ export default function RestaurantSignIn() {
   const [remember, setRemember] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
 
   // Redirect to restaurant panel if already authenticated
   useEffect(() => {
@@ -25,23 +27,36 @@ export default function RestaurantSignIn() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setError("")
     setIsLoading(true)
 
-    // TODO: replace with real API
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // Set authentication state
+    try {
+      // Login with restaurant role
+      const response = await authAPI.login(email, password, "restaurant")
+      const data = response?.data?.data || response?.data
+      
+      if (data.accessToken) {
+        localStorage.setItem("accessToken", data.accessToken)
     localStorage.setItem("restaurant_authenticated", "true")
-    localStorage.setItem("restaurant_user", JSON.stringify({
-      email: email,
-      name: "Restaurant Partner"
-    }))
+        localStorage.setItem("restaurant_user", JSON.stringify(data.user))
 
     // Dispatch custom event for same-tab updates
     window.dispatchEvent(new Event('restaurantAuthChanged'))
 
+        navigate("/restaurant-panel/dashboard", { replace: true })
+      } else {
+        throw new Error("Login failed. Please try again.")
+      }
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Login failed. Please check your credentials."
+      setError(message)
+    } finally {
     setIsLoading(false)
-    navigate("/restaurant-panel/dashboard")
+    }
   }
 
   return (
@@ -116,6 +131,11 @@ export default function RestaurantSignIn() {
             onSubmit={handleSubmit}
             className="space-y-5 w-full max-w-lg rounded-xl bg-white/80 backdrop-blur-sm p-1 sm:p-2"
           >
+            {error && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
             {/* Email */}
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-sm font-medium text-gray-700">
@@ -178,6 +198,7 @@ export default function RestaurantSignIn() {
               </label>
               <button
                 type="button"
+                onClick={() => navigate("/restaurant/forgot-password")}
                 className="text-primary-orange hover:underline font-medium"
               >
                 Forgot Password
@@ -193,6 +214,17 @@ export default function RestaurantSignIn() {
               {isLoading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
+
+          {/* Sign up link */}
+          <div className="mt-6 text-center text-sm text-gray-600">
+            Don't have an account?{" "}
+            <button
+              onClick={() => navigate("/restaurant/signup-email")}
+              className="text-primary-orange hover:underline font-medium"
+            >
+              Sign up
+            </button>
+          </div>
 
           {/* Demo credentials / info bar */}
           <div className="mt-8 w-full max-w-lg rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-xs sm:text-sm text-gray-800 flex items-start gap-3">
