@@ -33,6 +33,7 @@ import adminRoutes from './modules/admin/index.js';
 import subscriptionRoutes from './modules/subscription/index.js';
 import uploadModuleRoutes from './modules/upload/index.js';
 import locationRoutes from './modules/location/index.js';
+import heroBannerRoutes from './modules/heroBanner/index.js';
 
 
 // Validate required environment variables
@@ -145,6 +146,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api', uploadModuleRoutes);
 app.use('/api/location', locationRoutes);
+app.use('/api', heroBannerRoutes);
 
 // 404 handler
 app.use((req, res) => {

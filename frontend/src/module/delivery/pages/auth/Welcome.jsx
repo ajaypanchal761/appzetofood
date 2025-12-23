@@ -147,7 +147,19 @@ export default function DeliveryWelcome() {
 
           {/* Start Earning Button */}
           <button
-            onClick={()=> navigate("/delivery")}
+            onClick={() => {
+              // Verify token exists before navigating
+              const token = localStorage.getItem("delivery_accessToken")
+              const isAuthenticated = localStorage.getItem("delivery_authenticated") === "true"
+              
+              if (!token || !isAuthenticated) {
+                console.error("Token not found, redirecting to login")
+                navigate("/delivery/login", { replace: true })
+                return
+              }
+              
+              navigate("/delivery")
+            }}
             className="w-full bg-[#00B761] hover:bg-[#00A055] text-white font-bold py-4 rounded-lg mt-4 flex items-center justify-center gap-2 transition-colors"
           >
             <span>Start earning</span>

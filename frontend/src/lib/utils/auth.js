@@ -78,56 +78,99 @@ export function hasModuleAccess(role, module) {
 }
 
 /**
- * Get current user's role from localStorage
- * @returns {string|null} - Current user role or null
+ * Get module-specific access token
+ * @param {string} module - Module name (admin, restaurant, delivery, user)
+ * @returns {string|null} - Access token or null
  */
-export function getCurrentUserRole() {
-  const token = localStorage.getItem('accessToken');
-  if (!token) return null;
-  
-  if (isTokenExpired(token)) {
-    // Token expired, clear it
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('admin_authenticated');
-    localStorage.removeItem('restaurant_authenticated');
-    localStorage.removeItem('delivery_authenticated');
-    localStorage.removeItem('user_authenticated');
-    return null;
-  }
-  
-  return getRoleFromToken(token);
+export function getModuleToken(module) {
+  return localStorage.getItem(`${module}_accessToken`);
 }
 
 /**
- * Clear all authentication data
+ * Get current user's role from a specific module's token
+ * @param {string} module - Module name (admin, restaurant, delivery, user)
+ * @returns {string|null} - Current user role or null
+ */
+export function getCurrentUserRole(module = null) {
+  // If module is specified, check that module's token
+  if (module) {
+    const token = getModuleToken(module);
+    if (!token) return null;
+    
+    if (isTokenExpired(token)) {
+      // Token expired, clear it
+      clearModuleAuth(module);
+      return null;
+    }
+    
+    return getRoleFromToken(token);
+  }
+  
+  // Legacy: check all modules and return the first valid role found
+  // This is for backward compatibility but should be avoided
+  const modules = ['user', 'restaurant', 'delivery', 'admin'];
+  for (const mod of modules) {
+    const token = getModuleToken(mod);
+    if (token && !isTokenExpired(token)) {
+      return getRoleFromToken(token);
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check if user is authenticated for a specific module
+ * @param {string} module - Module name (admin, restaurant, delivery, user)
+ * @returns {boolean} - True if authenticated
+ */
+export function isModuleAuthenticated(module) {
+  const token = getModuleToken(module);
+  if (!token) return false;
+  
+  if (isTokenExpired(token)) {
+    clearModuleAuth(module);
+    return false;
+  }
+  
+  return true;
+}
+
+/**
+ * Clear authentication data for a specific module
+ * @param {string} module - Module name (admin, restaurant, delivery, user)
+ */
+export function clearModuleAuth(module) {
+  localStorage.removeItem(`${module}_accessToken`);
+  localStorage.removeItem(`${module}_authenticated`);
+  localStorage.removeItem(`${module}_user`);
+}
+
+/**
+ * Clear all authentication data for all modules
  */
 export function clearAuthData() {
+  const modules = ['admin', 'restaurant', 'delivery', 'user'];
+  modules.forEach(module => {
+    clearModuleAuth(module);
+  });
+  // Also clear legacy token if it exists
   localStorage.removeItem('accessToken');
-  localStorage.removeItem('admin_authenticated');
-  localStorage.removeItem('restaurant_authenticated');
-  localStorage.removeItem('delivery_authenticated');
-  localStorage.removeItem('user_authenticated');
-  localStorage.removeItem('admin_user');
-  localStorage.removeItem('restaurant_user');
-  localStorage.removeItem('delivery_user');
   localStorage.removeItem('user');
 }
 
 /**
- * Set authentication data for a specific role
- * @param {string} role - User role
+ * Set authentication data for a specific module
+ * @param {string} module - Module name (admin, restaurant, delivery, user)
  * @param {string} token - Access token
  * @param {Object} user - User data
  */
-export function setAuthData(role, token, user) {
-  // Clear old auth data first
-  clearAuthData();
-  
-  // Set new auth data
-  localStorage.setItem('accessToken', token);
-  localStorage.setItem(`${role}_authenticated`, 'true');
+export function setAuthData(module, token, user) {
+  // Store module-specific token (don't clear other modules)
+  localStorage.setItem(`${module}_accessToken`, token);
+  localStorage.setItem(`${module}_authenticated`, 'true');
   if (user) {
-    localStorage.setItem(`${role}_user`, JSON.stringify(user));
+    localStorage.setItem(`${module}_user`, JSON.stringify(user));
   }
 }
 

@@ -74,6 +74,15 @@ export const API_ENDPOINTS = {
   UPLOAD: {
     MEDIA: '/upload/media',
   },
+  // Hero Banner endpoints
+  HERO_BANNER: {
+    PUBLIC: '/hero-banners/public',
+    LIST: '/hero-banners',
+    CREATE: '/hero-banners',
+    DELETE: '/hero-banners/:id',
+    UPDATE_ORDER: '/hero-banners/:id/order',
+    TOGGLE_STATUS: '/hero-banners/:id/status',
+  },
 };
 
 export default {

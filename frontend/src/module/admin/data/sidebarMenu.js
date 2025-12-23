@@ -438,6 +438,12 @@ export const sidebarMenuData = [
       },
       {
         type: "link",
+        label: "Landing Page Management",
+        path: "/admin/hero-banner-management",
+        icon: "Image",
+      },
+      {
+        type: "link",
         label: "Notification Channels",
         path: "/admin/notification-channels",
         icon: "Bell",

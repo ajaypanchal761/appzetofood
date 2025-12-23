@@ -12,7 +12,8 @@ export default function DeliveryLogin() {
     if (isAuthenticated) {
       navigate("/delivery", { replace: true })
     }
-  }, [navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleContinue = () => {
       navigate("/delivery/sign-in")

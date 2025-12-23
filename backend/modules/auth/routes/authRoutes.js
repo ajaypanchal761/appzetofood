@@ -43,7 +43,9 @@ const verifyOTPSchema = Joi.object({
     then: Joi.required(),
     otherwise: Joi.optional()
   }),
-  role: Joi.string().valid('user', 'restaurant', 'delivery', 'admin').default('user')
+  role: Joi.string().valid('user', 'restaurant', 'delivery', 'admin').default('user'),
+  // Password is only used for email-based registrations (e.g. admin signup)
+  password: Joi.string().min(6).max(100).optional()
 }).or('phone', 'email'); // At least one of phone or email must be provided
 
 const registerSchema = Joi.object({

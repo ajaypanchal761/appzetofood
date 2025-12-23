@@ -1,7 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { authAPI } from "@/lib/api"
-import { setAuthData } from "@/lib/utils/auth"
+import { setAuthData, isModuleAuthenticated } from "@/lib/utils/auth"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -23,6 +23,14 @@ export default function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+
+  // Redirect to admin dashboard if already authenticated
+  useEffect(() => {
+    if (isModuleAuthenticated("admin")) {
+      navigate("/admin", { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

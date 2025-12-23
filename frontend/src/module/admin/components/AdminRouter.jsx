@@ -1,9 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
 import AdminLayout from "./AdminLayout";
-import AdminLogin from "../pages/auth/AdminLogin";
-import AdminSignup from "../pages/auth/AdminSignup";
-import AdminForgotPassword from "../pages/auth/AdminForgotPassword";
 import AdminHome from "../pages/AdminHome";
 import PointOfSale from "../pages/PointOfSale";
 import SearchingDeliveryMan from "../pages/dispatch/SearchingDeliveryMan";
@@ -123,15 +120,11 @@ import CleanDatabase from "../pages/system/CleanDatabase";
 import AddonActivation from "../pages/system/AddonActivation";
 // System Addons
 import SystemAddons from "../pages/system/SystemAddons";
+import LandingPageManagement from "../pages/system/LandingPageManagement";
 
 export default function AdminRouter() {
   return (
     <Routes>
-      {/* Public Routes */}
-      <Route path="/login" element={<AdminLogin />} />
-      <Route path="/signup" element={<AdminSignup />} />
-      <Route path="/forgot-password" element={<AdminForgotPassword />} />
-
       {/* Protected Routes - With Layout */}
       <Route
         element={
@@ -312,6 +305,8 @@ export default function AdminRouter() {
 
         {/* SYSTEM ADDONS */}
         <Route path="system-addons" element={<SystemAddons />} />
+        {/* HERO BANNER MANAGEMENT */}
+        <Route path="hero-banner-management" element={<LandingPageManagement />} />
       </Route>
 
       {/* Redirect /admin to /admin/ */}

@@ -81,7 +81,14 @@ export default function UserRouter() {
     <Routes>
       <Route element={<UserLayout />}>
       {/* Home & Discovery */}
-      <Route path="/" element={<Home />} />
+      <Route 
+        path="/" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Home />
+          </ProtectedRoute>
+        } 
+      />
       <Route path="/dining" element={<Dining />} />
       <Route path="/dining/restaurants" element={<DiningRestaurants />} />
       <Route path="/dining/:category" element={<DiningCategory />} />

@@ -2,13 +2,6 @@ import { Routes, Route } from "react-router-dom"
 import DeliveryLayout from "./DeliveryLayout"
 import ProtectedRoute from "./ProtectedRoute"
 
-// Auth pages (no layout needed)
-import DeliveryLogin from "../pages/auth/Login"
-import DeliverySignIn from "../pages/auth/SignIn"
-import DeliverySignup from "../pages/auth/Signup"
-import DeliveryOTP from "../pages/auth/OTP"
-import DeliveryWelcome from "../pages/auth/Welcome"
-
 // Main pages (with layout)
 import DeliveryHome from "../pages/DeliveryHome"
 import Notifications from "../pages/Notifications"
@@ -49,13 +42,6 @@ import CustomerTipsBalancePage from "../pages/CustomerTips"
 export default function DeliveryRouter() {
   return (
     <Routes>
-      {/* Auth routes - no layout */}
-      <Route path="/login" element={<DeliveryLogin />} />
-      <Route path="/sign-in" element={<DeliverySignIn />} />
-      <Route path="/signup" element={<DeliverySignup />} />
-      <Route path="/otp" element={<DeliveryOTP />} />
-      <Route path="/welcome" element={<DeliveryWelcome />} />
-
       {/* Protected routes - require authentication */}
       <Route
         path="/"

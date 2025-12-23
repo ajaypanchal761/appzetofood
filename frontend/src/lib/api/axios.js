@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { toast } from 'sonner';
 import { API_BASE_URL } from './config.js';
+import { getRoleFromToken, clearModuleAuth } from '../utils/auth.js';
 
 /**
  * Create axios instance with default configuration
@@ -15,13 +16,34 @@ const apiClient = axios.create({
 });
 
 /**
+ * Get the appropriate module token based on the current route
+ * @returns {string|null} - Access token for the current module or null
+ */
+function getTokenForCurrentRoute() {
+  const path = window.location.pathname;
+  
+  if (path.startsWith('/admin')) {
+    return localStorage.getItem('admin_accessToken');
+  } else if (path.startsWith('/restaurant-panel') || path.startsWith('/restaurant')) {
+    return localStorage.getItem('restaurant_accessToken');
+  } else if (path.startsWith('/delivery')) {
+    return localStorage.getItem('delivery_accessToken');
+  } else if (path.startsWith('/user') || path === '/' || (!path.startsWith('/admin') && !path.startsWith('/restaurant') && !path.startsWith('/restaurant-panel') && !path.startsWith('/delivery'))) {
+    return localStorage.getItem('user_accessToken');
+  }
+  
+  // Fallback to legacy token for backward compatibility
+  return localStorage.getItem('accessToken');
+}
+
+/**
  * Request Interceptor
- * Adds authentication token to requests
+ * Adds authentication token to requests based on current route
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // Get access token from localStorage
-    const accessToken = localStorage.getItem('accessToken');
+    // Get access token for the current module based on route
+    const accessToken = getTokenForCurrentRoute();
     
     // Add token to Authorization header if available
     if (accessToken) {
@@ -41,9 +63,35 @@ apiClient.interceptors.request.use(
  */
 apiClient.interceptors.response.use(
   (response) => {
-    // If response contains new access token, store it
+    // If response contains new access token, store it for the current module
     if (response.data?.accessToken) {
-      localStorage.setItem('accessToken', response.data.accessToken);
+      const currentPath = window.location.pathname;
+      let tokenKey = 'accessToken'; // fallback
+      let expectedRole = 'user';
+      
+      if (currentPath.startsWith('/admin')) {
+        tokenKey = 'admin_accessToken';
+        expectedRole = 'admin';
+      } else if (currentPath.startsWith('/restaurant-panel') || currentPath.startsWith('/restaurant')) {
+        tokenKey = 'restaurant_accessToken';
+        expectedRole = 'restaurant';
+      } else if (currentPath.startsWith('/delivery')) {
+        tokenKey = 'delivery_accessToken';
+        expectedRole = 'delivery';
+      } else if (currentPath.startsWith('/user') || currentPath === '/') {
+        tokenKey = 'user_accessToken';
+        expectedRole = 'user';
+      }
+      
+      const token = response.data.accessToken;
+      const role = getRoleFromToken(token);
+
+      // Only store the token if the role matches the current module
+      if (!role || role !== expectedRole) {
+        clearModuleAuth(tokenKey.replace('_accessToken', ''));
+      } else {
+        localStorage.setItem(tokenKey, token);
+      }
     }
     return response;
   },
@@ -68,8 +116,35 @@ apiClient.interceptors.response.use(
         const { accessToken } = response.data.data || response.data;
         
         if (accessToken) {
-          // Store new access token
-          localStorage.setItem('accessToken', accessToken);
+          // Determine which module's token to update based on current route
+          const currentPath = window.location.pathname;
+          let tokenKey = 'accessToken'; // fallback
+          let expectedRole = 'user';
+          
+          if (currentPath.startsWith('/admin')) {
+            tokenKey = 'admin_accessToken';
+            expectedRole = 'admin';
+          } else if (currentPath.startsWith('/restaurant-panel') || currentPath.startsWith('/restaurant')) {
+            tokenKey = 'restaurant_accessToken';
+            expectedRole = 'restaurant';
+          } else if (currentPath.startsWith('/delivery')) {
+            tokenKey = 'delivery_accessToken';
+            expectedRole = 'delivery';
+          } else if (currentPath.startsWith('/user') || currentPath === '/') {
+            tokenKey = 'user_accessToken';
+            expectedRole = 'user';
+          }
+          
+          const role = getRoleFromToken(accessToken);
+
+          // Only store token if role matches expected module; otherwise treat as invalid for this module
+          if (!role || role !== expectedRole) {
+            clearModuleAuth(tokenKey.replace('_accessToken', ''));
+            throw new Error('Role mismatch on refreshed token');
+          }
+
+          // Store new access token for the current module
+          localStorage.setItem(tokenKey, accessToken);
           
           // Retry original request with new token
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
@@ -100,19 +175,27 @@ apiClient.interceptors.response.use(
           });
         }
         
-        // Refresh failed, redirect to login
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
-        
-        // Redirect to appropriate login page based on current route
+        // Refresh failed, clear module-specific token and redirect to login
         const currentPath = window.location.pathname;
-        if (currentPath.startsWith('/restaurant')) {
+        if (currentPath.startsWith('/admin')) {
+          localStorage.removeItem('admin_accessToken');
+          localStorage.removeItem('admin_authenticated');
+          localStorage.removeItem('admin_user');
+          window.location.href = '/admin/login';
+        } else if (currentPath.startsWith('/restaurant-panel') || currentPath.startsWith('/restaurant')) {
+          localStorage.removeItem('restaurant_accessToken');
+          localStorage.removeItem('restaurant_authenticated');
+          localStorage.removeItem('restaurant_user');
           window.location.href = '/restaurant/login';
         } else if (currentPath.startsWith('/delivery')) {
+          localStorage.removeItem('delivery_accessToken');
+          localStorage.removeItem('delivery_authenticated');
+          localStorage.removeItem('delivery_user');
           window.location.href = '/delivery/login';
-        } else if (currentPath.startsWith('/admin')) {
-          window.location.href = '/admin/login';
         } else {
+          localStorage.removeItem('user_accessToken');
+          localStorage.removeItem('user_authenticated');
+          localStorage.removeItem('user');
           window.location.href = '/user/auth/sign-in';
         }
         

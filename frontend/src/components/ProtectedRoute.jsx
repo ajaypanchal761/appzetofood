@@ -1,22 +1,28 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { getCurrentUserRole, hasModuleAccess } from "@/lib/utils/auth";
+import { isModuleAuthenticated } from "@/lib/utils/auth";
 
 /**
  * Role-based Protected Route Component
- * Only allows access if user has the correct role for the module
+ * Only allows access if user is authenticated for the specific module
  */
 export default function ProtectedRoute({ children, requiredRole, loginPath }) {
   const location = useLocation();
-  const currentRole = getCurrentUserRole();
 
-  // If no token or role, redirect to login
-  if (!currentRole) {
-    return <Navigate to={loginPath} state={{ from: location.pathname }} replace />;
+  // Check if user is authenticated for the required module using module-specific token
+  if (!requiredRole) {
+    // If no role required, allow access
+    return children;
   }
 
-  // Check if user has access to this module
-  if (requiredRole && !hasModuleAccess(currentRole, requiredRole)) {
-    // User is logged in but with wrong role, redirect to appropriate login
+  const isAuthenticated = isModuleAuthenticated(requiredRole);
+
+  // If not authenticated for this module, redirect to login
+  if (!isAuthenticated) {
+    if (loginPath) {
+      return <Navigate to={loginPath} state={{ from: location.pathname }} replace />;
+    }
+    
+    // Fallback: redirect to appropriate login page
     const roleLoginPaths = {
       'admin': '/admin/login',
       'restaurant': '/restaurant/login',
@@ -24,7 +30,7 @@ export default function ProtectedRoute({ children, requiredRole, loginPath }) {
       'user': '/user/auth/sign-in'
     };
     
-    const redirectPath = roleLoginPaths[currentRole] || '/';
+    const redirectPath = roleLoginPaths[requiredRole] || '/';
     return <Navigate to={redirectPath} replace />;
   }
 

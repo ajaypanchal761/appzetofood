@@ -23,7 +23,7 @@ const seoPages = [
   { id: 14, name: "Shipping policy page" }
 ]
 
-export default function PageMetaData() {
+export default function PageMetaDataPageMetaData() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)

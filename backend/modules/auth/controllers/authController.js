@@ -62,7 +62,7 @@ export const sendOTP = asyncHandler(async (req, res) => {
  * POST /api/auth/verify-otp
  */
 export const verifyOTP = asyncHandler(async (req, res) => {
-  const { phone, email, otp, purpose = 'login', name, role = 'user' } = req.body;
+  const { phone, email, otp, purpose = 'login', name, role = 'user', password } = req.body;
 
   // Validate that either phone or email is provided
   if ((!phone && !email) || !otp) {
@@ -74,6 +74,11 @@ export const verifyOTP = asyncHandler(async (req, res) => {
   const userRole = role || 'user';
   if (!allowedRoles.includes(userRole)) {
     return errorResponse(res, 400, `Invalid role. Allowed roles: ${allowedRoles.join(', ')}`);
+  }
+
+  // For email-based admin registration, password is mandatory
+  if (purpose === 'register' && !phone && userRole === 'admin' && !password) {
+    return errorResponse(res, 400, 'Password is required for admin email registration');
   }
 
   try {
@@ -114,6 +119,11 @@ export const verifyOTP = asyncHandler(async (req, res) => {
       if (email) {
         userData.email = email;
         // Note: We could add emailVerified field if needed
+      }
+
+      // If password provided (email/password registration like admin signup), set it
+      if (password && !phone) {
+        userData.password = password;
       }
 
       user = await User.create(userData);
@@ -176,6 +186,10 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         }
         if (email) {
           userData.email = email;
+        }
+
+        if (password && !phone) {
+          userData.password = password;
         }
 
         user = await User.create(userData);

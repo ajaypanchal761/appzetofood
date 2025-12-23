@@ -33,6 +33,7 @@ import {
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateRangeCalendar } from "@/components/ui/date-range-calendar"
+import { clearModuleAuth, clearAuthData } from "@/lib/utils/auth"
 
 // Time Picker Wheel Component
 function TimePickerWheel({ 
@@ -362,19 +363,27 @@ export default function ExploreMore() {
   }
 
   const handleLogout = () => {
-    // Implement logout logic here
-    console.log("Logout clicked")
-    // Example: Clear tokens, redirect to login, etc.
-    // localStorage.removeItem('authToken')
-    // navigate('/login')
+    // Clear only restaurant module auth and redirect to restaurant auth entry
+    try {
+      clearModuleAuth("restaurant")
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+    } catch (error) {
+      console.error("Error during restaurant logout:", error)
+    }
     setProfileOpen(false)
+    navigate("/restaurant/welcome")
   }
 
   const handleLogoutAllDevices = () => {
-    navigate("/restaurant/welcome")
-    console.log("Logout from all devices clicked")
-    // Example: Call API to invalidate all sessions
+    // Clear auth for all modules (admin, restaurant, delivery, user)
+    try {
+      clearAuthData()
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+    } catch (error) {
+      console.error("Error during logout from all devices:", error)
+    }
     setProfileOpen(false)
+    navigate("/restaurant/welcome")
   }
 
   const scheduleOffReasons = [

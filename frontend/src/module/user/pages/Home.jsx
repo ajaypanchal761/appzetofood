@@ -31,12 +31,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useLocation } from "../hooks/useLocation"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
-import bannerImage1 from "@/assets/banner images/images 1.png"
-import bannerImage2 from "@/assets/banner images/images 2.png"
-import bannerImage3 from "@/assets/banner images/images 3.png"
-import bannerImage4 from "@/assets/banner images/images 4.png"
-import bannerImage5 from "@/assets/banner images/images 5.png"
 import offerImage from "@/assets/offerimage.png"
+import api from "@/lib/api"
 // Explore More Icons
 import exploreOffers from "@/assets/explore more icons/offers.png"
 import exploreGourmet from "@/assets/explore more icons/gourmet.png"
@@ -44,8 +40,7 @@ import exploreTop10 from "@/assets/explore more icons/top 10.png"
 import exploreCollection from "@/assets/explore more icons/collection.png"
 import exploreGiftCard from "@/assets/explore more icons/gift catrd.png"
 
-// Banner images for hero carousel
-const heroBannerImages = [bannerImage1, bannerImage2, bannerImage3, bannerImage4, bannerImage5]
+// Banner images for hero carousel - will be fetched from API
 
 const categories = [
   { id: 1, name: "Biryani", image: foodImages[0] },
@@ -363,6 +358,12 @@ export default function Home() {
   const [popupPosition, setPopupPosition] = useState({ top: 0, right: 0 })
   const vegModeToggleRef = useRef(null)
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0)
+  const [heroBannerImages, setHeroBannerImages] = useState([])
+  const [loadingBanners, setLoadingBanners] = useState(true)
+  const [landingCategories, setLandingCategories] = useState([])
+  const [landingExploreMore, setLandingExploreMore] = useState([])
+  const [exploreMoreHeading, setExploreMoreHeading] = useState("Explore More")
+  const [loadingLandingConfig, setLoadingLandingConfig] = useState(true)
   const isHandlingSwitchOff = useRef(false)
 
   // Swipe functionality for hero banner carousel
@@ -428,8 +429,68 @@ export default function Home() {
     }
   }, [showVegModePopup])
 
+  // Fetch hero banners from API
+  useEffect(() => {
+    const fetchHeroBanners = async () => {
+      try {
+        setLoadingBanners(true)
+        const response = await api.get('/hero-banners/public')
+        if (response.data.success && response.data.data.banners) {
+          setHeroBannerImages(response.data.data.banners)
+        }
+      } catch (error) {
+        console.error('Error fetching hero banners:', error)
+        // Fallback to empty array if API fails
+        setHeroBannerImages([])
+      } finally {
+        setLoadingBanners(false)
+      }
+    }
+
+    fetchHeroBanners()
+  }, [])
+
+  // Fetch landing page config (categories, explore more, settings)
+  useEffect(() => {
+    const fetchLandingConfig = async () => {
+      try {
+        setLoadingLandingConfig(true)
+        const response = await api.get('/hero-banners/landing/public')
+        if (response.data.success && response.data.data) {
+          const apiCategories = response.data.data.categories || []
+          const apiExploreMore = response.data.data.exploreMore || []
+
+          // Extra safety: only keep active items and ensure order ascending
+          setLandingCategories(
+            apiCategories
+              .filter((c) => c.isActive !== false)
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          )
+          setLandingExploreMore(
+            apiExploreMore
+              .filter((e) => e.isActive !== false)
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          )
+          setExploreMoreHeading(response.data.data.settings?.exploreMoreHeading || "Explore More")
+        }
+      } catch (error) {
+        console.error('Error fetching landing config:', error)
+        // Fallback to empty arrays and default heading
+        setLandingCategories([])
+        setLandingExploreMore([])
+        setExploreMoreHeading("Explore More")
+      } finally {
+        setLoadingLandingConfig(false)
+      }
+    }
+
+    fetchLandingConfig()
+  }, [])
+
   // Auto-cycle hero banner images
   useEffect(() => {
+    if (heroBannerImages.length === 0) return
+
     autoSlideIntervalRef.current = setInterval(() => {
       if (!isSwiping.current) {
         setCurrentBannerIndex((prev) => (prev + 1) % heroBannerImages.length)
@@ -441,19 +502,21 @@ export default function Home() {
         clearInterval(autoSlideIntervalRef.current)
       }
     }
-  }, [])
+  }, [heroBannerImages.length])
 
   // Helper function to reset auto-slide timer
   const resetAutoSlide = useCallback(() => {
     if (autoSlideIntervalRef.current) {
       clearInterval(autoSlideIntervalRef.current)
     }
-    autoSlideIntervalRef.current = setInterval(() => {
-      if (!isSwiping.current) {
-        setCurrentBannerIndex((prev) => (prev + 1) % heroBannerImages.length)
-      }
-    }, 3500)
-  }, [])
+    if (heroBannerImages.length > 0) {
+      autoSlideIntervalRef.current = setInterval(() => {
+        if (!isSwiping.current) {
+          setCurrentBannerIndex((prev) => (prev + 1) % heroBannerImages.length)
+        }
+      }, 3500)
+    }
+  }, [heroBannerImages.length])
 
   // Swipe handlers for hero banner carousel
   const handleTouchStart = (e) => {
@@ -468,7 +531,7 @@ export default function Home() {
   }
 
   const handleTouchEnd = () => {
-    if (!isSwiping.current) return
+    if (!isSwiping.current || heroBannerImages.length === 0) return
 
     const deltaX = touchEndX.current - touchStartX.current
     const deltaY = Math.abs(touchEndY.current - touchStartY.current)
@@ -513,7 +576,7 @@ export default function Home() {
   }
 
   const handleMouseUp = () => {
-    if (!isSwiping.current) return
+    if (!isSwiping.current || heroBannerImages.length === 0) return
 
     const deltaX = touchEndX.current - touchStartX.current
     const deltaY = Math.abs(touchEndY.current - touchStartY.current)
@@ -899,33 +962,48 @@ export default function Home() {
 
 
         {/* Hero Banner Carousel Background */}
-        <div
-          className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          {heroBannerImages.map((image, index) => (
-            <img
-              key={index}
-              src={image}
-              alt={`Hero Banner ${index + 1}`}
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${index === currentBannerIndex ? 'opacity-100' : 'opacity-0'
-                }`}
-              style={{
-                objectPosition: 'center center',
-                minHeight: '100%',
-                userSelect: 'none',
-                pointerEvents: 'none',
-              }}
-              draggable={false}
-            />
-          ))}
-        </div>
+        {loadingBanners ? (
+          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+            <div className="text-white text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+              <p className="text-sm">Loading banners...</p>
+            </div>
+          </div>
+        ) : heroBannerImages.length > 0 ? (
+          <div
+            className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            {heroBannerImages.map((image, index) => (
+              <img
+                key={index}
+                src={image}
+                alt={`Hero Banner ${index + 1}`}
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${index === currentBannerIndex ? 'opacity-100' : 'opacity-0'
+                  }`}
+                style={{
+                  objectPosition: 'center center',
+                  minHeight: '100%',
+                  userSelect: 'none',
+                  pointerEvents: 'none',
+                }}
+                draggable={false}
+                onError={(e) => {
+                  // Fallback to a placeholder if image fails to load
+                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="1200" height="600"%3E%3Crect fill="%23ddd" width="1200" height="600"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="24" dy="10.5" font-weight="bold" x="50%25" y="50%25" text-anchor="middle"%3EImage not found%3C/text%3E%3C/svg%3E'
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-400 to-green-600" />
+        )}
 
         {/* Navbar */}
         <PageNavbar textColor="white" zIndex={20} />
@@ -1028,28 +1106,58 @@ export default function Home() {
                 />
               </div>
             </div>
-            {categories.map((category, index) => (
-              <ScrollRevealSimple key={category.id} delay={index * 0.05} className="flex-shrink-0">
-                <Link to={`/user/category/${category.name.toLowerCase()}`}>
-                  <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
-                    <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
-                      <img
-                        src={category.image}
-                        alt={category.name}
-                        className="w-full h-full object-cover bg-white rounded-full"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.target.src = foodImages[0]
-                        }}
-                      />
+            {loadingLandingConfig ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : landingCategories.length === 0 ? (
+              // Fallback to hardcoded categories if API returns empty
+              categories.map((category, index) => (
+                <ScrollRevealSimple key={category.id} delay={index * 0.05} className="flex-shrink-0">
+                  <Link to={`/user/category/${category.name.toLowerCase()}`}>
+                    <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
+                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
+                        <img
+                          src={category.image}
+                          alt={category.name}
+                          className="w-full h-full object-cover bg-white rounded-full"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.src = foodImages[0]
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 text-center">
+                        {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
+                      </span>
                     </div>
-                    <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 text-center">
-                      {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
-                    </span>
-                  </div>
-                </Link>
-              </ScrollRevealSimple>
-            ))}
+                  </Link>
+                </ScrollRevealSimple>
+              ))
+            ) : (
+              landingCategories.map((category, index) => (
+                <ScrollRevealSimple key={category._id || index} delay={index * 0.05} className="flex-shrink-0">
+                  <Link to={`/user/category/${category.slug || category.label.toLowerCase().replace(/\s+/g, '-')}`}>
+                    <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
+                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
+                        <img
+                          src={category.imageUrl}
+                          alt={category.label}
+                          className="w-full h-full object-cover bg-white rounded-full"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.src = foodImages[0]
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 text-center">
+                        {category.label.length > 7 ? `${category.label.slice(0, 7)}...` : category.label}
+                      </span>
+                    </div>
+                  </Link>
+                </ScrollRevealSimple>
+              ))
+            )}
           </div>
         </section>
 
@@ -1110,7 +1218,7 @@ export default function Home() {
         {/* Explore More Section */}
         <section className="pt-2 sm:pt-3">
           <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase mb-2 sm:mb-3 px-1">
-            Explore More
+            {exploreMoreHeading}
           </h2>
           <div
             className="flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide pb-2"
@@ -1119,53 +1227,80 @@ export default function Home() {
               msOverflowStyle: "none",
             }}
           >
-            {[
-              {
-                id: 'offers',
-                label: 'Offers',
-                image: exploreOffers,
-                href: '/user/offers'
-              },
-              {
-                id: 'gourmet',
-                label: 'Gourmet',
-                image: exploreGourmet,
-                href: '/user/gourmet'
-              },
-              {
-                id: 'top10',
-                label: 'Top 10',
-                image: exploreTop10,
-                href: '/user/top-10'
-              },
-              {
-                id: 'collection',
-                label: 'Collections',
-                image: exploreCollection,
-                href: '/user/collections'
-              },
-              {
-                id: 'giftcard',
-                label: 'Gift Card',
-                image: exploreGiftCard,
-                href: '/user/gift-card'
-              },
-            ].map((item) => (
-              <Link key={item.id} to={item.href} className="flex-shrink-0 bg-white">
-                <div className="flex flex-col items-center gap-2.5 w-24 sm:w-28 md:w-32 group">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white flex items-center justify-center shadow-sm group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 overflow-hidden p-2.5">
-                    <img
-                      src={item.image}
-                      alt={item.label}
-                      className="w-full h-full object-contain"
-                    />
+            {loadingLandingConfig ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              </div>
+            ) : landingExploreMore.length === 0 ? (
+              // Fallback to hardcoded explore more if API returns empty
+              [
+                {
+                  id: 'offers',
+                  label: 'Offers',
+                  image: exploreOffers,
+                  href: '/user/offers'
+                },
+                {
+                  id: 'gourmet',
+                  label: 'Gourmet',
+                  image: exploreGourmet,
+                  href: '/user/gourmet'
+                },
+                {
+                  id: 'top10',
+                  label: 'Top 10',
+                  image: exploreTop10,
+                  href: '/user/top-10'
+                },
+                {
+                  id: 'collection',
+                  label: 'Collections',
+                  image: exploreCollection,
+                  href: '/user/collections'
+                },
+                {
+                  id: 'giftcard',
+                  label: 'Gift Card',
+                  image: exploreGiftCard,
+                  href: '/user/gift-card'
+                },
+              ].map((item) => (
+                <Link key={item.id} to={item.href} className="flex-shrink-0 bg-white">
+                  <div className="flex flex-col items-center gap-2.5 w-24 sm:w-28 md:w-32 group">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white flex items-center justify-center shadow-sm group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 overflow-hidden p-2.5">
+                      <img
+                        src={item.image}
+                        alt={item.label}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <span className="text-sm sm:text-base font-semibold text-gray-700 text-center leading-tight">
+                      {item.label}
+                    </span>
                   </div>
-                  <span className="text-sm sm:text-base font-semibold text-gray-700 text-center leading-tight">
-                    {item.label}
-                  </span>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              ))
+            ) : (
+              landingExploreMore.map((item) => (
+                <Link key={item._id} to={item.link} className="flex-shrink-0 bg-white">
+                  <div className="flex flex-col items-center gap-2.5 w-24 sm:w-28 md:w-32 group">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white flex items-center justify-center shadow-sm group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 overflow-hidden p-2.5">
+                      <img
+                        src={item.imageUrl}
+                        alt={item.label}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.src = exploreOffers
+                        }}
+                      />
+                    </div>
+                    <span className="text-sm sm:text-base font-semibold text-gray-700 text-center leading-tight">
+                      {item.label}
+                    </span>
+                  </div>
+                </Link>
+              ))
+            )}
           </div>
         </section>
 

@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeft, Mail, ChevronDown, Phone } from "lucide-react"
+import { setAuthData } from "@/lib/utils/auth"
 import {
   Select,
   SelectContent,
@@ -248,10 +249,8 @@ export default function RestaurantLogin() {
         throw new Error("Invalid response from server")
       }
 
-      // Store auth data for restaurant module
-      localStorage.setItem("accessToken", accessToken)
-      localStorage.setItem("restaurant_authenticated", "true")
-      localStorage.setItem("restaurant_user", JSON.stringify(appUser))
+      // Store auth data for restaurant module using utility function
+      setAuthData("restaurant", accessToken, appUser)
 
       // Notify any listeners that auth state has changed
       window.dispatchEvent(new Event("restaurantAuthChanged"))

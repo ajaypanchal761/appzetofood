@@ -86,6 +86,9 @@ export default function UserLayout() {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [location.pathname, location.search, location.hash])
 
+  // Note: Authentication checks and redirects are handled by ProtectedRoute components
+  // UserLayout should not interfere with authentication redirects
+
   // Show bottom navigation only on home page, dining page, under-250 page, and profile page
   const showBottomNav = location.pathname === "/" || 
                         location.pathname === "/user" ||

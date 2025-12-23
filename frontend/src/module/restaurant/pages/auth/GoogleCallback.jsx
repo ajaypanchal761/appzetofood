@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { setAuthData } from "@/lib/utils/auth"
 
 export default function RestaurantGoogleCallback() {
   const navigate = useNavigate()
@@ -53,10 +54,8 @@ export default function RestaurantGoogleCallback() {
           return
         }
 
-        // Store authentication data
-        localStorage.setItem("accessToken", token)
-        localStorage.setItem("restaurant_authenticated", "true")
-        localStorage.setItem("restaurant_user", JSON.stringify(user))
+        // Store authentication data using utility function
+        setAuthData("restaurant", token, user)
 
         // Notify any listeners that auth state has changed
         window.dispatchEvent(new Event("restaurantAuthChanged"))

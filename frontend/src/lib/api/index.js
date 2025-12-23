@@ -66,15 +66,17 @@ export const authAPI = {
   },
 
   // Verify OTP (supports both phone and email)
-  verifyOTP: (phone = null, otp, purpose = 'login', name = null, email = null, role = 'user') => {
+  // 'password' is used only for email/password registrations (e.g. admin signup)
+  verifyOTP: (phone = null, otp, purpose = 'login', name = null, email = null, role = 'user', password = null) => {
     const payload = {
       otp,
       purpose,
       role,
     };
-    if (phone) payload.phone = phone;
-    if (email) payload.email = email;
-    if (name) payload.name = name;
+    if (phone != null) payload.phone = phone;
+    if (email != null) payload.email = email;
+    if (name != null) payload.name = name;
+    if (password != null) payload.password = password; // don't send null, Joi expects string
     return apiClient.post(API_ENDPOINTS.AUTH.VERIFY_OTP, payload);
   },
 

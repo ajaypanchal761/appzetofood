@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { authAPI } from "@/lib/api"
 import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
+import { setAuthData as setRestaurantAuthData } from "@/lib/utils/auth"
 
 export default function RestaurantOTP() {
   const navigate = useNavigate()
@@ -193,25 +194,43 @@ export default function RestaurantOTP() {
       const phone = authData.method === "phone" ? authData.phone : null
       const email = authData.method === "email" ? authData.email : null
       const purpose = authData.isSignUp ? "register" : "login"
-      const nameToSend =
-        // Email-based explicit signup: take name from this screen
-        authData.method === "email" && authData.isSignUp
-          ? name.trim()
-          // Phone-based auto-registration after OTP for login: use name from this screen
-          : authData.method === "phone" && showNameInput
-          ? name.trim()
-          // Phone-based explicit signup (from signup page): name was collected earlier
-          : authData.isSignUp
-          ? authData.name
-          : null
+
+      // Decide which name to send:
+      // - If we're currently showing the name input (either because backend returned needsName
+      //   or because this is an email/phone signup flow), always send the typed name.
+      // - Otherwise, for explicit signup flows where a name was already collected earlier,
+      //   send that stored name.
+      let nameToSend = null
+      if (showNameInput) {
+        nameToSend = name.trim()
+      } else if (authData.isSignUp && authData.name) {
+        nameToSend = authData.name
+      }
 
       const response = await authAPI.verifyOTP(phone, code, purpose, nameToSend, email, "restaurant")
 
       // Extract user and token or special flags (like needsName) from backend response
       const data = response?.data?.data || response?.data
 
-      // If backend says we need a name (user not found on login), show name input instead of erroring
+      // If backend says we need a name (user not found on login), treat this as a new signup:
+      // - flip authData.isSignUp -> true so subsequent verify calls use "register"
+      // - persist this updated state back to sessionStorage
+      // - show the name input instead of erroring
       if (data?.needsName) {
+        setAuthData((prev) => {
+          const updated = {
+            ...prev,
+            isSignUp: true,
+            // Preserve any existing name, but prefer the typed one if present
+            name: name?.trim() || prev?.name,
+          }
+          try {
+            sessionStorage.setItem("restaurantAuthData", JSON.stringify(updated))
+          } catch {
+            // Ignore storage errors; state is enough for this flow
+          }
+          return updated
+        })
         setShowNameInput(true)
         setError("")
         setNameError("")
@@ -221,22 +240,23 @@ export default function RestaurantOTP() {
       const accessToken = data?.accessToken
       const user = data?.user
 
-      if (accessToken) {
-        localStorage.setItem("accessToken", accessToken)
-      }
-      if (user) {
-        localStorage.setItem("restaurant_user", JSON.stringify(user))
-      }
-
       if (accessToken && user) {
-        // Mark restaurant as authenticated for existing listeners only when we have a valid session
-        localStorage.setItem("restaurant_authenticated", "true")
+        // Store auth data using utility function to ensure proper module-specific token storage
+        setRestaurantAuthData("restaurant", accessToken, user)
+        
+        // Dispatch custom event for same-tab updates
         window.dispatchEvent(new Event("restaurantAuthChanged"))
 
         sessionStorage.removeItem("restaurantAuthData")
 
         setTimeout(() => {
-          navigate("/restaurant")
+          console.log({authData})
+          // After signup, send to onboarding; after login, go to main restaurant page
+          if (authData?.isSignUp) {
+            navigate("/restaurant/onboarding", { replace: true })
+          } else {
+            navigate("/restaurant", { replace: true })
+          }
         }, 500)
       }
     } catch (err) {

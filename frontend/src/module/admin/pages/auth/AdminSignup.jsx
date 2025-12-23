@@ -138,14 +138,15 @@ export default function AdminSignup() {
 
     setIsLoading(true)
     try {
-      // Verify OTP and register
+      // Verify OTP and register (with password for email-based admin)
       const response = await authAPI.verifyOTP(
         null,
         otpCode,
         "register",
         formData.name,
         formData.email,
-        "admin"
+        "admin",
+        formData.password
       )
 
       const data = response?.data?.data || response?.data

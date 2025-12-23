@@ -143,8 +143,17 @@ class OTPService {
 
       // Send OTP via SMS or Email
       if (phone) {
-        // Use SMSIndia Hub for phone OTP
-        await smsIndiaHubService.sendOTP(phone, otp, purpose);
+        // Skip actual SMS sending for test phone numbers
+        if (!isTestPhoneNumber(phone)) {
+          // Use SMSIndia Hub for phone OTP
+          await smsIndiaHubService.sendOTP(phone, otp, purpose);
+        } else {
+          logger.info(`Skipping SMS for test phone number: ${phone}`, {
+            phone,
+            purpose,
+            otp
+          });
+        }
       } else if (email) {
         // Keep email service as is
         await emailService.sendOTP(email, otp, purpose);

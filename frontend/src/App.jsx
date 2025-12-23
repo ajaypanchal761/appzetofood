@@ -25,6 +25,7 @@ import WalletPage from "@/module/restaurant/pages/WalletPage"
 import RestaurantNotifications from "@/module/restaurant/pages/Notifications"
 import OrderDetails from "@/module/restaurant/pages/OrderDetails"
 import OrdersMain from "@/module/restaurant/pages/OrdersMain"
+import RestaurantOnboarding from "@/module/restaurant/pages/Onboarding"
 
 import RestaurantSignIn from "@/module/restaurant/pages/auth/SignIn"
 import RestaurantLogin from "@/module/restaurant/pages/auth/Login"
@@ -99,7 +100,15 @@ import ManageOutlets from "@/module/restaurant/pages/ManageOutlets"
 import UpdateBankDetails from "@/module/restaurant/pages/UpdateBankDetails"
 
 import AdminRouter from "@/module/admin/components/AdminRouter"
+import AdminLogin from "@/module/admin/pages/auth/AdminLogin"
+import AdminSignup from "@/module/admin/pages/auth/AdminSignup"
+import AdminForgotPassword from "@/module/admin/pages/auth/AdminForgotPassword"
 import DeliveryRouter from "@/module/delivery/components/DeliveryRouter"
+import DeliveryLogin from "@/module/delivery/pages/auth/Login"
+import DeliverySignIn from "@/module/delivery/pages/auth/SignIn"
+import DeliverySignup from "@/module/delivery/pages/auth/Signup"
+import DeliveryOTP from "@/module/delivery/pages/auth/OTP"
+import DeliveryWelcome from "@/module/delivery/pages/auth/Welcome"
 
 function UserPathRedirect() {
   const location = useLocation()
@@ -125,6 +134,15 @@ export default function App() {
       <Route path="/restaurant/auth/google-callback" element={<RestaurantGoogleCallback />} />
       
       {/* Restaurant Protected Routes */}
+      <Route
+        path="/restaurant/onboarding"
+        element={
+          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
+            <RestaurantOnboarding />
+          </ProtectedRoute>
+        }
+      />
+
       <Route 
         path="/restaurant-panel/*" 
         element={
@@ -769,7 +787,14 @@ export default function App() {
         } 
       />
 
-      {/* Delivery Routes */}
+      {/* Delivery Public Routes */}
+      <Route path="/delivery/login" element={<DeliveryLogin />} />
+      <Route path="/delivery/sign-in" element={<DeliverySignIn />} />
+      <Route path="/delivery/signup" element={<DeliverySignup />} />
+      <Route path="/delivery/otp" element={<DeliveryOTP />} />
+      <Route path="/delivery/welcome" element={<DeliveryWelcome />} />
+
+      {/* Delivery Protected Routes */}
       <Route 
         path="/delivery/*" 
         element={
@@ -779,7 +804,12 @@ export default function App() {
         } 
       />
       
-      {/* Admin Routes */}
+      {/* Admin Public Routes */}
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/admin/signup" element={<AdminSignup />} />
+      <Route path="/admin/forgot-password" element={<AdminForgotPassword />} />
+
+      {/* Admin Protected Routes */}
       <Route 
         path="/admin/*" 
         element={

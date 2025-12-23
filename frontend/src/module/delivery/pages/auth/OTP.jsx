@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { authAPI } from "@/lib/api"
 import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
+import { setAuthData } from "@/lib/utils/auth"
 
 export default function DeliveryOTP() {
   const navigate = useNavigate()
@@ -60,7 +61,8 @@ export default function DeliveryOTP() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [navigate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     // Focus first input on mount
@@ -194,20 +196,28 @@ export default function DeliveryOTP() {
       // Clear auth data from sessionStorage
       sessionStorage.removeItem("deliveryAuthData")
 
-      // Store auth data
-      localStorage.setItem("accessToken", accessToken)
-      localStorage.setItem("delivery_authenticated", "true")
-      localStorage.setItem("delivery_user", JSON.stringify(user))
+      // Store auth data using utility function to ensure proper role handling
+      setAuthData("delivery", accessToken, user)
+
+      // Verify token was stored correctly
+      const storedToken = localStorage.getItem("delivery_accessToken")
+      if (!storedToken || storedToken !== accessToken) {
+        console.error("Token storage failed. Retrying...")
+        // Retry storing the token
+        localStorage.setItem("delivery_accessToken", accessToken)
+        localStorage.setItem("delivery_authenticated", "true")
+        localStorage.setItem("delivery_user", JSON.stringify(user))
+      }
 
       // Dispatch custom event for same-tab updates
       window.dispatchEvent(new Event("deliveryAuthChanged"))
 
       setSuccess(true)
 
-      // Redirect to welcome page after short delay
+      // Redirect to welcome page after short delay to ensure token is stored
       setTimeout(() => {
         navigate("/delivery/welcome")
-      }, 500)
+      }, 100)
     } catch (err) {
       const message =
         err?.response?.data?.message ||
@@ -257,20 +267,28 @@ export default function DeliveryOTP() {
       // Clear auth data from sessionStorage
       sessionStorage.removeItem("deliveryAuthData")
 
-      // Store auth data
-      localStorage.setItem("accessToken", accessToken)
-      localStorage.setItem("delivery_authenticated", "true")
-      localStorage.setItem("delivery_user", JSON.stringify(user))
+      // Store auth data using utility function to ensure proper role handling
+      setAuthData("delivery", accessToken, user)
+
+      // Verify token was stored correctly
+      const storedToken = localStorage.getItem("delivery_accessToken")
+      if (!storedToken || storedToken !== accessToken) {
+        console.error("Token storage failed. Retrying...")
+        // Retry storing the token
+        localStorage.setItem("delivery_accessToken", accessToken)
+        localStorage.setItem("delivery_authenticated", "true")
+        localStorage.setItem("delivery_user", JSON.stringify(user))
+      }
 
       // Dispatch custom event for same-tab updates
       window.dispatchEvent(new Event("deliveryAuthChanged"))
 
       setSuccess(true)
 
-      // Redirect to welcome page after short delay
+      // Redirect to welcome page after short delay to ensure token is stored
       setTimeout(() => {
         navigate("/delivery/welcome")
-      }, 500)
+      }, 100)
     } catch (err) {
       const message =
         err?.response?.data?.message ||
