@@ -3,6 +3,8 @@ import ProtectedRoute from "./ProtectedRoute";
 import AdminLayout from "./AdminLayout";
 import AdminHome from "../pages/AdminHome";
 import PointOfSale from "../pages/PointOfSale";
+import AdminProfile from "../pages/AdminProfile";
+import AdminSettings from "../pages/AdminSettings";
 import SearchingDeliveryMan from "../pages/dispatch/SearchingDeliveryMan";
 import OngoingOrders from "../pages/dispatch/OngoingOrders";
 import NewRefundRequests from "../pages/refunds/NewRefundRequests";
@@ -136,6 +138,12 @@ export default function AdminRouter() {
         {/* Dashboard */}
         <Route path="/" element={<AdminHome />} />
         <Route path="/point-of-sale" element={<PointOfSale />} />
+        
+        {/* Profile */}
+        <Route path="/profile" element={<AdminProfile />} />
+        
+        {/* Settings */}
+        <Route path="/settings" element={<AdminSettings />} />
 
         {/* ORDER MANAGEMENT */}
         {/* Orders */}

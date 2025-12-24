@@ -4,8 +4,8 @@ const paymentSchema = new mongoose.Schema({
   paymentId: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true
+    // Note: unique: true automatically creates an index, so index: true is redundant
   },
   orderId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -43,12 +43,12 @@ const paymentSchema = new mongoose.Schema({
   // Razorpay specific fields
   razorpay: {
     orderId: {
-      type: String,
-      index: true
+      type: String
+      // Index created explicitly via schema.index() below
     },
     paymentId: {
-      type: String,
-      index: true
+      type: String
+      // Index created explicitly via schema.index() below
     },
     signature: {
       type: String

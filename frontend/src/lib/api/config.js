@@ -50,11 +50,21 @@ export const API_ENDPOINTS = {
   },
   // Admin endpoints
   ADMIN: {
+    AUTH: {
+      SIGNUP: '/admin/auth/signup',
+      SIGNUP_OTP: '/admin/auth/signup/otp',
+      LOGIN: '/admin/auth/login',
+      LOGOUT: '/admin/auth/logout',
+      ME: '/admin/auth/me',
+    },
+    PROFILE: '/admin/profile',
+    CHANGE_PASSWORD: '/admin/settings/change-password',
     USERS: '/admin/users',
     RESTAURANTS: '/admin/restaurants',
     DELIVERY: '/admin/delivery',
     ORDERS: '/admin/orders',
     ANALYTICS: '/admin/analytics',
+    DASHBOARD_STATS: '/admin/dashboard/stats',
   },
   // Order endpoints
   ORDER: {

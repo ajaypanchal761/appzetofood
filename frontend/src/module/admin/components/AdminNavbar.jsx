@@ -36,13 +36,43 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import appzetoLogo from "@/assets/appzetologo.png";
+import { adminAPI } from "@/lib/api";
+import { clearModuleAuth } from "@/lib/utils/auth";
 
 export default function AdminNavbar({ onMenuClick }) {
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [language, setLanguage] = useState("En");
+  const [adminData, setAdminData] = useState(null);
   const searchInputRef = useRef(null);
+
+  // Load admin data from localStorage
+  useEffect(() => {
+    const loadAdminData = () => {
+      try {
+        const adminUserStr = localStorage.getItem('admin_user');
+        if (adminUserStr) {
+          const adminUser = JSON.parse(adminUserStr);
+          setAdminData(adminUser);
+        }
+      } catch (error) {
+        console.error('Error loading admin data:', error);
+      }
+    };
+
+    loadAdminData();
+
+    // Listen for auth changes
+    const handleAuthChange = () => {
+      loadAdminData();
+    };
+    window.addEventListener('adminAuthChanged', handleAuthChange);
+    
+    return () => {
+      window.removeEventListener('adminAuthChanged', handleAuthChange);
+    };
+  }, []);
 
   // Keyboard shortcut for search (Ctrl+K)
   useEffect(() => {
@@ -112,6 +142,48 @@ export default function AdminNavbar({ onMenuClick }) {
 
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const totalCartPrice = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      // Call backend logout API to clear refresh token cookie
+      try {
+        await adminAPI.logout();
+      } catch (apiError) {
+        // Continue with logout even if API call fails (network issues, etc.)
+        console.warn("Logout API call failed, continuing with local cleanup:", apiError);
+      }
+
+      // Clear admin authentication data from localStorage
+      clearModuleAuth('admin');
+      localStorage.removeItem('admin_accessToken');
+      localStorage.removeItem('admin_authenticated');
+      localStorage.removeItem('admin_user');
+
+      // Clear sessionStorage if any
+      sessionStorage.removeItem('adminAuthData');
+
+      // Dispatch auth change event to notify other components
+      window.dispatchEvent(new Event('adminAuthChanged'));
+
+      // Navigate to admin login page
+      navigate('/admin/login', { replace: true });
+    } catch (error) {
+      // Even if there's an error, we should still clear local data and logout
+      console.error("Error during logout:", error);
+      
+      // Clear local data anyway
+      clearModuleAuth('admin');
+      localStorage.removeItem('admin_accessToken');
+      localStorage.removeItem('admin_authenticated');
+      localStorage.removeItem('admin_user');
+      sessionStorage.removeItem('adminAuthData');
+      window.dispatchEvent(new Event('adminAuthChanged'));
+
+      // Navigate to login
+      navigate('/admin/login', { replace: true });
+    }
+  };
 
   return (
     <>
@@ -356,8 +428,22 @@ export default function AdminNavbar({ onMenuClick }) {
                 <div className="flex items-center gap-2 pl-3 border-l border-neutral-200 cursor-pointer hover:bg-neutral-100 rounded-md px-2 py-1 transition-colors">
 
                   <div className="hidden md:block">
-                    <p className="text-sm font-medium text-neutral-900">Sumit Jaiswal</p>
-                    <p className="text-xs text-neutral-500">S****@appzeto.com</p>
+                    <p className="text-sm font-medium text-neutral-900">
+                      {adminData?.name || "Admin User"}
+                    </p>
+                    <p className="text-xs text-neutral-500">
+                      {adminData?.email
+                        ? (() => {
+                            const [local, domain] = adminData.email.split("@");
+                            return (
+                              local[0] +
+                              "*".repeat(Math.min(local.length - 1, 5)) +
+                              "@" +
+                              domain
+                            );
+                          })()
+                        : "admin@example.com"}
+                    </p>
                   </div>
                   <ChevronDown className="w-4 h-4 text-neutral-700 hidden md:block" />
                 </div>
@@ -368,21 +454,58 @@ export default function AdminNavbar({ onMenuClick }) {
               >
                 <div className="p-4 border-b border-neutral-200">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center overflow-hidden">
-                      <span className="text-2xl">👨</span>
+                    <div className="w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center overflow-hidden border border-neutral-300">
+                      {adminData?.profileImage ? (
+                        <img
+                          src={adminData.profileImage}
+                          alt={adminData.name || "Admin"}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-lg font-semibold text-neutral-600">
+                          {adminData?.name
+                            ? adminData.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .substring(0, 2)
+                            : "AD"}
+                        </span>
+                      )}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-neutral-900">Jhon Doe</p>
-                      <p className="text-xs text-neutral-500">a******@admin.com</p>
+                      <p className="text-sm font-semibold text-neutral-900">
+                        {adminData?.name || "Admin User"}
+                      </p>
+                      <p className="text-xs text-neutral-500">
+                        {adminData?.email
+                          ? (() => {
+                              const [local, domain] = adminData.email.split("@");
+                              return (
+                                local[0] +
+                                "*".repeat(Math.min(local.length - 1, 5)) +
+                                "@" +
+                                domain
+                              );
+                            })()
+                          : "admin@example.com"}
+                      </p>
                     </div>
                   </div>
                 </div>
                 <DropdownMenuGroup>
-                  <DropdownMenuItem className="cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100">
+                  <DropdownMenuItem
+                    className="cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100"
+                    onClick={() => navigate("/admin/profile")}
+                  >
                     <User className="mr-2 w-4 h-4" />
                     <span>Profile</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100">
+                  <DropdownMenuItem
+                    className="cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100"
+                    onClick={() => navigate("/admin/settings")}
+                  >
                     <Settings className="mr-2 w-4 h-4" />
                     <span>Settings</span>
                   </DropdownMenuItem>
@@ -392,7 +515,10 @@ export default function AdminNavbar({ onMenuClick }) {
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="cursor-pointer text-red-600 hover:bg-red-50 focus:bg-red-50">
+                <DropdownMenuItem 
+                  className="cursor-pointer text-red-600 hover:bg-red-50 focus:bg-red-50"
+                  onClick={handleLogout}
+                >
                   <LogOut className="mr-2 w-4 h-4" />
                   <span>Logout</span>
                 </DropdownMenuItem>

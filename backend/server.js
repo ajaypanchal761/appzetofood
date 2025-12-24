@@ -91,7 +91,11 @@ app.set('io', io);
 
 // Connect to databases
 connectDB();
-connectRedis();
+// Redis connection is optional - only connects if REDIS_ENABLED=true
+connectRedis().catch(() => {
+  // Silently handle Redis connection failures
+  // The app works without Redis
+});
 
 // Security middleware
 app.use(helmet());

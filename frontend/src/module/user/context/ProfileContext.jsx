@@ -1,16 +1,35 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"
+import { authAPI, userAPI } from "@/lib/api"
 
 const ProfileContext = createContext(null)
 
 export function ProfileProvider({ children }) {
   const [userProfile, setUserProfile] = useState(() => {
-    const saved = localStorage.getItem("userProfile")
-    return saved ? JSON.parse(saved) : {
-      name: "John Doe",
-      email: "john@example.com",
-      phone: "+1 234 567 8900",
+    // First, try to get from localStorage (user_user from auth)
+    const userStr = localStorage.getItem("user_user")
+    if (userStr) {
+      try {
+        return JSON.parse(userStr)
+      } catch (e) {
+        console.error("Error parsing user_user from localStorage:", e)
+      }
     }
+    
+    // Fallback to userProfile from localStorage
+    const saved = localStorage.getItem("userProfile")
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch (e) {
+        console.error("Error parsing userProfile from localStorage:", e)
+      }
+    }
+    
+    // Default empty profile
+    return null
   })
+  
+  const [loading, setLoading] = useState(true)
 
   const [addresses, setAddresses] = useState(() => {
     const saved = localStorage.getItem("userAddresses")
@@ -83,6 +102,54 @@ export function ProfileProvider({ children }) {
   useEffect(() => {
     localStorage.setItem("userFavorites", JSON.stringify(favorites))
   }, [favorites])
+
+  // Fetch user profile from API on mount and when authentication changes
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      // Check if user is authenticated
+      const isAuthenticated = localStorage.getItem("user_authenticated") === "true" || 
+                             localStorage.getItem("user_accessToken")
+      
+      if (!isAuthenticated) {
+        setLoading(false)
+        return
+      }
+
+      try {
+        setLoading(true)
+        
+        // Use auth/me endpoint directly (user profile endpoint may not exist)
+        const response = await authAPI.getCurrentUser()
+        const userData = response?.data?.data?.user || response?.data?.user || response?.data
+        
+        if (userData) {
+          setUserProfile(userData)
+          // Update localStorage
+          localStorage.setItem("user_user", JSON.stringify(userData))
+          localStorage.setItem("userProfile", JSON.stringify(userData))
+        }
+      } catch (error) {
+        // Silently handle error - use existing profile from localStorage
+        console.error("Error fetching user profile:", error)
+        // Don't show error to user, just use localStorage data
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserProfile()
+    
+    // Listen for auth changes
+    const handleAuthChange = () => {
+      fetchUserProfile()
+    }
+    
+    window.addEventListener("userAuthChanged", handleAuthChange)
+    
+    return () => {
+      window.removeEventListener("userAuthChanged", handleAuthChange)
+    }
+  }, [])
 
   // Address functions - memoized with useCallback
   const addAddress = useCallback((address) => {
@@ -213,6 +280,7 @@ export function ProfileProvider({ children }) {
   const value = useMemo(
     () => ({
       userProfile,
+      loading,
       updateUserProfile,
       addresses,
       paymentMethods,
@@ -236,6 +304,7 @@ export function ProfileProvider({ children }) {
     }),
     [
       userProfile,
+      loading,
       updateUserProfile,
       addresses,
       paymentMethods,

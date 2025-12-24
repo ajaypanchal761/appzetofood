@@ -5,7 +5,6 @@ import AnimatedPage from "../../components/AnimatedPage"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { authAPI } from "@/lib/api"
-import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
 import { setAuthData as setUserAuthData } from "@/lib/utils/auth"
 
 export default function OTP() {
@@ -57,13 +56,7 @@ export default function OTP() {
         setContactInfo(data.phone || "")
       }
       
-      // Auto-fill OTP for test phone numbers
-      if (isTestPhoneNumber(data.phone)) {
-        const defaultOtp = getDefaultOTP(data.phone)
-        if (defaultOtp) {
-          setOtp(defaultOtp.split(""))
-        }
-      }
+      // OTP auto-fill removed - user must manually enter OTP
     }
 
     // Start resend timer (60 seconds)

@@ -37,7 +37,7 @@ Backend API for Appzeto Food Delivery Platform built with Node.js, Express, and 
    - SMSHub API credentials
    - Redis connection (optional)
    - Other service configurations
-mongod
+
 3. **Start MongoDB:**
    ```bash
    # Make sure MongoDB is running on your system
@@ -45,6 +45,35 @@ mongod
    ```
 
 4. **Start Redis (optional):**
+   
+   **Note:** Redis is optional. The application will work without it, but some features like OTP rate limiting will be less effective.
+   
+   **For Windows:**
+   
+   **Option 1: Using WSL2 (Recommended)**
+   ```bash
+   # Install Redis in WSL2
+   wsl
+   sudo apt update
+   sudo apt install redis-server
+   redis-server
+   ```
+   
+   **Option 2: Using Docker**
+   ```bash
+   docker run -d -p 6379:6379 --name redis redis:latest
+   ```
+   
+   **Option 3: Using Memurai (Windows-native Redis alternative)**
+   - Download from: https://www.memurai.com/
+   - Install and start the service
+   - It will run on port 6379 by default
+   
+   **Option 4: Skip Redis (Development Only)**
+   - You can skip Redis installation for development
+   - The app will work without it, but with reduced caching and rate limiting capabilities
+   
+   **For Linux/macOS:**
    ```bash
    redis-server
    ```

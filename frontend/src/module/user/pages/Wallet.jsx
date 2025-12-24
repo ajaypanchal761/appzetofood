@@ -161,7 +161,7 @@ export default function Wallet() {
             onClick={() => navigate(-1)}
             className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
           >
-            <ArrowLeft className="h-5 w-5 text-gray-700" />
+            <ArrowLeft className="h-5 w-5 text-gray-700 dark:text-white" />
           </button>
         </div>
       </div>
@@ -182,16 +182,16 @@ export default function Wallet() {
           </div>
 
           {/* Title */}
-          <h1 className="text-xl font-bold text-gray-900 mb-1.5">Appzeto Food Money</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-1.5">Appzeto Food Money</h1>
           
           {/* Current Balance */}
           <div className="mb-2">
-            <p className="text-gray-500 text-xs mb-0.5">Current Balance</p>
-            <p className="text-2xl font-bold text-gray-900">{formatAmount(currentBalance)}</p>
+            <p className="text-gray-500 dark:text-gray-400 text-xs mb-0.5">Current Balance</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatAmount(currentBalance)}</p>
           </div>
           
           {/* Subtitle */}
-          <p className="text-gray-500 text-xs text-center max-w-xs">
+          <p className="text-gray-500 dark:text-gray-400 text-xs text-center max-w-xs">
             Add money to enjoy one-tap, seamless payments
           </p>
         </div>
@@ -210,7 +210,7 @@ export default function Wallet() {
 
         {/* Transaction History Section */}
         <div className="space-y-4">
-          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase">
+          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase">
             TRANSACTION HISTORY
           </h2>
 
@@ -229,8 +229,8 @@ export default function Wallet() {
                   onClick={() => setSelectedFilter(filter.id)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap flex-shrink-0 transition-all ${
                     isSelected
-                      ? 'bg-white border-2 border-green-600 text-green-600'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+                      ? 'bg-white dark:bg-[#1a1a1a] border-2 border-green-600 text-green-600'
+                      : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-700'
                   }`}
                 >
                   {filter.label}
@@ -254,10 +254,10 @@ export default function Wallet() {
                         
                         {/* Transaction Details */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-gray-900 font-medium text-sm truncate">
+                          <p className="text-gray-900 dark:text-white font-medium text-sm truncate">
                             {transaction.description}
                           </p>
-                          <p className="text-gray-500 text-xs mt-0.5">
+                          <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
                             {transaction.date} • {transaction.time}
                           </p>
                         </div>

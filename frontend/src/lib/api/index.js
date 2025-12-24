@@ -131,6 +131,17 @@ export const userAPI = {
     return apiClient.put(API_ENDPOINTS.USER.PROFILE, data);
   },
 
+  // Upload profile image
+  uploadProfileImage: (file) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return apiClient.post('/user/profile/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
   // Get user addresses
   getAddresses: () => {
     return apiClient.get(API_ENDPOINTS.USER.ADDRESSES);
@@ -275,6 +286,54 @@ export const deliveryAPI = {
 
 // Export admin API helper functions
 export const adminAPI = {
+  // Admin Auth
+  signup: (name, email, password, phone = null) => {
+    const payload = { name, email, password };
+    if (phone) payload.phone = phone;
+    return apiClient.post(API_ENDPOINTS.ADMIN.AUTH.SIGNUP, payload);
+  },
+
+  signupWithOTP: (name, email, password, otp, phone = null) => {
+    const payload = { name, email, password, otp };
+    if (phone) payload.phone = phone;
+    return apiClient.post(API_ENDPOINTS.ADMIN.AUTH.SIGNUP_OTP, payload);
+  },
+
+  login: (email, password) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.AUTH.LOGIN, { email, password });
+  },
+
+  logout: () => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.AUTH.LOGOUT);
+  },
+
+  getCurrentAdmin: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.AUTH.ME);
+  },
+
+  // Get admin profile
+  getAdminProfile: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.PROFILE);
+  },
+
+  // Update admin profile
+  updateAdminProfile: (profileData) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.PROFILE, profileData);
+  },
+
+  // Change admin password
+  changePassword: (currentPassword, newPassword) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.CHANGE_PASSWORD, {
+      currentPassword,
+      newPassword
+    });
+  },
+
+  // Get dashboard stats
+  getDashboardStats: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DASHBOARD_STATS);
+  },
+
   // Get users
   getUsers: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.USERS, { params });

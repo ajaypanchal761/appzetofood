@@ -101,20 +101,22 @@ export default function UserLayout() {
                         location.pathname.startsWith("/user/profile")
 
   return (
-    <CartProvider>
-      <ProfileProvider>
-        <OrdersProvider>
-          <SearchOverlayProvider>
-            <LocationSelectorProvider>
-              {/* <Navbar /> */}
-              <LocationPrompt />
-              <Outlet />
-              {showBottomNav && <BottomNavigation />}
-            </LocationSelectorProvider>
-          </SearchOverlayProvider>
-        </OrdersProvider>
-      </ProfileProvider>
-    </CartProvider>
+    <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] transition-colors duration-200">
+      <CartProvider>
+        <ProfileProvider>
+          <OrdersProvider>
+            <SearchOverlayProvider>
+              <LocationSelectorProvider>
+                {/* <Navbar /> */}
+                <LocationPrompt />
+                <Outlet />
+                {showBottomNav && <BottomNavigation />}
+              </LocationSelectorProvider>
+            </SearchOverlayProvider>
+          </OrdersProvider>
+        </ProfileProvider>
+      </CartProvider>
+    </div>
   )
 }
 

@@ -126,7 +126,25 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         userData.password = password;
       }
 
-      user = await User.create(userData);
+      try {
+        user = await User.create(userData);
+      } catch (createError) {
+        // Handle duplicate key error - user might have been created between findOne and create
+        if (createError.code === 11000) {
+          // Try to find the user again
+          const findQuery = phone 
+            ? { phone, role: userRole } 
+            : { email, role: userRole };
+          user = await User.findOne(findQuery);
+          if (!user) {
+            throw createError; // Re-throw if still not found
+          }
+          // User exists, return error that they should login instead
+          return errorResponse(res, 400, `User already exists with this ${identifierType} and role. Please login.`);
+        } else {
+          throw createError;
+        }
+      }
 
       logger.info(`New user registered: ${user._id}`, { 
         [identifierType]: identifier, 
@@ -184,6 +202,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
           userData.phone = phone;
           userData.phoneVerified = true;
         }
+        // Only include email if provided (don't set to null)
         if (email) {
           userData.email = email;
         }
@@ -192,7 +211,25 @@ export const verifyOTP = asyncHandler(async (req, res) => {
           userData.password = password;
         }
 
-        user = await User.create(userData);
+        try {
+          user = await User.create(userData);
+        } catch (createError) {
+          // Handle duplicate key error - user might have been created between findOne and create
+          if (createError.code === 11000) {
+            // Try to find the user again
+            const findQuery = phone 
+              ? { phone, role: userRole } 
+              : { email, role: userRole };
+            user = await User.findOne(findQuery);
+            if (!user) {
+              throw createError; // Re-throw if still not found
+            }
+            // User exists, continue with login flow
+            logger.info(`User found after duplicate key error: ${user._id}`);
+          } else {
+            throw createError;
+          }
+        }
 
         logger.info(`New user auto-registered: ${user._id}`, { 
           [identifierType]: identifier, 
@@ -520,7 +557,11 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
       profileImage: req.user.profileImage,
       signupMethod: req.user.signupMethod,
       preferences: req.user.preferences,
-      wallet: req.user.wallet
+      wallet: req.user.wallet,
+      // Include additional profile fields
+      dateOfBirth: req.user.dateOfBirth,
+      anniversary: req.user.anniversary,
+      gender: req.user.gender
     }
   });
 });

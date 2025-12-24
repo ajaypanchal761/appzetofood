@@ -34,8 +34,8 @@ const orderSchema = new mongoose.Schema({
   orderId: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true
+    // Note: unique: true automatically creates an index, so index: true is redundant
   },
   userId: {
     type: mongoose.Schema.Types.ObjectId,

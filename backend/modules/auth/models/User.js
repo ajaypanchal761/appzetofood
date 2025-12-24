@@ -49,6 +49,16 @@ const userSchema = new mongoose.Schema({
   profileImage: {
     type: String
   },
+  dateOfBirth: {
+    type: Date
+  },
+  anniversary: {
+    type: Date
+  },
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other', 'prefer-not-to-say']
+  },
   addresses: [{
     label: {
       type: String,
@@ -149,8 +159,21 @@ const userSchema = new mongoose.Schema({
 // Indexes
 // Compound unique indexes to allow same email/phone for different roles
 // But prevent duplicate email+role or phone+role combinations
-userSchema.index({ email: 1, role: 1 }, { unique: true, sparse: true });
-userSchema.index({ phone: 1, role: 1 }, { unique: true, sparse: true });
+// Use partial index to only index non-null emails to avoid duplicate key errors with null emails
+userSchema.index(
+  { email: 1, role: 1 }, 
+  { 
+    unique: true, 
+    partialFilterExpression: { email: { $exists: true, $type: 'string' } }
+  }
+);
+userSchema.index(
+  { phone: 1, role: 1 }, 
+  { 
+    unique: true, 
+    partialFilterExpression: { phone: { $exists: true, $type: 'string' } }
+  }
+);
 userSchema.index({ googleId: 1 }, { unique: true, sparse: true });
 userSchema.index({ 'addresses.location': '2dsphere' });
 // Non-unique indexes for individual fields (for queries)

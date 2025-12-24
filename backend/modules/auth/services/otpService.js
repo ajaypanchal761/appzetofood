@@ -1,7 +1,6 @@
 import Otp from '../models/Otp.js';
 import smsIndiaHubService from './smsIndiaHubService.js';
 import emailService from './emailService.js';
-import { getRedisClient } from '../../../config/redis.js';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -84,16 +83,18 @@ class OTPService {
       const identifier = phone || email;
       const identifierType = phone ? 'phone' : 'email';
 
-      // Check rate limiting (max 3 OTPs per identifier per hour) - disabled in development
+      // Check rate limiting (max 3 OTPs per identifier per hour) - using MongoDB
       if (process.env.NODE_ENV === 'production') {
-        const rateLimitKey = `otp_rate_limit:${identifierType}:${identifier}`;
-        const redisClient = getRedisClient();
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const rateLimitQuery = {
+          [identifierType]: identifier,
+          purpose,
+          createdAt: { $gte: oneHourAgo }
+        };
         
-        if (redisClient) {
-          const attempts = await redisClient.get(rateLimitKey);
-          if (attempts && parseInt(attempts) >= 3) {
-            throw new Error('Too many OTP requests. Please try again after some time.');
-          }
+        const recentOtpCount = await Otp.countDocuments(rateLimitQuery);
+        if (recentOtpCount >= 3) {
+          throw new Error('Too many OTP requests. Please try again after some time.');
         }
       }
 
@@ -122,24 +123,6 @@ class OTPService {
       if (email) otpData.email = email;
 
       const otpRecord = await Otp.create(otpData);
-
-      // Store in Redis for faster verification (optional)
-      const redisClient = getRedisClient();
-      if (redisClient) {
-        const redisKey = `otp:${identifierType}:${identifier}:${purpose}`;
-        await redisClient.setEx(
-          redisKey,
-          300, // 5 minutes
-          JSON.stringify({ otp, expiresAt: expiresAt.toISOString() })
-        );
-
-        // Set rate limit (only in production)
-        if (process.env.NODE_ENV === 'production') {
-          const rateLimitKey = `otp_rate_limit:${identifierType}:${identifier}`;
-          await redisClient.setEx(rateLimitKey, 3600, '1'); // 1 hour
-          await redisClient.incr(rateLimitKey);
-        }
-      }
 
       // Send OTP via SMS or Email
       if (phone) {
@@ -200,10 +183,6 @@ class OTPService {
       const identifier = phone || email;
       const identifierType = phone ? 'phone' : 'email';
 
-      // Get Redis client and key (defined here so they're available throughout the function)
-      const redisClient = getRedisClient();
-      const redisKey = `otp:${identifierType}:${identifier}:${purpose}`;
-
       // Check if this is a test phone number and OTP matches default test OTP
       if (phone && isTestPhoneNumber(phone) && otp === DEFAULT_TEST_OTP) {
         logger.info(`Test OTP verified for ${phone}`, {
@@ -216,46 +195,7 @@ class OTPService {
         };
       }
 
-      // Check Redis first for faster verification (only for unverified OTPs)
-      // For reset-password, we'll check database directly to handle already-verified OTPs
-      if (purpose !== 'reset-password') {
-        
-        if (redisClient) {
-          const cached = await redisClient.get(redisKey);
-          if (cached) {
-            const cachedData = JSON.parse(cached);
-            if (cachedData.otp === otp) {
-              // Verify in database
-              const query = {
-                otp,
-                purpose,
-                verified: false,
-                expiresAt: { $gt: new Date() }
-              };
-              if (phone) query.phone = phone;
-              if (email) query.email = email;
-
-              const otpRecord = await Otp.findOne(query);
-
-              if (otpRecord) {
-                // Mark as verified
-                otpRecord.verified = true;
-                await otpRecord.save();
-
-                // Delete from Redis
-                await redisClient.del(redisKey);
-
-                return {
-                  success: true,
-                  message: 'OTP verified successfully'
-                };
-              }
-            }
-          }
-        }
-      }
-
-      // Fallback to database verification
+      // Verify OTP from database
       // For reset-password purpose, allow already-verified OTPs within 10 minutes
       let otpRecord;
       
@@ -331,11 +271,6 @@ class OTPService {
       // Mark as verified
       otpRecord.verified = true;
       await otpRecord.save();
-
-      // Delete from Redis if exists
-      if (redisClient) {
-        await redisClient.del(redisKey);
-      }
 
       logger.info(`OTP verified successfully for ${identifier} (${identifierType})`, {
         [identifierType]: identifier,

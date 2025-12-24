@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Mail, User, Lock, Eye, EyeOff, ArrowLeft, Shield } from "lucide-react"
 import appzetoLogo from "@/assets/appzetologo.png"
-import { authAPI } from "@/lib/api"
+import { authAPI, adminAPI } from "@/lib/api"
 import { setAuthData } from "@/lib/utils/auth"
 
 export default function AdminSignup() {
@@ -138,23 +138,20 @@ export default function AdminSignup() {
 
     setIsLoading(true)
     try {
-      // Verify OTP and register (with password for email-based admin)
-      const response = await authAPI.verifyOTP(
-        null,
-        otpCode,
-        "register",
+      // Use admin-specific signup endpoint with OTP
+      const response = await adminAPI.signupWithOTP(
         formData.name,
         formData.email,
-        "admin",
-        formData.password
+        formData.password,
+        otpCode
       )
 
       const data = response?.data?.data || response?.data
       
       // If registration successful, store tokens and redirect
-      if (data.accessToken && data.user) {
-        // Replace old token with new one (handles cross-module login)
-        setAuthData("admin", data.accessToken, data.user)
+      if (data.accessToken && data.admin) {
+        // Store admin token and data
+        setAuthData("admin", data.accessToken, data.admin)
         
         // Navigate to admin dashboard
         navigate("/admin", { replace: true })

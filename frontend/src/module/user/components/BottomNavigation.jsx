@@ -54,7 +54,7 @@ export default function BottomNavigation() {
 
   return (
     <div 
-      className={`fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 transition-transform duration-300 ease-in-out ${
+      className={`fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-200 dark:border-gray-800 z-50 transition-transform duration-300 ease-in-out ${
         isVisible ? "translate-y-0" : "translate-y-full"
       }`}
     >
@@ -78,7 +78,7 @@ export default function BottomNavigation() {
         </Link>
 
         {/* Divider */}
-        <div className="h-8 w-px bg-gray-300" />
+        <div className="h-8 w-px bg-gray-300 dark:bg-gray-700" />
 
         {/* Under 250 Tab */}
         <Link
@@ -99,7 +99,7 @@ export default function BottomNavigation() {
         </Link>
 
         {/* Divider */}
-        <div className="h-8 w-px bg-gray-300" />
+        <div className="h-8 w-px bg-gray-300 dark:bg-gray-700" />
 
         {/* Dining Tab */}
         <Link
@@ -120,7 +120,7 @@ export default function BottomNavigation() {
         </Link>
 
         {/* Divider */}
-        <div className="h-8 w-px bg-gray-300" />
+        <div className="h-8 w-px bg-gray-300 dark:bg-gray-700" />
 
         {/* Profile Tab */}
         <Link

@@ -1,6 +1,7 @@
 /**
  * Migration script to fix User model indexes
  * Allows same email/phone for different roles by using compound unique indexes
+ * Uses partial indexes to prevent duplicate key errors with null emails/phones
  * 
  * Run this once: node scripts/fix-user-indexes.js
  */
@@ -29,6 +30,29 @@ async function fixIndexes() {
 
     console.log('\nDropping old unique indexes...');
     
+    // Drop old compound unique indexes if they exist (sparse ones causing issues)
+    try {
+      await collection.dropIndex('email_1_role_1');
+      console.log('✓ Dropped old email_1_role_1 compound unique index');
+    } catch (err) {
+      if (err.code === 27) {
+        console.log('  email_1_role_1 index does not exist, skipping...');
+      } else {
+        console.log('  Error dropping email_1_role_1 index:', err.message);
+      }
+    }
+
+    try {
+      await collection.dropIndex('phone_1_role_1');
+      console.log('✓ Dropped old phone_1_role_1 compound unique index');
+    } catch (err) {
+      if (err.code === 27) {
+        console.log('  phone_1_role_1 index does not exist, skipping...');
+      } else {
+        console.log('  Error dropping phone_1_role_1 index:', err.message);
+      }
+    }
+
     // Drop old unique email index if it exists
     try {
       await collection.dropIndex('email_1');
@@ -53,28 +77,74 @@ async function fixIndexes() {
       }
     }
 
-    console.log('\nCreating new compound unique indexes...');
+    console.log('\nCreating new compound unique indexes with partial filter...');
     
-    // Create compound unique index for email + role
+    // Create compound unique index for email + role using partial index
+    // This only indexes documents where email is not null, preventing duplicate key errors
     try {
       await collection.createIndex(
         { email: 1, role: 1 },
-        { unique: true, sparse: true, name: 'email_1_role_1' }
+        { 
+          unique: true, 
+          partialFilterExpression: { email: { $exists: true, $type: 'string' } },
+          name: 'email_1_role_1' 
+        }
       );
-      console.log('✓ Created email_1_role_1 compound unique index');
+      console.log('✓ Created email_1_role_1 compound unique index (partial)');
     } catch (err) {
-      console.log('  Error creating email_1_role_1 index:', err.message);
+      if (err.code === 85) {
+        console.log('  email_1_role_1 index already exists with different options, dropping and recreating...');
+        try {
+          await collection.dropIndex('email_1_role_1');
+          await collection.createIndex(
+            { email: 1, role: 1 },
+            { 
+              unique: true, 
+              partialFilterExpression: { email: { $exists: true, $type: 'string' } },
+              name: 'email_1_role_1' 
+            }
+          );
+          console.log('✓ Recreated email_1_role_1 compound unique index (partial)');
+        } catch (recreateErr) {
+          console.log('  Error recreating email_1_role_1 index:', recreateErr.message);
+        }
+      } else {
+        console.log('  Error creating email_1_role_1 index:', err.message);
+      }
     }
 
-    // Create compound unique index for phone + role
+    // Create compound unique index for phone + role using partial index
+    // This only indexes documents where phone is not null, preventing duplicate key errors
     try {
       await collection.createIndex(
         { phone: 1, role: 1 },
-        { unique: true, sparse: true, name: 'phone_1_role_1' }
+        { 
+          unique: true, 
+          partialFilterExpression: { phone: { $exists: true, $type: 'string' } },
+          name: 'phone_1_role_1' 
+        }
       );
-      console.log('✓ Created phone_1_role_1 compound unique index');
+      console.log('✓ Created phone_1_role_1 compound unique index (partial)');
     } catch (err) {
-      console.log('  Error creating phone_1_role_1 index:', err.message);
+      if (err.code === 85) {
+        console.log('  phone_1_role_1 index already exists with different options, dropping and recreating...');
+        try {
+          await collection.dropIndex('phone_1_role_1');
+          await collection.createIndex(
+            { phone: 1, role: 1 },
+            { 
+              unique: true, 
+              partialFilterExpression: { phone: { $exists: true, $type: 'string' } },
+              name: 'phone_1_role_1' 
+            }
+          );
+          console.log('✓ Recreated phone_1_role_1 compound unique index (partial)');
+        } catch (recreateErr) {
+          console.log('  Error recreating phone_1_role_1 index:', recreateErr.message);
+        }
+      } else {
+        console.log('  Error creating phone_1_role_1 index:', err.message);
+      }
     }
 
     // Create non-unique indexes for individual fields
@@ -101,6 +171,7 @@ async function fixIndexes() {
 
     console.log('\n✅ Index migration completed successfully!');
     console.log('\nYou can now use the same email/phone for different roles.');
+    console.log('Multiple users with null emails/phones are now allowed.');
     
   } catch (error) {
     console.error('❌ Error fixing indexes:', error);

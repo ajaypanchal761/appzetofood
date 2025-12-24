@@ -425,23 +425,23 @@ export default function Cart() {
   // Empty cart state - but don't show if order success or placing order modal is active
   if (cart.length === 0 && !showOrderSuccess && !showPlacingOrder) {
     return (
-      <AnimatedPage className="min-h-screen bg-gray-50">
-        <div className="bg-white border-b sticky top-0 z-10">
+      <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a]">
+        <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-10">
           <div className="flex items-center gap-3 px-4 py-3">
             <Link to="/user">
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <span className="font-semibold text-gray-800">Cart</span>
+            <span className="font-semibold text-gray-800 dark:text-white">Cart</span>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center py-20 px-4">
           <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
             <Utensils className="h-10 w-10 text-gray-400" />
           </div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-1">Your cart is empty</h2>
-          <p className="text-sm text-gray-500 mb-4 text-center">Add items from a restaurant to start a new order</p>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-1">Your cart is empty</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">Add items from a restaurant to start a new order</p>
           <Link to="/user">
             <Button className="bg-primary-orange hover:opacity-90 text-white">Browse Restaurants</Button>
           </Link>
@@ -451,9 +451,9 @@ export default function Cart() {
   }
 
   return (
-    <div className="relative min-h-screen bg-white">
+    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a]">
       {/* Header - Sticky at top */}
-      <div className="bg-white border-b sticky top-0 z-20 flex-shrink-0">
+      <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-20 flex-shrink-0">
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Link to="/user">
@@ -462,10 +462,10 @@ export default function Cart() {
               </Button>
             </Link>
             <div className="min-w-0">
-              <p className="text-xs text-gray-500">Apna Sweets</p>
-              <p className="text-sm font-medium text-gray-800 truncate">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Apna Sweets</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
                 10-15 mins to <span className="font-semibold">Home</span>
-                <span className="text-gray-400 ml-1 text-xs">{defaultAddress?.city || "Select address"}</span>
+                <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">{defaultAddress?.city || "Select address"}</span>
               </p>
             </div>
           </div>

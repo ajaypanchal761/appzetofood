@@ -144,6 +144,8 @@ export function clearModuleAuth(module) {
   localStorage.removeItem(`${module}_accessToken`);
   localStorage.removeItem(`${module}_authenticated`);
   localStorage.removeItem(`${module}_user`);
+  // Also clear any sessionStorage data
+  sessionStorage.removeItem(`${module}AuthData`);
 }
 
 /**
@@ -164,13 +166,50 @@ export function clearAuthData() {
  * @param {string} module - Module name (admin, restaurant, delivery, user)
  * @param {string} token - Access token
  * @param {Object} user - User data
+ * @throws {Error} If localStorage is not available or quota exceeded
  */
 export function setAuthData(module, token, user) {
-  // Store module-specific token (don't clear other modules)
-  localStorage.setItem(`${module}_accessToken`, token);
-  localStorage.setItem(`${module}_authenticated`, 'true');
-  if (user) {
-    localStorage.setItem(`${module}_user`, JSON.stringify(user));
+  try {
+    // Check if localStorage is available
+    if (typeof Storage === 'undefined' || !localStorage) {
+      throw new Error('localStorage is not available');
+    }
+
+    // Store module-specific token (don't clear other modules)
+    localStorage.setItem(`${module}_accessToken`, token);
+    localStorage.setItem(`${module}_authenticated`, 'true');
+    
+    if (user) {
+      localStorage.setItem(`${module}_user`, JSON.stringify(user));
+    }
+
+    // Verify the token was stored correctly
+    const storedToken = localStorage.getItem(`${module}_accessToken`);
+    if (storedToken !== token) {
+      throw new Error(`Token storage verification failed for module: ${module}`);
+    }
+  } catch (error) {
+    // If quota exceeded, try to clear some space
+    if (error.name === 'QuotaExceededError' || error.code === 22) {
+      console.warn('localStorage quota exceeded. Attempting to clear old data...');
+      // Clear legacy tokens
+      try {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('user');
+        // Retry storing
+        localStorage.setItem(`${module}_accessToken`, token);
+        localStorage.setItem(`${module}_authenticated`, 'true');
+        if (user) {
+          localStorage.setItem(`${module}_user`, JSON.stringify(user));
+        }
+      } catch (retryError) {
+        console.error('Failed to store auth data after clearing space:', retryError);
+        throw new Error('Unable to store authentication data. Please clear browser storage and try again.');
+      }
+    } else {
+      console.error('Error storing auth data:', error);
+      throw error;
+    }
   }
 }
 

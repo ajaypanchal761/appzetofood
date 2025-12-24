@@ -1,12 +1,10 @@
-// User module - to be implemented
 import express from 'express';
+import userRoutes from './routes/userRoutes.js';
 
 const router = express.Router();
 
-// Placeholder route
-router.get('/', (req, res) => {
-  res.status(501).json({ message: 'User module not implemented yet' });
-});
+// Mount user routes
+router.use('/', userRoutes);
 
 export default router;
 

@@ -1,13 +1,23 @@
+import { Link } from "react-router-dom"
+import { ArrowLeft } from "lucide-react"
 import AnimatedPage from "../../components/AnimatedPage"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Button } from "@/components/ui/button"
 
 export default function Settings() {
   return (
     <AnimatedPage className="min-h-screen bg-background p-4">
       <div className="max-w-4xl mx-auto space-y-6">
-        <h1 className="text-lg sm:text-xl md:text-2xl font-bold">Settings</h1>
+        <div className="flex items-center gap-3">
+          <Link to="/user/profile">
+            <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+              <ArrowLeft className="h-5 w-5 text-black dark:text-white" />
+            </Button>
+          </Link>
+          <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-black dark:text-white">Settings</h1>
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>Notifications & Preferences</CardTitle>

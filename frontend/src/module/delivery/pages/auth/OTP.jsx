@@ -197,16 +197,14 @@ export default function DeliveryOTP() {
       sessionStorage.removeItem("deliveryAuthData")
 
       // Store auth data using utility function to ensure proper role handling
-      setAuthData("delivery", accessToken, user)
-
-      // Verify token was stored correctly
-      const storedToken = localStorage.getItem("delivery_accessToken")
-      if (!storedToken || storedToken !== accessToken) {
-        console.error("Token storage failed. Retrying...")
-        // Retry storing the token
-        localStorage.setItem("delivery_accessToken", accessToken)
-        localStorage.setItem("delivery_authenticated", "true")
-        localStorage.setItem("delivery_user", JSON.stringify(user))
+      // The setAuthData function includes error handling and verification
+      try {
+        setAuthData("delivery", accessToken, user)
+      } catch (storageError) {
+        console.error("Failed to store authentication data:", storageError)
+        setError("Failed to save authentication. Please try again or clear your browser storage.")
+        setIsLoading(false)
+        return
       }
 
       // Dispatch custom event for same-tab updates
@@ -268,16 +266,14 @@ export default function DeliveryOTP() {
       sessionStorage.removeItem("deliveryAuthData")
 
       // Store auth data using utility function to ensure proper role handling
-      setAuthData("delivery", accessToken, user)
-
-      // Verify token was stored correctly
-      const storedToken = localStorage.getItem("delivery_accessToken")
-      if (!storedToken || storedToken !== accessToken) {
-        console.error("Token storage failed. Retrying...")
-        // Retry storing the token
-        localStorage.setItem("delivery_accessToken", accessToken)
-        localStorage.setItem("delivery_authenticated", "true")
-        localStorage.setItem("delivery_user", JSON.stringify(user))
+      // The setAuthData function includes error handling and verification
+      try {
+        setAuthData("delivery", accessToken, user)
+      } catch (storageError) {
+        console.error("Failed to store authentication data:", storageError)
+        setError("Failed to save authentication. Please try again or clear your browser storage.")
+        setIsLoading(false)
+        return
       }
 
       // Dispatch custom event for same-tab updates

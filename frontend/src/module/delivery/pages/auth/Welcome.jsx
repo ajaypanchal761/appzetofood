@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { CheckCircle2, Play, Pause, IndianRupee } from "lucide-react"
 import BottomPopup from "../../components/BottomPopup"
+import { isModuleAuthenticated } from "@/lib/utils/auth"
 
 export default function DeliveryWelcome() {
   const navigate = useNavigate()
@@ -148,12 +149,9 @@ export default function DeliveryWelcome() {
           {/* Start Earning Button */}
           <button
             onClick={() => {
-              // Verify token exists before navigating
-              const token = localStorage.getItem("delivery_accessToken")
-              const isAuthenticated = localStorage.getItem("delivery_authenticated") === "true"
-              
-              if (!token || !isAuthenticated) {
-                console.error("Token not found, redirecting to login")
+              // Verify authentication before navigating
+              if (!isModuleAuthenticated("delivery")) {
+                // User not authenticated, redirect to login
                 navigate("/delivery/login", { replace: true })
                 return
               }

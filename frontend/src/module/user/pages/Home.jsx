@@ -938,11 +938,11 @@ export default function Home() {
   )
 
   return (
-    <div className="relative min-h-screen bg-white">
+    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a]">
       {/* Unified Background for Entire Page - Vibrant Food Theme */}
       <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background */}
-        <div className="absolute inset-0 bg-white">
+        <div className="absolute inset-0 bg-white dark:bg-[#0a0a0a]">
         </div>
         {/* Background Elements - Reduced to 2 blobs with CSS animations for better performance */}
         <div className="absolute inset-0 overflow-hidden opacity-20">
@@ -1108,7 +1108,7 @@ export default function Home() {
             <div className="sticky top-4 z-30 flex items-center gap-3 sm:gap-4">
               {/* Enhanced Search Bar */}
               <div className="flex-1 relative animate-[slideUp_0.4s_ease-out]">
-                <div className="relative bg-white rounded-xl shadow-lg border border-gray-200 p-1 sm:p-1.5 transition-all duration-300 hover:shadow-xl">
+                <div className="relative bg-white dark:bg-[#1a1a1a] rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 p-1 sm:p-1.5 transition-all duration-300 hover:shadow-xl">
                   <div className="flex items-center gap-2 sm:gap-3">
                     <Search className="h-4 w-4 sm:h-4 sm:w-4 text-green-600 flex-shrink-0 ml-2 sm:ml-3" strokeWidth={2.5} />
                     <div className="flex-1 relative">
@@ -1124,7 +1124,7 @@ export default function Home() {
                               setHeroSearch("")
                             }
                           }}
-                          className="pl-0 pr-2 h-8 sm:h-9 w-full bg-transparent border-0 text-sm sm:text-base font-semibold text-gray-700 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full"
+                          className="pl-0 pr-2 h-8 sm:h-9 w-full bg-transparent border-0 text-sm sm:text-base font-semibold text-gray-700 dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full"
                         />
                         {/* Animated placeholder - same animation as RestaurantDetails highlight offer */}
                         {!heroSearch && (
@@ -1136,7 +1136,7 @@ export default function Home() {
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: -16, opacity: 0 }}
                                 transition={{ duration: 0.3 }}
-                                className="text-sm sm:text-base font-semibold text-gray-400 inline-block"
+                                className="text-sm sm:text-base font-semibold text-gray-400 dark:text-gray-500 inline-block"
                               >
                                 {placeholders[placeholderIndex]}
                               </motion.span>
@@ -1148,9 +1148,9 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={handleSearchFocus}
-                      className="flex-shrink-0 mr-2 sm:mr-3 p-1 hover:bg-gray-100 rounded-full transition-colors"
-                    >
-                      <Mic className="h-4 w-4 sm:h-4 sm:w-4 text-gray-500" strokeWidth={2.5} />
+                      className="flex-shrink-0 mr-2 sm:mr-3 p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                      >
+                      <Mic className="h-4 w-4 sm:h-4 sm:w-4 text-gray-500 dark:text-gray-400" strokeWidth={2.5} />
                     </button>
                   </div>
                 </div>
@@ -1266,7 +1266,7 @@ export default function Home() {
             <Button
               variant="outline"
               onClick={() => setIsFilterOpen(true)}
-              className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white border border-gray-200 hover:bg-gray-50 text-gray-700"
+              className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-white"
             >
               <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
               <span className="text-xs sm:text-sm font-bold text-black">Filters</span>
@@ -1296,7 +1296,7 @@ export default function Home() {
                   }
                   className={`h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${isActive
                       ? 'bg-green-600 text-white border border-green-600 hover:bg-green-600/90'
-                      : 'bg-white border border-gray-200 hover:bg-gray-50 text-gray-600'
+                      : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
                     }`}
                 >
                   {Icon && <Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${isActive ? 'fill-white' : ''}`} />}
@@ -1309,7 +1309,7 @@ export default function Home() {
 
         {/* Explore More Section */}
         <section className="pt-2 sm:pt-3">
-          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase mb-2 sm:mb-3 px-1">
+          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-2 sm:mb-3 px-1">
             {exploreMoreHeading}
           </h2>
           <div
@@ -1411,10 +1411,10 @@ export default function Home() {
           <div className="relative">
             {/* Loading Overlay */}
             {(isLoadingFilterResults || loadingRestaurants) && (
-              <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg min-h-[400px]">
+              <div className="absolute inset-0 bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg min-h-[400px]">
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 className="h-8 w-8 text-green-600 animate-spin" strokeWidth={2.5} />
-                  <span className="text-sm font-medium text-gray-700">Loading restaurants...</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-white">Loading restaurants...</span>
                 </div>
               </div>
             )}
@@ -1453,7 +1453,7 @@ export default function Home() {
                 return (
                   <ScrollRevealSimple key={restaurant.id} delay={index * 0.1}>
                     <Link to={`/user/restaurants/${restaurantSlug}`}>
-                      <Card className="overflow-hidden gap-0 cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl">
+                      <Card className="overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl">
                         {/* Image Section */}
                         <div className="relative h-48 sm:h-56 md:h-60 w-full overflow-hidden rounded-t-2xl">
                           <img

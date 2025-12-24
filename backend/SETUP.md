@@ -107,9 +107,37 @@ The following collections will be created automatically:
 ## Troubleshooting
 
 ### MongoDB Connection Issues:
+
+#### Local MongoDB:
 - Ensure MongoDB is running: `mongod`
 - Check `MONGODB_URI` in `.env`
 - Verify MongoDB is accessible on the specified host/port
+
+#### MongoDB Atlas (Cloud):
+If you're using MongoDB Atlas and getting connection errors:
+
+1. **IP Whitelist Issue (Most Common):**
+   - Error: "Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted."
+   - Solution:
+     - Go to your MongoDB Atlas dashboard: https://cloud.mongodb.com/
+     - Navigate to: **Network Access** → **IP Access List**
+     - Click **Add IP Address**
+     - Either:
+       - Add your current IP address (temporary solution)
+       - Or add `0.0.0.0/0` to allow all IPs (⚠️ **Only for development/testing - not recommended for production**)
+     - Click **Confirm**
+   - Wait 1-2 minutes for changes to propagate
+   - Try connecting again
+
+2. **Connection String:**
+   - Verify `MONGODB_URI` in `.env` matches your Atlas connection string
+   - Format should be: `mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority`
+   - Make sure username and password are URL-encoded if they contain special characters
+
+3. **Database User:**
+   - Ensure you've created a database user in Atlas with appropriate permissions
+   - Go to: **Database Access** → **Add New Database User**
+   - Choose password authentication and set appropriate privileges
 
 ### Redis Connection Issues:
 - Redis is optional - app will work without it

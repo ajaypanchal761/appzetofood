@@ -2,7 +2,20 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input(props: React.ComponentProps<"input">) {
+  const { className, type, value, ...restProps } = props
+  
+  // Ensure value is always a string (never undefined/null) when provided
+  // This prevents "uncontrolled to controlled" React warnings
+  // If value prop exists in props (even if undefined), convert undefined/null to empty string
+  const safeValue = value !== undefined && value !== null ? String(value) : ""
+  
+  // Only include value prop if it was originally provided (controlled input)
+  // Otherwise omit it for uncontrolled inputs
+  const inputProps = "value" in props 
+    ? { ...restProps, value: safeValue }
+    : restProps
+  
   return (
     <input
       type={type}
@@ -13,7 +26,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
         className
       )}
-      {...props}
+      {...inputProps}
     />
   )
 }
