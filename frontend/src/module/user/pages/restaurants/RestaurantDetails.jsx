@@ -3524,7 +3524,7 @@ export default function RestaurantDetails() {
               className="flex items-center gap-1 text-sm text-gray-700 cursor-pointer"
               onClick={() => setShowOffersSheet(true)}
             >
-              <span>{restaurant.offerCount} offers</span>
+              <span>{(restaurant?.offerCount || 0)} offers</span>
               <ChevronDown className="h-4 w-4" />
             </div>
           </div>
@@ -3628,7 +3628,7 @@ export default function RestaurantDetails() {
         </div>
 
         {/* Menu Items Section */}
-        {restaurant.menuSections && restaurant.menuSections.length > 0 && (
+        {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
           <div className="px-4 py-6 space-y-6">
             {restaurant.menuSections.map((section, sectionIndex) => {
               const sectionTitle = sectionIndex === 0 ? "Recommended for you" : section.title
@@ -4349,20 +4349,20 @@ export default function RestaurantDetails() {
                       <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
                         <span className="text-white font-bold text-base">{(restaurant.name || "R").charAt(0).toUpperCase()}</span>
                       </div>
-                      <h2 className="text-lg font-bold text-gray-900">{restaurant.name}</h2>
+                      <h2 className="text-lg font-bold text-gray-900">{restaurant?.name || "Unknown Restaurant"}</h2>
                     </div>
                   </div>
 
                   {/* Outlets List */}
                   <div className="flex-1 overflow-y-auto px-4 py-3">
-                    {restaurant.outlets && restaurant.outlets.length > 0 ? (
+                    {restaurant?.outlets && Array.isArray(restaurant.outlets) && restaurant.outlets.length > 0 ? (
                       <div className="space-y-2">
                         {restaurant.outlets.map((outlet) => (
                           <div
-                            key={outlet.id}
+                            key={outlet?.id || Math.random()}
                             className="p-3 rounded-lg border border-gray-200 bg-white"
                           >
-                            {outlet.isNearest && (
+                            {outlet?.isNearest && (
                               <div className="flex items-center gap-1.5 mb-2 px-2 py-1 bg-green-50 rounded-md">
                                 <Zap className="h-3.5 w-3.5 text-green-600 fill-green-600" />
                                 <span className="text-xs font-semibold text-green-700">
@@ -4371,28 +4371,28 @@ export default function RestaurantDetails() {
                               </div>
                             )}
                             <h3 className="text-sm font-semibold text-gray-900 mb-2">
-                              {outlet.location}
+                              {outlet?.location || "Location"}
                             </h3>
                             <div className="flex items-center justify-between gap-4">
                               <div className="flex items-center gap-3 text-xs text-gray-600">
                                 <div className="flex items-center gap-1">
                                   <Clock className="h-3.5 w-3.5" />
-                                  <span>{outlet.deliveryTime}</span>
+                                  <span>{outlet?.deliveryTime || "25-30 mins"}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <MapPin className="h-3.5 w-3.5" />
-                                  <span>{outlet.distance}</span>
+                                  <span>{outlet?.distance || "1.2 km"}</span>
                                 </div>
                               </div>
                               <div className="flex flex-col items-end gap-0.5">
                                 <div className="flex items-center gap-1">
                                   <Star className="h-3.5 w-3.5 text-green-600 fill-green-600" />
                                   <span className="text-xs font-medium text-gray-900">
-                                    {outlet.rating}
+                                    {outlet?.rating ?? 4.5}
                                   </span>
                                 </div>
                                 <span className="text-xs text-gray-500">
-                                  By {outlet.reviews >= 1000 ? `${(outlet.reviews / 1000).toFixed(1)}K+` : `${outlet.reviews}+`}
+                                  By {(outlet?.reviews || 0) >= 1000 ? `${((outlet.reviews || 0) / 1000).toFixed(1)}K+` : `${outlet?.reviews || 0}+`}
                                 </span>
                               </div>
                             </div>
@@ -4407,7 +4407,7 @@ export default function RestaurantDetails() {
                   </div>
 
                   {/* Footer */}
-                  {restaurant.outlets && restaurant.outlets.length > 5 && (
+                  {restaurant?.outlets && Array.isArray(restaurant.outlets) && restaurant.outlets.length > 5 && (
                     <div className="border-t border-gray-200 px-4 py-3 bg-white">
                       <button className="flex items-center justify-center gap-2 text-red-600 font-medium text-sm w-full">
                         <span>See all {restaurant.outlets.length} outlets</span>
@@ -4895,27 +4895,27 @@ export default function RestaurantDetails() {
                   {/* Header */}
                   <div className="px-4 pt-6 pb-4 border-b border-gray-200">
                     <h2 className="text-lg font-bold text-gray-900">
-                      Offers at {restaurant.name}
+                      Offers at {restaurant?.name || "Unknown Restaurant"}
                     </h2>
                   </div>
 
                   {/* Scrollable Content */}
                   <div className="flex-1 overflow-y-auto px-4 py-4">
                     {/* Gold Exclusive Offer Section */}
-                    {restaurant.restaurantOffers?.goldOffer && (
+                    {restaurant?.restaurantOffers?.goldOffer && (
                       <div className="mb-6">
                         <h3 className="text-sm font-semibold text-gray-900 mb-3">
-                          {restaurant.restaurantOffers.goldOffer.title}
+                          {restaurant.restaurantOffers.goldOffer?.title || "Gold exclusive offer"}
                         </h3>
                         <div className="bg-gray-50 rounded-lg p-4 flex items-start justify-between gap-4">
                           <div className="flex items-start gap-3 flex-1">
                             <Lock className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
                             <div className="flex-1">
                               <p className="text-sm font-medium text-gray-900 mb-1">
-                                {restaurant.restaurantOffers.goldOffer.description}
+                                {restaurant.restaurantOffers.goldOffer?.description || "Free delivery above ₹99"}
                               </p>
                               <p className="text-xs text-gray-500">
-                                {restaurant.restaurantOffers.goldOffer.unlockText}
+                                {restaurant.restaurantOffers.goldOffer?.unlockText || "join Gold to unlock"}
                               </p>
                             </div>
                           </div>
@@ -4925,14 +4925,14 @@ export default function RestaurantDetails() {
                               // Handle add gold
                             }}
                           >
-                            {restaurant.restaurantOffers.goldOffer.buttonText}
+                            {restaurant.restaurantOffers.goldOffer?.buttonText || "Add Gold - ₹1"}
                           </Button>
                         </div>
                       </div>
                     )}
 
                     {/* Restaurant Coupons Section */}
-                    {restaurant.restaurantOffers?.coupons && (
+                    {restaurant?.restaurantOffers?.coupons && Array.isArray(restaurant.restaurantOffers.coupons) && restaurant.restaurantOffers.coupons.length > 0 && (
                       <div>
                         <h3 className="text-sm font-semibold text-gray-900 mb-3">
                           Restaurant coupons
@@ -5048,7 +5048,7 @@ export default function RestaurantDetails() {
                   {/* Header */}
                   <div className="px-4 pt-6 pb-4 border-b border-gray-200">
                     <h2 className="text-lg font-bold text-gray-900">
-                      {restaurant.name}
+                      {restaurant?.name || "Unknown Restaurant"}
                     </h2>
                   </div>
 
