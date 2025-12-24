@@ -34,6 +34,9 @@ export const API_ENDPOINTS = {
     ORDERS: '/restaurant/orders',
     WALLET: '/restaurant/wallet',
     ANALYTICS: '/restaurant/analytics',
+    LIST: '/restaurant/list',
+    BY_ID: '/restaurant/:id',
+    BY_OWNER: '/restaurant/owner/me',
   },
   // Delivery endpoints
   DELIVERY: {

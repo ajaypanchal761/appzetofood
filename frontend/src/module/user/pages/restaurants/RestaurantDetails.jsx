@@ -2,6 +2,8 @@ import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { useParams, useNavigate } from "react-router-dom"
+import { restaurantAPI } from "@/lib/api"
+import { Loader2 } from "lucide-react"
 import { 
   ArrowLeft, 
   Search, 
@@ -2989,11 +2991,105 @@ export default function RestaurantDetails() {
     spicy: false,
   })
 
-  // Get restaurant data or default to golden-dragon
-  const restaurant = restaurantsData[slug] || restaurantsData["golden-dragon"]
+  // Restaurant data state
+  const [restaurant, setRestaurant] = useState(null)
+  const [loadingRestaurant, setLoadingRestaurant] = useState(true)
+  const [restaurantError, setRestaurantError] = useState(null)
+
+  // Fetch restaurant data from API
+  useEffect(() => {
+    const fetchRestaurant = async () => {
+      if (!slug) return
+      
+      try {
+        setLoadingRestaurant(true)
+        setRestaurantError(null)
+        
+        console.log('Fetching restaurant with slug:', slug)
+        const response = await restaurantAPI.getRestaurantById(slug)
+        
+        if (response.data && response.data.success && response.data.data && response.data.data.restaurant) {
+          const apiRestaurant = response.data.data.restaurant
+          console.log('Fetched restaurant from API:', apiRestaurant)
+          
+          // Transform API data to match expected format with comprehensive fallbacks
+          const transformedRestaurant = {
+            id: apiRestaurant?.restaurantId || apiRestaurant?._id || null,
+            name: apiRestaurant?.name || "Unknown Restaurant", 
+            cuisine: (apiRestaurant?.cuisines && Array.isArray(apiRestaurant.cuisines) && apiRestaurant.cuisines.length > 0)
+              ? apiRestaurant.cuisines[0] 
+              : "Multi-cuisine",
+            rating: apiRestaurant?.rating ?? 4.5,
+            reviews: apiRestaurant?.totalRatings ?? 0,
+            deliveryTime: apiRestaurant?.estimatedDeliveryTime || "25-30 mins",
+            distance: apiRestaurant?.distance || "1.2 km",
+            location: apiRestaurant?.location?.area || apiRestaurant?.location?.city || apiRestaurant?.location?.addressLine1 || "Location",
+            image: apiRestaurant?.profileImage?.url 
+              || (Array.isArray(apiRestaurant?.menuImages) && apiRestaurant.menuImages.length > 0 
+                ? apiRestaurant.menuImages[0]?.url 
+                : null)
+              || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
+            priceRange: apiRestaurant?.priceRange || "$$",
+            offers: Array.isArray(apiRestaurant?.offers) ? apiRestaurant.offers : [], // Will be populated from menu/offers API later
+            offerText: apiRestaurant?.offer || "FLAT 50% OFF",
+            offerCount: apiRestaurant?.offerCount ?? 0,
+            restaurantOffers: {
+              goldOffer: {
+                title: apiRestaurant?.restaurantOffers?.goldOffer?.title || "Gold exclusive offer",
+                description: apiRestaurant?.restaurantOffers?.goldOffer?.description || "Free delivery above ₹99",
+                unlockText: apiRestaurant?.restaurantOffers?.goldOffer?.unlockText || "join Gold to unlock",
+                buttonText: apiRestaurant?.restaurantOffers?.goldOffer?.buttonText || "Add Gold - ₹1",
+              },
+              coupons: Array.isArray(apiRestaurant?.restaurantOffers?.coupons) 
+                ? apiRestaurant.restaurantOffers.coupons 
+                : [],
+            },
+            outlets: Array.isArray(apiRestaurant?.outlets) ? apiRestaurant.outlets : [],
+            categories: Array.isArray(apiRestaurant?.categories) ? apiRestaurant.categories : [],
+            menu: Array.isArray(apiRestaurant?.menu) ? apiRestaurant.menu : [],
+            slug: apiRestaurant?.slug || slug || "unknown",
+            restaurantId: apiRestaurant?.restaurantId || apiRestaurant?._id || null,
+            // Add other fields with defaults
+            featuredDish: apiRestaurant?.featuredDish || "Special Dish",
+            featuredPrice: apiRestaurant?.featuredPrice ?? 249,
+            // Additional safety fields
+            openDays: Array.isArray(apiRestaurant?.openDays) ? apiRestaurant.openDays : [],
+            deliveryTimings: apiRestaurant?.deliveryTimings || {
+              openingTime: "09:00",
+              closingTime: "22:00",
+            },
+            cuisines: Array.isArray(apiRestaurant?.cuisines) ? apiRestaurant.cuisines : [],
+            profileImage: apiRestaurant?.profileImage || null,
+            menuImages: Array.isArray(apiRestaurant?.menuImages) ? apiRestaurant.menuImages : [],
+            // Menu sections for display (will be populated from menu API later)
+            menuSections: Array.isArray(apiRestaurant?.menuSections) ? apiRestaurant.menuSections : [],
+          }
+          
+          console.log('Transformed restaurant:', transformedRestaurant)
+          setRestaurant(transformedRestaurant)
+        } else {
+          console.warn('Invalid API response structure:', response.data)
+          setRestaurantError('Restaurant not found')
+          // Fallback to hardcoded data if API fails
+          setRestaurant(restaurantsData[slug] || restaurantsData["golden-dragon"])
+        }
+      } catch (error) {
+        console.error('Error fetching restaurant:', error)
+        setRestaurantError(error.message || 'Failed to load restaurant')
+        // Fallback to hardcoded data if API fails
+        setRestaurant(restaurantsData[slug] || restaurantsData["golden-dragon"])
+      } finally {
+        setLoadingRestaurant(false)
+      }
+    }
+    
+    fetchRestaurant()
+  }, [slug])
 
   // Sync quantities from cart on mount and when restaurant changes
   useEffect(() => {
+    if (!restaurant || !restaurant.name) return
+    
     const cartQuantities = {}
     cart.forEach((item) => {
       if (item.restaurant === restaurant.name) {
@@ -3002,7 +3098,7 @@ export default function RestaurantDetails() {
     })
     setQuantities(cartQuantities)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurant.name])
+  }, [restaurant?.name, cart])
 
   // Helper function to update item quantity in both local state and cart
   const updateItemQuantity = (item, newQuantity, event = null) => {
@@ -3018,7 +3114,7 @@ export default function RestaurantDetails() {
       name: item.name,
       price: item.price,
       image: item.image,
-      restaurant: restaurant.name,
+      restaurant: restaurant?.name || "Unknown Restaurant",
       description: item.description,
       originalPrice: item.originalPrice,
     }
@@ -3103,18 +3199,20 @@ export default function RestaurantDetails() {
   }
 
   // Menu categories - dynamically generated from restaurant menu sections
-  const menuCategories = restaurant.menuSections?.map((section, index) => {
-    const sectionTitle = index === 0 ? "Recommended for you" : section.title
-    const itemCount = section.items?.length || 0
-    const subsectionCount = section.subsections?.reduce((sum, sub) => sum + (sub.items?.length || 0), 0) || 0
-    const totalCount = itemCount + subsectionCount
-    
-    return {
-      name: sectionTitle,
-      count: totalCount,
-      sectionIndex: index,
-    }
-  }) || []
+  const menuCategories = (restaurant?.menuSections && Array.isArray(restaurant.menuSections)) 
+    ? restaurant.menuSections.map((section, index) => {
+        const sectionTitle = index === 0 ? "Recommended for you" : (section?.title || "Menu")
+        const itemCount = section?.items?.length || 0
+        const subsectionCount = section?.subsections?.reduce((sum, sub) => sum + (sub?.items?.length || 0), 0) || 0
+        const totalCount = itemCount + subsectionCount
+        
+        return {
+          name: sectionTitle,
+          count: totalCount,
+          sectionIndex: index,
+        }
+      })
+    : []
 
   // Count active filters
   const getActiveFilterCount = () => {
@@ -3206,17 +3304,20 @@ export default function RestaurantDetails() {
   // Highlight offers/texts for the blue offer line
   const highlightOffers = [
     "Upto 50% OFF",
-    restaurant.offerText,
-    ...restaurant.offers.map((offer) => offer.title),
+    restaurant?.offerText || "",
+    ...(Array.isArray(restaurant?.offers) ? restaurant.offers.map((offer) => offer?.title || "") : []),
   ]
   
   // Auto-rotate images every 3 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentImageIndex((prev) => (prev + 1) % restaurant.offers.length)
+      setCurrentImageIndex((prev) => {
+        const offersLength = Array.isArray(restaurant?.offers) ? restaurant.offers.length : 1
+        return (prev + 1) % offersLength
+      })
     }, 3000)
     return () => clearInterval(interval)
-  }, [restaurant.offers.length])
+  }, [restaurant?.offers?.length || 0])
 
   // Auto-rotate highlight offer text every 2 seconds
   useEffect(() => {
@@ -3226,6 +3327,57 @@ export default function RestaurantDetails() {
 
     return () => clearInterval(interval)
   }, [highlightOffers.length])
+
+  // Show loading state
+  if (loadingRestaurant) {
+    return (
+      <AnimatedPage>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 text-green-600 animate-spin" />
+            <span className="text-sm text-gray-600">Loading restaurant...</span>
+          </div>
+        </div>
+      </AnimatedPage>
+    )
+  }
+
+  // Show error state if restaurant not found
+  if (restaurantError && !restaurant) {
+    return (
+      <AnimatedPage>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <AlertCircle className="h-12 w-12 text-red-500" />
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Restaurant not found</h2>
+              <p className="text-sm text-gray-600 mb-4">{restaurantError}</p>
+              <Button onClick={() => navigate(-1)} variant="outline">
+                Go Back
+              </Button>
+            </div>
+          </div>
+        </div>
+      </AnimatedPage>
+    )
+  }
+
+  // Show error if restaurant is still null
+  if (!restaurant) {
+    return (
+      <AnimatedPage>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <AlertCircle className="h-12 w-12 text-red-500" />
+            <span className="text-sm text-gray-600">Restaurant not found</span>
+            <Button onClick={() => navigate(-1)} variant="outline">
+              Go Back
+            </Button>
+          </div>
+        </div>
+      </AnimatedPage>
+    )
+  }
 
   return (
     <AnimatedPage id="scrollingelement" className="min-h-screen bg-white flex flex-col">
@@ -3302,15 +3454,15 @@ export default function RestaurantDetails() {
           {/* Restaurant Name and Rating */}
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">{restaurant.name}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{restaurant?.name || "Unknown Restaurant"}</h1>
               <Info className="h-5 w-5 text-gray-400" />
             </div>
             <div className="flex flex-col items-end">
               <Badge className="bg-green-500 text-white mb-1 flex items-center gap-1 px-2 py-1">
                 <Star className="h-3 w-3 fill-white" />
-                {restaurant.rating}
+                {restaurant?.rating ?? 4.5}
               </Badge>
-              <span className="text-xs text-gray-500">By {restaurant.reviews.toLocaleString()}+</span>
+              <span className="text-xs text-gray-500">By {(restaurant.reviews || 0).toLocaleString()}+</span>
             </div>
           </div>
 
@@ -3320,7 +3472,7 @@ export default function RestaurantDetails() {
             onClick={() => setShowLocationSheet(true)}
           >
               <MapPin className="h-4 w-4" />
-              <span>{restaurant.distance} · {restaurant.location}</span>
+              <span>{restaurant?.distance || "1.2 km"} · {restaurant?.location || "Location"}</span>
             <ChevronDown className="h-4 w-4 text-gray-500" />
           </div>
 
@@ -3344,7 +3496,7 @@ export default function RestaurantDetails() {
               className="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 transition-colors"
             >
               <Clock className="h-4 w-4" />
-              <span>{restaurant.deliveryTime} · Schedule for later</span>
+              <span>{restaurant?.deliveryTime || "25-30 mins"} · Schedule for later</span>
               <ChevronDown className="h-4 w-4" />
             </button>
           </div>
@@ -4195,7 +4347,7 @@ export default function RestaurantDetails() {
                     <p className="text-xs text-gray-500 mb-1.5">All delivery outlets for</p>
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-                        <span className="text-white font-bold text-base">{restaurant.name.charAt(0)}</span>
+                        <span className="text-white font-bold text-base">{(restaurant.name || "R").charAt(0).toUpperCase()}</span>
                       </div>
                       <h2 className="text-lg font-bold text-gray-900">{restaurant.name}</h2>
                     </div>

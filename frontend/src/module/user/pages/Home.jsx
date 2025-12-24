@@ -32,7 +32,7 @@ import {
 import { useLocation } from "../hooks/useLocation"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
 import offerImage from "@/assets/offerimage.png"
-import api from "@/lib/api"
+import api, { restaurantAPI } from "@/lib/api"
 // Explore More Icons
 import exploreOffers from "@/assets/explore more icons/offers.png"
 import exploreGourmet from "@/assets/explore more icons/gourmet.png"
@@ -364,6 +364,8 @@ export default function Home() {
   const [landingExploreMore, setLandingExploreMore] = useState([])
   const [exploreMoreHeading, setExploreMoreHeading] = useState("Explore More")
   const [loadingLandingConfig, setLoadingLandingConfig] = useState(true)
+  const [restaurantsData, setRestaurantsData] = useState([])
+  const [loadingRestaurants, setLoadingRestaurants] = useState(true)
   const isHandlingSwitchOff = useRef(false)
 
   // Swipe functionality for hero banner carousel
@@ -678,9 +680,84 @@ export default function Home() {
     return () => observer.disconnect()
   }, [isFilterOpen])
 
+  // Fetch restaurants from API
+  useEffect(() => {
+    const fetchRestaurants = async () => {
+      try {
+        setLoadingRestaurants(true)
+        const response = await restaurantAPI.getRestaurants()
+        console.log('Restaurants API response:', response.data)
+        
+        if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
+          const restaurantsArray = response.data.data.restaurants
+          console.log(`Fetched ${restaurantsArray.length} restaurants from API`)
+          
+          if (restaurantsArray.length === 0) {
+            console.warn('No restaurants found in API response')
+            setRestaurantsData([])
+            setLoadingRestaurants(false)
+            return
+          }
+          
+          // Transform API data to match expected format
+          const transformedRestaurants = restaurantsArray.map((restaurant, index) => {
+            // Use restaurant data if available, otherwise use defaults
+            const deliveryTime = restaurant.estimatedDeliveryTime || "25-30 mins"
+            const distance = restaurant.distance || "1.2 km"
+            
+            // Get first cuisine or default
+            const cuisine = restaurant.cuisines && restaurant.cuisines.length > 0 
+              ? restaurant.cuisines[0] 
+              : "Multi-cuisine"
+            
+            // Get profile image or first menu image
+            const image = restaurant.profileImage?.url 
+              || (restaurant.menuImages && restaurant.menuImages.length > 0 
+                ? restaurant.menuImages[0].url 
+                : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop")
+            
+            return {
+              id: restaurant.restaurantId || restaurant._id,
+              name: restaurant.name,
+              cuisine: cuisine,
+              rating: restaurant.rating || 4.5,
+              deliveryTime: deliveryTime,
+              distance: distance,
+              image: image,
+              priceRange: restaurant.priceRange || "$$", // Use from API or default
+              featuredDish: restaurant.featuredDish || (restaurant.cuisines && restaurant.cuisines.length > 0 
+                ? `${restaurant.cuisines[0]} Special` 
+                : "Special Dish"),
+              featuredPrice: restaurant.featuredPrice || 249, // Use from API or default
+              offer: restaurant.offer || "Flat ₹50 OFF above ₹199", // Use from API or default
+              slug: restaurant.slug,
+              restaurantId: restaurant.restaurantId,
+            }
+          })
+          console.log('Transformed restaurants:', transformedRestaurants)
+          setRestaurantsData(transformedRestaurants)
+        } else {
+          console.warn('Invalid API response structure:', response.data)
+          setRestaurantsData([])
+        }
+      } catch (error) {
+        console.error('Error fetching restaurants:', error)
+        console.error('Error details:', error.response?.data || error.message)
+        // Fallback to hardcoded restaurants if API fails
+        setRestaurantsData(restaurants)
+      } finally {
+        setLoadingRestaurants(false)
+      }
+    }
+    
+    fetchRestaurants()
+  }, [])
+
   // Filter restaurants and foods based on active filters
   const filteredRestaurants = useMemo(() => {
-    let filtered = [...restaurants]
+    // Use fetched restaurants if available, otherwise fallback to hardcoded
+    const restaurantsToUse = restaurantsData.length > 0 ? restaurantsData : restaurants
+    let filtered = [...restaurantsToUse]
 
     // Apply filters
     if (activeFilters.has('price-under-200')) {
@@ -1318,7 +1395,7 @@ export default function Home() {
           </TextRevealSimple>
           <div className="relative">
             {/* Loading Overlay */}
-            {isLoadingFilterResults && (
+            {(isLoadingFilterResults || loadingRestaurants) && (
               <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg min-h-[400px]">
                 <div className="flex flex-col items-center gap-3">
                   <Loader2 className="h-8 w-8 text-green-600 animate-spin" strokeWidth={2.5} />
@@ -1326,9 +1403,9 @@ export default function Home() {
                 </div>
               </div>
             )}
-            <div className={`grid grid-cols-1 gap-2 sm:gap-3 pt-1 sm:pt-1.5 ${isLoadingFilterResults ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300`}>
+            <div className={`grid grid-cols-1 gap-2 sm:gap-3 pt-1 sm:pt-1.5 ${isLoadingFilterResults || loadingRestaurants ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300`}>
               {filteredRestaurants.map((restaurant, index) => {
-                const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+                const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
                 // Direct favorite check - isFavorite is already memoized in context
                 const favorite = isFavorite(restaurantSlug)
 

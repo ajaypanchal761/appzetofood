@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import ProtectedRoute from "@/components/ProtectedRoute"
+import AuthRedirect from "@/components/AuthRedirect"
 
 import Home from "@/pages/Home"
 import UserRouter from "@/module/user/components/UserRouter"
@@ -124,14 +125,14 @@ export default function App() {
       <Route path="/routes" element={<Home />} />
 
       {/* Restaurant Public Routes */}
-      <Route path="/restaurant/welcome" element={<RestaurantWelcome />} />
-      <Route path="/restaurant/auth/sign-in" element={<RestaurantSignIn />} />
-      <Route path="/restaurant/login" element={<RestaurantLogin />} />
-      <Route path="/restaurant/signup" element={<RestaurantSignup />} />
-      <Route path="/restaurant/signup-email" element={<RestaurantSignupEmail />} />
-      <Route path="/restaurant/forgot-password" element={<RestaurantForgotPassword />} />
-      <Route path="/restaurant/otp" element={<RestaurantOTP />} />
-      <Route path="/restaurant/auth/google-callback" element={<RestaurantGoogleCallback />} />
+      <Route path="/restaurant/welcome" element={<AuthRedirect module="restaurant"><RestaurantWelcome /></AuthRedirect>} />
+      <Route path="/restaurant/auth/sign-in" element={<AuthRedirect module="restaurant"><RestaurantSignIn /></AuthRedirect>} />
+      <Route path="/restaurant/login" element={<AuthRedirect module="restaurant"><RestaurantLogin /></AuthRedirect>} />
+      <Route path="/restaurant/signup" element={<AuthRedirect module="restaurant"><RestaurantSignup /></AuthRedirect>} />
+      <Route path="/restaurant/signup-email" element={<AuthRedirect module="restaurant"><RestaurantSignupEmail /></AuthRedirect>} />
+      <Route path="/restaurant/forgot-password" element={<AuthRedirect module="restaurant"><RestaurantForgotPassword /></AuthRedirect>} />
+      <Route path="/restaurant/otp" element={<AuthRedirect module="restaurant"><RestaurantOTP /></AuthRedirect>} />
+      <Route path="/restaurant/auth/google-callback" element={<AuthRedirect module="restaurant"><RestaurantGoogleCallback /></AuthRedirect>} />
       
       {/* Restaurant Protected Routes */}
       <Route
@@ -788,11 +789,11 @@ export default function App() {
       />
 
       {/* Delivery Public Routes */}
-      <Route path="/delivery/login" element={<DeliveryLogin />} />
-      <Route path="/delivery/sign-in" element={<DeliverySignIn />} />
-      <Route path="/delivery/signup" element={<DeliverySignup />} />
-      <Route path="/delivery/otp" element={<DeliveryOTP />} />
-      <Route path="/delivery/welcome" element={<DeliveryWelcome />} />
+      <Route path="/delivery/login" element={<AuthRedirect module="delivery"><DeliveryLogin /></AuthRedirect>} />
+      <Route path="/delivery/sign-in" element={<AuthRedirect module="delivery"><DeliverySignIn /></AuthRedirect>} />
+      <Route path="/delivery/signup" element={<AuthRedirect module="delivery"><DeliverySignup /></AuthRedirect>} />
+      <Route path="/delivery/otp" element={<AuthRedirect module="delivery"><DeliveryOTP /></AuthRedirect>} />
+      <Route path="/delivery/welcome" element={<AuthRedirect module="delivery"><DeliveryWelcome /></AuthRedirect>} />
 
       {/* Delivery Protected Routes */}
       <Route 
@@ -805,9 +806,9 @@ export default function App() {
       />
       
       {/* Admin Public Routes */}
-      <Route path="/admin/login" element={<AdminLogin />} />
-      <Route path="/admin/signup" element={<AdminSignup />} />
-      <Route path="/admin/forgot-password" element={<AdminForgotPassword />} />
+      <Route path="/admin/login" element={<AuthRedirect module="admin"><AdminLogin /></AuthRedirect>} />
+      <Route path="/admin/signup" element={<AuthRedirect module="admin"><AdminSignup /></AuthRedirect>} />
+      <Route path="/admin/forgot-password" element={<AuthRedirect module="admin"><AdminForgotPassword /></AuthRedirect>} />
 
       {/* Admin Protected Routes */}
       <Route 

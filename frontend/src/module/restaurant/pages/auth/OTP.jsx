@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { authAPI } from "@/lib/api"
 import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
 import { setAuthData as setRestaurantAuthData } from "@/lib/utils/auth"
+import { checkOnboardingStatus } from "../../utils/onboardingUtils"
 
 export default function RestaurantOTP() {
   const navigate = useNavigate()
@@ -249,13 +250,27 @@ export default function RestaurantOTP() {
 
         sessionStorage.removeItem("restaurantAuthData")
 
-        setTimeout(() => {
+        setTimeout(async () => {
           console.log({authData})
-          // After signup, send to onboarding; after login, go to main restaurant page
+          // After signup, send to onboarding
           if (authData?.isSignUp) {
             navigate("/restaurant/onboarding", { replace: true })
           } else {
-            navigate("/restaurant", { replace: true })
+            // After login, check if onboarding is incomplete
+            try {
+              const incompleteStep = await checkOnboardingStatus()
+              if (incompleteStep) {
+                // Navigate to onboarding with the incomplete step
+                navigate(`/restaurant/onboarding?step=${incompleteStep}`, { replace: true })
+              } else {
+                // Onboarding is complete, go to main restaurant page
+                navigate("/restaurant", { replace: true })
+              }
+            } catch (err) {
+              console.error("Failed to check onboarding status:", err)
+              // Fallback to main restaurant page
+              navigate("/restaurant", { replace: true })
+            }
           }
         }, 500)
       }
@@ -397,7 +412,7 @@ export default function RestaurantOTP() {
           {showNameInput && (
             <div className="mt-6 max-w-sm mx-auto text-left">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {authData?.method === "phone" ? "Restaurant / Owner name" : "Your name"}
+                {authData?.method === "phone" ? "Restaurant name" : "Your name"}
               </label>
               <input
                 type="text"

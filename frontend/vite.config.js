@@ -11,6 +11,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    include: ['@emotion/react', '@emotion/styled', '@mui/material', '@mui/x-date-pickers'],
+  },
   server: {
     host: '0.0.0.0', // Allow access from network
     port: 5173, // Default Vite port

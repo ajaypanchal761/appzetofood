@@ -4,10 +4,14 @@ import { motion } from "framer-motion"
 import Lenis from "lenis"
 import { ArrowLeft, Search, Power } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { clearModuleAuth } from "@/lib/utils/auth"
+import { authAPI } from "@/lib/api"
+import { firebaseAuth } from "@/lib/firebase"
 
 export default function SwitchOutlet() {
   const navigate = useNavigate()
   const [showOffline, setShowOffline] = useState(true)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   // Mock outlet data - replace with actual data from your API/store
   const outlets = [
@@ -47,12 +51,56 @@ export default function SwitchOutlet() {
     }
   }, [])
 
-  const handleLogout = () => {
-    // Implement logout logic here
-    console.log("Logout clicked")
-    // Example: Clear tokens, redirect to login, etc.
-    // localStorage.removeItem('authToken')
-    navigate('/restaurant/welcome')
+  const handleLogout = async () => {
+    if (isLoggingOut) return // Prevent multiple clicks
+    
+    setIsLoggingOut(true)
+    
+    try {
+      // Call backend logout API to invalidate refresh token
+      try {
+        await authAPI.logout()
+      } catch (apiError) {
+        // Continue with logout even if API call fails (network issues, etc.)
+        console.warn("Logout API call failed, continuing with local cleanup:", apiError)
+      }
+
+      // Sign out from Firebase if user logged in via Google
+      try {
+        const { signOut } = await import("firebase/auth")
+        const currentUser = firebaseAuth.currentUser
+        if (currentUser) {
+          await signOut(firebaseAuth)
+        }
+      } catch (firebaseError) {
+        // Continue even if Firebase logout fails
+        console.warn("Firebase logout failed, continuing with local cleanup:", firebaseError)
+      }
+
+      // Clear restaurant module authentication data
+      clearModuleAuth("restaurant")
+      
+      // Clear any onboarding data from localStorage
+      localStorage.removeItem("restaurant_onboarding")
+      localStorage.removeItem("restaurant_accessToken")
+      
+      // Dispatch auth change event to notify other components
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+
+      // Small delay for UX, then navigate to welcome page
+      setTimeout(() => {
+        navigate("/restaurant/welcome", { replace: true })
+      }, 300)
+    } catch (error) {
+      // Even if there's an error, we should still clear local data and logout
+      console.error("Error during logout:", error)
+      clearModuleAuth("restaurant")
+      localStorage.removeItem("restaurant_onboarding")
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+      navigate("/restaurant/welcome", { replace: true })
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
   const handleOutletClick = (outletId) => {
@@ -216,10 +264,13 @@ export default function SwitchOutlet() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.25 }}
           onClick={handleLogout}
-          className="flex items-center gap-2 text-red-600 hover:text-red-700 transition-colors"
+          disabled={isLoggingOut}
+          className="flex items-center gap-2 text-red-600 hover:text-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Power className="w-5 h-5" />
-          <span className="text-base font-medium">Logout</span>
+          <Power className={`w-5 h-5 ${isLoggingOut ? 'animate-spin' : ''}`} />
+          <span className="text-base font-medium">
+            {isLoggingOut ? "Logging out..." : "Logout"}
+          </span>
         </motion.button>
       </div>
     </motion.div>

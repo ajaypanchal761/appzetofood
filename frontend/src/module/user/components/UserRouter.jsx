@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom"
 import ProtectedRoute from "@/components/ProtectedRoute"
+import AuthRedirect from "@/components/AuthRedirect"
 import UserLayout from "./UserLayout"
 
 // Home & Discovery
@@ -308,9 +309,9 @@ export default function UserRouter() {
       />
 
       {/* Auth */}
-      <Route path="/auth/sign-in" element={<SignIn />} />
-      <Route path="/auth/otp" element={<OTP />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/auth/sign-in" element={<AuthRedirect module="user"><SignIn /></AuthRedirect>} />
+      <Route path="/auth/otp" element={<AuthRedirect module="user"><OTP /></AuthRedirect>} />
+      <Route path="/auth/callback" element={<AuthRedirect module="user"><AuthCallback /></AuthRedirect>} />
 
       {/* Help */}
       <Route path="/help" element={<Help />} />

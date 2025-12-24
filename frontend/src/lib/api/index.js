@@ -203,6 +203,21 @@ export const restaurantAPI = {
   getAnalytics: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.ANALYTICS, { params });
   },
+
+  // Get all restaurants (for user module)
+  getRestaurants: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.LIST, { params });
+  },
+
+  // Get restaurant by ID or slug
+  getRestaurantById: (id) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.BY_ID.replace(':id', id));
+  },
+
+  // Get restaurant by owner (for restaurant module)
+  getRestaurantByOwner: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.BY_OWNER);
+  },
 };
 
 // Export delivery API helper functions

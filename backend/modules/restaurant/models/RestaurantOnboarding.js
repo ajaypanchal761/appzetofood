@@ -81,6 +81,14 @@ const restaurantOnboardingSchema = new mongoose.Schema(
         accountType: String,
       },
     },
+    step4: {
+      estimatedDeliveryTime: String,
+      distance: String,
+      priceRange: String,
+      featuredDish: String,
+      featuredPrice: Number,
+      offer: String,
+    },
     completedSteps: {
       type: Number,
       default: 0,
