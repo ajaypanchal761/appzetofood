@@ -22,10 +22,13 @@ import BottomNavOrders from "../components/BottomNavOrders"
 import { getAllFoods, saveFood, deleteFood } from "../utils/foodManagement"
 import { Switch } from "@/components/ui/switch"
 import { useNavigate } from "react-router-dom"
+import { restaurantAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 export default function HubMenu() {
   const navigate = useNavigate()
-  const allFoods = getAllFoods()
+  const [loadingMenu, setLoadingMenu] = useState(true)
+  const [allFoods, setAllFoods] = useState([])
   const [activeTab, setActiveTab] = useState("all")
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isAddPopupOpen, setIsAddPopupOpen] = useState(false)
@@ -117,24 +120,186 @@ export default function HubMenu() {
       grouped[category].push(food)
     })
     
-    return Object.entries(grouped).map(([category, items]) => ({
+    return Object.entries(grouped).map(([category, items], index) => ({
       id: category.toLowerCase().replace(/\s+/g, "-"),
       name: category,
       items: items.map(item => ({
         ...item,
+        id: String(item.id || Date.now() + Math.random()), // Ensure id is string
         isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
         isRecommended: item.isRecommended || false,
+        // Ensure all required fields are present
+        name: item.name || "Unnamed Item",
+        price: item.price || 0,
+        category: item.category || category,
+        foodType: item.foodType || "Non-Veg",
+        image: item.image || "",
+        nameArabic: item.nameArabic || "",
+        rating: item.rating ?? 0.0,
+        reviews: item.reviews ?? 0,
+        stock: item.stock || "Unlimited",
+        discount: item.discount || null,
+        originalPrice: item.originalPrice || null,
+        availabilityTimeStart: item.availabilityTimeStart || "12:01 AM",
+        availabilityTimeEnd: item.availabilityTimeEnd || "11:57 PM",
+        description: item.description || "",
+        discountType: item.discountType || "Percent",
+        discountAmount: item.discountAmount ?? 0.0,
+        variations: Array.isArray(item.variations) ? item.variations : [],
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
+        allergies: Array.isArray(item.allergies) ? item.allergies : [],
+        photoCount: item.photoCount ?? 1,
       })),
-      isEnabled: true, // Group toggle state
+      subsections: [], // Always include subsections array
+      isEnabled: true,
+      order: index, // Add order field
     }))
   }, [transformedFoods])
 
-  // Initialize menuData state
+  // Fetch menu from API on mount
   useEffect(() => {
-    if (menuData.length === 0 && menuGroups.length > 0) {
-      setMenuData(menuGroups)
+    const fetchMenu = async () => {
+      try {
+        setLoadingMenu(true)
+        const response = await restaurantAPI.getMenu()
+        
+        if (response.data && response.data.success && response.data.data && response.data.data.menu) {
+          const menuSections = response.data.data.menu.sections || []
+          setMenuData(menuSections)
+          
+          // Transform menu sections to foods format for backward compatibility
+          const foods = []
+          menuSections.forEach((section) => {
+            if (section.items && section.items.length > 0) {
+              foods.push(...section.items)
+            }
+            if (section.subsections && section.subsections.length > 0) {
+              section.subsections.forEach((subsection) => {
+                if (subsection.items && subsection.items.length > 0) {
+                  foods.push(...subsection.items)
+                }
+              })
+            }
+          })
+          setAllFoods(foods)
+        } else {
+          // Empty menu - start fresh
+          setMenuData([])
+          setAllFoods([])
+        }
+      } catch (error) {
+        console.error('Error fetching menu:', error)
+        toast.error('Failed to load menu')
+        setMenuData([])
+        setAllFoods([])
+      } finally {
+        setLoadingMenu(false)
+      }
     }
-  }, [menuGroups])
+    
+    fetchMenu()
+  }, [])
+
+  // Save menu to API whenever menuData changes (debounced)
+  useEffect(() => {
+    if (!loadingMenu && menuData.length >= 0) {
+      const timeoutId = setTimeout(async () => {
+        try {
+          // Normalize menuData before saving to ensure proper structure matching backend schema
+          const normalizedSections = menuData.map((section, index) => ({
+            id: section.id || `section-${index}`,
+            name: section.name || "Unnamed Section",
+            items: Array.isArray(section.items) ? section.items.map(item => ({
+              id: String(item.id || Date.now() + Math.random()),
+              name: item.name || "Unnamed Item",
+              nameArabic: item.nameArabic || "",
+              image: item.image || "",
+              category: item.category || section.name,
+              rating: item.rating ?? 0.0,
+              reviews: item.reviews ?? 0,
+              price: item.price || 0,
+              stock: item.stock || "Unlimited",
+              discount: item.discount || null,
+              originalPrice: item.originalPrice || null,
+              foodType: item.foodType || "Non-Veg",
+              availabilityTimeStart: item.availabilityTimeStart || "12:01 AM",
+              availabilityTimeEnd: item.availabilityTimeEnd || "11:57 PM",
+              description: item.description || "",
+              discountType: item.discountType || "Percent",
+              discountAmount: item.discountAmount ?? 0.0,
+              isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
+              isRecommended: item.isRecommended || false,
+              variations: Array.isArray(item.variations) ? item.variations.map(v => ({
+                id: String(v.id || Date.now() + Math.random()),
+                name: v.name || "",
+                price: v.price || 0,
+                stock: v.stock || "Unlimited",
+              })) : [],
+              tags: Array.isArray(item.tags) ? item.tags : [],
+              nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
+              allergies: Array.isArray(item.allergies) ? item.allergies : [],
+              photoCount: item.photoCount ?? 1,
+            })) : [],
+            subsections: Array.isArray(section.subsections) ? section.subsections.map(subsection => ({
+              id: subsection.id || `subsection-${Date.now()}`,
+              name: subsection.name || "Unnamed Subsection",
+              items: Array.isArray(subsection.items) ? subsection.items.map(item => ({
+                id: String(item.id || Date.now() + Math.random()),
+                name: item.name || "Unnamed Item",
+                nameArabic: item.nameArabic || "",
+                image: item.image || "",
+                category: item.category || section.name,
+                rating: item.rating ?? 0.0,
+                reviews: item.reviews ?? 0,
+                price: item.price || 0,
+                stock: item.stock || "Unlimited",
+                discount: item.discount || null,
+                originalPrice: item.originalPrice || null,
+                foodType: item.foodType || "Non-Veg",
+                availabilityTimeStart: item.availabilityTimeStart || "12:01 AM",
+                availabilityTimeEnd: item.availabilityTimeEnd || "11:57 PM",
+                description: item.description || "",
+                discountType: item.discountType || "Percent",
+                discountAmount: item.discountAmount ?? 0.0,
+                isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
+                isRecommended: item.isRecommended || false,
+                variations: Array.isArray(item.variations) ? item.variations.map(v => ({
+                  id: String(v.id || Date.now() + Math.random()),
+                  name: v.name || "",
+                  price: v.price || 0,
+                  stock: v.stock || "Unlimited",
+                })) : [],
+                tags: Array.isArray(item.tags) ? item.tags : [],
+                nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
+                allergies: Array.isArray(item.allergies) ? item.allergies : [],
+                photoCount: item.photoCount ?? 1,
+              })) : [],
+            })) : [],
+            isEnabled: section.isEnabled !== undefined ? section.isEnabled : true,
+            order: section.order !== undefined ? section.order : index,
+          }))
+          
+          await restaurantAPI.updateMenu({ sections: normalizedSections })
+          console.log('✅ Menu saved successfully with', normalizedSections.length, 'sections')
+        } catch (error) {
+          console.error('Error saving menu:', error)
+          toast.error('Failed to save menu changes')
+        }
+      }, 1000) // Debounce: save 1 second after last change
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, [menuData, loadingMenu])
+
+  // Initialize menuData from menuGroups if empty (for backward compatibility)
+  // This is now handled in the fetchMenu useEffect, so we don't need this anymore
+  // Keeping it commented out in case we need it for migration
+  // useEffect(() => {
+  //   if (menuData.length === 0 && menuGroups.length > 0 && !loadingMenu) {
+  //     setMenuData(menuGroups)
+  //   }
+  // }, [menuGroups, loadingMenu])
 
   // Listen for food changes and refresh menu data
   useEffect(() => {
@@ -160,15 +325,45 @@ export default function HubMenu() {
         grouped[category].push(food)
       })
       
-      const updatedMenuGroups = Object.entries(grouped).map(([category, items]) => ({
+      const updatedMenuGroups = Object.entries(grouped).map(([category, items], index) => ({
         id: category.toLowerCase().replace(/\s+/g, "-"),
         name: category,
         items: items.map(item => ({
           ...item,
+          id: String(item.id || Date.now() + Math.random()), // Ensure id is string
           isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
           isRecommended: item.isRecommended || false,
+          // Ensure all required fields are present
+          name: item.name || "Unnamed Item",
+          price: item.price || 0,
+          category: item.category || category,
+          foodType: item.foodType || "Non-Veg",
+          image: item.image || "",
+          nameArabic: item.nameArabic || "",
+          rating: item.rating ?? 0.0,
+          reviews: item.reviews ?? 0,
+          stock: item.stock || "Unlimited",
+          discount: item.discount || null,
+          originalPrice: item.originalPrice || null,
+          availabilityTimeStart: item.availabilityTimeStart || "12:01 AM",
+          availabilityTimeEnd: item.availabilityTimeEnd || "11:57 PM",
+          description: item.description || "",
+          discountType: item.discountType || "Percent",
+          discountAmount: item.discountAmount ?? 0.0,
+          variations: Array.isArray(item.variations) ? item.variations.map(v => ({
+            id: String(v.id || Date.now() + Math.random()),
+            name: v.name || "",
+            price: v.price || 0,
+            stock: v.stock || "Unlimited",
+          })) : [],
+          tags: Array.isArray(item.tags) ? item.tags : [],
+          nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
+          allergies: Array.isArray(item.allergies) ? item.allergies : [],
+          photoCount: item.photoCount ?? 1,
         })),
+        subsections: [], // Always include subsections array
         isEnabled: true,
+        order: index, // Add order field
       }))
       
       setMenuData(updatedMenuGroups)

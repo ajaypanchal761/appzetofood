@@ -31,6 +31,9 @@ export const API_ENDPOINTS = {
   RESTAURANT: {
     PROFILE: '/restaurant/profile',
     MENU: '/restaurant/menu',
+    MENU_BY_RESTAURANT_ID: '/restaurant/:id/menu',
+    INVENTORY: '/restaurant/inventory',
+    INVENTORY_BY_RESTAURANT_ID: '/restaurant/:id/inventory',
     ORDERS: '/restaurant/orders',
     WALLET: '/restaurant/wallet',
     ANALYTICS: '/restaurant/analytics',

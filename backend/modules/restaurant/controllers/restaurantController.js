@@ -1,5 +1,6 @@
 import Restaurant from '../models/Restaurant.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
+import mongoose from 'mongoose';
 
 // Get all restaurants (for user module)
 export const getRestaurants = async (req, res) => {
@@ -30,14 +31,24 @@ export const getRestaurantById = async (req, res) => {
   try {
     const { id } = req.params;
     
-    const restaurant = await Restaurant.findOne({
-      $or: [
-        { restaurantId: id },
-        { slug: id },
-        { _id: id },
-      ],
+    // Build query conditions - only include _id if it's a valid ObjectId
+    const queryConditions = {
       isActive: true,
-    })
+    };
+    
+    const orConditions = [
+      { restaurantId: id },
+      { slug: id },
+    ];
+    
+    // Only add _id condition if the id is a valid ObjectId
+    if (mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
+      orConditions.push({ _id: new mongoose.Types.ObjectId(id) });
+    }
+    
+    queryConditions.$or = orConditions;
+    
+    const restaurant = await Restaurant.findOne(queryConditions)
       .select('-owner -createdAt -updatedAt')
       .lean();
 
@@ -90,15 +101,38 @@ export const createRestaurantFromOnboarding = async (onboardingData, ownerId) =>
     }
 
     // Generate slug from restaurant name
-    const slug = step1.restaurantName
+    let baseSlug = step1.restaurantName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '');
 
-    // Check if restaurant already exists
-    const existing = await Restaurant.findOne({ owner: ownerId });
-    if (existing) {
+    // Check if restaurant already exists by owner OR by slug
+    const existingByOwner = await Restaurant.findOne({ owner: ownerId });
+    const existingBySlug = await Restaurant.findOne({ slug: baseSlug });
+    
+    // If restaurant exists by owner, update it
+    if (existingByOwner) {
       console.log('Restaurant already exists for owner:', ownerId);
+      
+      // Check if slug needs to be unique (if it's different from existing)
+      let slug = baseSlug;
+      if (existingByOwner.slug !== baseSlug) {
+        // Check if the new slug already exists for another restaurant
+        if (existingBySlug && existingBySlug._id.toString() !== existingByOwner._id.toString()) {
+          // Make slug unique by appending a number
+          let counter = 1;
+          let uniqueSlug = `${baseSlug}-${counter}`;
+          while (await Restaurant.findOne({ slug: uniqueSlug, _id: { $ne: existingByOwner._id } })) {
+            counter++;
+            uniqueSlug = `${baseSlug}-${counter}`;
+          }
+          slug = uniqueSlug;
+          console.log(`Slug already exists, using unique slug: ${slug}`);
+        }
+      } else {
+        slug = existingByOwner.slug; // Keep existing slug
+      }
+      
       // Update existing restaurant with latest onboarding data
       existing.name = step1.restaurantName;
       existing.slug = slug;
@@ -112,9 +146,38 @@ export const createRestaurantFromOnboarding = async (onboardingData, ownerId) =>
       if (step2.cuisines && step2.cuisines.length > 0) existing.cuisines = step2.cuisines;
       if (step2.deliveryTimings) existing.deliveryTimings = step2.deliveryTimings;
       if (step2.openDays && step2.openDays.length > 0) existing.openDays = step2.openDays;
+      
+      // Update step4 data if available
+      if (step4) {
+        if (step4.estimatedDeliveryTime) existing.estimatedDeliveryTime = step4.estimatedDeliveryTime;
+        if (step4.distance) existing.distance = step4.distance;
+        if (step4.priceRange) existing.priceRange = step4.priceRange;
+        if (step4.featuredDish) existing.featuredDish = step4.featuredDish;
+        if (step4.featuredPrice !== undefined) existing.featuredPrice = step4.featuredPrice;
+        if (step4.offer) existing.offer = step4.offer;
+      }
+      
       existing.isActive = true; // Ensure it's active
       existing.isAcceptingOrders = true; // Ensure it's accepting orders
-      await existing.save();
+      
+      try {
+        await existing.save();
+      } catch (saveError) {
+        if (saveError.code === 11000 && saveError.keyPattern && saveError.keyPattern.slug) {
+          // Slug conflict - try to make it unique
+          let counter = 1;
+          let uniqueSlug = `${slug}-${counter}`;
+          while (await Restaurant.findOne({ slug: uniqueSlug, _id: { $ne: existing._id } })) {
+            counter++;
+            uniqueSlug = `${slug}-${counter}`;
+          }
+          existing.slug = uniqueSlug;
+          await existing.save();
+          console.log(`Updated slug to unique value: ${uniqueSlug}`);
+        } else {
+          throw saveError;
+        }
+      }
       console.log('✅ Restaurant updated successfully:', {
         restaurantId: existing.restaurantId,
         _id: existing._id,
@@ -122,6 +185,21 @@ export const createRestaurantFromOnboarding = async (onboardingData, ownerId) =>
         isActive: existing.isActive,
       });
       return existing;
+    }
+
+    // Check if slug already exists and make it unique if needed
+    let slug = baseSlug;
+    const slugExists = await Restaurant.findOne({ slug: baseSlug });
+    if (slugExists) {
+      // Make slug unique by appending a number
+      let counter = 1;
+      let uniqueSlug = `${baseSlug}-${counter}`;
+      while (await Restaurant.findOne({ slug: uniqueSlug })) {
+        counter++;
+        uniqueSlug = `${baseSlug}-${counter}`;
+      }
+      slug = uniqueSlug;
+      console.log(`Slug already exists, using unique slug: ${slug}`);
     }
 
     // Generate restaurantId before creating the restaurant
@@ -187,6 +265,35 @@ export const createRestaurantFromOnboarding = async (onboardingData, ownerId) =>
       console.error('Save error message:', saveError.message);
       if (saveError.code === 11000) {
         console.error('Duplicate key error - restaurant with this slug or restaurantId already exists');
+        // If it's a duplicate slug error, try to find and update the existing restaurant
+        if (saveError.keyPattern && saveError.keyPattern.slug) {
+          console.log('Attempting to find existing restaurant by slug and update it...');
+          const existingBySlug = await Restaurant.findOne({ slug: restaurantData.slug });
+          if (existingBySlug) {
+            // If it's the same owner, update it
+            if (existingBySlug.owner.toString() === ownerId.toString()) {
+              Object.assign(existingBySlug, restaurantData);
+              existingBySlug.isActive = true;
+              existingBySlug.isAcceptingOrders = true;
+              await existingBySlug.save();
+              console.log('✅ Updated existing restaurant instead of creating new one');
+              return existingBySlug;
+            } else {
+              // Different owner - make slug unique and retry
+              let counter = 1;
+              let uniqueSlug = `${restaurantData.slug}-${counter}`;
+              while (await Restaurant.findOne({ slug: uniqueSlug })) {
+                counter++;
+                uniqueSlug = `${restaurantData.slug}-${counter}`;
+              }
+              restaurantData.slug = uniqueSlug;
+              const retryRestaurant = new Restaurant(restaurantData);
+              await retryRestaurant.save();
+              console.log(`✅ Created restaurant with unique slug: ${uniqueSlug}`);
+              return retryRestaurant;
+            }
+          }
+        }
       }
       throw saveError;
     }

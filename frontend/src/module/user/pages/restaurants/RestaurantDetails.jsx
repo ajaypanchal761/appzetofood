@@ -3061,12 +3061,62 @@ export default function RestaurantDetails() {
             cuisines: Array.isArray(apiRestaurant?.cuisines) ? apiRestaurant.cuisines : [],
             profileImage: apiRestaurant?.profileImage || null,
             menuImages: Array.isArray(apiRestaurant?.menuImages) ? apiRestaurant.menuImages : [],
-            // Menu sections for display (will be populated from menu API later)
-            menuSections: Array.isArray(apiRestaurant?.menuSections) ? apiRestaurant.menuSections : [],
+            // Menu sections for display (will be populated from menu API)
+            menuSections: [],
           }
           
           console.log('Transformed restaurant:', transformedRestaurant)
           setRestaurant(transformedRestaurant)
+          
+          // Fetch menu and inventory for this restaurant
+          try {
+            const menuResponse = await restaurantAPI.getMenuByRestaurantId(slug)
+            if (menuResponse.data && menuResponse.data.success && menuResponse.data.data && menuResponse.data.data.menu) {
+              const menuSections = menuResponse.data.data.menu.sections || []
+              setRestaurant(prev => ({
+                ...prev,
+                menuSections: menuSections,
+              }))
+              console.log('Fetched menu sections:', menuSections)
+            }
+          } catch (menuError) {
+            console.error('Error fetching menu:', menuError)
+          }
+          
+          try {
+            const inventoryResponse = await restaurantAPI.getInventoryByRestaurantId(slug)
+            if (inventoryResponse.data && inventoryResponse.data.success && inventoryResponse.data.data && inventoryResponse.data.data.inventory) {
+              const inventoryCategories = inventoryResponse.data.data.inventory.categories || []
+              
+              // Normalize inventory categories to ensure proper structure
+              const normalizedInventory = inventoryCategories.map((category, index) => ({
+                id: category.id || `category-${index}`,
+                name: category.name || "Unnamed Category",
+                description: category.description || "",
+                itemCount: category.itemCount ?? (category.items?.length || 0),
+                inStock: category.inStock !== undefined ? category.inStock : true,
+                items: Array.isArray(category.items) ? category.items.map(item => ({
+                  id: String(item.id || Date.now() + Math.random()),
+                  name: item.name || "Unnamed Item",
+                  inStock: item.inStock !== undefined ? item.inStock : true,
+                  isVeg: item.isVeg !== undefined ? item.isVeg : true,
+                  stockQuantity: item.stockQuantity || "Unlimited",
+                  unit: item.unit || "piece",
+                  expiryDate: item.expiryDate || null,
+                  lastRestocked: item.lastRestocked || null,
+                })) : [],
+                order: category.order !== undefined ? category.order : index,
+              }))
+              
+              setRestaurant(prev => ({
+                ...prev,
+                inventory: normalizedInventory,
+              }))
+              console.log('✅ Fetched and normalized inventory categories:', normalizedInventory)
+            }
+          } catch (inventoryError) {
+            console.error('Error fetching inventory:', inventoryError)
+          }
         } else {
           console.warn('Invalid API response structure:', response.data)
           setRestaurantError('Restaurant not found')
@@ -3201,7 +3251,7 @@ export default function RestaurantDetails() {
   // Menu categories - dynamically generated from restaurant menu sections
   const menuCategories = (restaurant?.menuSections && Array.isArray(restaurant.menuSections)) 
     ? restaurant.menuSections.map((section, index) => {
-        const sectionTitle = index === 0 ? "Recommended for you" : (section?.title || "Menu")
+        const sectionTitle = index === 0 ? "Recommended for you" : (section?.name || section?.title || "Menu")
         const itemCount = section?.items?.length || 0
         const subsectionCount = section?.subsections?.reduce((sum, sub) => sum + (sub?.items?.length || 0), 0) || 0
         const totalCount = itemCount + subsectionCount
@@ -3631,7 +3681,7 @@ export default function RestaurantDetails() {
         {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
           <div className="px-4 py-6 space-y-6">
             {restaurant.menuSections.map((section, sectionIndex) => {
-              const sectionTitle = sectionIndex === 0 ? "Recommended for you" : section.title
+              const sectionTitle = sectionIndex === 0 ? "Recommended for you" : (section?.name || section?.title || "Menu")
               const sectionId = `menu-section-${sectionIndex}`
               
               return (
@@ -3647,7 +3697,7 @@ export default function RestaurantDetails() {
                 {sectionIndex > 0 && (
                   <div className="space-y-1">
                     <h2 className="text-lg font-bold text-gray-900">
-                      {section.title}
+                      {section?.name || section?.title || "Menu"}
                     </h2>
                     {section.subtitle && (
                       <button className="text-sm text-blue-600 underline">
@@ -3833,7 +3883,7 @@ export default function RestaurantDetails() {
                         {/* Subsection Header */}
                         <div className="flex items-center justify-between">
                           <h3 className="text-base font-semibold text-gray-900">
-                            {subsection.title}
+                            {subsection?.name || subsection?.title || "Subsection"}
                           </h3>
                           <ChevronDown className="h-4 w-4 text-gray-500" />
                         </div>

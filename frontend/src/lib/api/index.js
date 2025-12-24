@@ -218,6 +218,28 @@ export const restaurantAPI = {
   getRestaurantByOwner: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.BY_OWNER);
   },
+
+  // Menu operations (for restaurant module)
+  getMenu: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.MENU);
+  },
+  updateMenu: (menuData) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.MENU, menuData);
+  },
+  getMenuByRestaurantId: (restaurantId) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.MENU_BY_RESTAURANT_ID.replace(':id', restaurantId));
+  },
+
+  // Inventory operations (for restaurant module)
+  getInventory: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.INVENTORY);
+  },
+  updateInventory: (inventoryData) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.INVENTORY, inventoryData);
+  },
+  getInventoryByRestaurantId: (restaurantId) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.INVENTORY_BY_RESTAURANT_ID.replace(':id', restaurantId));
+  },
 };
 
 // Export delivery API helper functions

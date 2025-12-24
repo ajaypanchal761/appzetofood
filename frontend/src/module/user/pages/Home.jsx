@@ -743,10 +743,12 @@ export default function Home() {
       } catch (error) {
         console.error('Error fetching restaurants:', error)
         console.error('Error details:', error.response?.data || error.message)
-        // Fallback to hardcoded restaurants if API fails
-        setRestaurantsData(restaurants)
+        // Don't set hardcoded data here - let the useMemo fallback handle it
+        // This way, if API succeeds later, it will show the real data
+        setRestaurantsData([])
       } finally {
         setLoadingRestaurants(false)
+        console.log('Restaurant loading completed. restaurantsData length:', restaurantsData.length)
       }
     }
     
@@ -755,8 +757,21 @@ export default function Home() {
 
   // Filter restaurants and foods based on active filters
   const filteredRestaurants = useMemo(() => {
-    // Use fetched restaurants if available, otherwise fallback to hardcoded
-    const restaurantsToUse = restaurantsData.length > 0 ? restaurantsData : restaurants
+    // Only use hardcoded restaurants while loading - once API loads, always use fetched data
+    const restaurantsToUse = loadingRestaurants ? restaurants : restaurantsData
+    console.log('🔍 filteredRestaurants calculation:', {
+      restaurantsDataLength: restaurantsData.length,
+      loadingRestaurants,
+      restaurantsToUseLength: restaurantsToUse.length,
+      usingFetchedData: !loadingRestaurants,
+      usingHardcodedData: loadingRestaurants,
+    })
+    console.log('filteredRestaurants calculation:', {
+      restaurantsDataLength: restaurantsData.length,
+      loadingRestaurants,
+      restaurantsToUseLength: restaurantsToUse.length,
+      usingFetchedData: restaurantsData.length > 0,
+    })
     let filtered = [...restaurantsToUse]
 
     // Apply filters

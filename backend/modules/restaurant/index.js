@@ -3,6 +3,8 @@ import express from 'express';
 import { authenticate, authorize } from '../auth/middleware/auth.js';
 import { getOnboarding, upsertOnboarding, createRestaurantFromOnboardingManual } from './controllers/restaurantOnboardingController.js';
 import { getRestaurants, getRestaurantById, getRestaurantByOwner } from './controllers/restaurantController.js';
+import { getMenu, updateMenu, getMenuByRestaurantId } from './controllers/menuController.js';
+import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
 
 const router = express.Router();
 
@@ -11,8 +13,19 @@ router.get('/onboarding', authenticate, authorize('restaurant'), getOnboarding);
 router.put('/onboarding', authenticate, authorize('restaurant'), upsertOnboarding);
 router.post('/onboarding/create-restaurant', authenticate, authorize('restaurant'), createRestaurantFromOnboardingManual);
 
+// Menu routes (authenticated - for restaurant module)
+router.get('/menu', authenticate, authorize('restaurant'), getMenu);
+router.put('/menu', authenticate, authorize('restaurant'), updateMenu);
+
+// Inventory routes (authenticated - for restaurant module)
+router.get('/inventory', authenticate, authorize('restaurant'), getInventory);
+router.put('/inventory', authenticate, authorize('restaurant'), updateInventory);
+
 // Restaurant routes (public - for user module)
 router.get('/list', getRestaurants);
+// Menu and inventory routes must come before /:id to avoid route conflicts
+router.get('/:id/menu', getMenuByRestaurantId);
+router.get('/:id/inventory', getInventoryByRestaurantId);
 router.get('/:id', getRestaurantById);
 
 // Restaurant routes (authenticated - for restaurant module)

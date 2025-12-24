@@ -17,6 +17,8 @@ import RestaurantNavbar from "../components/RestaurantNavbar"
 import BottomNavOrders from "../components/BottomNavOrders"
 import { Switch } from "@/components/ui/switch"
 import { useNavigate } from "react-router-dom"
+import { restaurantAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 const INVENTORY_STORAGE_KEY = "restaurant_inventory_state"
 
@@ -644,6 +646,93 @@ export default function Inventory() {
 
   // Content container ref
   const contentContainerRef = useRef(null)
+
+  // Fetch inventory from API on mount
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        setLoadingInventory(true)
+        const response = await restaurantAPI.getInventory()
+        
+        if (response.data && response.data.success && response.data.data && response.data.data.inventory) {
+          const inventoryCategories = response.data.data.inventory.categories || []
+          
+          // Normalize inventory categories to ensure proper structure
+          const normalizedCategories = inventoryCategories.map((category, index) => ({
+            id: category.id || `category-${index}`,
+            name: category.name || "Unnamed Category",
+            description: category.description || "",
+            itemCount: category.itemCount ?? (category.items?.length || 0),
+            inStock: category.inStock !== undefined ? category.inStock : true,
+            items: Array.isArray(category.items) ? category.items.map(item => ({
+              id: String(item.id || Date.now() + Math.random()),
+              name: item.name || "Unnamed Item",
+              inStock: item.inStock !== undefined ? item.inStock : true,
+              isVeg: item.isVeg !== undefined ? item.isVeg : true,
+              stockQuantity: item.stockQuantity || "Unlimited",
+              unit: item.unit || "piece",
+              expiryDate: item.expiryDate || null,
+              lastRestocked: item.lastRestocked || null,
+            })) : [],
+            order: category.order !== undefined ? category.order : index,
+          }))
+          
+          setCategories(normalizedCategories)
+          setExpandedCategories(normalizedCategories.map(c => c.id))
+        } else {
+          // Empty inventory - start fresh
+          setCategories([])
+          setExpandedCategories([])
+        }
+      } catch (error) {
+        console.error('Error fetching inventory:', error)
+        toast.error('Failed to load inventory')
+        setCategories([])
+        setExpandedCategories([])
+      } finally {
+        setLoadingInventory(false)
+      }
+    }
+    
+    fetchInventory()
+  }, [])
+
+  // Save inventory to API whenever categories change (debounced)
+  useEffect(() => {
+    if (!loadingInventory && categories.length >= 0) {
+      const timeoutId = setTimeout(async () => {
+        try {
+          // Normalize categories before saving to ensure proper structure
+          const normalizedCategories = categories.map((category, index) => ({
+            id: category.id || `category-${index}`,
+            name: category.name || "Unnamed Category",
+            description: category.description || "",
+            itemCount: category.itemCount ?? (category.items?.length || 0),
+            inStock: category.inStock !== undefined ? category.inStock : true,
+            items: Array.isArray(category.items) ? category.items.map(item => ({
+              id: String(item.id || Date.now() + Math.random()),
+              name: item.name || "Unnamed Item",
+              inStock: item.inStock !== undefined ? item.inStock : true,
+              isVeg: item.isVeg !== undefined ? item.isVeg : true,
+              stockQuantity: item.stockQuantity || "Unlimited",
+              unit: item.unit || "piece",
+              expiryDate: item.expiryDate || null,
+              lastRestocked: item.lastRestocked || null,
+            })) : [],
+            order: category.order !== undefined ? category.order : index,
+          }))
+          
+          await restaurantAPI.updateInventory({ categories: normalizedCategories })
+          console.log('✅ Inventory saved successfully')
+        } catch (error) {
+          console.error('Error saving inventory:', error)
+          toast.error('Failed to save inventory changes')
+        }
+      }, 1000) // Debounce: save 1 second after last change
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, [categories, loadingInventory])
 
   // Handle swipe gestures
   const handleTouchStart = (e) => {
