@@ -20,7 +20,7 @@ export default function AnimatedPage({ children, className = "" }) {
   }, [])
 
   return (
-    <div ref={containerRef} className={`${className} pb-16 md:pb-0`}>
+    <div ref={containerRef} className={`${className}  md:pb-0`}>
       {children}
     </div>
   )

@@ -3689,18 +3689,18 @@ export default function RestaurantDetails() {
                 {/* Section Header */}
                 {sectionIndex === 0 && (
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                       Recommended for you
                     </h2>
       </div>
                 )}
                 {sectionIndex > 0 && (
                   <div className="space-y-1">
-                    <h2 className="text-lg font-bold text-gray-900">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                       {section?.name || section?.title || "Menu"}
                     </h2>
                     {section.subtitle && (
-                      <button className="text-sm text-blue-600 underline">
+                      <button className="text-sm text-blue-600 dark:text-blue-400 underline">
                         {section.subtitle}
                       </button>
                     )}
@@ -3853,10 +3853,10 @@ export default function RestaurantDetails() {
                       <div key={subIndex} className="space-y-4">
                         {/* Subsection Header */}
                         <div className="flex items-center justify-between">
-                          <h3 className="text-base font-semibold text-gray-900">
+                          <h3 className="text-base font-semibold text-gray-900 dark:text-white">
                             {subsection?.name || subsection?.title || "Subsection"}
                           </h3>
-                          <ChevronDown className="h-4 w-4 text-gray-500" />
+                          <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                         </div>
 
                         {/* Subsection Items */}
@@ -4011,7 +4011,7 @@ export default function RestaurantDetails() {
 
       {/* Menu Button - Sticky at page bottom right (hidden when filter or menu sheet open) */}
       {!showFilterSheet && !showMenuSheet && !showMenuOptionsSheet && (
-        <div className="sticky bottom-4 flex justify-end px-4 z-40 mt-auto">
+        <div className="sticky dark:bg-[#1a1a1a] bottom-4 flex justify-end px-4 z-50 mt-auto">
         <Button
           className="bg-gray-800 hover:bg-gray-900 text-white flex items-center gap-2 shadow-lg px-6 py-2.5 rounded-lg"
           size="lg"

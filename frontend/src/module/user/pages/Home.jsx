@@ -1803,10 +1803,10 @@ export default function Home() {
                               }}
                               transition={{ duration: 0.3 }}
                             >
-                              <Clock className="h-4 w-4 lg:h-5 lg:w-5" strokeWidth={1.5} />
-                              <span className="font-medium">{restaurant.deliveryTime}</span>
+                              <Clock className="h-4 w-4 lg:h-5 lg:w-5 text-gray-500 dark:text-gray-400" strokeWidth={1.5} />
+                              <span className="font-medium dark:text-gray-300 text-gray-700">{restaurant.deliveryTime}</span>
                               <span className="mx-1">|</span>
-                              <span className="font-medium">{restaurant.distance}</span>
+                              <span className="font-medium dark:text-gray-300 text-gray-700">{restaurant.distance}</span>
                             </motion.div>
 
                             {/* Offer Badge */}

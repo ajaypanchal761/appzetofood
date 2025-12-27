@@ -83,8 +83,8 @@ export default function Restaurants() {
         <ScrollReveal>
           <div className="flex items-center gap-3 sm:gap-4 lg:gap-5 mb-4 lg:mb-6">
             <Link to="/user">
-                <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12">
-                  <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
+                <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 hover:bg-gray-100 dark:hover:bg-gray-800">
+                  <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-gray-900 dark:text-gray-100" />
                 </Button>
             </Link>
             <TextReveal className="flex items-center gap-2 sm:gap-3 lg:gap-4">
@@ -123,7 +123,7 @@ export default function Restaurants() {
             return (
               <ScrollReveal key={restaurant.id} delay={index * 0.1}>
                 <Link to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
-                  <Card className="overflow-hidden cursor-pointer border border-gray-200 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] hover:shadow-lg pb-1 sm:pb-2 lg:pb-3 flex flex-col h-full w-full">
+                  <Card className="overflow-hidden cursor-pointer border border-gray-200 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] hover:shadow-lg dark:hover:shadow-xl dark:hover:shadow-gray-900/50 pb-1 sm:pb-2 lg:pb-3 flex flex-col h-full w-full transition-all duration-300">
                     <div className="flex flex-row min-h-[120px] sm:min-h-[140px] md:min-h-[160px] lg:min-h-[180px] flex-1">
                       {/* Left Side - Content */}
                       <CardContent className="flex-1 flex flex-col justify-between p-3 sm:p-4 md:p-5 lg:p-6 min-w-0 overflow-hidden">
@@ -147,7 +147,7 @@ export default function Restaurants() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className={`h-7 w-7 sm:h-8 sm:w-8 rounded-full flex-shrink-0 ${favorite ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
+                                className={`h-7 w-7 sm:h-8 sm:w-8 rounded-full flex-shrink-0 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${favorite ? "text-red-500 dark:text-red-400" : "text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
                                   }`}
                                 onClick={handleToggleFavorite}
                               >
@@ -166,7 +166,7 @@ export default function Restaurants() {
                                 <span className="font-medium whitespace-nowrap">{restaurant.distance}</span>
                               </div>
                             </div>
-                            <Button className="bg-primary-orange hover:opacity-90 text-white text-xs sm:text-sm h-7 sm:h-8 px-3 sm:px-4 flex-shrink-0">
+                            <Button className="bg-primary-orange hover:opacity-90 dark:hover:opacity-80 text-white text-xs sm:text-sm h-7 sm:h-8 px-3 sm:px-4 flex-shrink-0 transition-opacity">
                               Order Now
                             </Button>
                           </div>
@@ -180,7 +180,7 @@ export default function Restaurants() {
                           alt={restaurant.name}
                           className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-l from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-gradient-to-l from-black/20 dark:from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </div>
                   </Card>

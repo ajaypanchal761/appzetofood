@@ -1437,9 +1437,9 @@ export default function Dining() {
                 <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Offer details</h2>
                 <button
                   onClick={() => setSelectedBankOffer(null)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                 >
-                  <X className="h-5 w-5 text-gray-600" />
+                  <X className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 </button>
               </div>
 
@@ -1455,16 +1455,16 @@ export default function Dining() {
                       e.target.style.display = 'none'
                     }}
                   />
-                  <span className="text-base sm:text-lg font-semibold text-gray-900">{selectedBankOffer.name}</span>
+                  <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">{selectedBankOffer.name}</span>
                 </div>
 
                 {/* Offer Text */}
-                <p className="text-base sm:text-lg font-bold text-gray-900 mb-2">
+                <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
                   {selectedBankOffer.offerText}
                 </p>
 
                 {/* Minimum Amount */}
-                <p className="text-sm sm:text-base text-gray-600 mb-6">
+                <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-6">
                   Valid on final payable amount of ₹{selectedBankOffer.minAmount} or more
                 </p>
 
@@ -1473,9 +1473,9 @@ export default function Dining() {
                   {selectedBankOffer.terms.map((term, index) => (
                     <div key={index} className="flex items-start gap-3">
                       <div className="flex-shrink-0 mt-0.5">
-                        <Check className="h-5 w-5 text-green-600" strokeWidth={2.5} />
+                        <Check className="h-5 w-5 text-green-600 dark:text-green-400" strokeWidth={2.5} />
                       </div>
-                      <p className="text-sm sm:text-base text-gray-700 leading-relaxed">{term}</p>
+                      <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 leading-relaxed">{term}</p>
                     </div>
                   ))}
                 </div>
