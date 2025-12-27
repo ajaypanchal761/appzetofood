@@ -2650,7 +2650,7 @@ export default function Home() {
                   transition={{ delay: 0.5 }}
                 >
                   Veg Mode for you
-                </motion.p>
+                </motion.p> 
               </motion.div>
             </div>
           </motion.div>

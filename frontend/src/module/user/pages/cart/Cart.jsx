@@ -428,7 +428,7 @@ export default function Cart() {
       <AnimatedPage className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a]">
         <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-10">
           <div className="flex items-center gap-3 px-4 py-3">
-            <Link to="/user">
+            <Link onClick={() => navigate(-1)}>
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -442,7 +442,7 @@ export default function Cart() {
           </div>
           <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-1">Your cart is empty</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">Add items from a restaurant to start a new order</p>
-          <Link to="/user">
+          <Link>
             <Button className="bg-primary-orange hover:opacity-90 text-white">Browse Restaurants</Button>
           </Link>
         </div>
@@ -457,7 +457,7 @@ export default function Cart() {
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Link to="/user">
+              <Link onClick={() => navigate(-1)}>
                 <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0">
                   <ArrowLeft className="h-4 w-4 md:h-5 md:w-5" />
                 </Button>
@@ -767,7 +767,7 @@ export default function Cart() {
 
               {/* Delivery Address */}
               <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
-                <Link to="/user/profile/addresses" className="flex items-center justify-between">
+                <Link  className="flex items-center justify-between">
                   <div className="flex items-center gap-3 md:gap-4">
                     <MapPin className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
                     <div>
@@ -1147,11 +1147,11 @@ export default function Cart() {
                   damping: 30
                 }}
               >
-                <div className="relative bg-gradient-to-br from-blue-50 via-sky-50 to-blue-100 rounded-3xl shadow-2xl overflow-hidden">
+                <div className="relative bg-gradient-to-br from-blue-50 via-sky-50 to-blue-100 dark:from-blue-900/30 dark:via-sky-900/30 dark:to-blue-800/30 rounded-3xl shadow-2xl overflow-hidden">
                   {/* Close button - Black circle with white X */}
                   <motion.button
                     onClick={handleCloseBanner}
-                    className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black flex items-center justify-center hover:bg-gray-800 transition-colors shadow-lg"
+                    className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black dark:bg-gray-800 flex items-center justify-center hover:bg-gray-800 dark:hover:bg-gray-700 transition-colors shadow-lg"
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                   >
@@ -1204,7 +1204,7 @@ export default function Cart() {
                             </div>
                           </motion.div>
                           <motion.h3 
-                            className="text-3xl font-bold text-gray-900"
+                            className="text-3xl font-bold text-gray-900 dark:text-gray-100"
                             initial={{ y: 20, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             transition={{ delay: 0.4 }}
@@ -1212,7 +1212,7 @@ export default function Cart() {
                             Coupon Applied!
                           </motion.h3>
                           <motion.p 
-                            className="text-xl text-emerald-600 font-semibold"
+                            className="text-xl text-emerald-600 dark:text-emerald-400 font-semibold"
                             initial={{ y: 20, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             transition={{ delay: 0.5 }}
@@ -1277,7 +1277,7 @@ export default function Cart() {
                           >
                             <div className="flex items-center justify-center gap-2 mb-4">
                               <Sparkles className="h-5 w-5 text-yellow-400" fill="currentColor" />
-                              <span className="text-base font-bold text-gray-900">EXCLUSIVELY FOR YOU</span>
+                              <span className="text-base font-bold text-gray-900 dark:text-gray-100">EXCLUSIVELY FOR YOU</span>
                               <Sparkles className="h-5 w-5 text-yellow-400" fill="currentColor" />
                             </div>
                           </motion.div>
@@ -1289,13 +1289,13 @@ export default function Cart() {
                             animate={{ y: 0, opacity: 1 }}
                             transition={{ delay: 0.4 }}
                           >
-                            <h3 className="text-4xl font-extrabold text-gray-900">
-                              Save <span className="text-blue-600">₹220</span> on this order
+                            <h3 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100">
+                              Save <span className="text-blue-600 dark:text-blue-400">₹220</span> on this order
                             </h3>
-                            <p className="text-base text-gray-600">
-                              with coupon <span className="font-semibold text-gray-800">'GETOFF220ON599'</span>
+                            <p className="text-base text-gray-600 dark:text-gray-300">
+                              with coupon <span className="font-semibold text-gray-800 dark:text-gray-200">'GETOFF220ON599'</span>
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
                               Tap on 'APPLY' to avail this
                             </p>
                           </motion.div>

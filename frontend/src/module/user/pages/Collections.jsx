@@ -58,7 +58,7 @@ export default function Collections() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0a]">
       {/* Back Button */}
       <button 
         onClick={() => navigate(-1)}
@@ -79,12 +79,12 @@ export default function Collections() {
       </div>
 
       {/* Tabs */}
-      <div className="sticky top-0 bg-white z-10 border-b">
+      <div className="sticky top-0 bg-white dark:bg-[#1a1a1a] z-10 border-b dark:border-gray-800">
         <div className="flex">
           <button
             onClick={() => setActiveTab("delivery")}
             className={`flex-1 py-4 text-center font-semibold transition-colors relative ${
-              activeTab === "delivery" ? "text-gray-900" : "text-gray-400"
+              activeTab === "delivery" ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"
             }`}
           >
             Delivery
@@ -95,7 +95,7 @@ export default function Collections() {
           <button
             onClick={() => setActiveTab("dining")}
             className={`flex-1 py-4 text-center font-semibold transition-colors relative ${
-              activeTab === "dining" ? "text-gray-900" : "text-gray-400"
+              activeTab === "dining" ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"
             }`}
           >
             Dining
@@ -170,14 +170,14 @@ export default function Collections() {
           {/* Create New Collection Card */}
           <button
             onClick={() => setIsCreateDialogOpen(true)}
-            className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-4 h-48 flex flex-col items-center justify-center gap-3 hover:border-gray-300 hover:bg-gray-50 transition-colors"
+            className="bg-white dark:bg-[#1a1a1a] border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-4 h-48 flex flex-col items-center justify-center gap-3 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center border-2 border-green-200">
-              <Plus className="h-6 w-6 text-green-600" />
+            <div className="w-12 h-12 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center border-2 border-green-200 dark:border-green-800">
+              <Plus className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="text-center">
-              <p className="text-gray-700 font-semibold">Create a new</p>
-              <p className="text-gray-700 font-semibold">Collection</p>
+              <p className="text-gray-700 dark:text-gray-300 font-semibold">Create a new</p>
+              <p className="text-gray-700 dark:text-gray-300 font-semibold">Collection</p>
             </div>
           </button>
         </div>
@@ -197,24 +197,24 @@ export default function Collections() {
           />
           
           {/* Modal */}
-          <div className="relative bg-white rounded-2xl shadow-2xl w-[90%] max-w-sm mx-4 overflow-hidden animate-[slideUp_0.3s_ease-out]">
+          <div className="relative bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl w-[90%] max-w-sm mx-4 overflow-hidden animate-[slideUp_0.3s_ease-out]">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-bold text-gray-900">Create New Collection</h2>
+            <div className="flex items-center justify-between p-4 border-b dark:border-gray-800">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Create New Collection</h2>
               <button
                 onClick={() => {
                   setIsCreateDialogOpen(false)
                   setNewCollectionName("")
                 }}
-                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
               >
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             
             {/* Body */}
             <div className="p-4 space-y-4">
-              <p className="text-sm text-gray-500">Give your collection a unique name</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Give your collection a unique name</p>
               <Input
                 placeholder="e.g., Weekend Favorites"
                 value={newCollectionName}
@@ -224,28 +224,28 @@ export default function Collections() {
                     handleCreateCollection()
                   }
                 }}
-                className="w-full h-12 text-base border-2 border-gray-200 focus:border-green-500 rounded-xl"
+                className="w-full h-12 text-base border-2 border-gray-200 dark:border-gray-700 focus:border-green-500 dark:focus:border-green-500 rounded-xl bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 autoFocus
               />
               
               {/* Preview */}
               {newCollectionName.trim() && (
-                <div className="p-3 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-400 mb-1">Preview</p>
-                  <p className="font-semibold text-gray-800">{newCollectionName.trim()}</p>
+                <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Preview</p>
+                  <p className="font-semibold text-gray-800 dark:text-gray-200">{newCollectionName.trim()}</p>
                 </div>
               )}
             </div>
             
             {/* Footer */}
-            <div className="flex gap-3 p-4 bg-gray-50">
+            <div className="flex gap-3 p-4 bg-gray-50 dark:bg-gray-800">
               <Button
                 variant="outline"
                 onClick={() => {
                   setIsCreateDialogOpen(false)
                   setNewCollectionName("")
                 }}
-                className="flex-1 h-11 rounded-xl font-semibold"
+                className="flex-1 h-11 rounded-xl font-semibold border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 Cancel
               </Button>

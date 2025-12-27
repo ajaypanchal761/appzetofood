@@ -200,7 +200,7 @@ export default function Offers() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0a]">
       {/* Banner Section */}
       <div className="relative w-full overflow-hidden min-h-[25vh] md:min-h-[30vh]">
         {/* Back Button */}
@@ -226,7 +226,7 @@ export default function Offers() {
         <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
         {/* FLAT 50% OFF Section */}
         <section>
-          <h2 className="text-2xl sm:text-3xl font-black text-red-500 text-center mb-4 tracking-wide">
+          <h2 className="text-2xl sm:text-3xl font-black text-red-500 dark:text-red-400 text-center mb-4 tracking-wide">
             FLAT 50% OFF
           </h2>
           
@@ -267,10 +267,10 @@ export default function Offers() {
                   </div>
                   
                   {/* Restaurant Info */}
-                  <h3 className="font-semibold text-gray-900 text-sm line-clamp-1">
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm line-clamp-1">
                     {restaurant.name}
                   </h3>
-                  <div className="flex items-center gap-1 text-gray-500 text-xs">
+                  <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-xs">
                     <Clock className="h-3 w-3" />
                     <span>{restaurant.deliveryTime}</span>
                   </div>
@@ -283,7 +283,7 @@ export default function Offers() {
           <Link to="/user/restaurants">
             <Button 
               variant="ghost" 
-              className="w-full mt-4 border-0 text-gray-700 font-medium rounded-xl h-11 hover:bg-gray-100"
+              className="w-full mt-4 border-0 text-gray-700 dark:text-gray-300 font-medium rounded-xl h-11 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               View all
               <ChevronRight className="h-4 w-4 ml-1" />
@@ -293,7 +293,7 @@ export default function Offers() {
 
         {/* DEALS OF THE DAY Section */}
         <section>
-          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase mb-4">
+          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-4">
             DEALS OF THE DAY
           </h2>
           
@@ -311,7 +311,7 @@ export default function Offers() {
                 to="/user/restaurants"
                 className="flex-shrink-0 md:w-full"
               >
-                <div className="w-64 h-40 sm:w-72 sm:h-44 md:w-full md:h-48 lg:h-52 bg-gray-50 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-64 h-40 sm:w-72 sm:h-44 md:w-full md:h-48 lg:h-52 bg-gray-50 dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                   <img 
                     src={deal} 
                     alt={`Deal ${index + 1}`}
@@ -325,7 +325,7 @@ export default function Offers() {
 
         {/* More Offers Section - 2x2 Grid */}
         <section>
-          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase mb-4">
+          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-4">
             MORE OFFERS
           </h2>
           
@@ -356,7 +356,7 @@ export default function Offers() {
 
         {/* BEST OFFERS AROUND YOU Section */}
         <section>
-          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase mb-4">
+          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-4">
             BEST OFFERS AROUND YOU
           </h2>
           
@@ -371,10 +371,10 @@ export default function Offers() {
             {/* Filter Button */}
             <Button
               variant="outline"
-              className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white border border-gray-200 hover:bg-gray-50 text-gray-700"
+              className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
             >
               <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="text-xs sm:text-sm font-bold text-black">Filters</span>
+              <span className="text-xs sm:text-sm font-bold text-black dark:text-white">Filters</span>
               <ChevronDown className="h-3 w-3" />
             </Button>
 
@@ -394,17 +394,17 @@ export default function Offers() {
                   className={`h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${
                     isActive
                       ? 'bg-primary-orange text-white border border-primary-orange hover:bg-primary-orange/90'
-                      : 'bg-white border border-gray-200 hover:bg-gray-50 text-gray-600'
+                      : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
                   }`}
                 >
-                  <span className="text-xs sm:text-sm font-bold text-black">{filter.label}</span>
+                  <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{filter.label}</span>
                 </Button>
               )
             })}
           </div>
 
           {/* Featured Label */}
-          <p className="text-gray-500 text-sm mb-3">Featured</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mb-3">Featured</p>
 
           {/* Restaurant Cards - 1 Column on Mobile, 3 Columns on Desktop */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
@@ -414,7 +414,7 @@ export default function Offers() {
 
               return (
                 <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`} className="w-full">
-                  <Card className="overflow-hidden cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl w-full">
+                  <Card className="overflow-hidden cursor-pointer border-0 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl w-full">
                     {/* Image Section */}
                     <div className="relative h-44 sm:h-52 md:h-56 w-full overflow-hidden rounded-t-2xl">
                       <img
@@ -441,7 +441,7 @@ export default function Offers() {
                           toggleFavorite(restaurant.id)
                         }}
                       >
-                        <Bookmark className={`h-5 w-5 ${isFavorite ? "fill-gray-800 text-gray-800" : "text-gray-600"}`} strokeWidth={2} />
+                        <Bookmark className={`h-5 w-5 ${isFavorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
                       </Button>
                     </div>
                     
@@ -450,7 +450,7 @@ export default function Offers() {
                       {/* Restaurant Name & Rating */}
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 line-clamp-1">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 line-clamp-1">
                             {restaurant.name}
                           </h3>
                         </div>
@@ -461,7 +461,7 @@ export default function Offers() {
                       </div>
                       
                       {/* Delivery Time & Distance */}
-                      <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
+                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
                         <Clock className="h-4 w-4" strokeWidth={1.5} />
                         <span className="font-medium">{restaurant.deliveryTime}</span>
                         <span className="mx-1">|</span>
@@ -471,8 +471,8 @@ export default function Offers() {
                       {/* Offer Badge */}
                       {restaurant.offer && (
                         <div className="flex items-center gap-2 text-sm">
-                          <BadgePercent className="h-4 w-4 text-blue-600" strokeWidth={2} />
-                          <span className="text-gray-700 font-medium">{restaurant.offer}</span>
+                          <BadgePercent className="h-4 w-4 text-blue-600 dark:text-blue-400" strokeWidth={2} />
+                          <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
                         </div>
                       )}
                     </CardContent>

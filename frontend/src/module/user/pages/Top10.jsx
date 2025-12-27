@@ -161,7 +161,7 @@ export default function Top10() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0a]">
       {/* Banner Section */}
       <div className="relative w-full overflow-hidden min-h-[25vh] md:min-h-[30vh]">
         {/* Back Button */}
@@ -189,9 +189,9 @@ export default function Top10() {
         <div className="mb-2">
           <div className="flex items-center gap-2 mb-1">
             <Trophy className="h-6 w-6 text-yellow-500 fill-yellow-500" />
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Top 10 Restaurants</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Top 10 Restaurants</h1>
           </div>
-          <p className="text-sm text-gray-500">Most loved restaurants in your area</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Most loved restaurants in your area</p>
         </div>
 
         {/* Filters */}
@@ -205,10 +205,10 @@ export default function Top10() {
           {/* Filter Button */}
           <Button
             variant="outline"
-            className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white border border-gray-200 hover:bg-gray-50 text-gray-700"
+            className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
           >
             <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span className="text-xs sm:text-sm font-bold text-black">Filters</span>
+            <span className="text-xs sm:text-sm font-bold text-black dark:text-white">Filters</span>
             <ChevronDown className="h-3 w-3" />
           </Button>
 
@@ -229,10 +229,10 @@ export default function Top10() {
                 className={`h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${
                   isActive
                     ? 'bg-primary-orange text-white border border-primary-orange hover:bg-primary-orange/90'
-                    : 'bg-white border border-gray-200 hover:bg-gray-50 text-gray-600'
+                    : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
                 }`}
               >
-                <span className="text-xs sm:text-sm font-bold text-black">{filter.label}</span>
+                <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{filter.label}</span>
               </Button>
             )
           })}
@@ -246,7 +246,7 @@ export default function Top10() {
 
             return (
               <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`}>
-                <Card className="overflow-hidden cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl mb-4">
+                <Card className="overflow-hidden cursor-pointer border-0 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl mb-4">
                   {/* Image Section */}
                   <div className="relative h-44 sm:h-52 md:h-56 w-full overflow-hidden rounded-t-2xl">
                     <img
@@ -280,7 +280,7 @@ export default function Top10() {
                         toggleFavorite(restaurant.id)
                       }}
                     >
-                      <Bookmark className={`h-5 w-5 ${isFavorite ? "fill-gray-800 text-gray-800" : "text-gray-600"}`} strokeWidth={2} />
+                      <Bookmark className={`h-5 w-5 ${isFavorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
                     </Button>
                   </div>
                   
@@ -289,7 +289,7 @@ export default function Top10() {
                     {/* Restaurant Name & Rating */}
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-lg sm:text-xl font-bold text-gray-900 line-clamp-1">
+                        <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 line-clamp-1">
                           {restaurant.name}
                         </h3>
                       </div>
@@ -300,7 +300,7 @@ export default function Top10() {
                     </div>
                     
                     {/* Delivery Time & Distance */}
-                    <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
+                    <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
                       <Clock className="h-4 w-4" strokeWidth={1.5} />
                       <span className="font-medium">{restaurant.deliveryTime}</span>
                       <span className="mx-1">|</span>
@@ -310,8 +310,8 @@ export default function Top10() {
                     {/* Offer Badge */}
                     {restaurant.offer && (
                       <div className="flex items-center gap-2 text-sm">
-                        <BadgePercent className="h-4 w-4 text-blue-600" strokeWidth={2} />
-                        <span className="text-gray-700 font-medium">{restaurant.offer}</span>
+                        <BadgePercent className="h-4 w-4 text-blue-600 dark:text-blue-400" strokeWidth={2} />
+                        <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
                       </div>
                     )}
                   </CardContent>
