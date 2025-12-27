@@ -1270,7 +1270,7 @@ export default function Home() {
                 >
                   <Link to={`/user/category/${category.name.toLowerCase()}`}>
                     <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
-                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
+                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden transition-all">
                         <OptimizedImage
                           src={category.image}
                           alt={category.name}

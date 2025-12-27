@@ -1147,7 +1147,7 @@ export default function Cart() {
                   damping: 30
                 }}
               >
-                <div className="relative bg-gradient-to-br from-blue-50 via-sky-50 to-blue-100 dark:from-blue-900/30 dark:via-sky-900/30 dark:to-blue-800/30 rounded-3xl shadow-2xl overflow-hidden">
+                <div className="relative bg-gradient-to-br from-blue-50 via-sky-50 to-blue-100 dark:from-blue-900/98 dark:via-sky-900/98 dark:to-blue-800/98 rounded-3xl shadow-2xl overflow-hidden">
                   {/* Close button - Black circle with white X */}
                   <motion.button
                     onClick={handleCloseBanner}

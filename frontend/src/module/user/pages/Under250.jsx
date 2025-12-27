@@ -13,6 +13,7 @@ import { foodImages } from "@/constants/images"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
 import under250Banner from "@/assets/under250banner.png"
 import AddToCartAnimation from "../components/AddToCartAnimation"
+import OptimizedImage from "@/components/OptimizedImage"
 
 
 const categories = [
@@ -341,10 +342,13 @@ export default function Under250() {
       <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16">
         {/* Banner Image */}
         <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
-          <img
+          <OptimizedImage
             src={under250Banner}
             alt="Under 250 Banner"
-            className="w-full h-full object-cover"
+            className="w-full h-full"
+            objectFit="cover"
+            priority={true}
+            sizes="100vw"
           />
         </div>
 
@@ -369,47 +373,53 @@ export default function Under250() {
           >
             {/* All Button */}
             <div className="flex-shrink-0">
-              <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
+              <motion.div 
+                className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28"
+                whileHover={{ scale: 1.1, y: -4 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
                 <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
-                  <img
+                  <OptimizedImage
                     src={foodImages[5]}
                     alt="All"
-                    className="w-full h-full object-cover bg-white rounded-full"
-                    loading="lazy"
-                    onError={(e) => {
-                      e.target.src = foodImages[0]
-                    }}
+                    className="w-full h-full bg-white rounded-full"
+                    objectFit="cover"
+                    sizes="(max-width: 640px) 62px, (max-width: 768px) 96px, 112px"
+                    placeholder="blur"
                   />
                 </div>
                 <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1">
                   All
                 </span>
-              </div>
+              </motion.div>
             </div>
             {categories.map((category, index) => {
               const isActive = activeCategory === category.id
               return (
                 <div key={category.id} className="flex-shrink-0">
                   <Link to={`/user/category/${category.name.toLowerCase()}`}>
-                    <div
+                    <motion.div
                       className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28"
                       onClick={() => setActiveCategory(category.id)}
+                      whileHover={{ scale: 1.1, y: -4 }}
+                      whileTap={{ scale: 0.95 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
                     >
                       <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
-                        <img
+                        <OptimizedImage
                           src={category.image}
                           alt={category.name}
-                          className="w-full h-full object-cover bg-white rounded-full"
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = foodImages[0]
-                          }}
+                          className="w-full h-full bg-white rounded-full"
+                          objectFit="cover"
+                          sizes="(max-width: 640px) 62px, (max-width: 768px) 96px, 112px"
+                          placeholder="blur"
                         />
                       </div>
                       <span className={`text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center pb-1 ${isActive ? 'border-b-2 border-green-600' : ''}`}>
                         {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
                       </span>
-                    </div>
+                    </motion.div>
                   </Link>
                 </div>
               )
@@ -485,29 +495,53 @@ export default function Under250() {
                       overflowY: "hidden",
                     }}
                   >
-                    {restaurant.menuItems.map((item) => {
+                    {restaurant.menuItems.map((item, itemIndex) => {
                       const quantity = quantities[item.id] || 0
                       return (
-                      <div
+                      <motion.div
                         key={item.id}
-                        className="flex-shrink-0 w-[200px] sm:w-[220px] md:w-full bg-white dark:bg-[#1a1a1a] rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden hover:shadow-md md:hover:shadow-lg transition-shadow cursor-pointer"
+                        className="flex-shrink-0 w-[200px] sm:w-[220px] md:w-full bg-white dark:bg-[#1a1a1a] rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden cursor-pointer"
                         onClick={() => handleItemClick(item, restaurant)}
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "-50px" }}
+                        transition={{ duration: 0.4, delay: itemIndex * 0.05 }}
+                        whileHover={{ y: -8, scale: 1.02 }}
+                        style={{ boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" }}
                       >
                         {/* Item Image */}
                         <div className="relative w-full h-32 sm:h-36 md:h-40 lg:h-48 xl:h-52 overflow-hidden">
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.target.src = "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400&h=400&fit=crop"
-                            }}
+                          <motion.div
+                            className="absolute inset-0"
+                            whileHover={{ scale: 1.1 }}
+                            transition={{ duration: 0.5, ease: "easeOut" }}
+                          >
+                            <OptimizedImage
+                              src={item.image}
+                              alt={item.name}
+                              className="w-full h-full"
+                              objectFit="cover"
+                              sizes="(max-width: 640px) 200px, (max-width: 768px) 220px, 100vw"
+                              placeholder="blur"
+                              priority={itemIndex < 4}
+                            />
+                          </motion.div>
+                          {/* Gradient Overlay on Hover */}
+                          <motion.div
+                            className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"
+                            initial={{ opacity: 0 }}
+                            whileHover={{ opacity: 1 }}
+                            transition={{ duration: 0.3 }}
                           />
                           {/* Veg Indicator */}
                           {item.isVeg && (
-                            <div className="absolute top-2 left-2 md:top-3 md:left-3 h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 rounded border-2 border-green-600 bg-white flex items-center justify-center">
+                            <motion.div 
+                              className="absolute top-2 left-2 md:top-3 md:left-3 h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 rounded border-2 border-green-600 bg-white flex items-center justify-center z-10"
+                              whileHover={{ scale: 1.2, rotate: 5 }}
+                              transition={{ duration: 0.2 }}
+                            >
                               <div className="h-2 w-2 md:h-2.5 md:w-2.5 lg:h-3 lg:w-3 rounded-full bg-green-600" />
-                            </div>
+                            </motion.div>
                           )}
                         </div>
 
@@ -557,7 +591,7 @@ export default function Under250() {
                             )}
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                       )
                     })}
                   </div>
@@ -702,10 +736,14 @@ export default function Under250() {
 
               {/* Image Section */}
               <div className="relative w-full h-64 md:h-80 lg:h-96 xl:h-[500px] overflow-hidden rounded-t-3xl">
-                <img
+                <OptimizedImage
                   src={selectedItem.image}
                   alt={selectedItem.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full"
+                  objectFit="cover"
+                  sizes="100vw"
+                  priority={true}
+                  placeholder="blur"
                 />
                 {/* Bookmark and Share Icons Overlay */}
                 <div className="absolute bottom-4 right-4 flex items-center gap-3">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import { motion } from "framer-motion"
 import { 
   ArrowLeft, 
   ChevronRight, 
@@ -31,6 +32,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useProfile } from "../../context/ProfileContext"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import OptimizedImage from "@/components/OptimizedImage"
 import {
   Dialog,
   DialogContent,
@@ -258,17 +260,22 @@ export default function Profile() {
         <Card className="bg-white dark:bg-[#1a1a1a] rounded-2xl py-0 pt-1 shadow-sm mb-0 border-0 dark:border-gray-800 overflow-hidden">
           <CardContent className="p-4 py-0 pt-2">
             <div className="flex items-start gap-4 mb-4">
-              <Avatar className="h-16 w-16 bg-blue-300 border-0">
-                {userProfile?.profileImage && (
-                  <AvatarImage 
-                    src={userProfile.profileImage} 
-                    alt={displayName}
-                  />
-                )}
-                <AvatarFallback className="bg-blue-300 text-white text-2xl font-semibold">
-                  {avatarInitial}
-                </AvatarFallback>
-              </Avatar>
+              <motion.div
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                transition={{ duration: 0.3, type: "spring", stiffness: 300 }}
+              >
+                <Avatar className="h-16 w-16 bg-blue-300 border-0">
+                  {userProfile?.profileImage && (
+                    <AvatarImage 
+                      src={userProfile.profileImage} 
+                      alt={displayName}
+                    />
+                  )}
+                  <AvatarFallback className="bg-blue-300 text-white text-2xl font-semibold">
+                    {avatarInitial}
+                  </AvatarFallback>
+                </Avatar>
+              </motion.div>
               <div className="flex-1 pt-1">
                 <h2 className="text-xl font-bold text-black dark:text-white mb-1">{displayName}</h2>
                 {hasValidEmail && (
@@ -303,30 +310,48 @@ export default function Profile() {
          {/* Appzeto Money and Coupons - Side by Side */}
          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-5 mt-3 mb-3">
           <Link to="/user/wallet" className="h-full">
-            <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow h-full">
-               <CardContent className="p-4 h-full flex items-center gap-3">
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2 flex-shrink-0">
-                  <Wallet className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                </div>
-                 <div className="flex-1 min-w-0 flex flex-col">
-                   <span className="text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">Appzeto Money</span>
-                   <span className="text-base font-semibold text-green-600 dark:text-green-400">₹{userProfile?.wallet?.balance?.toFixed(0) || '0'}</span>
-                 </div>
-               </CardContent>
-             </Card>
+            <motion.div
+              whileHover={{ y: -4, scale: 1.02 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+            >
+              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer h-full">
+                 <CardContent className="p-4 h-full flex items-center gap-3">
+                  <motion.div 
+                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2 flex-shrink-0"
+                    whileHover={{ rotate: 360, scale: 1.1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <Wallet className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                  </motion.div>
+                   <div className="flex-1 min-w-0 flex flex-col">
+                     <span className="text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">Appzeto Money</span>
+                     <span className="text-base font-semibold text-green-600 dark:text-green-400">₹{userProfile?.wallet?.balance?.toFixed(0) || '0'}</span>
+                   </div>
+                 </CardContent>
+               </Card>
+             </motion.div>
            </Link>
           
           <Link to="/user/profile/coupons" className="h-full">
-            <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow h-full">
-              <CardContent className="p-4 h-full flex items-center gap-3">
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2 flex-shrink-0">
-                  <Tag className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                </div>
-                 <div className="flex-1 min-w-0">
-                   <p className="text-sm font-medium text-gray-900 dark:text-white">Your coupons</p>
-                 </div>
-              </CardContent>
-            </Card>
+            <motion.div
+              whileHover={{ y: -4, scale: 1.02 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+            >
+              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer h-full">
+                <CardContent className="p-4 h-full flex items-center gap-3">
+                  <motion.div 
+                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2 flex-shrink-0"
+                    whileHover={{ rotate: 360, scale: 1.1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <Tag className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                  </motion.div>
+                   <div className="flex-1 min-w-0">
+                     <p className="text-sm font-medium text-gray-900 dark:text-white">Your coupons</p>
+                   </div>
+                </CardContent>
+              </Card>
+            </motion.div>
           </Link>
         </div>
 
@@ -334,96 +359,188 @@ export default function Profile() {
         <div className="space-y-2 mb-3">
 
         <Link to="/user/cart" className="block">
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                    <ShoppingCart className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                  </div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">Your cart</span>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </CardContent>
-              </Card>
+              <motion.div
+                whileHover={{ x: 4, scale: 1.01 }}
+                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <ShoppingCart className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    </motion.div>
+                      <span className="text-base font-medium text-gray-900 dark:text-white">Your cart</span>
+                    </div>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </Link>
 
             
           <Link to="/user/profile/edit" className="block">
-            <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                    <User className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+            <motion.div
+              whileHover={{ x: 4, scale: 1.01 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+            >
+              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <User className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    </motion.div>
+                    <span className="text-base font-medium text-gray-900 dark:text-white">Your profile</span>
                   </div>
-                  <span className="text-base font-medium text-gray-900 dark:text-white">Your profile</span>
+                  <div className="flex items-center gap-2">
+                    <motion.span 
+                      className={`text-xs font-medium px-2 py-1 rounded ${
+                        isComplete 
+                          ? 'bg-green-100 text-green-700 border border-green-300' 
+                          : 'bg-yellow-200 text-yellow-800'
+                      }`}
+                      whileHover={{ scale: 1.1 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {profileCompletion}% completed
+                    </motion.span>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </Link>
+
+          <motion.div
+            whileHover={{ x: 4, scale: 1.01 }}
+            transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+          >
+            <Card 
+              className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
+              onClick={() => setVegModeOpen(true)}
+            >
+              <CardContent className="p-4  flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <motion.div 
+                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                    whileHover={{ rotate: 15, scale: 1.1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Leaf className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                  </motion.div>
+                  <span className="text-base font-medium text-gray-900 dark:text-white">Veg Mode</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs font-medium px-2 py-1 rounded ${
-                    isComplete 
-                      ? 'bg-green-100 text-green-700 border border-green-300' 
-                      : 'bg-yellow-200 text-yellow-800'
-                  }`}>
-                    {profileCompletion}% completed
-                  </span>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  <motion.span 
+                    className="text-base font-medium text-gray-900 dark:text-white"
+                    whileHover={{ scale: 1.1 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {vegMode ? 'ON' : 'OFF'}
+                  </motion.span>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  </motion.div>
                 </div>
               </CardContent>
             </Card>
-          </Link>
+          </motion.div>
 
-          <Card 
-            className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => setVegModeOpen(true)}
+          <motion.div
+            whileHover={{ x: 4, scale: 1.01 }}
+            transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
           >
-            <CardContent className="p-4  flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                  <Leaf className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+            <Card 
+              className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
+              onClick={() => setAppearanceOpen(true)}
+            >
+              <CardContent className="p-4  flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <motion.div 
+                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                    whileHover={{ rotate: 15, scale: 1.1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Palette className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                  </motion.div>
+                  <span className="text-base font-medium text-gray-900 dark:text-white">Appearance</span>
                 </div>
-                <span className="text-base font-medium text-gray-900 dark:text-white">Veg Mode</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-base font-medium text-gray-900 dark:text-white">{vegMode ? 'ON' : 'OFF'}</span>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
-              </div>
-            </CardContent>
-          </Card>
+                <div className="flex items-center gap-2">
+                  <motion.span 
+                    className="text-base font-medium text-gray-900 dark:text-white capitalize"
+                    whileHover={{ scale: 1.1 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {appearance}
+                  </motion.span>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  </motion.div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-          <Card 
-            className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => setAppearanceOpen(true)}
+          <motion.div
+            whileHover={{ x: 4, scale: 1.01 }}
+            transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
           >
-            <CardContent className="p-4  flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                  <Palette className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+            <Card 
+              className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
+              onClick={() => setRatingsOpen(true)}
+            >
+              <CardContent className="p-4  flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <motion.div 
+                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                    whileHover={{ rotate: 360, scale: 1.1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <Star className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                  </motion.div>
+                  <span className="text-base font-medium text-gray-900 dark:text-white">Your rating</span>
                 </div>
-                <span className="text-base font-medium text-gray-900 dark:text-white">Appearance</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-base font-medium text-gray-900 dark:text-white capitalize">{appearance}</span>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => setRatingsOpen(true)}
-          >
-            <CardContent className="p-4  flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                  <Star className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                <div className="flex items-center gap-2">
+                  <motion.span 
+                    className="text-base font-medium text-gray-900 dark:text-white"
+                    whileHover={{ scale: 1.1 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    -- ★
+                  </motion.span>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  </motion.div>
                 </div>
-                <span className="text-base font-medium text-gray-900 dark:text-white">Your rating</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-base font-medium text-gray-900 dark:text-white">-- ★</span>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
 
         {/* Collections Section */}
@@ -433,17 +550,31 @@ export default function Profile() {
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">Collections</h3>
           </div>
           <Link to="/user/collections">
-            <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4  flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                    <Bookmark className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+            <motion.div
+              whileHover={{ x: 4, scale: 1.01 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+            >
+              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                <CardContent className="p-4  flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Bookmark className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    </motion.div>
+                    <span className="text-base font-medium text-gray-900 dark:text-white">Your collections</span>
                   </div>
-                  <span className="text-base font-medium text-gray-900 dark:text-white">Your collections</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-              </CardContent>
-            </Card>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
           </Link>
         </div>
 
@@ -455,31 +586,59 @@ export default function Profile() {
           </div>
           <div className="space-y-2">
             <Link to="/user/orders" className="block">
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                      <Building2 className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+              <motion.div
+                whileHover={{ x: 4, scale: 1.01 }}
+                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div 
+                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                        whileHover={{ rotate: 15, scale: 1.1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <Building2 className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      </motion.div>
+                      <span className="text-base font-medium text-gray-900 dark:text-white">Your orders</span>
                     </div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">Your orders</span>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </CardContent>
-              </Card>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </Link>
 
 
-            <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                    <MessageSquare className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+            <motion.div
+              whileHover={{ x: 4, scale: 1.01 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+            >
+              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <MessageSquare className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    </motion.div>
+                    <span className="text-base font-medium text-gray-900 dark:text-white">Hear from restaurants</span>
                   </div>
-                  <span className="text-base font-medium text-gray-900 dark:text-white">Hear from restaurants</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-              </CardContent>
-            </Card>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
           </div>
         </div>
 
@@ -490,17 +649,31 @@ export default function Profile() {
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">Coupons</h3>
           </div>
           <Link to="/user/profile/redeem-gold-coupon">
-            <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                    <Percent className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+            <motion.div
+              whileHover={{ x: 4, scale: 1.01 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+            >
+              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Percent className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                    </motion.div>
+                    <span className="text-base font-medium text-gray-900 dark:text-white">Redeem Gold coupon</span>
                   </div>
-                  <span className="text-base font-medium text-gray-900 dark:text-white">Redeem Gold coupon</span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-              </CardContent>
-            </Card>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
           </Link>
         </div>
 
@@ -512,91 +685,175 @@ export default function Profile() {
           </div>
           <div className="space-y-2">
             <Link to="/user/profile/about" className="block">
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                      <Info className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+              <motion.div
+                whileHover={{ x: 4, scale: 1.01 }}
+                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div 
+                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                        whileHover={{ rotate: 15, scale: 1.1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <Info className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      </motion.div>
+                      <span className="text-base font-medium text-gray-900 dark:text-white">About</span>
                     </div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">About</span>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </CardContent>
-              </Card>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </Link>
 
             <Link to="/user/profile/send-feedback" className="block">
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                      <PenSquare className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+              <motion.div
+                whileHover={{ x: 4, scale: 1.01 }}
+                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div 
+                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                        whileHover={{ rotate: 15, scale: 1.1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <PenSquare className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      </motion.div>
+                      <span className="text-base font-medium text-gray-900 dark:text-white">Send feedback</span>
                     </div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">Send feedback</span>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </CardContent>
-              </Card>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </Link>
 
             <Link to="/user/profile/report-safety-emergency" className="block">
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                      <AlertTriangle className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+              <motion.div
+                whileHover={{ x: 4, scale: 1.01 }}
+                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div 
+                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                        whileHover={{ rotate: 15, scale: 1.1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <AlertTriangle className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      </motion.div>
+                      <span className="text-base font-medium text-gray-900 dark:text-white">Report a safety emergency</span>
                     </div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">Report a safety emergency</span>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </CardContent>
-              </Card>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </Link>
 
             <Link to="/user/profile/accessibility" className="block">
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                      <AccessibilityIcon className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+              <motion.div
+                whileHover={{ x: 4, scale: 1.01 }}
+                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div 
+                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                        whileHover={{ rotate: 15, scale: 1.1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <AccessibilityIcon className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      </motion.div>
+                      <span className="text-base font-medium text-gray-900 dark:text-white">Accessibility</span>
                     </div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">Accessibility</span>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </CardContent>
-              </Card>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </Link>
 
             <Link to="/user/profile/settings" className="block">
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                      <SettingsIcon className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+              <motion.div
+                whileHover={{ x: 4, scale: 1.01 }}
+                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
+              >
+                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div 
+                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                        whileHover={{ rotate: 15, scale: 1.1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <SettingsIcon className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      </motion.div>
+                      <span className="text-base font-medium text-gray-900 dark:text-white">Settings</span>
                     </div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">Settings</span>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                </CardContent>
-              </Card>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </Link>
 
-            <Card 
-              className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer hover:shadow-md transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={handleLogout}
+            <motion.div
+              whileHover={{ x: 4, scale: 1.01 }}
+              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
             >
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2">
-                    <Power className={`h-5 w-5 text-gray-700 dark:text-gray-300 ${isLoggingOut ? 'animate-pulse' : ''}`} />
+              <Card 
+                className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleLogout}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <motion.div 
+                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                      whileHover={{ rotate: 15, scale: 1.1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Power className={`h-5 w-5 text-gray-700 dark:text-gray-300 ${isLoggingOut ? 'animate-pulse' : ''}`} />
+                    </motion.div>
+                    <span className="text-base font-medium text-gray-900 dark:text-white">
+                      {isLoggingOut ? 'Logging out...' : 'Log out'}
+                    </span>
                   </div>
-                  <span className="text-base font-medium text-gray-900 dark:text-white">
-                    {isLoggingOut ? 'Logging out...' : 'Log out'}
-                  </span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-              </CardContent>
-            </Card>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
           </div>
         </div>
       </div>

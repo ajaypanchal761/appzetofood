@@ -32,17 +32,17 @@ export default function GiftCardCheckout() {
   const formattedAmount = `₹${amount.toLocaleString('en-IN')}`
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0a] pb-24">
       {/* Header */}
-      <div className="bg-white sticky top-0 z-10 border-b border-gray-100">
+      <div className="bg-white dark:bg-[#1a1a1a] sticky top-0 z-10 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3 px-4 py-4">
           <button 
             onClick={() => navigate(-1)}
-            className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors"
+            className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
           >
-            <ArrowLeft className="h-5 w-5 text-gray-700" />
+            <ArrowLeft className="h-5 w-5 text-gray-700 dark:text-gray-300" />
           </button>
-          <h1 className="text-lg font-semibold text-gray-900">Complete purchase</h1>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Complete purchase</h1>
         </div>
       </div>
 
@@ -50,7 +50,7 @@ export default function GiftCardCheckout() {
       <div className="px-4 py-6 space-y-5">
         <div className="max-w-2xl mx-auto space-y-5">
         {/* Gift Card Preview */}
-        <Card className="border-0 py-0 shadow-md overflow-hidden">
+        <Card className="border-0 py-0 shadow-md overflow-hidden bg-white dark:bg-[#1a1a1a]">
           <CardContent className="p-0">
             {/* Gift Card */}
             <div 
@@ -87,8 +87,8 @@ export default function GiftCardCheckout() {
             </div>
             
             {/* Message Below Card */}
-            <div className="bg-gray-100 px-4 py-4">
-              <p className="text-gray-700 text-base text-center font-medium">
+            <div className="bg-gray-100 dark:bg-gray-800 px-4 py-4">
+              <p className="text-gray-700 dark:text-gray-300 text-base text-center font-medium">
                 {message || category?.message}
               </p>
             </div>
@@ -96,17 +96,17 @@ export default function GiftCardCheckout() {
         </Card>
 
         {/* Gift Card Amount */}
-        <Card className="border border-gray-100 shadow-sm">
+        <Card className="border border-gray-100 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a]">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-gray-700 font-medium text-base">Gift Card amount</span>
-              <span className="text-gray-900 font-bold text-xl">{formattedAmount}</span>
+              <span className="text-gray-700 dark:text-gray-300 font-medium text-base">Gift Card amount</span>
+              <span className="text-gray-900 dark:text-white font-bold text-xl">{formattedAmount}</span>
             </div>
           </CardContent>
         </Card>
 
         {/* Share Section */}
-        <Card className="border border-gray-100 shadow-sm">
+        <Card className="border border-gray-100 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a]">
           <CardContent className="p-4">
             <div className="flex items-center gap-4">
               {/* Social Icons */}
@@ -122,7 +122,7 @@ export default function GiftCardCheckout() {
                 ))}
               </div>
               {/* Text */}
-              <p className="text-gray-600 text-sm flex-1">
+              <p className="text-gray-600 dark:text-gray-400 text-sm flex-1">
                 Complete payment and share this e-gift card with your loved ones using any app
               </p>
             </div>
@@ -131,32 +131,32 @@ export default function GiftCardCheckout() {
 
         {/* Bill Summary */}
         <section className="space-y-3">
-          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase">
             BILL SUMMARY
           </h3>
           
-          <Card className="border border-gray-100 shadow-sm">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a]">
             <CardContent className="p-4 space-y-3">
               {/* Subtotal */}
               <div className="flex items-center justify-between">
-                <span className="text-gray-600">Subtotal</span>
-                <span className="text-gray-900 font-medium">{formattedAmount}</span>
+                <span className="text-gray-600 dark:text-gray-400">Subtotal</span>
+                <span className="text-gray-900 dark:text-white font-medium">{formattedAmount}</span>
               </div>
               
               {/* Divider */}
-              <div className="border-t border-dashed border-gray-200" />
+              <div className="border-t border-dashed border-gray-200 dark:border-gray-700" />
               
               {/* Grand Total */}
               <div className="flex items-center justify-between">
-                <span className="text-gray-900 font-semibold">Grand Total</span>
-                <span className="text-gray-900 font-bold text-lg">{formattedAmount}</span>
+                <span className="text-gray-900 dark:text-white font-semibold">Grand Total</span>
+                <span className="text-gray-900 dark:text-white font-bold text-lg">{formattedAmount}</span>
               </div>
             </CardContent>
           </Card>
         </section>
 
         {/* Terms & Conditions */}
-        <div className="text-gray-500 text-sm">
+        <div className="text-gray-500 dark:text-gray-400 text-sm">
           <p>
             All gift cards are issued by Razorpay and have an expiry of 4 years. Read{' '}
             <button className="text-green-700 font-medium hover:underline">
@@ -167,7 +167,7 @@ export default function GiftCardCheckout() {
       </div>
 
       {/* Fixed Bottom Payment Button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 shadow-lg">
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-100 dark:border-gray-800 p-4 shadow-lg">
         <Button 
           className="w-full h-14 bg-green-700 hover:bg-green-800 text-white font-semibold text-base rounded-xl transition-all duration-200 flex items-center justify-between px-6"
           onClick={() => {

@@ -252,7 +252,7 @@ export default function ProductDetail() {
 
   if (!product) {
     return (
-      <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20">
+      <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 dark:from-[#0a0a0a] dark:via-[#0a0a0a] dark:to-[#0a0a0a]">
         <div className="max-w-4xl mx-auto px-4 py-20 text-center">
           <h1 className="text-2xl font-bold mb-4">Product Not Found</h1>
           <Link to="/user">
@@ -264,7 +264,7 @@ export default function ProductDetail() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20">
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 dark:from-[#0a0a0a] dark:via-[#0a0a0a] dark:to-[#0a0a0a]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12">
 
         {/* Hero Image Section */}

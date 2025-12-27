@@ -17,7 +17,7 @@ export default function RedeemGoldCoupon() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-[#f5f5f5]">
+    <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
       <div className="max-w-md mx-auto px-4 py-4">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">

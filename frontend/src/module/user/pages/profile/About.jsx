@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 
 export default function About() {
   return (
-    <AnimatedPage className="min-h-screen bg-[#f5f5f5]">
+    <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
       <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
         {/* Header */}
         <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 lg:mb-8">
@@ -19,7 +19,7 @@ export default function About() {
         </div>
 
         {/* App Info Card */}
-        <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-0 mb-4 md:mb-5 lg:mb-6">
+        <Card className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-0 dark:border-gray-800 mb-4 md:mb-5 lg:mb-6">
           <CardContent className="p-6 md:p-8 lg:p-10 text-center">
             <div className="flex justify-center mb-4 md:mb-5 lg:mb-6">
               <div className="bg-green-100 dark:bg-green-900 rounded-full p-4 md:p-5 lg:p-6">
@@ -36,10 +36,10 @@ export default function About() {
 
         {/* Features */}
         <div className="space-y-3 md:space-y-4 lg:space-y-5 mb-4 md:mb-5 lg:mb-6">
-          <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-0">
+          <Card className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-0 dark:border-gray-800">
             <CardContent className="p-4 md:p-5 lg:p-6">
               <div className="flex items-start gap-3 md:gap-4">
-                <div className="bg-gray-100 dark:bg-gray-700 rounded-full p-2 md:p-3 mt-0.5">
+                <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2 md:p-3 mt-0.5">
                   <Heart className="h-5 w-5 md:h-6 md:w-6 text-gray-700 dark:text-gray-300" />
                 </div>
                 <div className="flex-1">
@@ -54,10 +54,10 @@ export default function About() {
             </CardContent>
           </Card>
 
-          <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-0">
+          <Card className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-0 dark:border-gray-800">
             <CardContent className="p-4 md:p-5 lg:p-6">
               <div className="flex items-start gap-3 md:gap-4">
-                <div className="bg-gray-100 dark:bg-gray-700 rounded-full p-2 md:p-3 mt-0.5">
+                <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2 md:p-3 mt-0.5">
                   <Users className="h-5 w-5 md:h-6 md:w-6 text-gray-700 dark:text-gray-300" />
                 </div>
                 <div className="flex-1">
@@ -72,10 +72,10 @@ export default function About() {
             </CardContent>
           </Card>
 
-          <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-0">
+          <Card className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-0 dark:border-gray-800">
             <CardContent className="p-4 md:p-5 lg:p-6">
               <div className="flex items-start gap-3 md:gap-4">
-                <div className="bg-gray-100 dark:bg-gray-700 rounded-full p-2 md:p-3 mt-0.5">
+                <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-2 md:p-3 mt-0.5">
                   <Award className="h-5 w-5 md:h-6 md:w-6 text-gray-700 dark:text-gray-300" />
                 </div>
                 <div className="flex-1">
@@ -92,7 +92,7 @@ export default function About() {
         </div>
 
         {/* Legal Links */}
-        <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-0">
+        <Card className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-0 dark:border-gray-800">
           <CardContent className="p-4 md:p-5 lg:p-6">
             <h3 className="text-base md:text-lg lg:text-xl font-semibold text-gray-900 dark:text-white mb-3 md:mb-4">Legal</h3>
             <div className="space-y-2 md:space-y-3">

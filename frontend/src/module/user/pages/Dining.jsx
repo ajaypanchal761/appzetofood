@@ -10,6 +10,7 @@ import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
 import PageNavbar from "../components/PageNavbar"
+import OptimizedImage from "@/components/OptimizedImage"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
 import diningBanner from "@/assets/diningbanner.png"
 import diningCard1 from "@/assets/dining images/diningcard1.png"
@@ -411,11 +412,13 @@ export default function Dining() {
       >
         {/* Background with dining banner */}
         <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
-          <img
+          <OptimizedImage
             src={diningBanner}
             alt="Dining Banner"
-            className="w-full h-full object-cover"
-            style={{ objectPosition: 'center center', minHeight: '100%' }}
+            className="w-full h-full"
+            objectFit="cover"
+            priority={true}
+            sizes="100vw"
           />
         </div>
 
@@ -489,27 +492,52 @@ export default function Dining() {
           {/* Light blue-grey background container */}
           <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl">
             <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4">
-              {diningCategories.map((category) => (
+              {diningCategories.map((category, index) => (
                 <Link
                   key={category.id}
                   to={`/user/dining/${category.name.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="bg-[#f3f4f9] dark:bg-[#2a2a2a] rounded-xl overflow-hidden shadow-sm border-2 border-white dark:border-gray-800 hover:shadow-lg transition-all duration-300 hover:scale-[1.02] flex flex-col h-[140px] sm:h-[160px] md:h-[180px]"
                 >
-                  {/* Text Label on Top */}
-                  <div className="flex items-center justify-start px-3 py-2 sm:py-3 flex-shrink-0">
-                    <p className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white text-left uppercase tracking-wide">
-                      {category.name}
-                    </p>
-                  </div>
-                  
-                  {/* Image at Bottom */}
-                  <div className="relative flex-1 mt-auto">
-                    <img
-                      src={category.image}
-                      alt={category.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+                  <motion.div
+                    className="bg-[#f3f4f9] dark:bg-[#2a2a2a] rounded-xl overflow-hidden shadow-sm border-2 border-white dark:border-gray-800 flex flex-col h-[140px] sm:h-[160px] md:h-[180px]"
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-50px" }}
+                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                    whileHover={{ y: -8, scale: 1.05, boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1)" }}
+                  >
+                    {/* Text Label on Top */}
+                    <div className="flex items-center justify-start px-3 py-2 sm:py-3 flex-shrink-0">
+                      <p className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white text-left uppercase tracking-wide">
+                        {category.name}
+                      </p>
+                    </div>
+                    
+                    {/* Image at Bottom */}
+                    <div className="relative flex-1 mt-auto overflow-hidden">
+                      <motion.div
+                        className="absolute inset-0"
+                        whileHover={{ scale: 1.15 }}
+                        transition={{ duration: 0.5, ease: "easeOut" }}
+                      >
+                        <OptimizedImage
+                          src={category.image}
+                          alt={category.name}
+                          className="w-full h-full"
+                          objectFit="cover"
+                          sizes="(max-width: 640px) 33vw, (max-width: 1024px) 16vw, 12vw"
+                          placeholder="blur"
+                          priority={index < 3}
+                        />
+                      </motion.div>
+                      {/* Gradient Overlay on Hover */}
+                      <motion.div
+                        className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"
+                        initial={{ opacity: 0 }}
+                        whileHover={{ opacity: 1 }}
+                        transition={{ duration: 0.3 }}
+                      />
+                    </div>
+                  </motion.div>
                 </Link>
               ))}
             </div>
@@ -541,14 +569,14 @@ export default function Dining() {
                   className="min-w-full h-full relative flex-shrink-0 w-full"
                 >
                   {/* Restaurant Image */}
-                  <img
+                  <OptimizedImage
                     src={restaurant.image}
                     alt={restaurant.name}
-                    className="w-full h-full object-cover object-center"
-                    style={{ minHeight: '100%', minWidth: '100%' }}
-                    onError={(e) => {
-                      e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&h=600&fit=crop"
-                    }}
+                    className="w-full h-full"
+                    objectFit="cover"
+                    sizes="100vw"
+                    placeholder="blur"
+                    priority={index === 0}
                   />
                   
                   {/* Discount Tag - Top Left */}
@@ -614,19 +642,37 @@ export default function Dining() {
           {/* Mobile: Explore Section */}
           <div className="mb-6 md:hidden">
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <Link to="/user/dining/explore/upto50" className="rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow cursor-pointer">
-                <img
-                  src={upto50off}
-                  alt="Up to 50% Off"
-                  className="w-full h-32 sm:h-40 object-cover"
-                />
+              <Link to="/user/dining/explore/upto50" className="rounded-xl overflow-hidden shadow-sm cursor-pointer">
+                <motion.div
+                  whileHover={{ scale: 1.05, y: -4 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-32 sm:h-40 overflow-hidden"
+                >
+                  <OptimizedImage
+                    src={upto50off}
+                    alt="Up to 50% Off"
+                    className="w-full h-full"
+                    objectFit="cover"
+                    sizes="(max-width: 640px) 50vw, 25vw"
+                    placeholder="blur"
+                  />
+                </motion.div>
               </Link>
-              <Link to="/user/dining/explore/near-rated" className="rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow cursor-pointer">
-                <img
-                  src={nearAndTopRated}
-                  alt="Near and Top Rated"
-                  className="w-full h-32 sm:h-40 object-cover"
-                />
+              <Link to="/user/dining/explore/near-rated" className="rounded-xl overflow-hidden shadow-sm cursor-pointer">
+                <motion.div
+                  whileHover={{ scale: 1.05, y: -4 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-32 sm:h-40 overflow-hidden"
+                >
+                  <OptimizedImage
+                    src={nearAndTopRated}
+                    alt="Near and Top Rated"
+                    className="w-full h-full"
+                    objectFit="cover"
+                    sizes="(max-width: 640px) 50vw, 25vw"
+                    placeholder="blur"
+                  />
+                </motion.div>
               </Link>
             </div>
           </div>
@@ -643,11 +689,20 @@ export default function Dining() {
               </div>
             </div>
             <Link to="/user/dining/coffee" className="rounded-xl overflow-hidden shadow-lg block">
-              <img
-                src={coffeeBanner}
-                alt="Coffee Banner"
-                className="w-full h-40 sm:h-48 object-cover"
-              />
+              <motion.div
+                whileHover={{ scale: 1.05, y: -4 }}
+                transition={{ duration: 0.3 }}
+                className="h-40 sm:h-48 overflow-hidden"
+              >
+                <OptimizedImage
+                  src={coffeeBanner}
+                  alt="Coffee Banner"
+                  className="w-full h-full"
+                  objectFit="cover"
+                  sizes="(max-width: 640px) 100vw, 50vw"
+                  placeholder="blur"
+                />
+              </motion.div>
             </Link>
           </div>
 
@@ -667,30 +722,57 @@ export default function Dining() {
             {/* Desktop: Side by Side Layout - 25%, 25%, 50% */}
             <div className="flex gap-4 lg:gap-6">
               {/* First Explore Card - 25% */}
-              <Link to="/user/dining/explore/upto50" className="w-[25%] rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow cursor-pointer">
-                <img
-                  src={upto50off}
-                  alt="Up to 50% Off"
-                  className="w-full h-36 lg:h-40 object-cover"
-                />
+              <Link to="/user/dining/explore/upto50" className="w-[25%] rounded-xl overflow-hidden shadow-sm cursor-pointer">
+                <motion.div
+                  whileHover={{ scale: 1.05, y: -4 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-36 lg:h-40 overflow-hidden"
+                >
+                  <OptimizedImage
+                    src={upto50off}
+                    alt="Up to 50% Off"
+                    className="w-full h-full"
+                    objectFit="cover"
+                    sizes="25vw"
+                    placeholder="blur"
+                  />
+                </motion.div>
               </Link>
               
               {/* Second Explore Card - 25% */}
-              <Link to="/user/dining/explore/near-rated" className="w-[25%] rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow cursor-pointer">
-                <img
-                  src={nearAndTopRated}
-                  alt="Near and Top Rated"
-                  className="w-full h-36 lg:h-40 object-cover"
-                />
+              <Link to="/user/dining/explore/near-rated" className="w-[25%] rounded-xl overflow-hidden shadow-sm cursor-pointer">
+                <motion.div
+                  whileHover={{ scale: 1.05, y: -4 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-36 lg:h-40 overflow-hidden"
+                >
+                  <OptimizedImage
+                    src={nearAndTopRated}
+                    alt="Near and Top Rated"
+                    className="w-full h-full"
+                    objectFit="cover"
+                    sizes="25vw"
+                    placeholder="blur"
+                  />
+                </motion.div>
               </Link>
               
               {/* Exclusive on Dining - 50% */}
-              <Link to="/user/dining/coffee" className="w-[50%] rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow cursor-pointer">
-                <img
-                  src={coffeeBanner}
-                  alt="Coffee Banner"
-                  className="w-full h-36 lg:h-40 object-cover"
-                />
+              <Link to="/user/dining/coffee" className="w-[50%] rounded-xl overflow-hidden shadow-lg cursor-pointer">
+                <motion.div
+                  whileHover={{ scale: 1.05, y: -4 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-36 lg:h-40 overflow-hidden"
+                >
+                  <OptimizedImage
+                    src={coffeeBanner}
+                    alt="Coffee Banner"
+                    className="w-full h-full"
+                    objectFit="cover"
+                    sizes="50vw"
+                    placeholder="blur"
+                  />
+                </motion.div>
               </Link>
             </div>
           </div>
@@ -760,32 +842,43 @@ export default function Dining() {
                   image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop",
                 },
               ].map((item) => (
-                <div
+                <motion.div
                   key={item.id}
-                  className="relative flex-shrink-0 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow cursor-pointer"
+                  className="relative flex-shrink-0 rounded-xl overflow-hidden shadow-sm cursor-pointer"
                   style={{ 
                     width: 'calc((100vw - 3rem) / 2.5)',
                     minWidth: '140px',
                     maxWidth: '200px'
                   }}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ duration: 0.4, delay: index * 0.05 }}
+                  whileHover={{ y: -8, scale: 1.05 }}
                 >
-                  <div className="relative h-48 sm:h-56 md:h-64">
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop"
-                      }}
-                    />
+                  <div className="relative h-48 sm:h-56 md:h-64 overflow-hidden">
+                    <motion.div
+                      className="absolute inset-0"
+                      whileHover={{ scale: 1.15 }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                    >
+                      <OptimizedImage
+                        src={item.image}
+                        alt={item.name}
+                        className="w-full h-full"
+                        objectFit="cover"
+                        sizes="(max-width: 640px) 40vw, 200px"
+                        placeholder="blur"
+                      />
+                    </motion.div>
                     {/* White Subheading Overlay */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/50 to-transparent p-3 sm:p-2">
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/50 to-transparent p-3 sm:p-2 z-10">
                       <h4 className="text-white text-md sm:text-md font-bold text-start">
                         {item.name}
                       </h4>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>
@@ -889,35 +982,124 @@ export default function Dining() {
               }
 
               return (
-                <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
-                  <Card className="overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl h-full flex flex-col w-full">
-                    {/* Image Section */}
-                    <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-2xl flex-shrink-0">
-                      <img
-                        src={restaurant.image}
-                        alt={restaurant.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        onError={(e) => {
-                          e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
-                        }}
-                      />
+                <motion.div
+                  key={restaurant.id}
+                  className="h-full"
+                  initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ 
+                    duration: 0.5, 
+                    delay: index * 0.1,
+                    type: "spring",
+                    stiffness: 100
+                  }}
+                  style={{ perspective: 1000 }}
+                >
+                  <motion.div
+                    className="h-full"
+                    whileHover="hover"
+                    initial="rest"
+                    variants={{
+                      rest: {
+                        y: 0,
+                        scale: 1,
+                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                      },
+                      hover: {
+                        y: -12,
+                        scale: 1.02,
+                        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(34, 197, 94, 0.1)",
+                        transition: {
+                          type: "spring",
+                          stiffness: 300,
+                          damping: 20,
+                          mass: 0.5
+                        }
+                      }
+                    }}
+                  >
+                    <Link to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
+                      <Card className="overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md transition-all duration-500 py-0 rounded-2xl h-full flex flex-col w-full relative">
+                        {/* Image Section */}
+                        <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-2xl flex-shrink-0">
+                          <motion.div
+                            className="absolute inset-0"
+                            variants={{
+                              rest: { scale: 1 },
+                              hover: { scale: 1.15 }
+                            }}
+                            transition={{ duration: 0.6, ease: "easeOut" }}
+                          >
+                            <OptimizedImage
+                              src={restaurant.image}
+                              alt={restaurant.name}
+                              className="w-full h-full"
+                              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                              objectFit="cover"
+                              placeholder="blur"
+                              priority={index < 3}
+                            />
+                          </motion.div>
+                          
+                          {/* Gradient Overlay on Hover */}
+                          <motion.div
+                            className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0"
+                            variants={{
+                              rest: { opacity: 0 },
+                              hover: { opacity: 1 }
+                            }}
+                            transition={{ duration: 0.4 }}
+                          />
+                          
+                          {/* Shine Effect */}
+                          <motion.div
+                            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full"
+                            variants={{
+                              rest: { x: "-100%" },
+                              hover: { 
+                                x: "200%",
+                                transition: {
+                                  duration: 0.8,
+                                  ease: "easeInOut",
+                                  delay: 0.2
+                                }
+                              }
+                            }}
+                          />
                       
                       {/* Featured Dish Badge - Top Left */}
-                      <div className="absolute top-3 left-3">
-                        <div className="bg-gray-800/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium">
+                      <motion.div 
+                        className="absolute top-3 left-3 flex items-center z-10"
+                        variants={{
+                          rest: { scale: 1, y: 0 },
+                          hover: { scale: 1.05, y: -2 }
+                        }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <div className="bg-gray-800/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium shadow-lg">
                           {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
                         </div>
-                      </div>
+                      </motion.div>
                       
                       {/* Bookmark Icon - Top Right */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-3 right-3 h-9 w-9 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-sm rounded-lg hover:bg-white dark:hover:bg-[#2a2a2a] transition-colors"
-                        onClick={handleToggleFavorite}
+                      <motion.div
+                        variants={{
+                          rest: { scale: 1, rotate: 0 },
+                          hover: { scale: 1.1, rotate: 5 }
+                        }}
+                        transition={{ duration: 0.3 }}
+                        className="absolute top-3 right-3 z-10"
                       >
-                        <Bookmark className={`h-5 w-5 ${favorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
-                      </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-sm rounded-lg hover:bg-white dark:hover:bg-[#2a2a2a] transition-colors"
+                          onClick={handleToggleFavorite}
+                        >
+                          <Bookmark className={`h-5 w-5 ${favorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
+                        </Button>
+                      </motion.div>
 
                       {/* Blue Section - Bottom 40% */}
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-transparent" style={{ height: '40%' }}>
@@ -936,38 +1118,62 @@ export default function Dining() {
                     </div>
                     
                     {/* Content Section */}
-                    <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
-                      {/* Restaurant Name & Rating */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white line-clamp-1">
-                            {restaurant.name}
-                          </h3>
+                    <motion.div
+                      variants={{
+                        rest: { y: 0 },
+                        hover: { y: -4 }
+                      }}
+                      transition={{ duration: 0.4, ease: "easeOut" }}
+                    >
+                      <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
+                        {/* Restaurant Name & Rating */}
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <motion.h3 
+                              className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white line-clamp-1"
+                              variants={{
+                                rest: {},
+                                hover: { color: "rgb(34, 197, 94)" }
+                              }}
+                              transition={{ duration: 0.3 }}
+                            >
+                              {restaurant.name}
+                            </motion.h3>
+                          </div>
+                          <motion.div 
+                            className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1"
+                            variants={{
+                              rest: { scale: 1, rotate: 0 },
+                              hover: { scale: 1.1, rotate: 5 }
+                            }}
+                            transition={{ duration: 0.3, type: "spring", stiffness: 400 }}
+                          >
+                            <span className="text-sm font-bold">{restaurant.rating}</span>
+                            <Star className="h-3 w-3 fill-white text-white" />
+                          </motion.div>
                         </div>
-                        <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1">
-                          <span className="text-sm font-bold">{restaurant.rating}</span>
-                          <Star className="h-3 w-3 fill-white text-white" />
+                        
+                        {/* Delivery Time & Distance */}
+                        <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
+                          <Clock className="h-4 w-4" strokeWidth={1.5} />
+                          <span className="font-medium">{restaurant.deliveryTime}</span>
+                          <span className="mx-1">|</span>
+                          <span className="font-medium">{restaurant.distance}</span>
                         </div>
-                      </div>
-                      
-                      {/* Delivery Time & Distance */}
-                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
-                        <Clock className="h-4 w-4" strokeWidth={1.5} />
-                        <span className="font-medium">{restaurant.deliveryTime}</span>
-                        <span className="mx-1">|</span>
-                        <span className="font-medium">{restaurant.distance}</span>
-                      </div>
-                      
-                      {/* Offer Badge */}
-                      {restaurant.offer && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <BadgePercent className="h-4 w-4 text-blue-600 dark:text-blue-400" strokeWidth={2} />
-                          <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
+                        
+                        {/* Offer Badge */}
+                        {restaurant.offer && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <BadgePercent className="h-4 w-4 text-blue-600 dark:text-blue-400" strokeWidth={2} />
+                            <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </motion.div>
+                      </Card>
+                    </Link>
+                  </motion.div>
+                </motion.div>
               )
             })}
 
@@ -998,28 +1204,33 @@ export default function Dining() {
                   }
                 `}</style>
                 <div className="flex gap-3 sm:gap-4 pb-2 bank-offers-scroll" style={{ width: 'max-content' }}>
-                  {bankOffers.map((bank) => (
-                    <div 
+                  {bankOffers.map((bank, bankIndex) => (
+                    <motion.div 
                       key={bank.id} 
                       onClick={() => setSelectedBankOffer(bank)}
-                      className="flex-shrink-0 w-[calc((100vw-3rem)/3)] sm:w-[240px] md:w-[280px] bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-2 border-gray-300 dark:border-gray-700 p-3 sm:p-4 cursor-pointer hover:shadow-md transition-shadow"
+                      className="flex-shrink-0 w-[calc((100vw-3rem)/3)] sm:w-[240px] md:w-[280px] bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-2 border-gray-300 dark:border-gray-700 p-3 sm:p-4 cursor-pointer"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: "-50px" }}
+                      transition={{ duration: 0.4, delay: bankIndex * 0.05 }}
+                      whileHover={{ y: -8, scale: 1.05, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" }}
                     >
                       <h4 className="text-xs sm:text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">{bank.cardType}</h4>
                       <div className="mb-4">
-                        <img
+                        <OptimizedImage
                           src={bank.logo}
                           alt={bank.name}
                           className="h-8 sm:h-10 object-contain"
-                          onError={(e) => {
-                            e.target.style.display = 'none'
-                          }}
+                          objectFit="contain"
+                          sizes="(max-width: 640px) 33vw, 240px"
+                          placeholder="blur"
                         />
                       </div>
                       <div className="space-y-1">
                         <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">{bank.discount}</p>
                         <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{bank.maxDiscount}</p>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               </div>
@@ -1049,18 +1260,90 @@ export default function Dining() {
               }
 
               return (
-                <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
-                  <Card className="overflow-hidden cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl h-full flex flex-col w-full">
-                    {/* Image Section */}
-                    <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-2xl flex-shrink-0">
-                      <img
-                        src={restaurant.image}
-                        alt={restaurant.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        onError={(e) => {
-                          e.target.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
-                        }}
-                      />
+                <motion.div
+                  key={restaurant.id}
+                  className="h-full"
+                  initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ 
+                    duration: 0.5, 
+                    delay: (index + 2) * 0.1,
+                    type: "spring",
+                    stiffness: 100
+                  }}
+                  style={{ perspective: 1000 }}
+                >
+                  <motion.div
+                    className="h-full"
+                    whileHover="hover"
+                    initial="rest"
+                    variants={{
+                      rest: {
+                        y: 0,
+                        scale: 1,
+                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                      },
+                      hover: {
+                        y: -12,
+                        scale: 1.02,
+                        boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(34, 197, 94, 0.1)",
+                        transition: {
+                          type: "spring",
+                          stiffness: 300,
+                          damping: 20,
+                          mass: 0.5
+                        }
+                      }
+                    }}
+                  >
+                    <Link to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
+                      <Card className="overflow-hidden cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md transition-all duration-500 py-0 rounded-2xl h-full flex flex-col w-full relative">
+                        {/* Image Section */}
+                        <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-2xl flex-shrink-0">
+                          <motion.div
+                            className="absolute inset-0"
+                            variants={{
+                              rest: { scale: 1 },
+                              hover: { scale: 1.15 }
+                            }}
+                            transition={{ duration: 0.6, ease: "easeOut" }}
+                          >
+                            <OptimizedImage
+                              src={restaurant.image}
+                              alt={restaurant.name}
+                              className="w-full h-full"
+                              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                              objectFit="cover"
+                              placeholder="blur"
+                            />
+                          </motion.div>
+                          
+                          {/* Gradient Overlay on Hover */}
+                          <motion.div
+                            className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0"
+                            variants={{
+                              rest: { opacity: 0 },
+                              hover: { opacity: 1 }
+                            }}
+                            transition={{ duration: 0.4 }}
+                          />
+                          
+                          {/* Shine Effect */}
+                          <motion.div
+                            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full"
+                            variants={{
+                              rest: { x: "-100%" },
+                              hover: { 
+                                x: "200%",
+                                transition: {
+                                  duration: 0.8,
+                                  ease: "easeInOut",
+                                  delay: 0.2
+                                }
+                              }
+                            }}
+                          />
                       
                       {/* Featured Dish Badge - Top Left */}
                       <div className="absolute top-3 left-3">
@@ -1126,8 +1409,10 @@ export default function Dining() {
                         </div>
                       )}
                     </CardContent>
-                  </Card>
-                </Link>
+                      </Card>
+                    </Link>
+                  </motion.div>
+                </motion.div>
               )
             })}
           </div>
@@ -1447,13 +1732,13 @@ export default function Dining() {
               <div className="px-4 sm:px-6 py-4 sm:py-6">
                 {/* Bank Logo and Name */}
                 <div className="flex items-center gap-3 mb-4">
-                  <img
+                  <OptimizedImage
                     src={selectedBankOffer.logo}
                     alt={selectedBankOffer.name}
                     className="h-8 sm:h-10 object-contain"
-                    onError={(e) => {
-                      e.target.style.display = 'none'
-                    }}
+                    objectFit="contain"
+                    sizes="80px"
+                    placeholder="blur"
                   />
                   <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">{selectedBankOffer.name}</span>
                 </div>

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 
 export default function Settings() {
   return (
-    <AnimatedPage className="min-h-screen bg-background p-4">
+    <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a] p-4">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <Link to="/user/profile">
@@ -18,9 +18,9 @@ export default function Settings() {
           </Link>
           <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-black dark:text-white">Settings</h1>
         </div>
-        <Card>
+        <Card className="bg-white dark:bg-[#1a1a1a] border-0 dark:border-gray-800">
           <CardHeader>
-            <CardTitle>Notifications & Preferences</CardTitle>
+            <CardTitle className="text-gray-900 dark:text-white">Notifications & Preferences</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
