@@ -265,10 +265,10 @@ export default function ProductDetail() {
 
   return (
     <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12">
 
         {/* Hero Image Section */}
-        <div className="relative w-full h-[350px] md:h-[400px] overflow-hidden">
+        <div className="relative w-full h-[350px] sm:h-[400px] md:h-[450px] lg:h-[500px] xl:h-[550px] overflow-hidden rounded-lg md:rounded-xl lg:rounded-2xl mt-4 md:mt-6 lg:mt-8">
           <img
             src={product.image}
             alt={product.name}
@@ -295,44 +295,44 @@ export default function ProductDetail() {
           </div>
 
           {/* Product Info Card Overlay */}
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-4 md:p-6">
-            <div className="flex items-start gap-4">
+          <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] rounded-t-3xl p-4 sm:p-5 md:p-6 lg:p-8">
+            <div className="flex items-start gap-4 md:gap-6 lg:gap-8">
               <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between mb-2">
-                  <h1 className="text-xl md:text-2xl font-bold text-gray-900 leading-tight break-words">
+                <div className="flex items-start justify-between mb-2 md:mb-3">
+                  <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white leading-tight break-words">
                     {product.name}
                   </h1>
                 </div>
-                <p className="text-gray-600 text-sm md:text-base mb-2 line-clamp-2">
+                <p className="text-gray-600 dark:text-gray-300 text-sm sm:text-base md:text-lg mb-2 md:mb-3 line-clamp-2 lg:line-clamp-3">
                   {product.description}
                 </p>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-1">
-                    {renderStars(averageRating, "h-4 w-4")}
-                    <span className="text-gray-900 font-semibold text-sm md:text-base">{averageRating}</span>
+                <div className="flex items-center gap-3 md:gap-4 flex-wrap">
+                  <div className="flex items-center gap-1 md:gap-2">
+                    {renderStars(averageRating, "h-4 w-4 md:h-5 md:w-5")}
+                    <span className="text-gray-900 dark:text-white font-semibold text-sm sm:text-base md:text-lg">{averageRating}</span>
                   </div>
                   <span className="text-gray-400">|</span>
-                  <span className="text-gray-600 text-sm md:text-base underline">
+                  <span className="text-gray-600 dark:text-gray-300 text-sm sm:text-base md:text-lg underline">
                     {reviews.length} {reviews.length === 1 ? 'Review' : 'Reviews'}
                   </span>
                   <span className="text-gray-400">|</span>
-                  <Badge variant="outline" className="text-xs md:text-sm">
+                  <Badge variant="outline" className="text-xs sm:text-sm md:text-base">
                     {product.category}
                   </Badge>
                 </div>
               </div>
               <div className="flex-shrink-0 text-right">
-                <div className="text-2xl md:text-3xl font-extrabold text-primary-orange">
+                <div className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-primary-orange">
                   ₹{(product.price * 83).toFixed(0)}
                 </div>
-                <p className="text-xs text-gray-500 mt-1">per serving</p>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">per serving</p>
               </div>
             </div>
           </div>
         </div>
 
 
-        <div className="px-4 py-6 space-y-6">
+        <div className="px-4 sm:px-6 md:px-8 lg:px-10 py-6 sm:py-8 md:py-10 lg:py-12 space-y-6 md:space-y-8 lg:space-y-10">
           {/* Product Info */}
           <ScrollReveal>
             <div className="space-y-4">
@@ -424,17 +424,17 @@ export default function ProductDetail() {
           {/* Restaurant Info */}
           {restaurant && (
             <ScrollReveal delay={0.1}>
-              <div className="space-y-3 pb-4 border-b">
+              <div className="space-y-3 md:space-y-4 pb-4 md:pb-6 border-b">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-bold">
+                    <h3 className="text-lg md:text-xl lg:text-2xl font-bold">
                       {restaurant.name}
                     </h3>
-                    <p className="text-sm text-muted-foreground">{restaurant.cuisine}</p>
+                    <p className="text-sm md:text-base text-muted-foreground">{restaurant.cuisine}</p>
                   </div>
-                  <Badge className="bg-primary-orange text-white">{restaurant.priceRange}</Badge>
+                  <Badge className="bg-primary-orange text-white text-sm md:text-base">{restaurant.priceRange}</Badge>
                 </div>
-                <div className="flex items-center gap-4 flex-wrap text-sm">
+                <div className="flex items-center gap-4 md:gap-6 flex-wrap text-sm md:text-base">
                   <div className="flex items-center gap-1.5">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                     <span className="font-semibold">{restaurant.rating}</span>
@@ -454,23 +454,23 @@ export default function ProductDetail() {
 
           {/* Product Details */}
           <ScrollReveal delay={0.2}>
-            <div className="space-y-4 pb-4 border-b">
-              <h2 className="text-xl font-bold">Details</h2>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="space-y-4 md:space-y-6 pb-4 md:pb-6 border-b">
+              <h2 className="text-xl md:text-2xl lg:text-3xl font-bold">Details</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 text-sm md:text-base">
                 <div>
-                  <p className="text-muted-foreground mb-1">Category</p>
+                  <p className="text-muted-foreground mb-1 md:mb-2">Category</p>
                   <p className="font-semibold">{product.category}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground mb-1">Preparation Time</p>
+                  <p className="text-muted-foreground mb-1 md:mb-2">Preparation Time</p>
                   <p className="font-semibold">{product.preparationTime}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground mb-1">Calories</p>
+                  <p className="text-muted-foreground mb-1 md:mb-2">Calories</p>
                   <p className="font-semibold">{product.calories} kcal</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground mb-1">Ingredients</p>
+                  <p className="text-muted-foreground mb-1 md:mb-2">Ingredients</p>
                   <p className="font-semibold">{product.ingredients.length} items</p>
                 </div>
               </div>

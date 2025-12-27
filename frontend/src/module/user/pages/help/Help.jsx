@@ -207,12 +207,12 @@ export default function Help() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 p-4">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 p-4 md:p-6 lg:p-8">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto space-y-4 md:space-y-5 lg:space-y-6">
         <ScrollReveal>
-          <div className="text-center space-y-4 mb-8">
-            <h1 className="text-4xl font-bold">Help Center</h1>
-            <p className="text-lg text-muted-foreground">
+          <div className="text-center space-y-3 md:space-y-4 mb-6 md:mb-8">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold">Help Center</h1>
+            <p className="text-base md:text-lg lg:text-xl text-muted-foreground">
               Find answers to common questions or contact our support team
             </p>
           </div>
@@ -221,15 +221,15 @@ export default function Help() {
         {/* Search Bar */}
         <ScrollReveal delay={0.1}>
           <Card className="shadow-lg">
-            <CardContent className="p-4">
+            <CardContent className="p-4 md:p-5 lg:p-6">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Search className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 md:h-6 md:w-6 text-muted-foreground" />
                 <Input
                   type="text"
                   placeholder="Search for help topics, questions, or keywords..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-12 text-base"
+                  className="pl-10 md:pl-12 h-12 md:h-14 text-base md:text-lg"
                 />
               </div>
             </CardContent>
@@ -238,41 +238,41 @@ export default function Help() {
 
         {/* Quick Actions */}
         <ScrollReveal delay={0.2}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
             <Link to="/user/orders">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-yellow-100 rounded-lg">
-                      <Package className="h-6 w-6 text-primary-orange" />
+                <CardContent className="p-4 md:p-5 lg:p-6">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="p-2 md:p-3 bg-yellow-100 rounded-lg">
+                      <Package className="h-5 w-5 md:h-6 md:w-6 text-primary-orange" />
                     </div>
                     <div>
-                      <h3 className="font-semibold">Track Your Order</h3>
-                      <p className="text-sm text-muted-foreground">View order status</p>
+                      <h3 className="text-sm md:text-base font-semibold">Track Your Order</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground">View order status</p>
                     </div>
                   </div>
                 </CardContent>
             </Link>
             <Link to="/user/profile">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-100 rounded-lg">
-                      <User className="h-6 w-6 text-blue-600" />
+                <CardContent className="p-4 md:p-5 lg:p-6">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="p-2 md:p-3 bg-blue-100 rounded-lg">
+                      <User className="h-5 w-5 md:h-6 md:w-6 text-blue-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold">Manage Account</h3>
-                      <p className="text-sm text-muted-foreground">Update profile & settings</p>
+                      <h3 className="text-sm md:text-base font-semibold">Manage Account</h3>
+                      <p className="text-xs md:text-sm text-muted-foreground">Update profile & settings</p>
                     </div>
                   </div>
                 </CardContent>
             </Link>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-green-100 rounded-lg">
-                    <MessageCircle className="h-6 w-6 text-green-600" />
+              <CardContent className="p-4 md:p-5 lg:p-6">
+                <div className="flex items-center gap-3 md:gap-4">
+                  <div className="p-2 md:p-3 bg-green-100 rounded-lg">
+                    <MessageCircle className="h-5 w-5 md:h-6 md:w-6 text-green-600" />
                   </div>
                   <div>
-                    <h3 className="font-semibold">Contact Support</h3>
-                    <p className="text-sm text-muted-foreground">Get help from our team</p>
+                    <h3 className="text-sm md:text-base font-semibold">Contact Support</h3>
+                    <p className="text-xs md:text-sm text-muted-foreground">Get help from our team</p>
                   </div>
                 </div>
               </CardContent>
@@ -281,8 +281,8 @@ export default function Help() {
 
         {/* Help Categories */}
         <ScrollReveal delay={0.3}>
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Browse by Category</h2>
+          <div className="space-y-4 md:space-y-5 lg:space-y-6">
+            <h2 className="text-xl md:text-2xl lg:text-3xl font-bold">Browse by Category</h2>
             {filteredCategories.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
@@ -308,26 +308,27 @@ export default function Help() {
                   <Card key={category.id} className="shadow-lg">
                     <CardHeader
                       onClick={() => toggleCategory(category.id)}
+                      className="p-4 md:p-5 lg:p-6"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className={`p-3 ${category.bgColor} rounded-lg`}>
-                            <Icon className={`h-6 w-6 ${category.color}`} />
+                        <div className="flex items-center gap-3 md:gap-4">
+                          <div className={`p-2 md:p-3 ${category.bgColor} rounded-lg`}>
+                            <Icon className={`h-5 w-5 md:h-6 md:w-6 ${category.color}`} />
                           </div>
                           <div>
-                            <CardTitle className="text-xl">{category.title}</CardTitle>
-                            <CardDescription>{category.description}</CardDescription>
+                            <CardTitle className="text-lg md:text-xl lg:text-2xl">{category.title}</CardTitle>
+                            <CardDescription className="text-sm md:text-base">{category.description}</CardDescription>
                           </div>
                         </div>
                         {isExpanded ? (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          <ChevronDown className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground flex-shrink-0" />
                         ) : (
-                          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                          <ChevronRight className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground flex-shrink-0" />
                         )}
                       </div>
                     </CardHeader>
                     {isExpanded && (
-                      <CardContent className="space-y-3 pt-0">
+                      <CardContent className="space-y-3 md:space-y-4 pt-0 p-4 md:p-5 lg:p-6">
                         {category.topics.map((topic, topicIndex) => {
                           const questionIndex = `${category.id}-${topicIndex}`
                           const isQuestionExpanded = expandedQuestion === questionIndex
@@ -367,17 +368,17 @@ export default function Help() {
         {/* Contact Support Section */}
         <ScrollReveal delay={0.4}>
           <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-2xl flex items-center gap-2">
-                <MessageCircle className="h-6 w-6 text-primary-orange" />
+            <CardHeader className="p-4 md:p-5 lg:p-6">
+              <CardTitle className="text-xl md:text-2xl lg:text-3xl flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 md:h-6 md:w-6 text-primary-orange" />
                 Still Need Help?
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-sm md:text-base">
                 Our support team is here to assist you 24/7
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <CardContent className="space-y-4 md:space-y-5 lg:space-y-6 p-4 md:p-5 lg:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
                 <div className="flex items-start gap-3 p-4 bg-white rounded-lg">
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <Phone className="h-5 w-5 text-blue-600" />

@@ -131,25 +131,28 @@ export default function Gourmet() {
   return (
     <div className="min-h-screen bg-white">
       {/* Banner Section */}
-      <div className="relative">
+      <div className="relative w-full overflow-hidden min-h-[25vh] md:min-h-[30vh]">
         {/* Back Button */}
         <button 
           onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 z-10 w-10 h-10 bg-gray-800/60 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-gray-800/80 transition-colors"
+          className="absolute top-4 left-4 md:top-6 md:left-6 z-20 w-10 h-10 md:w-12 md:h-12 bg-gray-800/60 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-gray-800/80 transition-colors"
         >
-          <ArrowLeft className="h-5 w-5 text-white" />
+          <ArrowLeft className="h-5 w-5 md:h-6 md:w-6 text-white" />
         </button>
         
         {/* Banner Image */}
-        <img 
-          src={gourmetBanner} 
-          alt="Gourmet Dining" 
-          className="w-full h-auto object-cover"
-        />
+        <div className="absolute inset-0 z-0">
+          <img 
+            src={gourmetBanner} 
+            alt="Gourmet Dining" 
+            className="w-full h-full object-cover"
+          />
+        </div>
       </div>
 
       {/* Content */}
-      <div className="px-4 py-6 space-y-4">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 py-6 md:py-8 lg:py-10 space-y-4 md:space-y-6">
+        <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
         {/* Header */}
         <div className="mb-2">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Premium Gourmet Restaurants</h1>
@@ -206,7 +209,7 @@ export default function Gourmet() {
         </p>
 
         {/* Restaurant Cards */}
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {gourmetRestaurants.map((restaurant) => {
             const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
             const isFavorite = favorites.has(restaurant.id)
@@ -228,13 +231,7 @@ export default function Gourmet() {
                         {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
                       </div>
                     </div>
-                    
-                    {/* Gourmet Badge */}
-                    <div className="absolute top-3 left-1/2 -translate-x-1/2">
-                      <div className="bg-amber-500 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide">
-                        Gourmet
-                      </div>
-                    </div>
+        
                     
                     {/* Bookmark Icon - Top Right */}
                     <Button
@@ -286,6 +283,7 @@ export default function Gourmet() {
               </Link>
             )
           })}
+        </div>
         </div>
       </div>
     </div>

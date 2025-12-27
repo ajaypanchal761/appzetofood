@@ -202,44 +202,43 @@ export default function Offers() {
   return (
     <div className="min-h-screen bg-white">
       {/* Banner Section */}
-      <div className="relative">
+      <div className="relative w-full overflow-hidden min-h-[25vh] md:min-h-[30vh]">
         {/* Back Button */}
         <button 
           onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 z-10 w-10 h-10 bg-gray-800/60 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-gray-800/80 transition-colors"
+          className="absolute top-4 left-4 md:top-6 md:left-6 z-20 w-10 h-10 md:w-12 md:h-12 bg-gray-800/60 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-gray-800/80 transition-colors"
         >
-          <ArrowLeft className="h-5 w-5 text-white" />
+          <ArrowLeft className="h-5 w-5 md:h-6 md:w-6 text-white" />
         </button>
         
         {/* Banner Image */}
-        <img 
-          src={offerBanner} 
-          alt="Great Offers" 
-          className="w-full h-auto object-cover"
-        />
+        <div className="absolute inset-0 z-0">
+          <img 
+            src={offerBanner} 
+            alt="Great Offers" 
+            className="w-full h-full object-cover"
+          />
+        </div>
       </div>
 
       {/* Content */}
-      <div className="px-4 py-6 space-y-6">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8">
+        <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
         {/* FLAT 50% OFF Section */}
         <section>
           <h2 className="text-2xl sm:text-3xl font-black text-red-500 text-center mb-4 tracking-wide">
             FLAT 50% OFF
           </h2>
           
-          {/* Restaurant Cards - Horizontal Scroll */}
+          {/* Restaurant Cards - Grid Layout */}
           <div 
-            className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4"
-            style={{
-              scrollbarWidth: "none",
-              msOverflowStyle: "none",
-            }}
+            className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5 lg:gap-6"
           >
             {offerRestaurants.map((restaurant) => (
               <Link 
                 key={restaurant.id} 
                 to={`/user/restaurants/${restaurant.name.toLowerCase().replace(/\s+/g, '-')}`}
-                className="flex-shrink-0 w-40 sm:w-44"
+                className="w-full"
               >
                 <div className="group">
                   {/* Image Container */}
@@ -283,8 +282,8 @@ export default function Offers() {
           {/* View All Button */}
           <Link to="/user/restaurants">
             <Button 
-              variant="outline" 
-              className="w-full mt-4 border-gray-200 text-gray-700 font-medium rounded-xl h-11"
+              variant="ghost" 
+              className="w-full mt-4 border-0 text-gray-700 font-medium rounded-xl h-11 hover:bg-gray-100"
             >
               View all
               <ChevronRight className="h-4 w-4 ml-1" />
@@ -298,9 +297,9 @@ export default function Offers() {
             DEALS OF THE DAY
           </h2>
           
-          {/* Deals Cards - Horizontal Scroll */}
+          {/* Deals Cards - Grid on Desktop, Horizontal Scroll on Mobile */}
           <div 
-            className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4"
+            className="flex md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5 lg:gap-6 overflow-x-auto md:overflow-x-visible scrollbar-hide pb-2 md:pb-0 -mx-4 md:mx-0 px-4 md:px-0"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
@@ -310,9 +309,9 @@ export default function Offers() {
               <Link 
                 key={index} 
                 to="/user/restaurants"
-                className="flex-shrink-0"
+                className="flex-shrink-0 md:w-full"
               >
-                <div className="w-64 h-40 sm:w-72 sm:h-44 bg-gray-50 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-64 h-40 sm:w-72 sm:h-44 md:w-full md:h-48 lg:h-52 bg-gray-50 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                   <img 
                     src={deal} 
                     alt={`Deal ${index + 1}`}
@@ -330,7 +329,7 @@ export default function Offers() {
             MORE OFFERS
           </h2>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
             {moreOffers.map((offer) => (
               <Link 
                 key={offer.id}
@@ -407,15 +406,15 @@ export default function Offers() {
           {/* Featured Label */}
           <p className="text-gray-500 text-sm mb-3">Featured</p>
 
-          {/* Restaurant Cards - Same as Home Page */}
-          <div className="space-y-4">
+          {/* Restaurant Cards - 1 Column on Mobile, 3 Columns on Desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
             {bestOfferRestaurants.map((restaurant) => {
               const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
               const isFavorite = favorites.has(restaurant.id)
 
               return (
-                <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`}>
-                  <Card className="overflow-hidden cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl mb-4">
+                <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`} className="w-full">
+                  <Card className="overflow-hidden cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl w-full">
                     {/* Image Section */}
                     <div className="relative h-44 sm:h-52 md:h-56 w-full overflow-hidden rounded-t-2xl">
                       <img
@@ -483,6 +482,7 @@ export default function Offers() {
             })}
           </div>
         </section>
+        </div>
       </div>
     </div>
   )

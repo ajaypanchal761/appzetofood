@@ -82,8 +82,8 @@ export default function Orders() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 p-3 sm:p-4">
-      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 dark:from-[#0a0a0a] dark:via-[#1a1a1a] dark:to-[#0a0a0a] p-3 sm:p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 md:space-y-8">
         <ScrollReveal>
           <div className="flex items-center gap-3 sm:gap-4">
             <Link to="/user">
@@ -91,67 +91,67 @@ export default function Orders() {
                   <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
             </Link>
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold">My Orders</h1>
+            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold dark:text-white">My Orders</h1>
           </div>
         </ScrollReveal>
 
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {orders.map((order, index) => (
             <ScrollReveal key={order.id} delay={index * 0.1}>
-              <Card>
+              <Card className="dark:bg-[#1a1a1a] dark:border-gray-800 h-full flex flex-col">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <Package className="h-5 w-5 text-green-600" />
-                      <CardTitle>Order {order.id}</CardTitle>
+                      <Package className="h-5 w-5 md:h-6 md:w-6 text-green-600 dark:text-green-400" />
+                      <CardTitle className="text-base md:text-lg dark:text-white">Order {order.id}</CardTitle>
                     </div>
-                    <Badge className={`${getStatusColor(order.status)} text-white`}>
+                    <Badge className={`${getStatusColor(order.status)} text-white text-xs md:text-sm`}>
                       {getStatusLabel(order.status)}
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Clock className="h-4 w-4" />
+                <CardContent className="space-y-4 md:space-y-6 flex-1 flex flex-col">
+                  <div className="grid grid-cols-1 gap-3 md:gap-4">
+                    <div className="flex items-center gap-2 text-sm md:text-base text-muted-foreground">
+                      <Clock className="h-4 w-4 md:h-5 md:w-5" />
                       <span>Placed on {formatDate(order.createdAt)}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
+                    <div className="flex items-center gap-2 text-sm md:text-base text-muted-foreground">
+                      <MapPin className="h-4 w-4 md:h-5 md:w-5" />
                       <span>{order.address?.city}, {order.address?.state}</span>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold">Items ({order.items.length}):</p>
-                    <div className="space-y-1">
+                  <div className="space-y-2 md:space-y-3">
+                    <p className="text-sm md:text-base font-semibold dark:text-gray-200">Items ({order.items.length}):</p>
+                    <div className="space-y-1 md:space-y-2">
                       {order.items.slice(0, 3).map((item) => (
-                        <div key={item.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div key={item.id} className="flex items-center gap-2 text-sm md:text-base text-muted-foreground">
                           <span>• {item.name} × {item.quantity}</span>
                         </div>
                       ))}
                       {order.items.length > 3 && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm md:text-base text-muted-foreground">
                           + {order.items.length - 3} more items
                         </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center pt-4 border-t">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 md:gap-4 pt-4 md:pt-6 border-t dark:border-gray-700 mt-auto">
                     <div>
-                      <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="text-2xl font-bold text-green-600">${order.total.toFixed(2)}</p>
+                      <p className="text-sm md:text-base text-muted-foreground">Total</p>
+                      <p className="text-xl md:text-2xl lg:text-3xl font-bold text-green-600 dark:text-green-400">${order.total.toFixed(2)}</p>
                     </div>
-                    <div className="flex gap-2">
-                      <Link to={`/user/orders/${order.id}`}>
-                        <Button variant="outline" size="sm" className="flex items-center gap-1">
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <Link to={`/user/orders/${order.id}`} className="flex-1 sm:flex-initial">
+                        <Button variant="outline" size="sm" className="w-full sm:w-auto flex items-center gap-1 text-xs md:text-sm">
                           Track Order
                           <ArrowRight className="h-4 w-4" />
                         </Button>
                       </Link>
-                      <Link to={`/user/orders/${order.id}/invoice`}>
-                        <Button variant="outline" size="sm">
+                      <Link to={`/user/orders/${order.id}/invoice`} className="flex-1 sm:flex-initial">
+                        <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs md:text-sm">
                           Invoice
                         </Button>
                       </Link>

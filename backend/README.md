@@ -163,7 +163,7 @@ curl -X GET http://localhost:5000/api/auth/me \
    - User provides phone number and OTP
    - System verifies OTP
    - If valid, creates/updates user and generates tokens
-   - Returns access token (15 min expiry) and sets refresh token in httpOnly cookie (7 days)
+   - Returns access token (24 hours expiry) and sets refresh token in httpOnly cookie (7 days)
 
 3. **Refresh Token:**
    - Client sends refresh token from cookie

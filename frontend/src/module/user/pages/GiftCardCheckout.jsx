@@ -48,6 +48,7 @@ export default function GiftCardCheckout() {
 
       {/* Content */}
       <div className="px-4 py-6 space-y-5">
+        <div className="max-w-2xl mx-auto space-y-5">
         {/* Gift Card Preview */}
         <Card className="border-0 py-0 shadow-md overflow-hidden">
           <CardContent className="p-0">
@@ -182,6 +183,7 @@ export default function GiftCardCheckout() {
           <span>Add Payment Method</span>
           <ChevronRight className="h-5 w-5" />
         </Button>
+        </div>
       </div>
     </div>
   )

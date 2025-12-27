@@ -429,7 +429,7 @@ export default function OrderTracking() {
   const currentStatus = statusConfig[orderStatus]
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a]">
       {/* Order Confirmed Modal */}
       <AnimatePresence>
         {showConfirmation && (
@@ -437,7 +437,7 @@ export default function OrderTracking() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center"
+            className="fixed inset-0 z-50 bg-white dark:bg-[#1a1a1a] flex flex-col items-center justify-center"
           >
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
@@ -542,7 +542,7 @@ export default function OrderTracking() {
       <DeliveryMap isVisible={!showConfirmation} />
 
       {/* Scrollable Content */}
-      <div className="px-4 py-4 space-y-4 pb-24">
+      <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 space-y-4 md:space-y-6 pb-24 md:pb-32">
         {/* Payment Pending */}
         <motion.div 
           className="bg-white rounded-xl p-4 shadow-sm"

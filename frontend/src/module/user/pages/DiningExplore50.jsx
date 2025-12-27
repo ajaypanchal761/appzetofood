@@ -193,14 +193,13 @@ export default function DiningExplore50() {
   return (
     <AnimatedPage className="bg-white" style={{ minHeight: '100vh', paddingBottom: '80px', overflow: 'visible' }}>
       {/* Banner Section with Back Button and Location */}
-      <div className="relative w-full overflow-hidden">
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16">
         {/* Background with upto50off banner */}
-        <div className="relative w-full z-0">
+        <div className="absolute inset-0 z-0">
           <img
             src={upto50off}
             alt="Up to 50% Off"
-            className="w-full h-auto object-contain"
-            style={{ display: 'block' }}
+            className="w-full h-full object-cover"
           />
         </div>
 
@@ -236,39 +235,40 @@ export default function DiningExplore50() {
 
       {/* Content */}
       <div className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
-        {/* Search Bar */}
-        <div className="mb-6">
-          <div className="relative">
-            <Input
-              value={heroSearch}
-              onChange={(e) => setHeroSearch(e.target.value)}
-              onFocus={handleSearchFocus}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && heroSearch.trim()) {
-                  navigate(`/user/search?q=${encodeURIComponent(heroSearch.trim())}`)
-                  closeSearch()
-                  setHeroSearch("")
-                }
-              }}
-              placeholder="Search for restaurants, cuisines, dishes..."
-              className="w-full h-12 sm:h-14 pl-12 sm:pl-14 pr-12 sm:pr-14 rounded-xl border-2 border-gray-200 focus:border-green-500 bg-white shadow-sm text-base sm:text-lg"
-            />
-            <Search className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 h-5 w-5 sm:h-6 sm:w-6 text-gray-400" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-9 sm:w-9 rounded-full hover:bg-gray-100"
-              onClick={() => {
-                // Voice search functionality
-              }}
-            >
-              <Mic className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500" />
-            </Button>
+        <div className="max-w-7xl mx-auto">
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative max-w-3xl mx-auto">
+              <Input
+                value={heroSearch}
+                onChange={(e) => setHeroSearch(e.target.value)}
+                onFocus={handleSearchFocus}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && heroSearch.trim()) {
+                    navigate(`/user/search?q=${encodeURIComponent(heroSearch.trim())}`)
+                    closeSearch()
+                    setHeroSearch("")
+                  }
+                }}
+                placeholder="Search for restaurants, cuisines, dishes..."
+                className="w-full h-12 sm:h-14 md:h-16 pl-12 sm:pl-14 pr-12 sm:pr-14 rounded-xl border-2 border-gray-200 focus:border-green-500 bg-white shadow-sm text-base sm:text-lg md:text-xl"
+              />
+              <Search className="absolute left-4 sm:left-5 md:left-6 top-1/2 -translate-y-1/2 h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-gray-400" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 sm:right-3 md:right-4 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 rounded-full hover:bg-gray-100"
+                onClick={() => {
+                  // Voice search functionality
+                }}
+              >
+                <Mic className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-gray-500" />
+              </Button>
+            </div>
           </div>
-        </div>
 
-        {/* Popular Restaurants Around You Section */}
-        <div className="mb-6 mt-8 sm:mt-12">
+          {/* Popular Restaurants Around You Section */}
+          <div className="mb-6 mt-8 sm:mt-12">
           <div className="mb-6">
             <div className="flex items-center justify-center mb-2">
               <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide text-center">
@@ -328,7 +328,7 @@ export default function DiningExplore50() {
           </section>
 
           {/* Restaurant Cards */}
-          <div className="grid grid-cols-1 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6">
             {filteredRestaurants.map((restaurant, index) => {
               const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
               const favorite = isFavorite(restaurantSlug)
@@ -435,6 +435,7 @@ export default function DiningExplore50() {
             })}
           </div>
         </div>
+        </div>
       </div>
 
       {/* Filter Modal - Same as DiningRestaurants page */}
@@ -447,7 +448,7 @@ export default function DiningExplore50() {
           />
           
           {/* Modal Content */}
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
+          <div className="absolute bottom-0 left-0 right-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 bg-white rounded-t-3xl md:rounded-3xl max-h-[85vh] md:max-h-[90vh] md:max-w-lg w-full md:w-auto flex flex-col animate-[slideUp_0.3s_ease-out]">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-4 border-b">
               <h2 className="text-lg font-bold text-gray-900">Filters and sorting</h2>

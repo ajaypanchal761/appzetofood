@@ -14,7 +14,7 @@ import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
 // Payment method icons as SVG components
 const GooglePayIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center bg-white">
+  <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-800 flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
     <svg viewBox="0 0 24 24" className="w-6 h-6">
       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
       <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -33,7 +33,7 @@ const PhonePeIcon = () => (
 )
 
 const UPIIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center bg-white">
+  <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-800 flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
     <span className="text-xs font-bold text-gray-600">UPI</span>
   </div>
 )
@@ -51,13 +51,13 @@ const MobikwikIcon = () => (
 )
 
 const PluxeeIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center bg-white">
-    <span className="text-xs font-semibold text-gray-800">pluxee</span>
+  <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-800 flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
+    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">pluxee</span>
   </div>
 )
 
 const CardIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center bg-white">
+  <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-800 flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
     <CreditCard className="w-5 h-5 text-gray-600" />
   </div>
 )
@@ -454,414 +454,464 @@ export default function Cart() {
     <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a]">
       {/* Header - Sticky at top */}
       <div className="bg-white dark:bg-[#1a1a1a] border-b dark:border-gray-800 sticky top-0 z-20 flex-shrink-0">
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Link to="/user">
-              <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div className="min-w-0">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Apna Sweets</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
-                10-15 mins to <span className="font-semibold">Home</span>
-                <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs">{defaultAddress?.city || "Select address"}</span>
-              </p>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <Link to="/user">
+                <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0">
+                  <ArrowLeft className="h-4 w-4 md:h-5 md:w-5" />
+                </Button>
+              </Link>
+              <div className="min-w-0">
+                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Apna Sweets</p>
+                <p className="text-sm md:text-base font-medium text-gray-800 dark:text-white truncate">
+                  10-15 mins to <span className="font-semibold">Home</span>
+                  <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs md:text-sm">{defaultAddress?.city || "Select address"}</span>
+                </p>
+              </div>
             </div>
+            <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0">
+              <Share2 className="h-4 w-4 md:h-5 md:w-5" />
+            </Button>
           </div>
-          <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
-            <Share2 className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
       {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-24">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-32">
         {/* Savings Banner */}
         {savings > 0 && (
-          <div className="bg-blue-100 px-4 py-2 flex-shrink-0">
-            <p className="text-sm font-medium text-blue-800">
-              🎉 You saved ₹{savings} on this order
-            </p>
-          </div>
-        )}
-
-        <div className="space-y-2 pb-4">
-        {/* Gold Offer Card */}
-        <div className="bg-white px-4 py-3">
-          <div className="flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-3">
-            <div className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-amber-600" />
-              <div>
-                <p className="text-sm font-semibold text-gray-800">Get Gold for 3 months at ₹1</p>
-                <p className="text-xs text-gray-500">Enjoy FREE delivery above ₹99 and extra offers with Gold</p>
-                <button className="text-xs text-amber-600 font-medium mt-0.5">Learn more →</button>
-              </div>
-            </div>
-            <div className="text-right">
-              <Button size="sm" variant="outline" className="h-7 text-xs border-red-600 text-red-600 hover:bg-red-50">
-                ADD
-              </Button>
-              <p className="text-xs text-center text-gray-500 mt-0.5">₹1</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Cart Items */}
-        <div className="bg-white px-4 py-3">
-          <div className="space-y-3">
-            {cart.map((item) => (
-              <div key={item.id} className="flex items-start gap-3">
-                {/* Veg/Non-veg indicator */}
-                <div className={`w-4 h-4 border-2 ${item.isVeg !== false ? 'border-green-600' : 'border-red-600'} flex items-center justify-center mt-1 flex-shrink-0`}>
-                  <div className={`w-2 h-2 rounded-full ${item.isVeg !== false ? 'bg-green-600' : 'bg-red-600'}`} />
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 leading-tight">{item.name}</p>
-                  <button className="text-xs text-blue-600 font-medium flex items-center gap-0.5 mt-0.5">
-                    Edit <ChevronRight className="h-3 w-3" />
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {/* Quantity controls */}
-                  <div className="flex items-center border border-red-600 rounded">
-                    <button 
-                      className="px-2 py-1 text-red-600 hover:bg-red-50"
-                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                    >
-                      <Minus className="h-3 w-3" />
-                    </button>
-                    <span className="px-2 text-sm font-semibold text-red-600 min-w-[20px] text-center">
-                      {item.quantity}
-                    </span>
-                    <button 
-                      className="px-2 py-1 text-red-600 hover:bg-red-50"
-                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </button>
-                  </div>
-                  
-                  <p className="text-sm font-medium text-gray-800 min-w-[50px] text-right">
-                    ₹{(item.price * item.quantity * 83).toFixed(0)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Add more items */}
-          {cart.length > 0 && cart[0]?.restaurant ? (
-            <Link 
-              to={`/user/restaurants/${cart[0].restaurant.toLowerCase().replace(/\s+/g, "-")}`} 
-              className="flex items-center gap-2 mt-4 text-red-600"
-            >
-              <Plus className="h-4 w-4" />
-              <span className="text-sm font-medium">Add more items</span>
-            </Link>
-          ) : (
-            <button 
-              onClick={() => navigate(-1)}
-              className="flex items-center gap-2 mt-4 text-red-600"
-            >
-              <Plus className="h-4 w-4" />
-              <span className="text-sm font-medium">Add more items</span>
-            </button>
-          )}
-        </div>
-
-        {/* Note & Cutlery */}
-        <div className="bg-white px-4 py-3 flex gap-2">
-          <button 
-            onClick={() => setShowNoteInput(!showNoteInput)}
-            className="flex-1 flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-          >
-            <FileText className="h-4 w-4" />
-            <span className="truncate">{note || "Add a note for the restaurant"}</span>
-          </button>
-          <button 
-            onClick={() => setSendCutlery(!sendCutlery)}
-            className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm ${sendCutlery ? 'border-gray-200 text-gray-600' : 'border-red-600 text-red-600 bg-red-50'}`}
-          >
-            <Utensils className="h-4 w-4" />
-            <span className="whitespace-nowrap">{sendCutlery ? "Don't send cutlery" : "No cutlery"}</span>
-          </button>
-        </div>
-
-        {/* Note Input */}
-        {showNoteInput && (
-          <div className="bg-white px-4 py-3">
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Add cooking instructions, allergies, etc."
-              className="w-full border border-gray-200 rounded-lg p-3 text-sm resize-none h-20 focus:outline-none focus:border-red-600"
-            />
-          </div>
-        )}
-
-        {/* Complete your meal section */}
-        <div className="bg-white px-4 py-3">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center">
-              <span className="text-xs">🍽️</span>
-            </div>
-            <span className="text-sm font-semibold text-gray-800">Complete your meal with</span>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
-            {suggestedItems.map((item) => (
-              <div key={item.id} className="flex-shrink-0 w-28">
-                <div className="relative bg-gray-100 rounded-lg overflow-hidden">
-                  <img 
-                    src={item.image} 
-                    alt={item.name}
-                    className="w-full h-28 object-cover rounded-lg"
-                    onError={(e) => {
-                      e.target.onerror = null
-                      e.target.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"
-                    }}
-                  />
-                  <div className="absolute top-1 left-1">
-                    <div className={`w-3.5 h-3.5 bg-white border ${item.isVeg ? 'border-green-600' : 'border-red-600'} flex items-center justify-center rounded`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => addToCart({ ...item, isVeg: item.isVeg })}
-                    className="absolute bottom-1 right-1 w-6 h-6 bg-white border border-red-600 rounded flex items-center justify-center shadow-sm hover:bg-red-50 transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5 text-red-600" />
-                  </button>
-                </div>
-                <p className="text-xs font-medium text-gray-800 mt-1.5 line-clamp-2 leading-tight">{item.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{item.description}</p>
-                <p className="text-xs text-gray-800 font-semibold mt-0.5">₹{item.price}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Coupon Section */}
-        <div className="bg-white px-4 py-3">
-          {appliedCoupon ? (
-            <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-3">
-              <div className="flex items-center gap-2">
-                <Tag className="h-4 w-4 text-red-600" />
-                <div>
-                  <p className="text-sm font-medium text-red-700">'{appliedCoupon.code}' applied</p>
-                  <p className="text-xs text-red-600">You saved ₹{discount}</p>
-                </div>
-              </div>
-              <button onClick={handleRemoveCoupon} className="text-gray-500 text-xs font-medium">Remove</button>
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Percent className="h-4 w-4 text-gray-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">Save ₹40 with 'GETOFF40ON249'</p>
-                    <button onClick={() => setShowCoupons(!showCoupons)} className="text-xs text-blue-600 font-medium">
-                      View all coupons →
-                    </button>
-                  </div>
-                </div>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="h-7 text-xs border-red-600 text-red-600 hover:bg-red-50"
-                  onClick={() => handleApplyCoupon(availableCoupons[0])}
-                >
-                  APPLY
-                </Button>
-              </div>
-            </div>
-          )}
-          
-          {/* Coupons List */}
-          {showCoupons && !appliedCoupon && (
-            <div className="mt-3 space-y-2 border-t pt-3">
-              {availableCoupons.map((coupon) => (
-                <div key={coupon.code} className="flex items-center justify-between py-2 border-b border-dashed last:border-0">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{coupon.code}</p>
-                    <p className="text-xs text-gray-500">{coupon.description}</p>
-                  </div>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    className="h-6 text-xs border-red-600 text-red-600 hover:bg-red-50"
-                    onClick={() => handleApplyCoupon(coupon)}
-                    disabled={subtotal < coupon.minOrder}
-                  >
-                    {subtotal < coupon.minOrder ? `Min ₹${coupon.minOrder}` : 'APPLY'}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Delivery Time */}
-        <div className="bg-white px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Clock className="h-4 w-4 text-gray-500" />
-            <div className="flex-1">
-              <p className="text-sm text-gray-800">Delivery in <span className="font-semibold">10-15 mins</span></p>
-              <button className="text-xs text-gray-500">Want this later? <span className="text-blue-600 font-medium">Schedule it</span></button>
-            </div>
-          </div>
-        </div>
-
-        {/* Delivery Fleet Type */}
-        <div className="bg-white px-4 py-3">
-          <button 
-            onClick={() => setShowFleetOptions(!showFleetOptions)}
-            className="flex items-center justify-between w-full"
-          >
-            <div className="flex items-center gap-3">
-              <Truck className="h-4 w-4 text-gray-500" />
-              <span className="text-sm text-gray-800">Choose delivery fleet type</span>
-            </div>
-            {showFleetOptions ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-          </button>
-          
-          {showFleetOptions && (
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <button
-                onClick={() => setDeliveryFleet("standard")}
-                className={`p-3 rounded-lg border-2 text-left ${deliveryFleet === "standard" ? "border-red-600 bg-red-50" : "border-gray-200"}`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-gray-800">Standard Fleet</span>
-                  <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                    <Truck className="h-4 w-4 text-orange-600" />
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">Our standard food delivery experience</p>
-              </button>
-              <button
-                onClick={() => setDeliveryFleet("veg")}
-                className={`p-3 rounded-lg border-2 text-left ${deliveryFleet === "veg" ? "border-red-600 bg-red-50" : "border-gray-200"}`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-gray-800">Special Veg-only Fleet</span>
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <Leaf className="h-4 w-4 text-green-600" />
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500">Fleet delivering only from Pure Veg restaurants</p>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Delivery Address */}
-        <div className="bg-white px-4 py-3">
-          <Link to="/user/profile/addresses" className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <MapPin className="h-4 w-4 text-gray-500" />
-              <div>
-                <p className="text-sm text-gray-800">
-                  Delivery at <span className="font-semibold">{defaultAddress?.isDefault ? "Home" : "Address"}</span>
-                </p>
-                <p className="text-xs text-gray-500 line-clamp-1">
-                  {defaultAddress ? `${defaultAddress.street}, ${defaultAddress.city}` : "Add delivery address"}
-                </p>
-                <button className="text-xs text-gray-500 border-b border-dashed border-gray-400">Add instructions for delivery partner</button>
-              </div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-gray-400" />
-          </Link>
-        </div>
-
-        {/* Contact */}
-        <div className="bg-white px-4 py-3">
-          <Link to="/user/profile" className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Phone className="h-4 w-4 text-gray-500" />
-              <p className="text-sm text-gray-800">
-                {userProfile?.name || "Your Name"}, <span className="font-medium">{userProfile?.phone || "+91-XXXXXXXXXX"}</span>
+          <div className="bg-blue-100 dark:bg-blue-900/20 px-4 md:px-6 py-2 md:py-3 flex-shrink-0">
+            <div className="max-w-7xl mx-auto">
+              <p className="text-sm md:text-base font-medium text-blue-800 dark:text-blue-200">
+                🎉 You saved ₹{savings} on this order
               </p>
             </div>
-            <ChevronRight className="h-4 w-4 text-gray-400" />
-          </Link>
-        </div>
+          </div>
+        )}
 
-        {/* Bill Details */}
-        <div className="bg-white px-4 py-3">
-          <button 
-            onClick={() => setShowBillDetails(!showBillDetails)}
-            className="flex items-center justify-between w-full"
-          >
-            <div className="flex items-center gap-3">
-              <FileText className="h-4 w-4 text-gray-500" />
-              <div className="text-left">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-800">Total Bill</span>
-                  <span className="text-sm text-gray-400 line-through">₹{totalBeforeDiscount.toFixed(0)}</span>
-                  <span className="text-sm font-semibold text-gray-800">₹{total.toFixed(0)}</span>
-                  {savings > 0 && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">You saved ₹{savings}</span>
-                  )}
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 px-4 md:px-6 py-4 md:py-6">
+            {/* Left Column - Cart Items and Details */}
+            <div className="lg:col-span-2 space-y-2 md:space-y-4">
+              {/* Gold Offer Card */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                <div className="flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-lg md:rounded-xl p-3 md:p-4">
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <Crown className="h-5 w-5 md:h-6 md:w-6 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Get Gold for 3 months at ₹1</p>
+                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Enjoy FREE delivery above ₹99 and extra offers with Gold</p>
+                      <button className="text-xs md:text-sm text-amber-600 dark:text-amber-400 font-medium mt-0.5">Learn more →</button>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <Button size="sm" variant="outline" className="h-7 md:h-8 text-xs md:text-sm border-red-600 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                      ADD
+                    </Button>
+                    <p className="text-xs md:text-sm text-center text-gray-500 dark:text-gray-400 mt-0.5">₹1</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-500">Incl. taxes and charges</p>
               </div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-gray-400" />
-          </button>
 
-          {showBillDetails && (
-            <div className="mt-3 pt-3 border-t border-dashed space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Item Total</span>
-                <span className="text-gray-800">₹{subtotal.toFixed(0)}</span>
+              {/* Cart Items */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                <div className="space-y-3 md:space-y-4">
+                  {cart.map((item) => (
+                    <div key={item.id} className="flex items-start gap-3 md:gap-4">
+                      {/* Veg/Non-veg indicator */}
+                      <div className={`w-4 h-4 md:w-5 md:h-5 border-2 ${item.isVeg !== false ? 'border-green-600' : 'border-red-600'} flex items-center justify-center mt-1 flex-shrink-0`}>
+                        <div className={`w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${item.isVeg !== false ? 'bg-green-600' : 'bg-red-600'}`} />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200 leading-tight">{item.name}</p>
+                        <button className="text-xs md:text-sm text-blue-600 dark:text-blue-400 font-medium flex items-center gap-0.5 mt-0.5">
+                          Edit <ChevronRight className="h-3 w-3 md:h-4 md:w-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3 md:gap-4">
+                        {/* Quantity controls */}
+                        <div className="flex items-center border border-red-600 dark:border-red-500 rounded">
+                          <button 
+                            className="px-2 md:px-3 py-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          >
+                            <Minus className="h-3 w-3 md:h-4 md:w-4" />
+                          </button>
+                          <span className="px-2 md:px-3 text-sm md:text-base font-semibold text-red-600 dark:text-red-400 min-w-[20px] md:min-w-[24px] text-center">
+                            {item.quantity}
+                          </span>
+                          <button 
+                            className="px-2 md:px-3 py-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          >
+                            <Plus className="h-3 w-3 md:h-4 md:w-4" />
+                          </button>
+                        </div>
+                        
+                        <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200 min-w-[50px] md:min-w-[70px] text-right">
+                          ₹{(item.price * item.quantity * 83).toFixed(0)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add more items */}
+                {cart.length > 0 && cart[0]?.restaurant ? (
+                  <Link 
+                    to={`/user/restaurants/${cart[0].restaurant.toLowerCase().replace(/\s+/g, "-")}`} 
+                    className="flex items-center gap-2 mt-4 md:mt-6 text-red-600 dark:text-red-400"
+                  >
+                    <Plus className="h-4 w-4 md:h-5 md:w-5" />
+                    <span className="text-sm md:text-base font-medium">Add more items</span>
+                  </Link>
+                ) : (
+                  <button 
+                    onClick={() => navigate(-1)}
+                    className="flex items-center gap-2 mt-4 md:mt-6 text-red-600 dark:text-red-400"
+                  >
+                    <Plus className="h-4 w-4 md:h-5 md:w-5" />
+                    <span className="text-sm md:text-base font-medium">Add more items</span>
+                  </button>
+                )}
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Delivery Fee</span>
-                <span className={deliveryFee === 0 ? "text-red-600" : "text-gray-800"}>
-                  {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
-                </span>
+
+              {/* Note & Cutlery */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl flex flex-col sm:flex-row gap-2 md:gap-3">
+                <button 
+                  onClick={() => setShowNoteInput(!showNoteInput)}
+                  className="flex-1 flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 border border-gray-200 dark:border-gray-700 rounded-lg md:rounded-xl text-sm md:text-base text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <FileText className="h-4 w-4 md:h-5 md:w-5" />
+                  <span className="truncate">{note || "Add a note for the restaurant"}</span>
+                </button>
+                <button 
+                  onClick={() => setSendCutlery(!sendCutlery)}
+                  className={`flex items-center gap-2 px-3 md:px-4 py-2 md:py-3 border rounded-lg md:rounded-xl text-sm md:text-base ${sendCutlery ? 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300' : 'border-red-600 dark:border-red-500 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'}`}
+                >
+                  <Utensils className="h-4 w-4 md:h-5 md:w-5" />
+                  <span className="whitespace-nowrap">{sendCutlery ? "Don't send cutlery" : "No cutlery"}</span>
+                </button>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Platform Fee</span>
-                <span className="text-gray-800">₹{platformFee}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">GST and Restaurant Charges</span>
-                <span className="text-gray-800">₹{gstCharges}</span>
-              </div>
-              {discount > 0 && (
-                <div className="flex justify-between text-sm text-red-600">
-                  <span>Coupon Discount</span>
-                  <span>-₹{discount}</span>
+
+              {/* Note Input */}
+              {showNoteInput && (
+                <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                  <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Add cooking instructions, allergies, etc."
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-lg md:rounded-xl p-3 md:p-4 text-sm md:text-base resize-none h-20 md:h-24 focus:outline-none focus:border-red-600 dark:focus:border-red-500 bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100"
+                  />
                 </div>
               )}
-              <div className="flex justify-between text-sm font-semibold pt-2 border-t">
-                <span>To Pay</span>
-                <span>₹{total.toFixed(0)}</span>
+
+              {/* Complete your meal section */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
+                  <div className="w-6 h-6 md:w-8 md:h-8 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center">
+                    <span className="text-xs md:text-base">🍽️</span>
+                  </div>
+                  <span className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Complete your meal with</span>
+                </div>
+                <div className="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 md:-mx-6 px-4 md:px-6 scrollbar-hide">
+                  {suggestedItems.map((item) => (
+                    <div key={item.id} className="flex-shrink-0 w-28 md:w-36">
+                      <div className="relative bg-gray-100 dark:bg-gray-800 rounded-lg md:rounded-xl overflow-hidden">
+                        <img 
+                          src={item.image} 
+                          alt={item.name}
+                          className="w-full h-28 md:h-36 object-cover rounded-lg md:rounded-xl"
+                          onError={(e) => {
+                            e.target.onerror = null
+                            e.target.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"
+                          }}
+                        />
+                        <div className="absolute top-1 md:top-2 left-1 md:left-2">
+                          <div className={`w-3.5 h-3.5 md:w-4 md:h-4 bg-white border ${item.isVeg ? 'border-green-600' : 'border-red-600'} flex items-center justify-center rounded`}>
+                            <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => addToCart({ ...item, isVeg: item.isVeg })}
+                          className="absolute bottom-1 md:bottom-2 right-1 md:right-2 w-6 h-6 md:w-7 md:h-7 bg-white border border-red-600 rounded flex items-center justify-center shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        >
+                          <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 text-red-600" />
+                        </button>
+                      </div>
+                      <p className="text-xs md:text-sm font-medium text-gray-800 dark:text-gray-200 mt-1.5 md:mt-2 line-clamp-2 leading-tight">{item.name}</p>
+                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">{item.description}</p>
+                      <p className="text-xs md:text-sm text-gray-800 dark:text-gray-200 font-semibold mt-0.5">₹{item.price}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Coupon Section */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg md:rounded-xl p-3 md:p-4">
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <Tag className="h-4 w-4 md:h-5 md:w-5 text-red-600 dark:text-red-400" />
+                      <div>
+                        <p className="text-sm md:text-base font-medium text-red-700 dark:text-red-300">'{appliedCoupon.code}' applied</p>
+                        <p className="text-xs md:text-sm text-red-600 dark:text-red-400">You saved ₹{discount}</p>
+                      </div>
+                    </div>
+                    <button onClick={handleRemoveCoupon} className="text-gray-500 dark:text-gray-400 text-xs md:text-sm font-medium">Remove</button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <Percent className="h-4 w-4 md:h-5 md:w-5 text-gray-600 dark:text-gray-400" />
+                        <div>
+                          <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200">Save ₹40 with 'GETOFF40ON249'</p>
+                          <button onClick={() => setShowCoupons(!showCoupons)} className="text-xs md:text-sm text-blue-600 dark:text-blue-400 font-medium">
+                            View all coupons →
+                          </button>
+                        </div>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="h-7 md:h-8 text-xs md:text-sm border-red-600 dark:border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        onClick={() => handleApplyCoupon(availableCoupons[0])}
+                      >
+                        APPLY
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Coupons List */}
+                {showCoupons && !appliedCoupon && (
+                  <div className="mt-3 md:mt-4 space-y-2 md:space-y-3 border-t dark:border-gray-700 pt-3 md:pt-4">
+                    {availableCoupons.map((coupon) => (
+                      <div key={coupon.code} className="flex items-center justify-between py-2 md:py-3 border-b border-dashed dark:border-gray-700 last:border-0">
+                        <div>
+                          <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200">{coupon.code}</p>
+                          <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">{coupon.description}</p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="h-6 md:h-7 text-xs md:text-sm border-red-600 dark:border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => handleApplyCoupon(coupon)}
+                          disabled={subtotal < coupon.minOrder}
+                        >
+                          {subtotal < coupon.minOrder ? `Min ₹${coupon.minOrder}` : 'APPLY'}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Delivery Time */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                <div className="flex items-center gap-3 md:gap-4">
+                  <Clock className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
+                  <div className="flex-1">
+                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">Delivery in <span className="font-semibold">10-15 mins</span></p>
+                    <button className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Want this later? <span className="text-blue-600 dark:text-blue-400 font-medium">Schedule it</span></button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Delivery Fleet Type */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                <button 
+                  onClick={() => setShowFleetOptions(!showFleetOptions)}
+                  className="flex items-center justify-between w-full"
+                >
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <Truck className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm md:text-base text-gray-800 dark:text-gray-200">Choose delivery fleet type</span>
+                  </div>
+                  {showFleetOptions ? <ChevronUp className="h-4 w-4 md:h-5 md:w-5 text-gray-400" /> : <ChevronDown className="h-4 w-4 md:h-5 md:w-5 text-gray-400" />}
+                </button>
+                
+                {showFleetOptions && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mt-3 md:mt-4">
+                    <button
+                      onClick={() => setDeliveryFleet("standard")}
+                      className={`p-3 md:p-4 rounded-lg md:rounded-xl border-2 text-left transition-colors ${deliveryFleet === "standard" ? "border-red-600 dark:border-red-500 bg-red-50 dark:bg-red-900/20" : "border-gray-200 dark:border-gray-700"}`}
+                    >
+                      <div className="flex items-center justify-between mb-1 md:mb-2">
+                        <span className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Standard Fleet</span>
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-100 dark:bg-orange-900/20 rounded-full flex items-center justify-center">
+                          <Truck className="h-4 w-4 md:h-5 md:w-5 text-orange-600 dark:text-orange-400" />
+                        </div>
+                      </div>
+                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Our standard food delivery experience</p>
+                    </button>
+                    <button
+                      onClick={() => setDeliveryFleet("veg")}
+                      className={`p-3 md:p-4 rounded-lg md:rounded-xl border-2 text-left transition-colors ${deliveryFleet === "veg" ? "border-red-600 dark:border-red-500 bg-red-50 dark:bg-red-900/20" : "border-gray-200 dark:border-gray-700"}`}
+                    >
+                      <div className="flex items-center justify-between mb-1 md:mb-2">
+                        <span className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Special Veg-only Fleet</span>
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
+                          <Leaf className="h-4 w-4 md:h-5 md:w-5 text-green-600 dark:text-green-400" />
+                        </div>
+                      </div>
+                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Fleet delivering only from Pure Veg restaurants</p>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Delivery Address */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                <Link to="/user/profile/addresses" className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <MapPin className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
+                    <div>
+                      <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">
+                        Delivery at <span className="font-semibold">{defaultAddress?.isDefault ? "Home" : "Address"}</span>
+                      </p>
+                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
+                        {defaultAddress ? `${defaultAddress.street}, ${defaultAddress.city}` : "Add delivery address"}
+                      </p>
+                      <button className="text-xs md:text-sm text-gray-500 dark:text-gray-400 border-b border-dashed border-gray-400 dark:border-gray-600">Add instructions for delivery partner</button>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-400" />
+                </Link>
+              </div>
+
+              {/* Contact */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                <Link to="/user/profile" className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <Phone className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
+                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">
+                      {userProfile?.name || "Your Name"}, <span className="font-medium">{userProfile?.phone || "+91-XXXXXXXXXX"}</span>
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-400" />
+                </Link>
+              </div>
+
+              {/* Bill Details */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                <button 
+                  onClick={() => setShowBillDetails(!showBillDetails)}
+                  className="flex items-center justify-between w-full"
+                >
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <FileText className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
+                    <div className="text-left">
+                      <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+                        <span className="text-sm md:text-base text-gray-800 dark:text-gray-200">Total Bill</span>
+                        <span className="text-sm md:text-base text-gray-400 dark:text-gray-500 line-through">₹{totalBeforeDiscount.toFixed(0)}</span>
+                        <span className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">₹{total.toFixed(0)}</span>
+                        {savings > 0 && (
+                          <span className="text-xs md:text-sm bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-1.5 md:px-2 py-0.5 rounded font-medium">You saved ₹{savings}</span>
+                        )}
+                      </div>
+                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Incl. taxes and charges</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-400" />
+                </button>
+
+                {showBillDetails && (
+                  <div className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-dashed dark:border-gray-700 space-y-2 md:space-y-3">
+                    <div className="flex justify-between text-sm md:text-base">
+                      <span className="text-gray-600 dark:text-gray-400">Item Total</span>
+                      <span className="text-gray-800 dark:text-gray-200">₹{subtotal.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm md:text-base">
+                      <span className="text-gray-600 dark:text-gray-400">Delivery Fee</span>
+                      <span className={deliveryFee === 0 ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-gray-200"}>
+                        {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm md:text-base">
+                      <span className="text-gray-600 dark:text-gray-400">Platform Fee</span>
+                      <span className="text-gray-800 dark:text-gray-200">₹{platformFee}</span>
+                    </div>
+                    <div className="flex justify-between text-sm md:text-base">
+                      <span className="text-gray-600 dark:text-gray-400">GST and Restaurant Charges</span>
+                      <span className="text-gray-800 dark:text-gray-200">₹{gstCharges}</span>
+                    </div>
+                    {discount > 0 && (
+                      <div className="flex justify-between text-sm md:text-base text-red-600 dark:text-red-400">
+                        <span>Coupon Discount</span>
+                        <span>-₹{discount}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm md:text-base font-semibold pt-2 md:pt-3 border-t dark:border-gray-700">
+                      <span>To Pay</span>
+                      <span>₹{total.toFixed(0)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Payment Issue Notice */}
+              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 border-t-4 border-gray-100 dark:border-gray-800 rounded-lg md:rounded-xl">
+                <p className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Appzeto Money</p>
+                <p className="text-xs md:text-sm text-amber-600 dark:text-amber-400">Facing technical issues. Will be back shortly!</p>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Payment Issue Notice */}
-        <div className="bg-white px-4 py-3 border-t-4 border-gray-100">
-          <p className="text-sm font-semibold text-gray-800">Appzeto Money</p>
-          <p className="text-xs text-amber-600">Facing technical issues. Will be back shortly!</p>
-        </div>
+            {/* Right Column - Order Summary (Desktop) */}
+            <div className="lg:col-span-1">
+              <div className="lg:sticky lg:top-24 space-y-4 md:space-y-6">
+                {/* Bill Summary Card */}
+                <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-4 md:py-5 rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-700">
+                  <h3 className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3 md:mb-4">Order Summary</h3>
+                  <div className="space-y-2 md:space-y-3">
+                    <div className="flex justify-between text-sm md:text-base">
+                      <span className="text-gray-600 dark:text-gray-400">Item Total</span>
+                      <span className="text-gray-800 dark:text-gray-200">₹{subtotal.toFixed(0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm md:text-base">
+                      <span className="text-gray-600 dark:text-gray-400">Delivery Fee</span>
+                      <span className={deliveryFee === 0 ? "text-red-600 dark:text-red-400" : "text-gray-800 dark:text-gray-200"}>
+                        {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm md:text-base">
+                      <span className="text-gray-600 dark:text-gray-400">Platform Fee</span>
+                      <span className="text-gray-800 dark:text-gray-200">₹{platformFee}</span>
+                    </div>
+                    <div className="flex justify-between text-sm md:text-base">
+                      <span className="text-gray-600 dark:text-gray-400">GST</span>
+                      <span className="text-gray-800 dark:text-gray-200">₹{gstCharges}</span>
+                    </div>
+                    {discount > 0 && (
+                      <div className="flex justify-between text-sm md:text-base text-red-600 dark:text-red-400">
+                        <span>Discount</span>
+                        <span>-₹{discount}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-base md:text-lg font-bold pt-3 md:pt-4 border-t dark:border-gray-700">
+                      <span>Total</span>
+                      <span className="text-green-600 dark:text-green-400">₹{total.toFixed(0)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Bottom Sticky - Payment & Place Order */}
-      <div className="bg-white border-t shadow-lg z-30 flex-shrink-0 fixed bottom-0 left-0 right-0">
-        <div className="flex items-center justify-between px-4 py-3">
-          <button 
-            onClick={() => setShowPaymentSelection(true)}
-            className="flex items-center gap-2 hover:bg-gray-50 rounded-lg p-1 -m-1 transition-colors"
-          >
+      <div className="bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 shadow-lg z-30 flex-shrink-0 fixed bottom-0 left-0 right-0">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
+            <button 
+              onClick={() => setShowPaymentSelection(true)}
+              className="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg p-1 -m-1 transition-colors"
+            >
             {selectedPayment ? (
               <div className="w-7 h-7 rounded flex items-center justify-center overflow-hidden">
                 {selectedPayment.icon === 'gpay' ? (
@@ -890,30 +940,31 @@ export default function Cart() {
                 <CreditCard className="h-4 w-4 text-gray-500" />
               </div>
             )}
-            <div>
-              <p className="text-xs text-gray-500 flex items-center gap-1">
-                PAY USING <ChevronUp className="h-3 w-3" />
-              </p>
-              <p className="text-sm font-medium text-gray-800 text-start">
-                {"Razorpay"}
-              </p>
-            </div>
-          </button>
-          <Button
-            size="lg"
-            onClick={handlePlaceOrder}
-            disabled={isPlacingOrder}
-            className="bg-green-700 hover:bg-green-800 text-white px-7 h-11 rounded-sm"
-          >
-            <div className="text-left mr-3">
-              <p className="text-xs opacity-90">₹{total.toFixed(0)}</p>
-              <p className="text-xs opacity-75">TOTAL</p>
-            </div>
-            <span className="font-semibold text-md">
-              {isPlacingOrder ? "Processing..." : "Place Order"}
-            </span>
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+              <div>
+                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  PAY USING <ChevronUp className="h-3 w-3 md:h-4 md:w-4" />
+                </p>
+                <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200 text-start">
+                  {"Razorpay"}
+                </p>
+              </div>
+            </button>
+            <Button
+              size="lg"
+              onClick={handlePlaceOrder}
+              disabled={isPlacingOrder}
+              className="bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700 text-white px-5 md:px-7 h-11 md:h-12 rounded-sm md:rounded-md text-sm md:text-base"
+            >
+              <div className="text-left mr-2 md:mr-3">
+                <p className="text-xs md:text-sm opacity-90">₹{total.toFixed(0)}</p>
+                <p className="text-xs opacity-75">TOTAL</p>
+              </div>
+              <span className="font-semibold text-sm md:text-base">
+                {isPlacingOrder ? "Processing..." : "Place Order"}
+              </span>
+              <ChevronRight className="h-4 w-4 md:h-5 md:w-5 ml-1" />
+            </Button>
+          </div>
         </div>
       </div>
 

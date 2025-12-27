@@ -38,6 +38,7 @@ import Top10 from "../pages/Top10"
 
 // Collections
 import Collections from "../pages/Collections"
+import CollectionDetail from "../pages/CollectionDetail"
 
 // Gift Cards
 import GiftCards from "../pages/GiftCards"
@@ -158,6 +159,14 @@ export default function UserRouter() {
 
       {/* Collections */}
       <Route path="/collections" element={<Collections />} />
+      <Route 
+        path="/collections/:id" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <CollectionDetail />
+          </ProtectedRoute>
+        } 
+      />
 
       {/* Gift Cards */}
       <Route path="/gift-card" element={<GiftCards />} />

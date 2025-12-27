@@ -84,8 +84,8 @@ export default function EditPayment() {
 
   if (!payment) {
     return (
-      <AnimatedPage className="min-h-screen bg-background p-4">
-        <div className="max-w-2xl mx-auto">
+      <AnimatedPage className="min-h-screen bg-background p-4 sm:p-6 md:p-8 lg:p-10">
+        <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto">
           <Card>
             <CardContent className="py-8 text-center">
               <p className="text-muted-foreground">Payment method not found</p>
@@ -100,14 +100,14 @@ export default function EditPayment() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-background p-4">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <AnimatedPage className="min-h-screen bg-background p-4 sm:p-6 md:p-8 lg:p-10">
+      <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto space-y-6 md:space-y-8 lg:space-y-10">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">Edit Payment Method</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl md:text-3xl">Edit Payment Method</CardTitle>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <CardContent className="p-4 sm:p-5 md:p-6 lg:p-8">
+            <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5 lg:space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="cardNumber">Last 4 Digits of Card Number *</Label>
                 <Input
@@ -131,7 +131,7 @@ export default function EditPayment() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-5">
                 <div className="space-y-2">
                   <Label htmlFor="expiryMonth">Expiry Month *</Label>
                   <Input

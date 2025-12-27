@@ -33,12 +33,12 @@ export default function PageNavbar({
 
   return (
     <nav 
-      className={`relative ${zIndexClass} w-full px-1 pr-2 sm:px-2 sm:pr-3 md:px-3 lg:px-4 py-1.5 sm:py-3 backdrop-blur-sm`}
+      className={`relative ${zIndexClass} w-full px-1 pr-2 sm:px-2 sm:pr-3 md:px-3 lg:px-6 xl:px-8 py-1.5 sm:py-3 lg:py-4 backdrop-blur-sm`}
       onClick={onNavClick}
     >
-      <div className="flex items-center justify-between gap-2 sm:gap-3 md:gap-4">
-        {/* Left: Location */}
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+      <div className="flex items-center justify-between gap-2 sm:gap-3 md:gap-4 lg:gap-6 max-w-7xl mx-auto">
+        {/* Left: Location - Hidden on desktop, shown on mobile */}
+        <div className="flex md:hidden items-center gap-3 sm:gap-4 min-w-0">
           {/* Location Button */}
           <Button
             variant="ghost"
@@ -74,7 +74,7 @@ export default function PageNavbar({
         </div>
 
         {/* Center: Appzeto Logo */}
-        <Link to="/user" className="flex items-center justify-center ">
+        <Link to="/user" className="flex items-center justify-center lg:hidden">
           <img
             src={appzetoLogo}
             alt="Appzeto Logo"
@@ -82,8 +82,8 @@ export default function PageNavbar({
           />
         </Link>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+        {/* Right: Actions - Hidden on desktop, shown on mobile */}
+        <div className="flex md:hidden items-center gap-2 sm:gap-3 flex-shrink-0">
           {/* Wallet Icon */}
           <Link to="/user/wallet">
             <Button

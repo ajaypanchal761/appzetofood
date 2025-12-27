@@ -364,28 +364,29 @@ export default function SearchResults() {
   }, [query, selectedCategory, activeFilters])
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0a]">
       {/* Sticky Header */}
-      <div className="sticky top-0 z-20 bg-white shadow-sm">
+      <div className="sticky top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm">
+        <div className="max-w-7xl mx-auto">
         {/* Search Bar with Back Button */}
-        <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-100">
+        <div className="flex items-center gap-2 px-3 sm:px-4 md:px-6 lg:px-8 py-3 md:py-4 border-b border-gray-100 dark:border-gray-800">
           <button 
             onClick={() => navigate('/user')}
-            className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+            className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors flex-shrink-0"
           >
-            <ArrowLeft className="h-5 w-5 text-gray-700" />
+            <ArrowLeft className="h-5 w-5 text-gray-700 dark:text-gray-300" />
           </button>
           
           <form onSubmit={handleSearch} className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-gray-400" />
               <Input
               placeholder="Restaurant name or a dish..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10 h-11 rounded-lg border-gray-300 bg-gray-50 focus:bg-white focus:border-gray-500 text-sm placeholder:text-gray-600"
+              className="pl-10 pr-10 h-11 rounded-lg border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#1a1a1a] focus:bg-white dark:focus:bg-[#2a2a2a] focus:border-gray-500 dark:focus:border-gray-600 text-sm dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-400"
               />
             <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2">
-              <Mic className="h-4 w-4 text-gray-500" />
+              <Mic className="h-4 w-4 text-gray-500 dark:text-gray-400" />
             </button>
           </form>
             </div>
@@ -393,7 +394,7 @@ export default function SearchResults() {
         {/* Browse Category Section */}
         <div 
           ref={categoryScrollRef}
-          className="flex gap-4 overflow-x-auto scrollbar-hide px-4 py-3 bg-white border-b border-gray-100"
+          className="flex gap-3 sm:gap-4 lg:gap-5 overflow-x-auto scrollbar-hide px-4 sm:px-6 md:px-8 lg:px-10 py-3 md:py-4 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800"
           style={{
             scrollbarWidth: "none",
             msOverflowStyle: "none",
@@ -411,7 +412,7 @@ export default function SearchResults() {
               >
                 {cat.image ? (
                   <div className={`w-16 h-16 rounded-full overflow-hidden border-2 transition-all ${
-                    isSelected ? 'border-green-600 shadow-lg' : 'border-transparent'
+                    isSelected ? 'border-green-600 dark:border-green-500 shadow-lg' : 'border-transparent'
                   }`}>
                     <img 
                       src={cat.image} 
@@ -420,14 +421,14 @@ export default function SearchResults() {
                     />
                   </div>
                 ) : (
-                  <div className={`w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center border-2 transition-all ${
-                    isSelected ? 'border-green-600 shadow-lg bg-green-50' : 'border-transparent'
+                  <div className={`w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center border-2 transition-all ${
+                    isSelected ? 'border-green-600 dark:border-green-500 shadow-lg bg-green-50 dark:bg-green-900/20' : 'border-transparent'
                   }`}>
                     <span className="text-xl">🍽️</span>
                   </div>
                 )}
                 <span className={`text-xs font-medium whitespace-nowrap ${
-                  isSelected ? 'text-green-700' : 'text-gray-600'
+                  isSelected ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'
                 }`}>
                   {cat.name}
                 </span>
@@ -438,7 +439,7 @@ export default function SearchResults() {
 
       {/* Filters */}
       <div 
-        className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4 py-3 bg-white border-b border-gray-100"
+        className="flex items-center gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide px-4 sm:px-6 md:px-8 lg:px-10 py-3 md:py-4 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800"
         style={{
           scrollbarWidth: "none",
           msOverflowStyle: "none",
@@ -447,10 +448,10 @@ export default function SearchResults() {
         {/* Filter Button */}
         <Button
           variant="outline"
-          className="h-9 px-3 rounded-lg flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium bg-white border border-gray-200 hover:bg-gray-50 text-gray-700"
+          className="h-9 px-3 rounded-lg flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
         >
           <SlidersHorizontal className="h-4 w-4" />
-          <span className="text-sm font-bold text-black">Filters</span>
+          <span className="text-sm font-bold text-black dark:text-white">Filters</span>
           <ChevronDown className="h-3 w-3" />
         </Button>
 
@@ -464,34 +465,35 @@ export default function SearchResults() {
               onClick={() => toggleFilter(filter.id)}
               className={`h-9 px-3 rounded-lg flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${
                 isActive
-                  ? 'bg-green-600 text-white border-green-600 hover:bg-green-700'
-                  : 'bg-white border border-gray-200 hover:bg-gray-50 text-gray-600'
+                  ? 'bg-green-600 text-white border-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700'
+                  : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
               }`}
             >
               {filter.hasIcon && filter.id === 'price-match' && (
-                <span className="text-green-600 text-xs">✓</span>
+                <span className={`text-xs ${isActive ? 'text-white' : 'text-green-600 dark:text-green-400'}`}>✓</span>
               )}
               {filter.hasIcon && filter.id === 'flat-50-off' && (
-                <span className="text-blue-500 text-xs">★</span>
+                <span className={`text-xs ${isActive ? 'text-white' : 'text-blue-500 dark:text-blue-400'}`}>★</span>
               )}
-              <span className="text-sm font-bold text-black">{filter.label}</span>
+              <span className={`text-sm font-bold ${isActive ? 'text-white' : 'text-black dark:text-white'}`}>{filter.label}</span>
                                     </Button>
           )
         })}
       </div>
+        </div>
       </div>
 
       {/* Content */}
-      <div className="px-4 py-4 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8 lg:space-y-10">
         {/* RECOMMENDED FOR YOU Section */}
         {filteredRecommended.length > 0 && (
           <section>
-            <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase mb-4">
+            <h2 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-4">
               RECOMMENDED FOR YOU
             </h2>
             
             {/* Small Restaurant Cards - Horizontal Scroll */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 sm:gap-4 lg:gap-5">
               {filteredRecommended.slice(0, 6).map((restaurant) => (
                 <Link 
                   key={restaurant.id} 
@@ -521,10 +523,10 @@ export default function SearchResults() {
                     </div>
                     
                     {/* Restaurant Info */}
-                    <h3 className="font-semibold text-gray-900 text-xs line-clamp-1">
+                    <h3 className="font-semibold text-gray-900 dark:text-white text-xs line-clamp-1">
                       {restaurant.name}
                     </h3>
-                    <div className="flex items-center gap-1 text-gray-500 text-[10px]">
+                    <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 text-[10px]">
                       <Clock className="h-2.5 w-2.5" />
                       <span>{restaurant.deliveryTime}</span>
                     </div>
@@ -537,21 +539,21 @@ export default function SearchResults() {
 
         {/* ALL RESTAURANTS Section */}
         <section>
-          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase mb-4">
+          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-4">
             ALL RESTAURANTS
           </h2>
           
           {/* Large Restaurant Cards */}
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5 lg:gap-6">
             {filteredAllRestaurants.map((restaurant) => {
               const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
               const isFavorite = favorites.has(restaurant.id)
 
               return (
-                <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`}>
-                  <Card className="overflow-hidden cursor-pointer border-0 group bg-white shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl mb-4">
+                <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
+                  <Card className="overflow-hidden cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-md flex flex-col h-full w-full">
                     {/* Image Section */}
-                    <div className="relative h-44 sm:h-52 md:h-56 w-full overflow-hidden rounded-t-2xl">
+                    <div className="relative h-44 sm:h-52 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0">
                         <img
                         src={restaurant.image}
                         alt={restaurant.name}
@@ -576,35 +578,35 @@ export default function SearchResults() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="absolute top-3 right-3 h-9 w-9 bg-white/90 backdrop-blur-sm rounded-lg hover:bg-white transition-colors"
+                        className="absolute top-3 right-3 h-9 w-9 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-sm rounded-lg hover:bg-white dark:hover:bg-[#2a2a2a] transition-colors"
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
                           toggleFavorite(restaurant.id)
                         }}
                       >
-                        <Bookmark className={`h-5 w-5 ${isFavorite ? "fill-gray-800 text-gray-800" : "text-gray-600"}`} strokeWidth={2} />
+                        <Bookmark className={`h-5 w-5 ${isFavorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
                       </Button>
                     </div>
                     
                     {/* Content Section */}
-                    <CardContent className="p-3 sm:p-4">
+                    <CardContent className="p-3 sm:p-4 lg:p-5 flex flex-col flex-grow">
                       {/* Restaurant Name & Rating */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-start justify-between gap-2 mb-2 lg:mb-3">
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 line-clamp-1">
+                          <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white line-clamp-1 lg:line-clamp-2">
                             {restaurant.name}
                           </h3>
                         </div>
-                        <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1">
-                          <span className="text-sm font-bold">{restaurant.rating}</span>
-                          <Star className="h-3 w-3 fill-white text-white" />
+                        <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg flex items-center gap-1">
+                          <span className="text-sm lg:text-base font-bold">{restaurant.rating}</span>
+                          <Star className="h-3 w-3 lg:h-4 lg:w-4 fill-white text-white" />
                         </div>
                       </div>
                       
                       {/* Delivery Time & Distance */}
-                      <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
-                        <Clock className="h-4 w-4" strokeWidth={1.5} />
+                      <div className="flex items-center gap-1 text-sm lg:text-base text-gray-500 dark:text-gray-400 mb-2 lg:mb-3">
+                        <Clock className="h-4 w-4 lg:h-5 lg:w-5" strokeWidth={1.5} />
                         <span className="font-medium">{restaurant.deliveryTime}</span>
                         <span className="mx-1">|</span>
                         <span className="font-medium">{restaurant.distance}</span>
@@ -612,9 +614,9 @@ export default function SearchResults() {
                       
                       {/* Offer Badge */}
                       {restaurant.offer && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <BadgePercent className="h-4 w-4 text-blue-600" strokeWidth={2} />
-                          <span className="text-gray-700 font-medium">{restaurant.offer}</span>
+                        <div className="flex items-center gap-2 text-sm lg:text-base mt-auto">
+                          <BadgePercent className="h-4 w-4 lg:h-5 lg:w-5 text-blue-600 dark:text-blue-400" strokeWidth={2} />
+                          <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
                         </div>
                       )}
                       </CardContent>
@@ -626,14 +628,14 @@ export default function SearchResults() {
             {/* Empty State */}
             {filteredAllRestaurants.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-gray-500">
+                <p className="text-gray-500 dark:text-gray-400">
                   {query
                     ? `No restaurants found for "${query}"`
                     : "No restaurants found with selected filters"}
                 </p>
                 <Button
                   variant="outline"
-                  className="mt-4"
+                  className="mt-4 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                   onClick={() => {
                     setActiveFilters(new Set())
                     setSearchQuery("")

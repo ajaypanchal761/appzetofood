@@ -106,13 +106,13 @@ export default function GiftCards() {
     : `₹${selectedAmount.toLocaleString('en-IN')}`
 
   return (
-    <div className="min-h-screen bg-white pb-24">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0a] pb-24">
       {/* Banner Section */}
       <div className="relative">
         {/* Back Button */}
         <button 
           onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 z-10 w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+          className="absolute top-4 left-4 z-10 w-10 h-10 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/30 dark:hover:bg-black/30 transition-colors"
         >
           <ArrowLeft className="h-5 w-5 text-white" />
         </button>
@@ -127,17 +127,20 @@ export default function GiftCards() {
         </Link>
         
         {/* Banner Image */}
-        <div className="relative overflow-hidden">
-          <img 
-            src={giftCardBanner} 
-            alt="Gift Cards" 
-            className="w-full h-auto object-cover"
-          />
+        <div className="relative w-full overflow-hidden min-h-[25vh] md:min-h-[30vh]">
+          <div className="absolute inset-0 z-0">
+            <img 
+              src={giftCardBanner} 
+              alt="Gift Cards" 
+              className="w-full h-full object-cover"
+            />
+          </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="px-4 py-6 space-y-6">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8">
+        <div className="max-w-4xl md:max-w-5xl lg:max-w-6xl mx-auto space-y-6 md:space-y-8">
         {/* Category Tabs - Horizontal Scrollable */}
         <div 
           className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4"
@@ -154,8 +157,8 @@ export default function GiftCards() {
                 onClick={() => handleCategoryChange(category.id)}
                 className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-300 flex-shrink-0 ${
                   isSelected 
-                    ? 'bg-white border-2 border-gray-900 text-gray-900 shadow-md' 
-                    : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+                    ? 'bg-white dark:bg-[#1a1a1a] border-2 border-gray-900 dark:border-gray-200 text-gray-900 dark:text-white shadow-md' 
+                    : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 {category.label}
@@ -213,16 +216,16 @@ export default function GiftCards() {
 
         {/* Choose Amount Section */}
         <section className="space-y-4">
-          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase">
             CHOOSE AMOUNT
           </h3>
           
-          <Card className="border border-gray-100 shadow-sm">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a]">
             <CardContent className="p-4 space-y-4">
               {/* Amount Display */}
               <div className="flex items-center justify-between">
-                <span className="text-gray-700 font-medium">Gift card amount</span>
-                <span className="text-gray-900 font-bold text-lg">{displayAmount}</span>
+                <span className="text-gray-700 dark:text-gray-300 font-medium">Gift card amount</span>
+                <span className="text-gray-900 dark:text-white font-bold text-lg">{displayAmount}</span>
               </div>
               
               {/* Amount Options */}
@@ -240,13 +243,13 @@ export default function GiftCards() {
                       }}
                       className={`relative px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
                         isSelected
-                          ? 'bg-white border-2 border-green-700 text-green-700'
-                          : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+                          ? 'bg-white dark:bg-[#2a2a2a] border-2 border-green-700 dark:border-green-500 text-green-700 dark:text-green-400'
+                          : 'bg-white dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}
                     >
                       {option.label}
                       {option.popular && (
-                        <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-green-700 text-white text-[10px] px-2 py-0.5 rounded font-semibold whitespace-nowrap">
+                        <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-green-700 dark:bg-green-600 text-white text-[10px] px-2 py-0.5 rounded font-semibold whitespace-nowrap">
                           POPULAR
                         </span>
                       )}
@@ -259,13 +262,13 @@ export default function GiftCards() {
               {selectedAmount === 'custom' && (
                 <div className="pt-3">
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-lg">₹</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 font-semibold text-lg">₹</span>
                     <Input
                       type="number"
                       placeholder="Enter amount (Min ₹100)"
                       value={customAmount}
                       onChange={(e) => setCustomAmount(e.target.value)}
-                      className="pl-10 h-14 text-lg border-gray-200 focus:border-green-600 w-full focus:ring-green-600 rounded-xl"
+                      className="pl-10 h-14 text-lg border-gray-200 dark:border-gray-700 focus:border-green-600 dark:focus:border-green-500 w-full focus:ring-green-600 dark:focus:ring-green-500 rounded-xl bg-white dark:bg-[#2a2a2a] text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
                       min="100"
                       max="50000"
                     />
@@ -275,8 +278,8 @@ export default function GiftCards() {
 
               {/* Redeem Link */}
               <div className="flex items-center gap-1 pt-1">
-                <span className="text-gray-600 text-sm">Do you have a gift card?</span>
-                <Link to="/user/gift-card/redeem" className="text-green-700 text-sm font-medium underline underline-offset-2 decoration-dashed hover:text-green-800">
+                <span className="text-gray-600 dark:text-gray-400 text-sm">Do you have a gift card?</span>
+                <Link to="/user/gift-card/redeem" className="text-green-700 dark:text-green-400 text-sm font-medium underline underline-offset-2 decoration-dashed hover:text-green-800 dark:hover:text-green-500">
                   Redeem now
                 </Link>
               </div>
@@ -286,20 +289,20 @@ export default function GiftCards() {
 
         {/* Add Message Section */}
         <section className="space-y-4">
-          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase">
             ADD MESSAGE (OPTIONAL)
           </h3>
           
-          <Card className="border border-gray-100 shadow-sm">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a]">
             <CardContent className="p-4">
               <Textarea
                 placeholder="Write a personal message..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                className="min-h-[120px] border w-full border-gray-200 rounded-xl p-4 resize-none focus-visible:ring-1 focus-visible:ring-green-600 focus:border-green-600 text-gray-700 text-base"
+                className="min-h-[120px] border w-full border-gray-200 dark:border-gray-700 rounded-xl p-4 resize-none focus-visible:ring-1 focus-visible:ring-green-600 dark:focus-visible:ring-green-500 focus:border-green-600 dark:focus:border-green-500 text-gray-700 dark:text-white text-base bg-white dark:bg-[#2a2a2a] placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 maxLength={200}
               />
-              <p className="text-right text-xs text-gray-400 mt-2">
+              <p className="text-right text-xs text-gray-400 dark:text-gray-500 mt-2">
                 {message.length}/200
               </p>
             </CardContent>
@@ -308,27 +311,27 @@ export default function GiftCards() {
 
         {/* For Bulk Purchases Section */}
         <section className="space-y-4">
-          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase">
             FOR BULK PURCHASES
           </h3>
           
-          <Card className="border border-gray-100 shadow-sm bg-gray-50/50">
+          <Card className="border border-gray-100 dark:border-gray-800 shadow-sm bg-gray-50/50 dark:bg-gray-900/30">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-600 mt-2 flex-shrink-0" />
-                <p className="text-gray-700 text-sm">
-                  Write to us at <span className="font-semibold text-gray-900">giftcards@appzeto.com</span>
+                <div className="w-2 h-2 rounded-full bg-green-600 dark:bg-green-500 mt-2 flex-shrink-0" />
+                <p className="text-gray-700 dark:text-gray-300 text-sm">
+                  Write to us at <span className="font-semibold text-gray-900 dark:text-white">giftcards@appzeto.com</span>
                 </p>
               </div>
               <div className="flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-600 mt-2 flex-shrink-0" />
-                <p className="text-gray-600 text-sm">
+                <div className="w-2 h-2 rounded-full bg-green-600 dark:bg-green-500 mt-2 flex-shrink-0" />
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
                   For corporate purchases, an invoice in the name of the company will be provided
                 </p>
               </div>
               <div className="flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-600 mt-2 flex-shrink-0" />
-                <p className="text-gray-600 text-sm">
+                <div className="w-2 h-2 rounded-full bg-green-600 dark:bg-green-500 mt-2 flex-shrink-0" />
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
                   Gift cards will be shared within 2 working days, after receiving the payment
                 </p>
               </div>
@@ -338,7 +341,7 @@ export default function GiftCards() {
 
         {/* Purchase History Section */}
         <section className="space-y-4">
-          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase">
             YOUR PURCHASE HISTORY
           </h3>
           
@@ -349,20 +352,20 @@ export default function GiftCards() {
               {[1, 2, 3].map((i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-3 bg-gray-100 rounded-xl px-4 py-3 w-64"
+                  className="flex items-center gap-3 bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-3 w-64"
                   style={{
                     opacity: 0.4 + (i * 0.2)
                   }}
                 >
-                  <div className="w-8 h-8 bg-gray-200 rounded-lg" />
+                  <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg" />
                   <div className="flex-1 space-y-1.5">
-                    <div className="h-2 bg-gray-200 rounded w-3/4" />
-                    <div className="h-2 bg-gray-200 rounded w-1/2" />
+                    <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+                    <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
                   </div>
                 </div>
               ))}
             </div>
-            <p className="text-gray-500 text-sm text-center">
+            <p className="text-gray-500 dark:text-gray-400 text-sm text-center">
               You haven't purchased any gift cards yet
             </p>
           </div>
@@ -370,9 +373,9 @@ export default function GiftCards() {
       </div>
 
       {/* Fixed Bottom Continue Button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 shadow-lg">
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] border-t border-gray-100 dark:border-gray-800 p-4 shadow-lg">
         <Button 
-          className="w-full h-14 bg-green-700 hover:bg-green-800 text-white font-semibold text-base rounded-xl transition-all duration-200"
+          className="w-full h-14 bg-green-700 dark:bg-green-600 hover:bg-green-800 dark:hover:bg-green-700 text-white font-semibold text-base rounded-xl transition-all duration-200"
           onClick={() => {
             const finalAmount = selectedAmount === 'custom' ? Number(customAmount) : selectedAmount
             if (!finalAmount || finalAmount < 100) {
@@ -390,6 +393,7 @@ export default function GiftCards() {
         >
           Continue
         </Button>
+        </div>
       </div>
     </div>
   )

@@ -340,25 +340,25 @@ export default function OTP() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-white flex flex-col">
+    <AnimatedPage className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col">
       {/* Header */}
-      <div className="relative flex items-center justify-center py-4 px-4 border-b border-gray-200">
+      <div className="relative flex items-center justify-center py-4 px-4 md:py-6 md:px-6 lg:px-8 border-b border-gray-200 dark:border-gray-800">
         <button
           onClick={() => navigate("/user/auth/sign-in")}
-          className="absolute left-4 top-1/2 -translate-y-1/2"
+          className="absolute left-4 md:left-6 lg:left-8 top-1/2 -translate-y-1/2 hover:opacity-70 transition-opacity"
           aria-label="Go back"
         >
-          <ArrowLeft className="h-5 w-5 text-black" />
+          <ArrowLeft className="h-5 w-5 md:h-6 md:w-6 text-black dark:text-white" />
         </button>
-        <h1 className="text-lg font-bold text-black">OTP Verification</h1>
+        <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-black dark:text-white">OTP Verification</h1>
       </div> 
 
       {/* Main Content */}
-      <div className="flex flex-col justify-center px-6 pt-8 pb-12">
-        <div className="max-w-md mx-auto w-full space-y-8">
+      <div className="flex flex-col justify-center px-6 sm:px-8 md:px-12 lg:px-16 xl:px-20 pt-8 sm:pt-12 md:pt-16 lg:pt-20 pb-12 sm:pb-16 md:pb-20">
+        <div className="max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl mx-auto w-full space-y-8 md:space-y-10 lg:space-y-12">
           {/* Message */}
-          <div className="text-center space-y-2">
-            <p className="text-base text-black">
+          <div className="text-center space-y-2 md:space-y-3">
+            <p className="text-base md:text-lg lg:text-xl text-black dark:text-white">
               {showNameInput
                 ? "You're almost done! Please tell us your name to complete registration."
                 : contactType === "email"
@@ -366,7 +366,7 @@ export default function OTP() {
                 : "We have sent a verification code to"}
             </p>
             {!showNameInput && (
-              <p className="text-base text-black font-medium">
+              <p className="text-base md:text-lg lg:text-xl text-black dark:text-white font-medium">
                 {contactInfo}
               </p>
             )}
@@ -382,7 +382,7 @@ export default function OTP() {
           {/* OTP Input Fields */}
           {!showNameInput && (
             <>
-              <div className="flex justify-center gap-2">
+              <div className="flex justify-center gap-2 sm:gap-3 md:gap-4 lg:gap-5">
                 {otp.map((digit, index) => (
                   <Input
                     key={index}
@@ -395,18 +395,18 @@ export default function OTP() {
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={index === 0 ? handlePaste : undefined}
                     disabled={isLoading}
-                    className="w-12 h-12 text-center text-lg font-semibold p-0 border border-black rounded-md focus-visible:ring-0 focus-visible:border-black bg-white"
+                    className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 text-center text-lg sm:text-xl md:text-2xl lg:text-3xl font-semibold p-0 border-2 border-black dark:border-gray-600 rounded-lg focus-visible:ring-2 focus-visible:ring-[#E23744] focus-visible:border-[#E23744] dark:focus-visible:border-[#E23744] bg-white dark:bg-[#1a1a1a] text-black dark:text-white transition-all"
                   />
                 ))}
               </div>
 
               {/* Resend Section */}
-              <div className="text-center space-y-1">
-                <p className="text-sm text-black">
+              <div className="text-center space-y-1 md:space-y-2">
+                <p className="text-sm md:text-base text-black dark:text-white">
                   Didn't get the {contactType === "email" ? "email" : "SMS"}?
                 </p>
                 {resendTimer > 0 ? (
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
                     Resend {contactType === "email" ? "email" : "SMS"} in {resendTimer}s
                   </p>
                 ) : (
@@ -414,7 +414,7 @@ export default function OTP() {
                     type="button"
                     onClick={handleResend}
                     disabled={isLoading}
-                    className="text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                    className="text-sm md:text-base text-[#E23744] hover:text-[#d32f3d] dark:text-[#E23744] dark:hover:text-[#d32f3d] disabled:opacity-50 transition-colors font-medium"
                   >
                     Resend {contactType === "email" ? "email" : "SMS"}
                   </button>
@@ -425,9 +425,9 @@ export default function OTP() {
 
           {/* Name Input (shown only after OTP verified and user is new) */}
           {showNameInput && (
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-black text-left">
+            <div className="space-y-4 md:space-y-5">
+              <div className="space-y-2">
+                <label className="block text-sm md:text-base font-medium text-black dark:text-white text-left">
                   Full name
                 </label>
                 <Input
@@ -439,12 +439,12 @@ export default function OTP() {
                   }}
                   disabled={isLoading}
                   placeholder="Enter your name"
-                  className={`h-11 border ${
-                    nameError ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`h-11 md:h-14 text-base md:text-lg border-2 ${
+                    nameError ? "border-red-500" : "border-gray-300 dark:border-gray-700"
+                  } bg-white dark:bg-[#1a1a1a] text-black dark:text-white rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-[#E23744]`}
                 />
                 {nameError && (
-                  <p className="text-xs text-red-500 text-left">
+                  <p className="text-xs md:text-sm text-red-500 text-left">
                     {nameError}
                   </p>
                 )}
@@ -453,7 +453,7 @@ export default function OTP() {
               <Button
                 onClick={handleSubmitName}
                 disabled={isLoading}
-                className="w-full h-11 bg-[#E23744] hover:bg-[#d32f3d] text-white font-semibold"
+                className="w-full h-11 md:h-14 bg-[#E23744] hover:bg-[#d32f3d] text-white font-semibold text-base md:text-lg rounded-lg transition-all hover:shadow-lg active:scale-[0.98]"
               >
                 {isLoading ? "Continuing..." : "Continue"}
               </Button>
@@ -470,11 +470,11 @@ export default function OTP() {
       </div>
 
       {/* Go back to login methods */}
-      <div className="pt-4 mt-auto px-6 text-center pb-8">
+      <div className="pt-4 md:pt-6 mt-auto px-6 md:px-8 lg:px-12 text-center pb-8 md:pb-12">
         <button
           type="button"
           onClick={() => navigate("/user/auth/sign-in")}
-          className="text-sm text-[#E23744] hover:underline"
+          className="text-sm md:text-base text-[#E23744] hover:text-[#d32f3d] hover:underline transition-colors font-medium"
         >
           Go back to login methods
         </button>

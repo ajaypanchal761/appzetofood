@@ -100,7 +100,7 @@ The following collections will be created automatically:
 
 1. **Send OTP:** User requests OTP via `/api/auth/send-otp`
 2. **Verify OTP:** User verifies OTP via `/api/auth/verify-otp`
-3. **Get Tokens:** System returns access token (15 min) and sets refresh token in httpOnly cookie (7 days)
+3. **Get Tokens:** System returns access token (24 hours) and sets refresh token in httpOnly cookie (7 days)
 4. **Use Access Token:** Include in Authorization header: `Bearer <access-token>`
 5. **Refresh Token:** Use `/api/auth/refresh-token` to get new access token
 

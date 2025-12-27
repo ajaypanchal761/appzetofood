@@ -33,6 +33,7 @@ import { useLocation } from "../hooks/useLocation"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
 import offerImage from "@/assets/offerimage.png"
 import api, { restaurantAPI } from "@/lib/api"
+import OptimizedImage from "@/components/OptimizedImage"
 // Explore More Icons
 import exploreOffers from "@/assets/explore more icons/offers.png"
 import exploreGourmet from "@/assets/explore more icons/gourmet.png"
@@ -938,7 +939,7 @@ export default function Home() {
   )
 
   return (
-    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a]">
+    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-24">
       {/* Unified Background for Entire Page - Vibrant Food Theme */}
       <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background */}
@@ -1050,9 +1051,7 @@ export default function Home() {
       </div>
 
       {/* Unified Navbar & Hero Section */}
-      <div className="relative w-full overflow-hidden" style={{ minHeight: '39vh' }}>
-
-
+      <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16">
         {/* Hero Banner Carousel Background */}
         {loadingBanners ? (
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
@@ -1072,45 +1071,66 @@ export default function Home() {
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
           >
-            {heroBannerImages.map((image, index) => (
-              <img
-                key={index}
-                src={image}
-                alt={`Hero Banner ${index + 1}`}
-                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${index === currentBannerIndex ? 'opacity-100' : 'opacity-0'
-                  }`}
-                style={{
-                  objectPosition: 'center center',
-                  minHeight: '100%',
-                  userSelect: 'none',
-                  pointerEvents: 'none',
-                }}
-                draggable={false}
-                onError={(e) => {
-                  // Fallback to a placeholder if image fails to load
-                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="1200" height="600"%3E%3Crect fill="%23ddd" width="1200" height="600"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="24" dy="10.5" font-weight="bold" x="50%25" y="50%25" text-anchor="middle"%3EImage not found%3C/text%3E%3C/svg%3E'
-                }}
-              />
-            ))}
+            <AnimatePresence mode="wait">
+              {heroBannerImages.map((image, index) => {
+                if (index !== currentBannerIndex) return null
+                return (
+                  <motion.div
+                    key={index}
+                    className="absolute inset-0 w-full h-full"
+                    initial={{ opacity: 0, scale: 1.1 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.8, ease: "easeInOut" }}
+                  >
+                    <OptimizedImage
+                      src={image}
+                      alt={`Hero Banner ${index + 1}`}
+                      className="w-full h-full"
+                      priority={index === 0}
+                      sizes="100vw"
+                      objectFit="cover"
+                      placeholder="blur"
+                    />
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
           </div>
         ) : (
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-400 to-green-600" />
         )}
 
         {/* Navbar */}
-        <PageNavbar textColor="white" zIndex={20} />
+        <motion.div 
+          className="relative z-20 pt-2 sm:pt-3 lg:pt-4"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
+          <PageNavbar textColor="white" zIndex={20} />
+        </motion.div>
 
         {/* Hero Section */}
-        <section className="relative z-20 w-full py-0 sm:py-0">
+        <section className="relative z-20 w-full py-4 sm:py-6 md:py-12 lg:py-12">
           {/* Content */}
-          <div className="relative z-20 max-w-2xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="relative z-20 max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-3 sm:px-6 lg:px-8">
             {/* Search Bar and VEG MODE Container - Sticky */}
-            <div className="sticky top-4 z-30 flex items-center gap-3 sm:gap-4">
+            <motion.div 
+              className="sticky top-4 z-30 flex items-center gap-3 sm:gap-4 lg:gap-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
+            >
               {/* Enhanced Search Bar */}
-              <div className="flex-1 relative animate-[slideUp_0.4s_ease-out]">
-                <div className="relative bg-white dark:bg-[#1a1a1a] rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 p-1 sm:p-1.5 transition-all duration-300 hover:shadow-xl">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <Search className="h-4 w-4 sm:h-4 sm:w-4 text-green-600 flex-shrink-0 ml-2 sm:ml-3" strokeWidth={2.5} />
+              <motion.div 
+                className="flex-1 relative"
+                whileHover={{ scale: 1.02 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <div className="relative bg-white dark:bg-[#1a1a1a] rounded-xl lg:rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 p-1 sm:p-1.5 lg:p-2 transition-all duration-300 hover:shadow-xl">
+                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
+                    <Search className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-green-600 flex-shrink-0 ml-2 sm:ml-3 lg:ml-4" strokeWidth={2.5} />
                     <div className="flex-1 relative">
                       <div className="relative w-full">
                         <Input
@@ -1124,11 +1144,11 @@ export default function Home() {
                               setHeroSearch("")
                             }
                           }}
-                          className="pl-0 pr-2 h-8 sm:h-9 w-full bg-transparent border-0 text-sm sm:text-base font-semibold text-gray-700 dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full"
+                          className="pl-0 pr-2 h-8 sm:h-9 lg:h-11 w-full bg-white dark:bg-[#1a1a1a] border-0 text-sm sm:text-base lg:text-lg font-semibold text-gray-700 dark:text-white focus-visible:ring-0 focus-visible:ring-offset-0 rounded-full placeholder:text-gray-400 dark:placeholder:text-gray-500"
                         />
                         {/* Animated placeholder - same animation as RestaurantDetails highlight offer */}
                         {!heroSearch && (
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none h-5 overflow-hidden">
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none h-5 lg:h-6 overflow-hidden">
                             <AnimatePresence mode="wait">
                               <motion.span
                                 key={placeholderIndex}
@@ -1136,7 +1156,7 @@ export default function Home() {
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: -16, opacity: 0 }}
                                 transition={{ duration: 0.3 }}
-                                className="text-sm sm:text-base font-semibold text-gray-400 dark:text-gray-500 inline-block"
+                                className="text-sm sm:text-base lg:text-lg font-semibold text-gray-400 dark:text-gray-500 inline-block"
                               >
                                 {placeholders[placeholderIndex]}
                               </motion.span>
@@ -1148,38 +1168,57 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={handleSearchFocus}
-                      className="flex-shrink-0 mr-2 sm:mr-3 p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                      className="flex-shrink-0 mr-2 sm:mr-3 lg:mr-4 p-1 lg:p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                       >
-                      <Mic className="h-4 w-4 sm:h-4 sm:w-4 text-gray-500 dark:text-gray-400" strokeWidth={2.5} />
+                      <Mic className="h-4 w-4 sm:h-4 sm:w-4 lg:h-5 lg:w-5 text-gray-500 dark:text-gray-400" strokeWidth={2.5} />
                     </button>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
               {/* VEG MODE Toggle */}
-              <div ref={vegModeToggleRef} className="flex flex-col items-center gap-0.5 sm:gap-1 flex-shrink-0 relative">
+              <motion.div 
+                ref={vegModeToggleRef} 
+                className="flex flex-col items-center gap-0.5 sm:gap-1 lg:gap-1.5 flex-shrink-0 relative"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
                 <div className="flex flex-col items-center">
-                  <span className="text-white text-[13px] sm:text-[11px] font-black leading-none">VEG</span>
-                  <span className="text-white text-[9.5px] sm:text-[10px] font-black leading-none">MODE</span>
+                  <span className="text-white text-[13px] sm:text-[11px] lg:text-sm font-black leading-none">VEG</span>
+                  <span className="text-white text-[9.5px] sm:text-[10px] lg:text-xs font-black leading-none">MODE</span>
                 </div>
                 <Switch
                   checked={vegMode}
                   onCheckedChange={setVegMode}
-                  className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-9 h-4 sm:w-10 sm:h-5 shadow-lg [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-3 [&_[data-slot=switch-thumb]]:w-3 sm:[&_[data-slot=switch-thumb]]:h-4 sm:[&_[data-slot=switch-thumb]]:w-4 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 sm:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
+                  className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-9 h-4 sm:w-10 sm:h-5 lg:w-12 lg:h-6 shadow-lg [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-3 [&_[data-slot=switch-thumb]]:w-3 sm:[&_[data-slot=switch-thumb]]:h-4 sm:[&_[data-slot=switch-thumb]]:w-4 lg:[&_[data-slot=switch-thumb]]:h-5 lg:[&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 sm:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 lg:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
                 />
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </div>
         </section>
       </div>
 
       {/* Rest of Content - Container Width with Unified Background */}
-      <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 space-y-0 pt-2 sm:pt-3">
+      <motion.div 
+        className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 space-y-0 pt-2 sm:pt-3 lg:pt-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.4 }}
+      >
         {/* Food Categories - Horizontal Scroll */}
-        <section className="space-y-1 sm:space-y-1.5">
+        <motion.section 
+          className="space-y-1 sm:space-y-1.5 lg:space-y-2"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.5 }}
+        >
           <div
             ref={categoryScrollRef}
-            className="flex gap-3 sm:gap-4 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 py-2 sm:py-3"
+            className="flex gap-3 sm:gap-4 lg:gap-5 xl:gap-6 overflow-x-auto overflow-y-visible scrollbar-hide scroll-smooth px-2 sm:px-3 lg:px-4 py-2 sm:py-3 lg:py-4"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
@@ -1188,16 +1227,25 @@ export default function Home() {
             }}
           >
             {/* Offer Image - Static, Centered */}
-            <div className="flex-shrink-0 flex flex-col items-center justify-center">
+            <motion.div 
+              className="flex-shrink-0 flex flex-col items-center justify-center"
+              initial={{ opacity: 0, scale: 0.8 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              whileHover={{ scale: 1.1 }}
+            >
               <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-xl overflow-hidden">
-                <img
+                <OptimizedImage
                   src={offerImage}
                   alt="Special Offer"
-                  className="w-full h-full object-cover"
-                  loading="lazy"
+                  className="w-full h-full"
+                  sizes="(max-width: 640px) 56px, (max-width: 768px) 80px, 96px"
+                  objectFit="cover"
+                  placeholder="blur"
                 />
               </div>
-            </div>
+            </motion.div>
             {loadingLandingConfig ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -1205,72 +1253,111 @@ export default function Home() {
             ) : landingCategories.length === 0 ? (
               // Fallback to hardcoded categories if API returns empty
               categories.map((category, index) => (
-                <ScrollRevealSimple key={category.id} delay={index * 0.05} className="flex-shrink-0">
+                <motion.div 
+                  key={category.id} 
+                  className="flex-shrink-0"
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ 
+                    duration: 0.4, 
+                    delay: index * 0.05,
+                    type: "spring",
+                    stiffness: 100
+                  }}
+                  whileHover={{ scale: 1.1, y: -5 }}
+                  whileTap={{ scale: 0.95 }}
+                >
                   <Link to={`/user/category/${category.name.toLowerCase()}`}>
                     <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
                       <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
-                        <img
+                        <OptimizedImage
                           src={category.image}
                           alt={category.name}
-                          className="w-full h-full object-cover bg-white rounded-full"
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = foodImages[0]
-                          }}
+                          className="w-full h-full rounded-full"
+                          sizes="(max-width: 640px) 56px, (max-width: 768px) 80px, 96px"
+                          objectFit="cover"
+                          placeholder="blur"
+                          onError={() => {}}
                         />
                       </div>
-                      <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 text-center">
+                      <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center">
                         {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
                       </span>
                     </div>
                   </Link>
-                </ScrollRevealSimple>
+                </motion.div>
               ))
             ) : (
               landingCategories.map((category, index) => (
-                <ScrollRevealSimple key={category._id || index} delay={index * 0.05} className="flex-shrink-0">
+                <motion.div 
+                  key={category._id || index} 
+                  className="flex-shrink-0"
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ 
+                    duration: 0.4, 
+                    delay: index * 0.05,
+                    type: "spring",
+                    stiffness: 100
+                  }}
+                  whileHover={{ scale: 1.1, y: -5 }}
+                  whileTap={{ scale: 0.95 }}
+                >
                   <Link to={`/user/category/${category.slug || category.label.toLowerCase().replace(/\s+/g, '-')}`}>
                     <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
                       <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
-                        <img
+                        <OptimizedImage
                           src={category.imageUrl}
                           alt={category.label}
-                          className="w-full h-full object-cover bg-white rounded-full"
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = foodImages[0]
-                          }}
+                          className="w-full h-full bg-white rounded-full"
+                          sizes="(max-width: 640px) 56px, (max-width: 768px) 80px, 96px"
+                          objectFit="cover"
+                          placeholder="blur"
+                          onError={() => {}}
                         />
                       </div>
-                      <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 text-center">
+                      <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center">
                         {category.label.length > 7 ? `${category.label.slice(0, 7)}...` : category.label}
                       </span>
                     </div>
                   </Link>
-                </ScrollRevealSimple>
+                </motion.div>
               ))
             )}
           </div>
-        </section>
+        </motion.section>
 
         {/* Filters */}
-        <section className="py-1">
+        <motion.section 
+          className="py-1 lg:py-2"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
           <div
-            className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pb-1"
+            className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 overflow-x-auto scrollbar-hide pb-1 lg:pb-2"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
             }}
           >
             {/* Filter Button - Opens Modal */}
-            <Button
-              variant="outline"
-              onClick={() => setIsFilterOpen(true)}
-              className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-white"
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
-              <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="text-xs sm:text-sm font-bold text-black">Filters</span>
-            </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsFilterOpen(true)}
+                className="h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 font-medium transition-all bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-white"
+              >
+                <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="text-xs sm:text-sm font-bold text-black dark:text-white">Filters</span>
+              </Button>
+            </motion.div>
 
             {/* Filter Buttons */}
             {[
@@ -1278,42 +1365,63 @@ export default function Home() {
               { id: 'delivery-under-45', label: 'Under 45 mins' },
               { id: 'distance-under-1km', label: 'Under 1km', icon: MapPin },
               { id: 'distance-under-2km', label: 'Under 2km', icon: MapPin },
-            ].map((filter) => {
+            ].map((filter, index) => {
               const Icon = filter.icon
               const isActive = activeFilters.has(filter.id)
               return (
-                <Button
+                <motion.div
                   key={filter.id}
-                  variant="outline"
-                  onClick={() => {
-                    toggleFilter(filter.id)
-                    setIsLoadingFilterResults(true)
-                    // Simulate loading for 1 second
-                    setTimeout(() => {
-                      setIsLoadingFilterResults(false)
-                    }, 500)
-                  }
-                  }
-                  className={`h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${isActive
-                      ? 'bg-green-600 text-white border border-green-600 hover:bg-green-600/90'
-                      : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
-                    }`}
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: index * 0.1 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
-                  {Icon && <Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${isActive ? 'fill-white' : ''}`} />}
-                  <span className="text-xs sm:text-sm font-bold text-black">{filter.label}</span>
-                </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      toggleFilter(filter.id)
+                      setIsLoadingFilterResults(true)
+                      // Simulate loading for 1 second
+                      setTimeout(() => {
+                        setIsLoadingFilterResults(false)
+                      }, 500)
+                    }
+                    }
+                    className={`h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${isActive
+                        ? 'bg-green-600 text-white border border-green-600 hover:bg-green-600/90'
+                        : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
+                      }`}
+                  >
+                    {Icon && <Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${isActive ? 'fill-white' : ''}`} />}
+                    <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{filter.label}</span>
+                  </Button>
+                </motion.div>
               )
             })}
           </div>
-        </section>
+        </motion.section>
 
         {/* Explore More Section */}
-        <section className="pt-2 sm:pt-3">
-          <h2 className="text-xs sm:text-sm font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-2 sm:mb-3 px-1">
+        <motion.section 
+          className="pt-2 sm:pt-3 lg:pt-4"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.5 }}
+        >
+          <motion.h2 
+            className="text-xs sm:text-sm lg:text-base font-semibold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-2 sm:mb-3 lg:mb-4 px-1"
+            initial={{ opacity: 0, x: -20 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+          >
             {exploreMoreHeading}
-          </h2>
+          </motion.h2>
           <div
-            className="flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide pb-2"
+            className="flex gap-2 sm:gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-2 lg:pb-3"
             style={{
               scrollbarWidth: "none",
               msOverflowStyle: "none",
@@ -1356,69 +1464,123 @@ export default function Home() {
                   image: exploreGiftCard,
                   href: '/user/gift-card'
                 },
-              ].map((item) => (
-                <Link key={item.id} to={item.href} className="flex-shrink-0 bg-white">
-                  <div className="flex flex-col items-center gap-2.5 w-24 sm:w-28 md:w-32 group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white flex items-center justify-center shadow-sm group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 overflow-hidden p-2.5">
-                      <img
-                        src={item.image}
-                        alt={item.label}
-                        className="w-full h-full object-contain"
-                      />
+              ].map((item, index) => (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ 
+                    duration: 0.4, 
+                    delay: index * 0.1,
+                    type: "spring",
+                    stiffness: 100
+                  }}
+                  whileHover={{ scale: 1.1, y: -5 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Link to={item.href} className="flex-shrink-0 bg-white  dark:bg-[#1a1a1a]/80 dark:text-white">
+                    <div className="flex flex-col items-center gap-2.5 w-24 sm:w-28 md:w-32 group">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white dark:bg-[#1a1a1a]/80 dark:text-white flex items-center justify-center shadow-sm group-hover:shadow-lg transition-all duration-300 overflow-hidden p-2.5">
+                        <OptimizedImage
+                          src={item.image}
+                          alt={item.label}
+                          className="w-full h-full dark:rounded-md"
+                          sizes="(max-width: 640px) 80px, (max-width: 768px) 96px, 112px"
+                          objectFit="contain"
+                          placeholder="blur"
+                        />
+                      </div>
+                      <span className="text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 text-center leading-tight">
+                        {item.label}
+                      </span>
                     </div>
-                    <span className="text-sm sm:text-base font-semibold text-gray-700 text-center leading-tight">
-                      {item.label}
-                    </span>
-                  </div>
-                </Link>
+                  </Link>
+                </motion.div>
               ))
             ) : (
-              landingExploreMore.map((item) => (
-                <Link key={item._id} to={item.link} className="flex-shrink-0 bg-white">
-                  <div className="flex flex-col items-center gap-2.5 w-24 sm:w-28 md:w-32 group">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white flex items-center justify-center shadow-sm group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 overflow-hidden p-2.5">
-                      <img
-                        src={item.imageUrl}
-                        alt={item.label}
-                        className="w-full h-full object-contain"
-                        onError={(e) => {
-                          e.target.src = exploreOffers
-                        }}
-                      />
+              landingExploreMore.map((item, index) => (
+                <motion.div
+                  key={item._id}
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ 
+                    duration: 0.4, 
+                    delay: index * 0.1,
+                    type: "spring",
+                    stiffness: 100
+                  }}
+                  whileHover={{ scale: 1.1, y: -5 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                    <Link to={item.link} className="flex-shrink-0 bg-white dark:bg-[#1a1a1a]/80 dark:text-white">
+                    <div className="flex flex-col items-center gap-2.5 w-24 sm:w-28 md:w-32 group">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl bg-white dark:bg-[#1a1a1a]/80 dark:text-white  flex items-center justify-center shadow-sm group-hover:shadow-lg transition-all duration-300 overflow-hidden p-2.5">
+                        <OptimizedImage
+                          src={item.imageUrl}
+                          alt={item.label}
+                          className="w-full h-full"
+                          sizes="(max-width: 640px) 80px, (max-width: 768px) 96px, 112px"
+                          objectFit="contain"
+                          placeholder="blur"
+                          onError={() => {}}
+                        />
+                      </div>
+                      <span className="text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 text-center leading-tight">
+                        {item.label}
+                      </span>
                     </div>
-                    <span className="text-sm sm:text-base font-semibold text-gray-700 text-center leading-tight">
-                      {item.label}
-                    </span>
-                  </div>
-                </Link>
+                  </Link>
+                </motion.div>
               ))
             )}
           </div>
-        </section>
+        </motion.section>
 
         {/* Featured Foods - Horizontal Scroll */}
 
         {/* Restaurants - Enhanced with Animations */}
-        <section className="space-y-0 pt-3 sm:pt-4">
-          <TextRevealSimple className="px-1 mb-3">
-            <div className="flex flex-col gap-0.5">
-              <h2 className="text-xs sm:text-sm font-semibold text-gray-400 tracking-widest uppercase">
+        <motion.section 
+          className="space-y-0 pt-3 sm:pt-4 lg:pt-6"
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.6 }}
+        >
+          <motion.div 
+            className="px-1 mb-3 lg:mb-4"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="flex flex-col gap-0.5 lg:gap-1">
+              <h2 className="text-xs sm:text-sm lg:text-base font-semibold text-gray-400 tracking-widest uppercase">
                 {filteredRestaurants.length} Restaurants Delivering to You
               </h2>
-              <span className="text-base sm:text-lg text-gray-500 font-normal">Featured</span>
+              <span className="text-base sm:text-lg lg:text-2xl text-gray-500 font-normal">Featured</span>
             </div>
-          </TextRevealSimple>
+          </motion.div>
           <div className="relative">
             {/* Loading Overlay */}
-            {(isLoadingFilterResults || loadingRestaurants) && (
-              <div className="absolute inset-0 bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg min-h-[400px]">
-                <div className="flex flex-col items-center gap-3">
-                  <Loader2 className="h-8 w-8 text-green-600 animate-spin" strokeWidth={2.5} />
-                  <span className="text-sm font-medium text-gray-700 dark:text-white">Loading restaurants...</span>
-                </div>
-              </div>
-            )}
-            <div className={`grid grid-cols-1 gap-2 sm:gap-3 pt-1 sm:pt-1.5 ${isLoadingFilterResults || loadingRestaurants ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300`}>
+            <AnimatePresence>
+              {(isLoadingFilterResults || loadingRestaurants) && (
+                <motion.div 
+                  className="absolute inset-0 bg-white/80 dark:bg-[#1a1a1a]/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg min-h-[400px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="h-8 w-8 text-green-600 animate-spin" strokeWidth={2.5} />
+                    <span className="text-sm font-medium text-gray-700 dark:text-white">Loading restaurants...</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3  gap-3 sm:gap-4 lg:gap-5 xl:gap-6 pt-1 sm:pt-1.5 lg:pt-2 items-stretch ${isLoadingFilterResults || loadingRestaurants ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300`}>
               {filteredRestaurants.map((restaurant, index) => {
                 const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
                 // Direct favorite check - isFavorite is already memoized in context
@@ -1451,82 +1613,238 @@ export default function Home() {
                 }
 
                 return (
-                  <ScrollRevealSimple key={restaurant.id} delay={index * 0.1}>
-                    <Link to={`/user/restaurants/${restaurantSlug}`}>
-                      <Card className="overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-2xl">
-                        {/* Image Section */}
-                        <div className="relative h-48 sm:h-56 md:h-60 w-full overflow-hidden rounded-t-2xl">
-                          <img
-                            src={restaurant.image}
-                            alt={restaurant.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
+                  <motion.div 
+                    key={restaurant.id} 
+                    className="h-full"
+                    initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                    viewport={{ once: true, margin: "-50px" }}
+                    transition={{ 
+                      duration: 0.5, 
+                      delay: index * 0.1,
+                      type: "spring",
+                      stiffness: 100
+                    }}
+                    style={{ perspective: 1000 }}
+                  >
+                    <motion.div
+                      className="h-full"
+                      whileHover="hover"
+                      initial="rest"
+                      variants={{
+                        rest: {
+                          y: 0,
+                          scale: 1,
+                          rotateX: 0,
+                          rotateY: 0,
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                        },
+                        hover: {
+                          y: -12,
+                          scale: 1.02,
+                          rotateX: 2,
+                          rotateY: 0,
+                          boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(34, 197, 94, 0.1)",
+                          transition: {
+                            type: "spring",
+                            stiffness: 300,
+                            damping: 20,
+                            mass: 0.5
+                          }
+                        }
+                      }}
+                    >
+                      <Link to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
+                        <Card className="overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] border-background transition-all duration-500 py-0 rounded-md flex flex-col h-full w-full relative">
+                          {/* Image Section */}
+                          <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0">
+                            <motion.div
+                              className="absolute inset-0"
+                              variants={{
+                                rest: { scale: 1 },
+                                hover: { scale: 1.15 }
+                              }}
+                              transition={{ duration: 0.6, ease: "easeOut" }}
+                            >
+                              <OptimizedImage
+                                src={restaurant.image}
+                                alt={restaurant.name}
+                                className="w-full h-full"
+                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                                objectFit="cover"
+                                placeholder="blur"
+                                priority={index < 3}
+                              />
+                            </motion.div>
+                            
+                            {/* Gradient Overlay on Hover */}
+                            <motion.div
+                              className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0"
+                              variants={{
+                                rest: { opacity: 0 },
+                                hover: { opacity: 1 }
+                              }}
+                              transition={{ duration: 0.4 }}
+                            />
+                            
+                            {/* Shine Effect */}
+                            <motion.div
+                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full"
+                              variants={{
+                                rest: { x: "-100%" },
+                                hover: { 
+                                  x: "200%",
+                                  transition: {
+                                    duration: 0.8,
+                                    ease: "easeInOut",
+                                    delay: 0.2
+                                  }
+                                }
+                              }}
+                            />
 
-                          {/* Featured Dish Badge - Top Left */}
-                          <div className="absolute top-3 left-3">
-                            <div className="bg-gray-800/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium">
-                              {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
-                            </div>
-                          </div>
-
-                          {/* Bookmark Icon - Top Right */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={handleToggleFavorite}
-                            className={`absolute top-3 right-3 h-9 w-9  rounded-full border flex items-center justify-center transition-all duration-300 ${favorite
-                                ? "border-red-500 bg-red-50 text-red-500"
-                                : "border-white bg-white/90 text-gray-600 hover:bg-white"
-                              }`}
-                          >
-
-                            <Bookmark
-                              className={`h-5 w-5 transition-all duration-300 ${favorite ? "fill-red-500" : ""
-                                }`} />                       </Button>
-                          {/* FREE delivery Badge - Bottom Left (only for first 3 restaurants) */}
-                          {index < 3 && (
-                            <div className="absolute bottom-0 left-0 sm:bottom-0 sm:left-0 z-10">
-                              <div className="bg-gradient-to-r from-blue-600 via-blue-500/80 to-transparent text-white px-2.5 py-1 rounded-r-sm text-[10px] sm:text-xs font-bold shadow-lg backdrop-blur-sm">
-                                FREE delivery
+                            {/* Featured Dish Badge - Top Left */}
+                            <motion.div 
+                              className="absolute top-3 left-3 md:top-4 md:left-4 flex items-center z-10"
+                              variants={{
+                                rest: { scale: 1, y: 0 },
+                                hover: { scale: 1.05, y: -2 }
+                              }}
+                              transition={{ duration: 0.3 }}
+                            >
+                              <div className="bg-gray-800/90 backdrop-blur-sm text-white px-2 py-1 md:px-4 md:py-1.5 rounded-md text-xs font-medium flex items-center shadow-lg">
+                                {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
                               </div>
-                            </div>
-                          )}
-                        </div>
+                            </motion.div>
 
-                        {/* Content Section */}
-                        <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
-                          {/* Restaurant Name & Rating */}
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-lg sm:text-xl font-bold text-gray-900 line-clamp-1">
-                                {restaurant.name}
-                              </h3>
-                            </div>
-                            <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1">
-                              <span className="text-sm font-bold">{restaurant.rating}</span>
-                              <Star className="h-3 w-3 fill-white text-white" />
-                            </div>
+                            {/* Bookmark Icon - Top Right */}
+                            <motion.div
+                              variants={{
+                                rest: { scale: 1, rotate: 0 },
+                                hover: { scale: 1.1, rotate: 5 }
+                              }}
+                              transition={{ duration: 0.3 }}
+                              className="absolute top-3 right-3 md:top-4 md:right-4 z-10"
+                            >
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={handleToggleFavorite}
+                                className={`h-9 w-9 md:h-11 md:w-11 rounded-full border flex items-center justify-center transition-all duration-300 ${favorite
+                                    ? "border-red-500 bg-red-50 text-red-500"
+                                    : "border-white bg-white/90 text-gray-600 hover:bg-white"
+                                  }`}
+                              >
+                                <Bookmark
+                                  className={`h-5 w-5 lg:h-6 lg:w-6 transition-all duration-300 ${favorite ? "fill-red-500" : ""
+                                    }`} />
+                              </Button>
+                            </motion.div>
+                            
+                            {/* FREE delivery Badge - Bottom Left (only for first 3 restaurants) */}
+                            {index < 3 && (
+                              <motion.div 
+                                className="absolute bottom-0 left-0 sm:bottom-0 sm:left-0 z-10"
+                                variants={{
+                                  rest: { x: 0, opacity: 1 },
+                                  hover: { x: 4, opacity: 1 }
+                                }}
+                                transition={{ duration: 0.3 }}
+                              >
+                                <div className="bg-gradient-to-r from-blue-600 via-blue-500/80 to-transparent text-white px-2.5 py-1 rounded-r-sm text-[10px] sm:text-xs font-bold shadow-lg backdrop-blur-sm">
+                                  FREE delivery
+                                </div>
+                              </motion.div>
+                            )}
                           </div>
 
-                          {/* Delivery Time & Distance */}
-                          <div className="flex items-center gap-1 text-sm text-gray-500 mb-2">
-                            <Clock className="h-4 w-4" strokeWidth={1.5} />
-                            <span className="font-medium">{restaurant.deliveryTime}</span>
-                            <span className="mx-1">|</span>
-                            <span className="font-medium">{restaurant.distance}</span>
-                          </div>
-
-                          {/* Offer Badge */}
-                          {restaurant.offer && (
-                            <div className="flex items-center gap-2 text-sm">
-                              <BadgePercent className="h-4 w-4 text-blue-600" strokeWidth={2} />
-                              <span className="text-gray-700 font-medium">{restaurant.offer}</span>
+                          {/* Content Section */}
+                          <motion.div
+                            variants={{
+                              rest: { y: 0 },
+                              hover: { y: -4 }
+                            }}
+                            transition={{ duration: 0.4, ease: "easeOut" }}
+                          >
+                            <CardContent className="p-3 sm:p-4 lg:p-5 pt-3 sm:pt-4 lg:pt-5 flex flex-col flex-grow">
+                            {/* Restaurant Name & Rating */}
+                            <div className="flex items-start justify-between gap-2 mb-2 lg:mb-3">
+                              <div className="flex-1 min-w-0">
+                                <motion.h3 
+                                  className="text-md sm:text-md lg:text-xl font-bold text-gray-900 dark:text-white line-clamp-1 lg:line-clamp-2"
+                                  variants={{
+                                    rest: {},
+                                    hover: { color: "rgb(34, 197, 94)" }
+                                  }}
+                                  transition={{ duration: 0.3 }}
+                                >
+                                  {restaurant.name}
+                                </motion.h3>
+                              </div>
+                              <motion.div 
+                                className="flex-shrink-0 bg-green-600 text-white px-2 py-1 lg:px-3 lg:py-1.5 rounded-lg flex items-center gap-1"
+                                variants={{
+                                  rest: { scale: 1, rotate: 0 },
+                                  hover: { scale: 1.1, rotate: 5 }
+                                }}
+                                transition={{ duration: 0.3, type: "spring", stiffness: 400 }}
+                              >
+                                <span className="text-sm lg:text-base font-bold">{restaurant.rating}</span>
+                                <Star className="h-3 w-3 lg:h-4 lg:w-4 fill-white text-white" />
+                              </motion.div>
                             </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </ScrollRevealSimple>
+
+                            {/* Delivery Time & Distance */}
+                            <motion.div 
+                              className="flex items-center gap-1 text-sm lg:text-base text-gray-500 mb-2 lg:mb-3"
+                              variants={{
+                                rest: { opacity: 0.7 },
+                                hover: { opacity: 1 }
+                              }}
+                              transition={{ duration: 0.3 }}
+                            >
+                              <Clock className="h-4 w-4 lg:h-5 lg:w-5" strokeWidth={1.5} />
+                              <span className="font-medium">{restaurant.deliveryTime}</span>
+                              <span className="mx-1">|</span>
+                              <span className="font-medium">{restaurant.distance}</span>
+                            </motion.div>
+
+                            {/* Offer Badge */}
+                            {restaurant.offer && (
+                              <motion.div 
+                                className="flex items-center gap-2 text-sm lg:text-base mt-auto"
+                                variants={{
+                                  rest: { x: 0 },
+                                  hover: { x: 4 }
+                                }}
+                                transition={{ duration: 0.3 }}
+                              >
+                                <BadgePercent className="h-4 w-4 lg:h-5 lg:w-5 text-blue-600" strokeWidth={2} />
+                                <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
+                              </motion.div>
+                            )}
+                            </CardContent>
+                          </motion.div>
+                          
+                          {/* Border Glow Effect */}
+                          <motion.div
+                            className="absolute inset-0 rounded-md pointer-events-none z-0"
+                            variants={{
+                              rest: { 
+                                boxShadow: "inset 0 0 0 0px rgba(34, 197, 94, 0)",
+                                border: "1px solid transparent"
+                              },
+                              hover: { 
+                                boxShadow: "inset 0 0 0 1px rgba(34, 197, 94, 0.2)",
+                                border: "1px solid rgba(34, 197, 94, 0.3)"
+                              }
+                            }}
+                            transition={{ duration: 0.4 }}
+                          />
+                        </Card>
+                      </Link>
+                    </motion.div>
+                  </motion.div>
                 )
               })}
             </div>
@@ -1538,24 +1856,39 @@ export default function Home() {
               </Button>
             </Link> */}
           </div>
-        </section>
-      </div>
-      <Footer />
+        </motion.section>
+      </motion.div>
 
       {/* Filter Modal - Bottom Sheet */}
-      {isFilterOpen && (
-        <div className="fixed inset-0 z-[100]">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setIsFilterOpen(false)}
-          />
+      <AnimatePresence>
+        {isFilterOpen && (
+          <div className="fixed inset-0 z-[100]">
+            {/* Backdrop */}
+            <motion.div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setIsFilterOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            />
 
-          {/* Modal Content */}
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
+            {/* Modal Content */}
+            <motion.div 
+              className="absolute bottom-0 left-0 right-0 bg-white dark:bg-[#1a1a1a] rounded-t-3xl max-h-[85vh] flex flex-col"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ 
+                type: "spring", 
+                damping: 30, 
+                stiffness: 400,
+                duration: 0.3
+              }}
+            >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-4 border-b">
-              <h2 className="text-lg font-bold text-gray-900">Filters and sorting</h2>
+            <div className="flex items-center justify-between px-4 py-4 border-b dark:border-gray-800">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Filters and sorting</h2>
               <button
                 onClick={() => {
                   setActiveFilters(new Set())
@@ -1571,7 +1904,7 @@ export default function Home() {
             {/* Body */}
             <div className="flex flex-1 overflow-hidden">
               {/* Left Sidebar - Tabs */}
-              <div className="w-24 sm:w-28 bg-gray-50 border-r flex flex-col">
+              <div className="w-24 sm:w-28 bg-gray-50 dark:bg-[#0a0a0a] border-r dark:border-gray-800 flex flex-col">
                 {[
                   { id: 'sort', label: 'Sort By', icon: ArrowDownUp },
                   { id: 'time', label: 'Time', icon: Timer },
@@ -1594,7 +1927,7 @@ export default function Home() {
                           section.scrollIntoView({ behavior: 'smooth', block: 'start' })
                         }
                       }}
-                      className={`flex flex-col items-center gap-1 py-4 px-2 text-center relative transition-colors ${isActive ? 'bg-white text-green-600' : 'text-gray-500 hover:bg-gray-100'
+                      className={`flex flex-col items-center gap-1 py-4 px-2 text-center relative transition-colors ${isActive ? 'bg-white dark:bg-[#1a1a1a] text-green-600' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                         }`}
                     >
                       {isActive && (
@@ -1615,7 +1948,7 @@ export default function Home() {
                   data-section-id="sort"
                   className="space-y-4 mb-8"
                 >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Sort by</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Sort by</h3>
                   <div className="flex flex-col gap-3">
                     {[
                       { id: null, label: 'Relevance' },
@@ -1628,11 +1961,11 @@ export default function Home() {
                         key={option.id || 'relevance'}
                         onClick={() => setSortBy(option.id)}
                         className={`px-4 py-3 rounded-xl border text-left transition-colors ${sortBy === option.id
-                            ? 'border-green-600 bg-green-50'
-                            : 'border-gray-200 hover:border-green-600'
+                            ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                           }`}
                       >
-                        <span className={`text-sm font-medium ${sortBy === option.id ? 'text-green-600' : 'text-gray-700'}`}>
+                        <span className={`text-sm font-medium ${sortBy === option.id ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>
                           {option.label}
                         </span>
                       </button>
@@ -1646,27 +1979,27 @@ export default function Home() {
                   data-section-id="time"
                   className="space-y-4 mb-8"
                 >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Delivery Time</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Delivery Time</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => toggleFilter('delivery-under-30')}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('delivery-under-30')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-30') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
-                      <span className={`text-sm font-medium ${activeFilters.has('delivery-under-30') ? 'text-green-600' : 'text-gray-700'}`}>Under 30 mins</span>
+                      <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-30') ? 'text-green-600' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
+                      <span className={`text-sm font-medium ${activeFilters.has('delivery-under-30') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Under 30 mins</span>
                     </button>
                     <button
                       onClick={() => toggleFilter('delivery-under-45')}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('delivery-under-45')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-45') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
-                      <span className={`text-sm font-medium ${activeFilters.has('delivery-under-45') ? 'text-green-600' : 'text-gray-700'}`}>Under 45 mins</span>
+                      <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-45') ? 'text-green-600' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
+                      <span className={`text-sm font-medium ${activeFilters.has('delivery-under-45') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Under 45 mins</span>
                     </button>
                   </div>
                 </div>
@@ -1677,37 +2010,37 @@ export default function Home() {
                   data-section-id="rating"
                   className="space-y-4 mb-8"
                 >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Restaurant Rating</h3>
+                  <h3 className="text-lg font-semibold text-gray-900  dark:text-white mb-4">Restaurant Rating</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => toggleFilter('rating-35-plus')}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-35-plus')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <Star className={`h-6 w-6 ${activeFilters.has('rating-35-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
-                      <span className={`text-sm font-medium ${activeFilters.has('rating-35-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 3.5+</span>
+                      <Star className={`h-6 w-6 ${activeFilters.has('rating-35-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400 dark:text-gray-500'}`} />
+                      <span className={`text-sm font-medium ${activeFilters.has('rating-35-plus') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Rated 3.5+</span>
                     </button>
                     <button
                       onClick={() => toggleFilter('rating-4-plus')}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-4-plus')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <Star className={`h-6 w-6 ${activeFilters.has('rating-4-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
-                      <span className={`text-sm font-medium ${activeFilters.has('rating-4-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 4.0+</span>
+                      <Star className={`h-6 w-6 ${activeFilters.has('rating-4-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400 dark:text-gray-500'}`} />
+                      <span className={`text-sm font-medium ${activeFilters.has('rating-4-plus') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Rated 4.0+</span>
                     </button>
                     <button
                       onClick={() => toggleFilter('rating-45-plus')}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-45-plus')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <Star className={`h-6 w-6 ${activeFilters.has('rating-45-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400'}`} />
-                      <span className={`text-sm font-medium ${activeFilters.has('rating-45-plus') ? 'text-green-600' : 'text-gray-700'}`}>Rated 4.5+</span>
+                      <Star className={`h-6 w-6 ${activeFilters.has('rating-45-plus') ? 'text-green-600 fill-green-600' : 'text-gray-400 dark:text-gray-500'}`} />
+                      <span className={`text-sm font-medium ${activeFilters.has('rating-45-plus') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Rated 4.5+</span>
                     </button>
                   </div>
                 </div>
@@ -1718,27 +2051,27 @@ export default function Home() {
                   data-section-id="distance"
                   className="space-y-4 mb-8"
                 >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Distance</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Distance</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => toggleFilter('distance-under-1km')}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('distance-under-1km')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-1km') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
-                      <span className={`text-sm font-medium ${activeFilters.has('distance-under-1km') ? 'text-green-600' : 'text-gray-700'}`}>Under 1 km</span>
+                      <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-1km') ? 'text-green-600' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
+                      <span className={`text-sm font-medium ${activeFilters.has('distance-under-1km') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Under 1 km</span>
                     </button>
                     <button
                       onClick={() => toggleFilter('distance-under-2km')}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('distance-under-2km')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-2km') ? 'text-green-600' : 'text-gray-600'}`} strokeWidth={1.5} />
-                      <span className={`text-sm font-medium ${activeFilters.has('distance-under-2km') ? 'text-green-600' : 'text-gray-700'}`}>Under 2 km</span>
+                      <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-2km') ? 'text-green-600' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
+                      <span className={`text-sm font-medium ${activeFilters.has('distance-under-2km') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Under 2 km</span>
                     </button>
                   </div>
                 </div>
@@ -1749,25 +2082,25 @@ export default function Home() {
                   data-section-id="price"
                   className="space-y-4 mb-8"
                 >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Dish Price</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Dish Price</h3>
                   <div className="flex flex-col gap-3">
                     <button
                       onClick={() => toggleFilter('price-under-200')}
                       className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('price-under-200')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <span className={`text-sm font-medium ${activeFilters.has('price-under-200') ? 'text-green-600' : 'text-gray-700'}`}>Under ₹200</span>
+                      <span className={`text-sm font-medium ${activeFilters.has('price-under-200') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Under ₹200</span>
                     </button>
                     <button
                       onClick={() => toggleFilter('price-under-500')}
                       className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('price-under-500')
-                          ? 'border-green-600 bg-green-50'
-                          : 'border-gray-200 hover:border-green-600'
+                          ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                         }`}
                     >
-                      <span className={`text-sm font-medium ${activeFilters.has('price-under-500') ? 'text-green-600' : 'text-gray-700'}`}>Under ₹500</span>
+                      <span className={`text-sm font-medium ${activeFilters.has('price-under-500') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Under ₹500</span>
                     </button>
                   </div>
                 </div>
@@ -1778,18 +2111,18 @@ export default function Home() {
                   data-section-id="cuisine"
                   className="space-y-4 mb-8"
                 >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Cuisine</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Cuisine</h3>
                   <div className="grid grid-cols-2 gap-3">
                     {['Chinese', 'American', 'Japanese', 'Italian', 'Mexican', 'Indian', 'Asian', 'Seafood', 'Desserts', 'Cafe', 'Healthy'].map((cuisine) => (
                       <button
                         key={cuisine}
                         onClick={() => setSelectedCuisine(selectedCuisine === cuisine ? null : cuisine)}
                         className={`px-4 py-3 rounded-xl border text-center transition-colors ${selectedCuisine === cuisine
-                            ? 'border-green-600 bg-green-50'
-                            : 'border-gray-200 hover:border-green-600'
+                            ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
                           }`}
                       >
-                        <span className={`text-sm font-medium ${selectedCuisine === cuisine ? 'text-green-600' : 'text-gray-700'}`}>
+                        <span className={`text-sm font-medium ${selectedCuisine === cuisine ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>
                           {cuisine}
                         </span>
                       </button>
@@ -1800,13 +2133,13 @@ export default function Home() {
                 {/* Trust Markers Tab */}
                 {activeFilterTab === 'trust' && (
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Trust Markers</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Trust Markers</h3>
                     <div className="flex flex-col gap-3">
-                      <button className="px-4 py-3 rounded-xl border border-gray-200 hover:border-green-600 text-left transition-colors">
-                        <span className="text-sm font-medium text-gray-700">Top Rated</span>
+                      <button className="px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-green-600 text-left transition-colors">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Top Rated</span>
                       </button>
-                      <button className="px-4 py-3 rounded-xl border border-gray-200 hover:border-green-600 text-left transition-colors">
-                        <span className="text-sm font-medium text-gray-700">Trusted by 1000+ users</span>
+                      <button className="px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-green-600 text-left transition-colors">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Trusted by 1000+ users</span>
                       </button>
                     </div>
                   </div>
@@ -1815,10 +2148,10 @@ export default function Home() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center gap-4 px-4 py-4 border-t bg-white">
+            <div className="flex items-center gap-4 px-4 py-4 border-t dark:border-gray-800 bg-white dark:bg-[#1a1a1a]">
               <button
                 onClick={() => setIsFilterOpen(false)}
-                className="flex-1 py-3 text-center font-semibold text-gray-700"
+                className="flex-1 py-3 text-center font-semibold text-gray-700 dark:text-gray-300"
               >
                 Close
               </button>
@@ -1841,9 +2174,10 @@ export default function Home() {
                   : 'Show results'}
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* Veg Mode Popup */}
       <AnimatePresence>
@@ -1875,7 +2209,7 @@ export default function Home() {
                 stiffness: 300,
                 mass: 0.8
               }}
-              className="fixed z-[9999] bg-white rounded-2xl shadow-2xl p-4 w-[calc(100%-2rem)] max-w-xs"
+              className="fixed z-[9999] bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-2xl p-4 w-[calc(100%-2rem)] max-w-xs"
               style={{
                 top: `${popupPosition.top}px`,
                 right: `${popupPosition.right}px`,
@@ -1884,14 +2218,14 @@ export default function Home() {
             >
               {/* Pointer Triangle */}
               <div
-                className="absolute -top-2 right-5 w-3 h-3 bg-white transform rotate-45"
+                className="absolute -top-2 right-5 w-3 h-3 bg-white dark:bg-[#1a1a1a] transform rotate-45"
                 style={{
                   boxShadow: '-2px -2px 4px rgba(0,0,0,0.1)'
                 }}
               />
 
               {/* Title */}
-              <h3 className="text-base font-bold text-gray-900 mb-3">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white mb-3">
                 See veg dishes from
               </h3>
 
@@ -1899,7 +2233,7 @@ export default function Home() {
               <div className="space-y-2 mb-4">
                 {/* All restaurants */}
                 <label
-                  className="flex items-center gap-2.5 cursor-pointer p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-2.5 cursor-pointer p-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   onClick={() => setVegModeOption("all")}
                 >
                   <div className="relative flex items-center justify-center">
@@ -1912,22 +2246,22 @@ export default function Home() {
                       className="sr-only"
                     />
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${vegModeOption === "all"
-                        ? "border-green-600 bg-green-600"
-                        : "border-gray-300 bg-white"
+                        ? "border-green-600 dark:border-green-500 bg-green-600 dark:bg-green-500"
+                        : "border-gray-300 dark:border-gray-600 bg-white dark:bg-[#2a2a2a]"
                       }`}>
                       {vegModeOption === "all" && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-white dark:bg-white" />
                       )}
                     </div>
                   </div>
-                  <span className="text-sm font-medium text-gray-900">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
                     All restaurants
                   </span>
                 </label>
 
                 {/* Pure Veg restaurants only */}
                 <label
-                  className="flex items-center gap-2.5 cursor-pointer p-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-2.5 cursor-pointer p-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   onClick={() => setVegModeOption("pure-veg")}
                 >
                   <div className="relative flex items-center justify-center">
@@ -1940,15 +2274,15 @@ export default function Home() {
                       className="sr-only"
                     />
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${vegModeOption === "pure-veg"
-                        ? "border-green-600 bg-green-600"
-                        : "border-gray-300 bg-white"
+                        ? "border-green-600 dark:border-green-500 bg-green-600 dark:bg-green-500"
+                        : "border-gray-300 dark:border-gray-600 bg-white dark:bg-[#2a2a2a]"
                       }`}>
                       {vegModeOption === "pure-veg" && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-white dark:bg-white" />
                       )}
                     </div>
                   </div>
-                  <span className="text-sm font-medium text-gray-900">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
                     Pure Veg restaurants only
                   </span>
                 </label>
@@ -1979,7 +2313,7 @@ export default function Home() {
                   setVegMode(false)
                   setPrevVegMode(false)
                 }}
-                className="w-full text-green-600 font-medium text-xs hover:text-green-700 transition-colors"
+                className="w-full text-green-600 dark:text-green-400 font-medium text-xs hover:text-green-700 dark:hover:text-green-500 transition-colors"
               >
                 More settings
               </button>
@@ -2018,10 +2352,10 @@ export default function Home() {
                 stiffness: 300,
                 mass: 0.8
               }}
-              className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+              className="fixed inset-0 z-[9999] flex dark:bg-[#lalala] dark:text-white items-center justify-center p-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-white rounded-2xl shadow-2xl w-[85%] max-w-sm p-6">
+              <div className="bg-white dark:bg-[#lalala] dark:text-white rounded-2xl shadow-2xl w-[85%] max-w-sm p-6">
                 {/* Warning Icon */}
                 <div className="flex justify-center mb-4">
                   <div className="w-20 h-20 rounded-full bg-pink-100 flex items-center justify-center">
@@ -2030,7 +2364,7 @@ export default function Home() {
                 </div>
 
                 {/* Title */}
-                <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">
+                <h2 className="text-2xl font-bold text-gray-900  text-center mb-2">
                   Switch off Veg Mode?
                 </h2>
 
@@ -2164,7 +2498,7 @@ export default function Home() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[10000] bg-white flex items-center justify-center"
+            className="fixed inset-0 z-[10000] bg-white dark:bg-[#0a0a0a] flex items-center justify-center"
           >
             <div className="relative w-32 h-32 flex items-center justify-center w-full">
               {/* Animated circles - positioned absolutely at the center */}
@@ -2186,9 +2520,9 @@ export default function Home() {
                       duration: 2.5,
                       repeat: Number.POSITIVE_INFINITY,
                       ease: "easeOut",
-                      delay: i * 0.3,
+                      delay: i * 0.15,
                     }}
-                    className="absolute rounded-full border border-green-300"
+                    className="absolute rounded-full border border-green-300 dark:border-green-600"
                     style={{
                       width: baseSize,
                       height: baseSize,
@@ -2211,7 +2545,7 @@ export default function Home() {
                   damping: 15,
                   delay: 0.1,
                 }}
-                className="absolute z-10 w-28 h-28 rounded-full border-2 border-green-600 bg-white flex flex-col items-center justify-center shadow-sm"
+                className="absolute z-10 w-28 h-28 rounded-full border-2 border-green-600 dark:border-green-500 bg-white dark:bg-[#1a1a1a] flex flex-col items-center justify-center shadow-sm"
                 style={{
                   // left: "50%",
                   // top: "50%",
@@ -2224,8 +2558,8 @@ export default function Home() {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 }}
                 >
-                  <span className="text-green-600 font-extrabold text-3xl leading-none">100%</span>
-                  <span className="text-green-600 font-extrabold text-3xl leading-none mt-0.5">VEG</span>
+                  <span className="text-green-600 dark:text-green-400 font-extrabold text-3xl leading-none">100%</span>
+                  <span className="text-green-600 dark:text-green-400 font-extrabold text-3xl leading-none mt-0.5">VEG</span>
                 </motion.div>
               </motion.div>
 
@@ -2234,7 +2568,7 @@ export default function Home() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="text-xl font-normal text-gray text-center relative z-10 mt-56 w-full"
+                className="text-xl font-normal text-gray-800 dark:text-gray-200 text-center relative z-10 mt-56 w-full"
               >
                 Explore veg dishes from all restaurants
               </motion.p>
@@ -2252,7 +2586,7 @@ export default function Home() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[10000] bg-white flex items-center justify-center"
+            className="fixed inset-0 z-[10000] bg-white dark:bg-[#0a0a0a] flex items-center justify-center"
           >
             <div className="flex flex-col items-center gap-6">
               {/* Two Circles Spinning in Opposite Directions */}
@@ -2277,7 +2611,7 @@ export default function Home() {
                       ease: "linear"
                     }
                   }}
-                  className="absolute w-16 h-16 border-[4px] border-transparent border-t-pink-500 border-r-pink-500 rounded-full"
+                  className="absolute w-16 h-16 border-[4px] border-transparent border-t-pink-500 dark:border-t-pink-400 border-r-pink-500 dark:border-r-pink-400 rounded-full"
                 />
 
                 {/* Inner Circle - Spins Counter-clockwise */}
@@ -2290,7 +2624,7 @@ export default function Home() {
                       ease: "linear"
                     }
                   }}
-                  className="absolute w-12 h-12 border-[4px] border-transparent border-r-pink-500 rounded-full"
+                  className="absolute w-12 h-12 border-[4px] border-transparent border-r-pink-500 dark:border-r-pink-400 rounded-full"
                 />
               </motion.div>
 
@@ -2302,7 +2636,7 @@ export default function Home() {
                 className="text-center"
               >
                 <motion.h2
-                  className="text-xl font-normal text-gray-800 mb-1"
+                  className="text-xl font-normal text-gray-800 dark:text-gray-200 mb-1"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
@@ -2310,7 +2644,7 @@ export default function Home() {
                   Switching off
                 </motion.h2>
                 <motion.p
-                  className="text-xl font-normal text-gray-800"
+                  className="text-xl font-normal text-gray-800 dark:text-gray-200"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.5 }}

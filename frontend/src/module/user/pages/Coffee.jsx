@@ -244,8 +244,9 @@ export default function Coffee() {
 
       {/* Content */}
       <div className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
-        {/* Header Section */}
-        <div className="mb-6">
+        <div className="max-w-4xl mx-auto">
+          {/* Header Section */}
+          <div className="mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
             Starbucks Coffee
           </h1>
@@ -255,8 +256,9 @@ export default function Coffee() {
           <div className="h-px bg-gray-200 mt-4"></div>
         </div>
 
-        {/* Multiple Store Lists */}
-        {renderStoreList(starbucksStores, "DINING OUTLETS NEAR YOU")}
+          {/* Multiple Store Lists */}
+          {renderStoreList(starbucksStores, "DINING OUTLETS NEAR YOU")}
+        </div>
       </div>
     </AnimatedPage>
   )

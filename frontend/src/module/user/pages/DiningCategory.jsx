@@ -231,8 +231,9 @@ export default function DiningCategory() {
 
       {/* Content */}
       <div className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
-        {/* Category Heading */}
-        <div className="mb-2">
+        <div className="max-w-7xl mx-auto">
+          {/* Category Heading */}
+          <div className="mb-2">
 
           <div className="mb-2">
             <div className="flex items-center justify-center mb-2">
@@ -298,7 +299,7 @@ export default function DiningCategory() {
               </h3>
             </div>
           {/* Restaurant Cards */}
-          <div className="grid grid-cols-1 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
             {filteredRestaurants.map((restaurant, index) => {
               const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
               const favorite = isFavorite(restaurantSlug)
@@ -405,6 +406,7 @@ export default function DiningCategory() {
             })}
           </div>
         </div>
+        </div>
       </div>
 
       {/* Filter Modal - Same as DiningRestaurants page */}
@@ -417,7 +419,7 @@ export default function DiningCategory() {
           />
           
           {/* Modal Content */}
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[85vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
+          <div className="absolute bottom-0 left-0 right-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 bg-white rounded-t-3xl md:rounded-3xl max-h-[85vh] md:max-h-[90vh] md:max-w-lg w-full md:w-auto flex flex-col animate-[slideUp_0.3s_ease-out]">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-4 border-b">
               <h2 className="text-lg font-bold text-gray-900">Filters and sorting</h2>

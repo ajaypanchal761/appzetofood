@@ -217,19 +217,19 @@ export default function OrderHelp() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 p-4 md:p-6 lg:p-8">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto space-y-4 md:space-y-5 lg:space-y-6">
         {/* Header */}
         <ScrollReveal>
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6">
             <Link to="/user/help">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 md:h-10 md:w-10">
+                <ArrowLeft className="h-4 w-4 md:h-5 md:w-5" />
               </Button>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold">Order Help</h1>
-              <p className="text-muted-foreground">Order {order.id}</p>
+              <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold">Order Help</h1>
+              <p className="text-sm md:text-base text-muted-foreground">Order {order.id}</p>
             </div>
           </div>
         </ScrollReveal>
@@ -237,19 +237,19 @@ export default function OrderHelp() {
         {/* Order Summary */}
         <ScrollReveal delay={0.1}>
           <Card className="shadow-lg">
-            <CardHeader>
+            <CardHeader className="p-4 md:p-5 lg:p-6">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Package className="h-5 w-5 text-primary-orange" />
+                <CardTitle className="flex items-center gap-2 text-lg md:text-xl lg:text-2xl">
+                  <Package className="h-4 w-4 md:h-5 md:w-5 text-primary-orange" />
                   Order Summary
                 </CardTitle>
-                <Badge className={`${getStatusColor(order.status)} text-white`}>
+                <Badge className={`${getStatusColor(order.status)} text-white text-xs md:text-sm`}>
                   {getStatusLabel(order.status)}
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="space-y-4 md:space-y-5 p-4 md:p-5 lg:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Order ID</p>
                   <p className="font-semibold">{order.id}</p>
@@ -289,27 +289,27 @@ export default function OrderHelp() {
 
         {/* Common Issues */}
         <ScrollReveal delay={0.2}>
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold">What can we help you with?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4 md:space-y-5 lg:space-y-6">
+            <h2 className="text-xl md:text-2xl lg:text-3xl font-bold">What can we help you with?</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 lg:gap-6">
               {commonIssues.map((issue, index) => {
                 const Icon = issue.icon
                 return (
                   <Card
                     key={issue.id}
                   >
-                    <CardHeader>
-                      <div className="flex items-start gap-3">
-                        <div className="p-2 bg-yellow-100 rounded-lg">
-                          <Icon className="h-5 w-5 text-primary-orange" />
+                    <CardHeader className="p-4 md:p-5 lg:p-6">
+                      <div className="flex items-start gap-3 md:gap-4">
+                        <div className="p-2 md:p-3 bg-yellow-100 rounded-lg">
+                          <Icon className="h-4 w-4 md:h-5 md:w-5 text-primary-orange" />
                         </div>
                         <div className="flex-1">
-                          <CardTitle className="text-lg">{issue.title}</CardTitle>
-                          <CardDescription className="mt-1">{issue.description}</CardDescription>
+                          <CardTitle className="text-base md:text-lg lg:text-xl">{issue.title}</CardTitle>
+                          <CardDescription className="mt-1 text-sm md:text-base">{issue.description}</CardDescription>
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-3 md:space-y-4 p-4 md:p-5 lg:p-6">
                       <div className="space-y-2">
                         <p className="text-sm font-semibold">What to do:</p>
                         <ul className="space-y-1 text-sm text-muted-foreground">
@@ -345,14 +345,14 @@ export default function OrderHelp() {
         {/* Quick Actions */}
         <ScrollReveal delay={0.3}>
           <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200 shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 text-primary-orange" />
+            <CardHeader className="p-4 md:p-5 lg:p-6">
+              <CardTitle className="flex items-center gap-2 text-lg md:text-xl lg:text-2xl">
+                <HelpCircle className="h-4 w-4 md:h-5 md:w-5 text-primary-orange" />
                 Quick Actions
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <CardContent className="p-4 md:p-5 lg:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
                 <Link to={`/user/orders/${orderId}`}>
                   <Button
                     variant="outline"
@@ -396,17 +396,17 @@ export default function OrderHelp() {
         {/* Contact Support Section */}
         <ScrollReveal delay={0.4}>
           <Card id="contact-support" className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-2xl flex items-center gap-2">
-                <MessageCircle className="h-6 w-6 text-primary-orange" />
+            <CardHeader className="p-4 md:p-5 lg:p-6">
+              <CardTitle className="text-xl md:text-2xl lg:text-3xl flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 md:h-6 md:w-6 text-primary-orange" />
                 Contact Support for This Order
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-sm md:text-base">
                 Our support team is ready to help you with order {order.id}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="space-y-4 md:space-y-5 lg:space-y-6 p-4 md:p-5 lg:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 lg:gap-6">
                 <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <Phone className="h-5 w-5 text-blue-600" />

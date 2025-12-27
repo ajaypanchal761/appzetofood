@@ -3400,7 +3400,7 @@ export default function RestaurantDetails() {
           <div className="flex flex-col items-center gap-4 text-center">
             <AlertCircle className="h-12 w-12 text-red-500" />
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">Restaurant not found</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Restaurant not found</h2>
               <p className="text-sm text-gray-600 mb-4">{restaurantError}</p>
               <Button onClick={() => navigate(-1)} variant="outline">
                 Go Back
@@ -3430,18 +3430,18 @@ export default function RestaurantDetails() {
   }
 
   return (
-    <AnimatedPage id="scrollingelement" className="min-h-screen bg-white flex flex-col">
+    <AnimatedPage id="scrollingelement" className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col">
       {/* Header - Back, Search, Menu (like reference image) */}
-      <div className="px-4 pt-3 pb-2 bg-white">
-        <div className="flex items-center justify-between">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-3 md:pt-4 lg:pt-5 pb-2 md:pb-3 bg-white dark:bg-[#1a1a1a]">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Back Button */}
             <Button
             variant="outline"
               size="icon"
-            className="rounded-full h-10 w-10 border-gray-200 shadow-sm bg-white"
+            className="rounded-full h-10 w-10 border-gray-200 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a]"
               onClick={() => navigate(-1)}
             >
-            <ArrowLeft className="h-5 w-5 text-gray-900" />
+            <ArrowLeft className="h-5 w-5 text-gray-900 dark:text-white" />
             </Button>
 
           {/* Right side: Search pill + menu */}
@@ -3449,7 +3449,7 @@ export default function RestaurantDetails() {
               {!showSearch ? (
                 <Button
                   variant="outline"
-                  className="rounded-full h-10 px-4 border-gray-200 shadow-sm bg-white flex items-center gap-2 text-gray-900"
+                  className="rounded-full h-10 px-4 border-gray-200 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a] flex items-center gap-2 text-gray-900 dark:text-white"
                   onClick={() => setShowSearch(true)}
                 >
                   <Search className="h-4 w-4" />
@@ -3464,7 +3464,7 @@ export default function RestaurantDetails() {
                       placeholder="Search for dishes..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-10 py-2 rounded-full border border-gray-200 shadow-sm bg-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      className="w-full pl-10 pr-10 py-2 rounded-full border border-gray-200 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a] text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                       autoFocus
                       onBlur={() => {
                         if (!searchQuery) {
@@ -3489,22 +3489,22 @@ export default function RestaurantDetails() {
               <Button
                 variant="outline"
                 size="icon"
-                className="rounded-full h-10 w-10 border-gray-200 shadow-sm bg-white"
+                className="rounded-full h-10 w-10 border-gray-200 dark:border-gray-800 shadow-sm bg-white dark:bg-[#1a1a1a]"
                 onClick={() => setShowMenuOptionsSheet(true)}
               >
-                <MoreVertical className="h-5 w-5 text-gray-900" />
+                <MoreVertical className="h-5 w-5 text-gray-900 dark:text-white" />
               </Button>
             </div>
           </div>
         </div>
 
       {/* Main Content Card */}
-      <div className="bg-white rounded-t-3xl relative z-10 min-h-[40vh] pb-4">
-        <div className="px-4 py-4 space-y-3 pb-0">
+      <div className="bg-white dark:bg-[#1a1a1a] rounded-t-3xl relative z-10 min-h-[40vh] pb-4 md:pb-6 lg:pb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-5 md:py-6 lg:py-8 space-y-3 md:space-y-4 lg:space-y-5 pb-0">
           {/* Restaurant Name and Rating */}
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">{restaurant?.name || "Unknown Restaurant"}</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{restaurant?.name || "Unknown Restaurant"}</h1>
               <Info className="h-5 w-5 text-gray-400" />
             </div>
             <div className="flex flex-col items-end">
@@ -3518,7 +3518,7 @@ export default function RestaurantDetails() {
 
           {/* Location */}
           <div
-            className="flex items-center gap-1 text-sm text-gray-700 cursor-pointer"
+            className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
             onClick={() => setShowLocationSheet(true)}
           >
               <MapPin className="h-4 w-4" />
@@ -3543,7 +3543,7 @@ export default function RestaurantDetails() {
                 }
                 setShowScheduleSheet(true)
               }}
-              className="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               <Clock className="h-4 w-4" />
               <span>{restaurant?.deliveryTime || "25-30 mins"} · Schedule for later</span>
@@ -3571,7 +3571,7 @@ export default function RestaurantDetails() {
             </div>
             </div>
             <div
-              className="flex items-center gap-1 text-sm text-gray-700 cursor-pointer"
+              className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
               onClick={() => setShowOffersSheet(true)}
             >
               <span>{(restaurant?.offerCount || 0)} offers</span>
@@ -3585,7 +3585,7 @@ export default function RestaurantDetails() {
             <Button
               variant="outline"
               size="sm"
-                className="flex items-center gap-1.5 whitespace-nowrap border-gray-300 bg-white relative"
+                className="flex items-center gap-1.5 whitespace-nowrap border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] relative"
                 onClick={() => setShowFilterSheet(true)}
             >
               <SlidersHorizontal className="h-4 w-4" />
@@ -3679,7 +3679,7 @@ export default function RestaurantDetails() {
 
         {/* Menu Items Section */}
         {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
-          <div className="px-4 py-6 space-y-6">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-12 space-y-6 md:space-y-8 lg:space-y-10">
             {restaurant.menuSections.map((section, sectionIndex) => {
               const sectionTitle = sectionIndex === 0 ? "Recommended for you" : (section?.name || section?.title || "Menu")
               const sectionId = `menu-section-${sectionIndex}`
@@ -3709,163 +3709,134 @@ export default function RestaurantDetails() {
 
                 {/* Direct Items */}
                 {section.items && section.items.length > 0 && (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
                     {sortMenuItems(filterMenuItems(section.items)).map((item) => {
                       const quantity = quantities[item.id] || 0
                       return (
                         <div
                           key={item.id}
-                          className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+                          className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-lg md:rounded-xl p-4 md:p-5 lg:p-6 cursor-pointer hover:shadow-lg md:hover:shadow-xl transition-all duration-300 flex flex-col h-full group"
                           onClick={() => handleItemClick(item)}
                         >
-                          <div className="flex gap-4">
-                            {/* Left Side - Content */}
-                            <div className="flex-1 space-y-2">
-                              {/* Veg/Non-veg Indicator and Item Name */}
-                              <div className="flex items-center gap-2">
-                                <div className="h-4 w-4 rounded border-2 border-amber-700 bg-amber-50 flex items-center justify-center">
-                                  <div className="h-2 w-2 rounded-full bg-amber-700" />
+                          {/* Image Section - Top on desktop */}
+                          <div className="relative w-full h-40 md:h-48 lg:h-52 mb-3 md:mb-4 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          </div>
+
+                          {/* Content Section */}
+                          <div className="flex-1 flex flex-col space-y-2 md:space-y-3">
+                            {/* Veg/Non-veg Indicator and Item Name */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <div className="h-4 w-4 md:h-5 md:w-5 rounded border-2 border-amber-700 bg-amber-50 flex items-center justify-center flex-shrink-0">
+                                  <div className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-amber-700" />
                                 </div>
-                                <h3 className="text-base font-semibold text-gray-900">
+                                <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white line-clamp-2">
                                   {item.name}
                                 </h3>
                               </div>
-
-                              {/* Highly Reordered Progress Bar */}
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                  <div className="h-full bg-green-500 rounded-full" style={{ width: '100%' }} />
-                                </div>
-                                <span className="text-xs text-gray-600 font-medium whitespace-nowrap">
-                                  highly reordered
-                                </span>
-                              </div>
-
-                              {/* Price */}
-        <div>
-                                <span className="text-base font-semibold text-gray-900">
-                                  ₹{Math.round(item.price)}
-                                </span>
-        </div>
-
-                              {/* Description */}
-                              <p className="text-sm text-gray-600 line-clamp-2">
-                                {item.description}
-                                {item.description.length > 60 && (
-                                  <span className="text-gray-500">...more</span>
-                                )}
-                              </p>
-
-                              {/* Bookmark and Share Icons */}
-                              <div className="flex items-center gap-4 pt-1">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    handleBookmarkClick(item.id)
-                                  }}
-                                  className={`h-8 w-8 rounded-full border flex items-center justify-center transition-all duration-300 ${
-                                    bookmarkedItems.has(item.id)
-                                      ? "border-red-500 bg-red-50 text-red-500"
-                                      : "border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400"
-                                  }`}
-                                >
-                                  <Bookmark
-                                    className={`h-4 w-4 transition-all duration-300 ${
-                                      bookmarkedItems.has(item.id) ? "fill-red-500" : ""
-                                    }`}
-                                  />
-                                </button>
-                                <button
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="h-8 w-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors"
-                                >
-                                  <Share2 className="h-4 w-4" />
-                                </button>
-                              </div>
                             </div>
 
-                            {/* Right Side - Image with Quantity Selector */}
-                            <div className="flex flex-col items-center">
-                              <div className="relative w-32 h-32 mb-4">
-                                <img
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full rounded-lg object-cover"
-                                />
-                                {/* Quantity Selector - Light Red Button (half on image, half below) */}
-                                {quantity > 0 ? (
-                                  <motion.div
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    className="absolute bottom-0 left-0 right-0 translate-y-1/2 bg-red-400 rounded-lg flex items-center justify-between px-2 py-2 shadow-md"
-                                  >
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        updateItemQuantity(item, Math.max(0, quantity - 1), e)
-                                      }}
-                                      className="text-white hover:bg-red-500 rounded px-1.5 py-0.5 transition-colors"
-                                    >
-                                      <Minus className="h-4 w-4" />
-                                    </button>
-                                    <span className="text-white font-semibold text-sm">
-                                      {quantity}
-                                    </span>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        updateItemQuantity(item, quantity + 1, e)
-                                      }}
-                                      className="text-white hover:bg-red-500 rounded px-1.5 py-0.5 transition-colors"
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                    </button>
-                                  </motion.div>
-                                ) : (
-                                  <motion.div
-                                    layoutId={`add-button-${item.id}`}
-                                    initial={{ width: "auto", x: "-50%", opacity: 0, scale: 0.9 }}
-                                    animate={{ width: "100%", x: 0, opacity: 1, scale: 1 }}
-                                    transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
-                                    className="absolute bottom-0 left-0 right-0 translate-y-1/2 bg-red-400 rounded-lg flex items-center justify-between px-2 py-2 shadow-md"
-                                  >
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        updateItemQuantity(item, Math.max(0, (quantities[item.id] || 0) - 1), e)
-                                      }}
-                                      disabled
-                                      className="text-white/50 rounded px-1.5 py-0.5 cursor-not-allowed"
-                                    >
-                                      <Minus className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        updateItemQuantity(item, 1, e)
-                                      }}
-                                      className="text-white font-semibold text-sm hover:bg-red-500 rounded px-2 py-0.5 transition-colors"
-                                    >
-                                      ADD
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        updateItemQuantity(item, (quantities[item.id] || 0) + 1, e)
-                                      }}
-                                      className="text-white hover:bg-red-500 rounded px-1.5 py-0.5 transition-colors"
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                    </button>
-                                  </motion.div>
-                                )}
+                            {/* Highly Reordered Progress Bar */}
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 md:h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div className="h-full bg-green-500 rounded-full" style={{ width: '100%' }} />
                               </div>
+                              <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
+                                highly reordered
+                              </span>
+                            </div>
+
+                            {/* Price */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">
+                                ₹{Math.round(item.price)}
+                              </span>
                               {item.customisable && (
-                                <p className="text-xs text-gray-500 mt-2 text-center w-32">
+                                <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
                                   customisable
-                                </p>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Description */}
+                            <p className="text-sm md:text-base text-gray-600 dark:text-gray-400 line-clamp-2 md:line-clamp-3 flex-1">
+                              {item.description}
+                            </p>
+
+                            {/* Action Buttons - Bookmark, Share, and Add/Quantity */}
+                            <div className="flex items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  handleBookmarkClick(item.id)
+                                }}
+                                className={`h-8 w-8 md:h-9 md:w-9 rounded-full border flex items-center justify-center transition-all duration-300 ${
+                                  bookmarkedItems.has(item.id)
+                                    ? "border-red-500 bg-red-50 dark:bg-red-900/20 text-red-500"
+                                    : "border-gray-300 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600"
+                                }`}
+                              >
+                                <Bookmark
+                                  className={`h-4 w-4 md:h-5 md:w-5 transition-all duration-300 ${
+                                    bookmarkedItems.has(item.id) ? "fill-red-500" : ""
+                                  }`}
+                                />
+                              </button>
+                              <button
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-8 w-8 md:h-9 md:w-9 rounded-full border border-gray-300 dark:border-gray-700 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                              >
+                                <Share2 className="h-4 w-4 md:h-5 md:w-5" />
+                              </button>
+                              {quantity > 0 ? (
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.8 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  className="ml-auto bg-red-500 rounded-lg flex items-center justify-between px-2 py-1.5 shadow-md min-w-[90px]"
+                                >
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      updateItemQuantity(item, Math.max(0, quantity - 1), e)
+                                    }}
+                                    className="text-white hover:bg-red-600 rounded px-1.5 py-0.5 transition-colors"
+                                  >
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </button>
+                                  <span className="text-white font-semibold text-sm mx-2">
+                                    {quantity}
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      updateItemQuantity(item, quantity + 1, e)
+                                    }}
+                                    className="text-white hover:bg-red-600 rounded px-1.5 py-0.5 transition-colors"
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </button>
+                                </motion.div>
+                              ) : (
+                                <motion.button
+                                  layoutId={`add-button-${item.id}`}
+                                  initial={{ opacity: 0, scale: 0.9 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    updateItemQuantity(item, 1, e)
+                                  }}
+                                  className="ml-auto bg-red-500 hover:bg-red-600 text-white font-semibold text-sm px-4 py-2 rounded-lg shadow-md transition-colors"
+                                >
+                                  ADD
+                                </motion.button>
                               )}
                             </div>
                           </div>
@@ -3891,55 +3862,67 @@ export default function RestaurantDetails() {
                         {/* Subsection Items */}
                         {subsection.items &&
                           subsection.items.length > 0 && (
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
                               {sortMenuItems(filterMenuItems(subsection.items)).map((item) => {
                                 const quantity = quantities[item.id] || 0
                                 return (
                                   <div
                                     key={item.id}
-                                    className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+                                    className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-lg md:rounded-xl p-4 md:p-5 lg:p-6 cursor-pointer hover:shadow-lg md:hover:shadow-xl transition-all duration-300 flex flex-col h-full group"
                                     onClick={() => handleItemClick(item)}
                                   >
-                                    <div className="flex gap-4">
-                                      {/* Left Side - Content */}
-                                      <div className="flex-1 space-y-2">
-                                        {/* Veg/Non-veg Indicator and Item Name */}
-                                        <div className="flex items-center gap-2">
-                                          <div className="h-4 w-4 rounded border-2 border-amber-700 bg-amber-50 flex items-center justify-center">
-                                            <div className="h-2 w-2 rounded-full bg-amber-700" />
+                                    {/* Image Section - Top on desktop */}
+                                    <div className="relative w-full h-40 md:h-48 lg:h-52 mb-3 md:mb-4 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                                      <img
+                                        src={item.image}
+                                        alt={item.name}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                      />
+                                    </div>
+
+                                    {/* Content Section */}
+                                    <div className="flex-1 flex flex-col space-y-2 md:space-y-3">
+                                      {/* Veg/Non-veg Indicator and Item Name */}
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                          <div className="h-4 w-4 md:h-5 md:w-5 rounded border-2 border-amber-700 bg-amber-50 flex items-center justify-center flex-shrink-0">
+                                            <div className="h-2 w-2 md:h-2.5 md:w-2.5 rounded-full bg-amber-700" />
                                           </div>
-                                          <h3 className="text-base font-semibold text-gray-900">
+                                          <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white line-clamp-2">
                                             {item.name}
                                           </h3>
                                         </div>
+                                      </div>
 
-                              {/* Highly Reordered Progress Bar */}
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-0.5 bg-gray-200 rounded-full overflow-hidden">
-                                  <div className="h-full bg-green-500 rounded-full" style={{ width: '50%' }} />
-                                </div>
-                                <span className="text-xs text-gray-600 font-medium whitespace-nowrap">
-                                  highly reordered
-                                </span>
-                              </div>
-
-                                        {/* Price */}
-                                        <div>
-                                          <span className="text-base font-semibold text-gray-900">
-                                            ₹{Math.round(item.price)}
-                                          </span>
+                                      {/* Highly Reordered Progress Bar */}
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 md:h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                          <div className="h-full bg-green-500 rounded-full" style={{ width: '50%' }} />
                                         </div>
+                                        <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
+                                          highly reordered
+                                        </span>
+                                      </div>
 
-                                        {/* Description */}
-                                        <p className="text-sm text-gray-600 line-clamp-2">
-                                          {item.description}
-                                          {item.description.length > 60 && (
-                                            <span className="text-gray-500">...more</span>
-                                          )}
-                                        </p>
+                                      {/* Price */}
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">
+                                          ₹{Math.round(item.price)}
+                                        </span>
+                                        {item.customisable && (
+                                          <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                                            customisable
+                                          </span>
+                                        )}
+                                      </div>
 
-                                        {/* Bookmark and Share Icons */}
-                                        <div className="flex items-center gap-4 pt-1">
+                                      {/* Description */}
+                                      <p className="text-sm md:text-base text-gray-600 dark:text-gray-400 line-clamp-2 md:line-clamp-3 flex-1">
+                                        {item.description}
+                                      </p>
+
+                                        {/* Action Buttons - Bookmark, Share, and Add/Quantity */}
+                                        <div className="flex items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
                                           <button
                                             type="button"
                                             onClick={(e) => {
@@ -3947,49 +3930,40 @@ export default function RestaurantDetails() {
                                               e.stopPropagation()
                                               handleBookmarkClick(item.id)
                                             }}
-                                            className={`h-8 w-8 rounded-full border flex items-center justify-center transition-all duration-300 ${
+                                            className={`h-8 w-8 md:h-9 md:w-9 rounded-full border flex items-center justify-center transition-all duration-300 ${
                                               bookmarkedItems.has(item.id)
-                                                ? "border-red-500 bg-red-50 text-red-500"
-                                                : "border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400"
+                                                ? "border-red-500 bg-red-50 dark:bg-red-900/20 text-red-500"
+                                                : "border-gray-300 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600"
                                             }`}
                                           >
                                             <Bookmark
-                                              className={`h-4 w-4 transition-all duration-300 ${
+                                              className={`h-4 w-4 md:h-5 md:w-5 transition-all duration-300 ${
                                                 bookmarkedItems.has(item.id) ? "fill-red-500" : ""
                                               }`}
                                             />
                                           </button>
-                                          <button className="h-8 w-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors">
-                                            <Share2 className="h-4 w-4" />
+                                          <button
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="h-8 w-8 md:h-9 md:w-9 rounded-full border border-gray-300 dark:border-gray-700 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                                          >
+                                            <Share2 className="h-4 w-4 md:h-5 md:w-5" />
                                           </button>
-                                        </div>
-                                      </div>
-
-                                      {/* Right Side - Image with Quantity Selector */}
-                                      <div className="flex flex-col items-end">
-                                        <div className="relative w-32 h-32 mb-4">
-                                          <img
-                                            src={item.image}
-                                            alt={item.name}
-                                            className="w-full h-full rounded-lg object-cover"
-                                          />
-                                          {/* Quantity Selector - Light Red Button (half on image, half below) */}
                                           {quantity > 0 ? (
                                             <motion.div
                                               initial={{ opacity: 0, scale: 0.8 }}
                                               animate={{ opacity: 1, scale: 1 }}
-                                              className="absolute bottom-0 left-0 right-0 translate-y-1/2 bg-red-400 rounded-lg flex items-center justify-between px-2 py-2 shadow-md"
+                                              className="ml-auto bg-red-500 rounded-lg flex items-center justify-between px-2 py-1.5 shadow-md min-w-[90px]"
                                             >
                                               <button
                                                 onClick={(e) => {
                                                   e.stopPropagation()
                                                   updateItemQuantity(item, Math.max(0, quantity - 1), e)
                                                 }}
-                                                className="text-white hover:bg-red-500 rounded px-1.5 py-0.5 transition-colors"
+                                                className="text-white hover:bg-red-600 rounded px-1.5 py-0.5 transition-colors"
                                               >
-                                                <Minus className="h-4 w-4" />
+                                                <Minus className="h-3.5 w-3.5" />
                                               </button>
-                                              <span className="text-white font-semibold text-sm">
+                                              <span className="text-white font-semibold text-sm mx-2">
                                                 {quantity}
                                               </span>
                                               <button
@@ -3997,56 +3971,27 @@ export default function RestaurantDetails() {
                                                   e.stopPropagation()
                                                   updateItemQuantity(item, quantity + 1, e)
                                                 }}
-                                                className="text-white hover:bg-red-500 rounded px-1.5 py-0.5 transition-colors"
+                                                className="text-white hover:bg-red-600 rounded px-1.5 py-0.5 transition-colors"
                                               >
-                                                <Plus className="h-4 w-4" />
+                                                <Plus className="h-3.5 w-3.5" />
                                               </button>
                                             </motion.div>
                                           ) : (
-                                            <motion.div
+                                            <motion.button
                                               layoutId={`add-button-sub-${item.id}`}
-                                              initial={{ width: "auto", x: "-50%", opacity: 0, scale: 0.9 }}
-                                              animate={{ width: "100%", x: 0, opacity: 1, scale: 1 }}
+                                              initial={{ opacity: 0, scale: 0.9 }}
+                                              animate={{ opacity: 1, scale: 1 }}
                                               transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
-                                              className="absolute bottom-0 left-0 right-0 translate-y-1/2 bg-red-400 rounded-lg flex items-center justify-between px-2 py-2 shadow-md"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                updateItemQuantity(item, 1, e)
+                                              }}
+                                              className="ml-auto bg-red-500 hover:bg-red-600 text-white font-semibold text-sm px-4 py-2 rounded-lg shadow-md transition-colors"
                                             >
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  updateItemQuantity(item, Math.max(0, (quantities[item.id] || 0) - 1), e)
-                                                }}
-                                                disabled
-                                                className="text-white/50 rounded px-1.5 py-0.5 cursor-not-allowed"
-                                              >
-                                                <Minus className="h-4 w-4" />
-                                              </button>
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  updateItemQuantity(item, 1, e)
-                                                }}
-                                                className="text-white font-semibold text-sm hover:bg-red-500 rounded px-2 py-0.5 transition-colors"
-                                              >
-                                                ADD
-                                              </button>
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation()
-                                                  updateItemQuantity(item, (quantities[item.id] || 0) + 1, e)
-                                                }}
-                                                className="text-white hover:bg-red-500 rounded px-1.5 py-0.5 transition-colors"
-                                              >
-                                                <Plus className="h-4 w-4" />
-                                              </button>
-                                            </motion.div>
+                                              ADD
+                                            </motion.button>
                                           )}
                                         </div>
-                                        {item.customisable && (
-                                          <p className="text-xs text-gray-500 mt-2 text-center w-32 self-center">
-                                            customisable
-                                          </p>
-                                        )}
-                                      </div>
                                     </div>
                                   </div>
                                 )
@@ -4096,7 +4041,7 @@ export default function RestaurantDetails() {
 
                 {/* Menu Sheet */}
                 <motion.div
-                  className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col"
+                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[85vh] md:max-h-[90vh] md:max-w-lg w-full md:w-auto flex flex-col"
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
@@ -4109,7 +4054,7 @@ export default function RestaurantDetails() {
                       {menuCategories.map((category, index) => (
                         <button
                           key={index}
-                          className="w-full flex items-center justify-between py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                          className="w-full flex items-center justify-between py-3 px-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
                           onClick={() => {
                             setShowMenuSheet(false)
                             // Scroll to category section
@@ -4125,11 +4070,11 @@ export default function RestaurantDetails() {
                             }, 300) // Small delay to allow sheet to close
                           }}
                         >
-                          <span className="text-base font-medium text-gray-900">
+                          <span className="text-base font-medium text-gray-900 dark:text-white">
                             {category.name}
                           </span>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
                               {category.count}
                             </span>
                           </div>
@@ -4138,16 +4083,16 @@ export default function RestaurantDetails() {
                     </div>
 
                     {/* Large Order Menu Section */}
-                    <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
                       <button
-                        className="w-full flex items-center justify-between py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors"
+                        className="w-full flex items-center justify-between py-3 px-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
                         onClick={() => setShowLargeOrderMenu(!showLargeOrderMenu)}
                       >
-                        <span className="text-base font-semibold text-gray-900">
+                        <span className="text-base font-semibold text-gray-900 dark:text-white">
                           LARGE ORDER MENU
                         </span>
                         <ChevronDown
-                          className={`h-4 w-4 text-gray-500 transition-transform ${
+                          className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform ${
                             showLargeOrderMenu ? "rotate-180" : ""
                           }`}
                         />
@@ -4155,7 +4100,7 @@ export default function RestaurantDetails() {
                       {showLargeOrderMenu && (
                         <div className="mt-2 space-y-1 pl-4">
                           {/* Add large order menu items here if needed */}
-                          <p className="text-sm text-gray-500 py-2">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 py-2">
                             Large order options coming soon
                           </p>
                         </div>
@@ -4164,7 +4109,7 @@ export default function RestaurantDetails() {
                   </div>
 
                   {/* Close Button */}
-                  <div className="border-t border-gray-200 px-4 py-4 bg-white">
+                  <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 bg-white dark:bg-[#1a1a1a]">
                     <Button
                       variant="outline"
                       className="w-full bg-gray-800 hover:bg-gray-900 text-white border-0 flex items-center justify-center gap-2 py-3 rounded-lg"
@@ -4199,7 +4144,7 @@ export default function RestaurantDetails() {
 
                 {/* Bottom Sheet */}
                 <motion.div
-                  className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl h-[80vh] flex flex-col"
+                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl h-[80vh] md:h-auto md:max-h-[90vh] md:max-w-lg w-full md:w-auto flex flex-col"
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
@@ -4207,13 +4152,13 @@ export default function RestaurantDetails() {
                   style={{ willChange: "transform" }}
                 >
               {/* Header with X button */}
-              <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Filters and Sorting</h2>
+              <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-200 dark:border-gray-800">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Filters and Sorting</h2>
                 <button
                   onClick={() => setShowFilterSheet(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                 >
-                  <X className="h-5 w-5 text-gray-600" />
+                  <X className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 </button>
               </div>
 
@@ -4221,7 +4166,7 @@ export default function RestaurantDetails() {
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
                 {/* Sort by */}
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-gray-900">Sort by:</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Sort by:</h3>
                   <div className="flex flex-col gap-1.5">
                     <button
                       onClick={() =>
@@ -4232,8 +4177,8 @@ export default function RestaurantDetails() {
                       }
                       className={`text-left px-4 py-2.5 rounded-lg border-2 transition-all ${
                         filters.sortBy === "low-to-high"
-                          ? "border-blue-500 bg-blue-50 text-blue-700"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                          ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
                       }`}
                     >
                       Price - low to high
@@ -4247,8 +4192,8 @@ export default function RestaurantDetails() {
                       }
                       className={`text-left px-4 py-2.5 rounded-lg border-2 transition-all ${
                         filters.sortBy === "high-to-low"
-                          ? "border-blue-500 bg-blue-50 text-blue-700"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                          ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
                       }`}
                     >
                       Price - high to low
@@ -4258,7 +4203,7 @@ export default function RestaurantDetails() {
 
                 {/* Veg/Non-veg preference */}
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-gray-900">Veg/Non-veg preference:</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Veg/Non-veg preference:</h3>
                   <div className="flex gap-2">
                     <button
                       onClick={() =>
@@ -4269,11 +4214,11 @@ export default function RestaurantDetails() {
                       }
                       className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all flex-1 ${
                         filters.vegNonVeg === "veg"
-                          ? "border-green-500 bg-green-50 text-green-700"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                          ? "border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
                       }`}
                     >
-                      <div className="h-4 w-4 rounded-full bg-green-500" />
+                      <div className="h-4 w-4 rounded-full bg-green-500 dark:bg-green-400" />
                       <span className="font-medium">Veg</span>
                     </button>
                     <button
@@ -4285,11 +4230,11 @@ export default function RestaurantDetails() {
                       }
                       className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all flex-1 ${
                         filters.vegNonVeg === "non-veg"
-                          ? "border-amber-700 bg-amber-50 text-amber-700"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                          ? "border-amber-700 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                          : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
                       }`}
                     >
-                      <div className="h-4 w-4 rounded-full bg-amber-700" />
+                      <div className="h-4 w-4 rounded-full bg-amber-700 dark:bg-amber-600" />
                       <span className="font-medium">Non-veg</span>
                     </button>
                   </div>
@@ -4297,7 +4242,7 @@ export default function RestaurantDetails() {
 
                 {/* Top picks */}
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-gray-900">Top picks:</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Top picks:</h3>
                   <button
                     onClick={() =>
                       setFilters((prev) => ({
@@ -4307,8 +4252,8 @@ export default function RestaurantDetails() {
                     }
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all w-full ${
                       filters.highlyReordered
-                        ? "border-green-500 bg-green-50 text-green-700"
-                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                        ? "border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                        : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
                     }`}
                   >
                     <RotateCcw className="h-4 w-4" />
@@ -4318,7 +4263,7 @@ export default function RestaurantDetails() {
 
                 {/* Dietary preference */}
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-gray-900">Dietary preference:</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Dietary preference:</h3>
                   <button
                     onClick={() =>
                       setFilters((prev) => ({
@@ -4328,8 +4273,8 @@ export default function RestaurantDetails() {
                     }
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all w-full ${
                       filters.spicy
-                        ? "border-red-500 bg-red-50 text-red-700"
-                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                        ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                        : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a] text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
                     }`}
                   >
                     <Flame className="h-4 w-4" />
@@ -4339,7 +4284,7 @@ export default function RestaurantDetails() {
               </div>
 
               {/* Bottom Action Bar */}
-              <div className="border-t border-gray-200 px-4 py-3 flex items-center justify-between bg-white">
+              <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between bg-white dark:bg-[#1a1a1a]">
                 <button
                   onClick={() => {
                     setFilters({
@@ -4349,12 +4294,12 @@ export default function RestaurantDetails() {
                       spicy: false,
                     })
                   }}
-                  className="text-red-600 font-medium text-sm hover:text-red-700"
+                  className="text-red-600 dark:text-red-400 font-medium text-sm hover:text-red-700 dark:hover:text-red-500"
                 >
                   Clear All
                 </button>
                 <Button
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2.5 rounded-lg font-medium"
+                  className="bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-6 py-2.5 rounded-lg font-medium"
                   onClick={() => setShowFilterSheet(false)}
                 >
                   Apply {activeFilterCount > 0 && `(${activeFilterCount})`}
@@ -4385,7 +4330,7 @@ export default function RestaurantDetails() {
 
                 {/* Bottom Sheet */}
                 <motion.div
-                  className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl h-[75vh] flex flex-col"
+                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl h-[75vh] md:h-auto md:max-h-[90vh] md:max-w-xl w-full md:w-auto flex flex-col"
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
@@ -4393,13 +4338,13 @@ export default function RestaurantDetails() {
                   style={{ willChange: "transform" }}
                 >
                   {/* Header */}
-                  <div className="px-4 pt-4 pb-3 border-b border-gray-200">
-                    <p className="text-xs text-gray-500 mb-1.5">All delivery outlets for</p>
+                  <div className="px-4 pt-4 pb-3 border-b border-gray-200 dark:border-gray-800">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">All delivery outlets for</p>
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
+                      <div className="w-8 h-8 bg-red-600 dark:bg-red-500 rounded-lg flex items-center justify-center">
                         <span className="text-white font-bold text-base">{(restaurant.name || "R").charAt(0).toUpperCase()}</span>
                       </div>
-                      <h2 className="text-lg font-bold text-gray-900">{restaurant?.name || "Unknown Restaurant"}</h2>
+                      <h2 className="text-lg font-bold text-gray-900 dark:text-white">{restaurant?.name || "Unknown Restaurant"}</h2>
                     </div>
                   </div>
 
@@ -4410,21 +4355,21 @@ export default function RestaurantDetails() {
                         {restaurant.outlets.map((outlet) => (
                           <div
                             key={outlet?.id || Math.random()}
-                            className="p-3 rounded-lg border border-gray-200 bg-white"
+                            className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2a2a2a]"
                           >
                             {outlet?.isNearest && (
-                              <div className="flex items-center gap-1.5 mb-2 px-2 py-1 bg-green-50 rounded-md">
-                                <Zap className="h-3.5 w-3.5 text-green-600 fill-green-600" />
-                                <span className="text-xs font-semibold text-green-700">
+                              <div className="flex items-center gap-1.5 mb-2 px-2 py-1 bg-green-50 dark:bg-green-900/30 rounded-md">
+                                <Zap className="h-3.5 w-3.5 text-green-600 dark:text-green-400 fill-green-600 dark:fill-green-400" />
+                                <span className="text-xs font-semibold text-green-700 dark:text-green-400">
                                   Nearest available outlet
                                 </span>
                               </div>
                             )}
-                            <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
                               {outlet?.location || "Location"}
                             </h3>
                             <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-3 text-xs text-gray-600">
+                              <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
                                 <div className="flex items-center gap-1">
                                   <Clock className="h-3.5 w-3.5" />
                                   <span>{outlet?.deliveryTime || "25-30 mins"}</span>
@@ -4436,12 +4381,12 @@ export default function RestaurantDetails() {
                               </div>
                               <div className="flex flex-col items-end gap-0.5">
                                 <div className="flex items-center gap-1">
-                                  <Star className="h-3.5 w-3.5 text-green-600 fill-green-600" />
-                                  <span className="text-xs font-medium text-gray-900">
+                                  <Star className="h-3.5 w-3.5 text-green-600 dark:text-green-400 fill-green-600 dark:fill-green-400" />
+                                  <span className="text-xs font-medium text-gray-900 dark:text-white">
                                     {outlet?.rating ?? 4.5}
                                   </span>
                                 </div>
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
                                   By {(outlet?.reviews || 0) >= 1000 ? `${((outlet.reviews || 0) / 1000).toFixed(1)}K+` : `${outlet?.reviews || 0}+`}
                                 </span>
                               </div>
@@ -4450,7 +4395,7 @@ export default function RestaurantDetails() {
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-8 text-gray-500">
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                         No outlets available
                       </div>
                     )}
@@ -4458,8 +4403,8 @@ export default function RestaurantDetails() {
 
                   {/* Footer */}
                   {restaurant?.outlets && Array.isArray(restaurant.outlets) && restaurant.outlets.length > 5 && (
-                    <div className="border-t border-gray-200 px-4 py-3 bg-white">
-                      <button className="flex items-center justify-center gap-2 text-red-600 font-medium text-sm w-full">
+                    <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-3 bg-white dark:bg-[#1a1a1a]">
+                      <button className="flex items-center justify-center gap-2 text-red-600 dark:text-red-400 font-medium text-sm w-full">
                         <span>See all {restaurant.outlets.length} outlets</span>
                         <ChevronDown className="h-4 w-4" />
                       </button>
@@ -4509,18 +4454,18 @@ export default function RestaurantDetails() {
 
                 {/* Manage Collections Bottom Sheet */}
                 <motion.div
-                  className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl"
+                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl md:max-w-lg w-full md:w-auto"
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ duration: 0.2, type: "spring", damping: 30, stiffness: 400 }}
                 >
                   {/* Header */}
-                  <div className="flex items-center justify-between px-4 pt-6 pb-4 border-b border-gray-200">
-                    <h2 className="text-lg font-bold text-gray-900">Manage Collections</h2>
+                  <div className="flex items-center justify-between px-4 pt-6 pb-4 border-b border-gray-200 dark:border-gray-800">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">Manage Collections</h2>
                     <button
                       onClick={() => setShowManageCollections(false)}
-                      className="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-800 transition-colors"
+                      className="h-8 w-8 rounded-full bg-gray-700 dark:bg-gray-600 flex items-center justify-center hover:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
                     >
                       <X className="h-4 w-4 text-white" />
                     </button>
@@ -4530,18 +4475,18 @@ export default function RestaurantDetails() {
                   <div className="px-4 py-4 space-y-2">
                     {/* Bookmarks Collection */}
                     <button
-                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
                       onClick={(e) => {
                         e.stopPropagation()
                         // Don't close modal on click, let checkbox handle it
                       }}
                     >
-                      <div className="h-12 w-12 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
-                        <Bookmark className="h-6 w-6 text-red-500 fill-red-500" />
+                      <div className="h-12 w-12 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center flex-shrink-0">
+                        <Bookmark className="h-6 w-6 text-red-500 dark:text-red-400 fill-red-500 dark:fill-red-400" />
                       </div>
                       <div className="flex-1 text-left">
                         <div className="flex items-center justify-between">
-                          <span className="text-base font-medium text-gray-900">Bookmarks</span>
+                          <span className="text-base font-medium text-gray-900 dark:text-white">Bookmarks</span>
                           {selectedItemId && (
                             <Checkbox
                               checked={bookmarkedItems.has(selectedItemId)}
@@ -4566,7 +4511,7 @@ export default function RestaurantDetails() {
                             </div>
                           )}
                         </div>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                           {bookmarkedItems.size} dishes • 0 restaurant
                         </p>
                       </div>
@@ -4574,14 +4519,14 @@ export default function RestaurantDetails() {
 
                     {/* Create new Collection */}
                     <button
-                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
                       onClick={() => setShowManageCollections(false)}
                     >
-                      <div className="h-12 w-12 rounded-lg bg-pink-100 flex items-center justify-center flex-shrink-0">
-                        <Plus className="h-6 w-6 text-red-500" />
+                      <div className="h-12 w-12 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center flex-shrink-0">
+                        <Plus className="h-6 w-6 text-red-500 dark:text-red-400" />
                       </div>
                       <div className="flex-1 text-left">
-                        <span className="text-base font-medium text-gray-900">
+                        <span className="text-base font-medium text-gray-900 dark:text-white">
                           Create new Collection
                         </span>
                       </div>
@@ -4589,9 +4534,9 @@ export default function RestaurantDetails() {
                   </div>
 
                   {/* Done Button */}
-                  <div className="border-t border-gray-200 px-4 py-4">
+                  <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4">
                     <Button
-                      className="w-full bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 rounded-lg font-medium"
+                      className="w-full bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg font-medium"
                       onClick={() => {
                         setSelectedItemId(null)
                         setShowManageCollections(false)
@@ -4625,7 +4570,7 @@ export default function RestaurantDetails() {
 
             {/* Item Detail Bottom Sheet */}
             <motion.div
-              className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col"
+              className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[90vh] md:max-w-2xl lg:max-w-3xl w-full md:w-auto flex flex-col"
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
@@ -4662,17 +4607,17 @@ export default function RestaurantDetails() {
                         }}
                         className={`h-10 w-10 rounded-full border flex items-center justify-center transition-all duration-300 ${
                           bookmarkedItems.has(selectedItem.id)
-                            ? "border-red-500 bg-red-50 text-red-500"
-                            : "border-white bg-white/90 text-gray-600 hover:bg-white"
+                            ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
+                            : "border-white dark:border-gray-800 bg-white/90 dark:bg-[#1a1a1a]/90 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#2a2a2a]"
                         }`}
                       >
                         <Bookmark
                           className={`h-5 w-5 transition-all duration-300 ${
-                            bookmarkedItems.has(selectedItem.id) ? "fill-red-500" : ""
+                            bookmarkedItems.has(selectedItem.id) ? "fill-red-500 dark:fill-red-400" : ""
                           }`}
                         />
                       </button>
-                      <button className="h-10 w-10 rounded-full border border-white bg-white/90 text-gray-600 hover:bg-white flex items-center justify-center transition-colors">
+                      <button className="h-10 w-10 rounded-full border border-white dark:border-gray-800 bg-white/90 dark:bg-[#1a1a1a]/90 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#2a2a2a] flex items-center justify-center transition-colors">
                         <Share2 className="h-5 w-5" />
                       </button>
                     </div>
@@ -4683,10 +4628,10 @@ export default function RestaurantDetails() {
                     {/* Item Name and Indicator */}
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-2 flex-1">
-                        <div className="h-5 w-5 rounded border-2 border-amber-700 bg-amber-50 flex items-center justify-center flex-shrink-0">
-                          <div className="h-2.5 w-2.5 rounded-full bg-amber-700" />
+                        <div className="h-5 w-5 rounded border-2 border-amber-700 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                          <div className="h-2.5 w-2.5 rounded-full bg-amber-700 dark:bg-amber-600" />
                         </div>
-                        <h2 className="text-xl font-bold text-gray-900">
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                           {selectedItem.name}
                         </h2>
                       </div>
@@ -4699,34 +4644,34 @@ export default function RestaurantDetails() {
                           }}
                           className={`h-8 w-8 rounded-full border flex items-center justify-center transition-all duration-300 ${
                             bookmarkedItems.has(selectedItem.id)
-                              ? "border-red-500 bg-red-50 text-red-500"
-                              : "border-gray-300 text-gray-400 hover:text-gray-600"
+                              ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
+                              : "border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                           }`}
                         >
                           <Bookmark
                             className={`h-4 w-4 transition-all duration-300 ${
-                              bookmarkedItems.has(selectedItem.id) ? "fill-red-500" : ""
+                              bookmarkedItems.has(selectedItem.id) ? "fill-red-500 dark:fill-red-400" : ""
                             }`}
                           />
                         </button>
-                        <button className="h-8 w-8 rounded-full border border-gray-300 text-gray-400 hover:text-gray-600 flex items-center justify-center transition-colors">
+                        <button className="h-8 w-8 rounded-full border border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center transition-colors">
                           <Share2 className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
 
                     {/* Description */}
-                    <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 leading-relaxed">
                       {selectedItem.description}
                     </p>
 
                     {/* Highly Reordered Progress Bar */}
                     {selectedItem.customisable && (
                       <div className="flex items-center gap-2 mb-4">
-                        <div className="flex-1 h-0.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 rounded-full" style={{ width: '50%' }} />
+                        <div className="flex-1 h-0.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div className="h-full bg-green-500 dark:bg-green-400 rounded-full" style={{ width: '50%' }} />
                         </div>
-                        <span className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                        <span className="text-xs text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
                           highly reordered
                         </span>
                       </div>
@@ -4734,34 +4679,34 @@ export default function RestaurantDetails() {
 
                     {/* Not Eligible for Coupons */}
                     {selectedItem.notEligibleForCoupons && (
-                      <p className="text-xs text-gray-500 font-medium mb-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-4">
                         NOT ELIGIBLE FOR COUPONS
                       </p>
                     )}
                   </div>
 
                   {/* Bottom Action Bar */}
-                  <div className="border-t border-gray-200 px-4 py-4 bg-white">
+                  <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 bg-white dark:bg-[#1a1a1a]">
                     <div className="flex items-center gap-4">
                       {/* Quantity Selector */}
-                      <div className="flex items-center gap-3 border-2 border-gray-300 rounded-lg px-3 h-[44px]">
+                      <div className="flex items-center gap-3 border-2 border-gray-300 dark:border-gray-700 rounded-lg px-3 h-[44px] bg-white dark:bg-[#2a2a2a]">
                         <button
                           onClick={(e) =>
                             updateItemQuantity(selectedItem, Math.max(0, (quantities[selectedItem.id] || 0) - 1), e)
                           }
                           disabled={(quantities[selectedItem.id] || 0) === 0}
-                          className="text-gray-600 hover:text-gray-900 disabled:text-gray-300 disabled:cursor-not-allowed"
+                          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
                         >
                           <Minus className="h-5 w-5" />
                         </button>
-                        <span className="text-lg font-semibold text-gray-900 min-w-[2rem] text-center">
+                        <span className="text-lg font-semibold text-gray-900 dark:text-white min-w-[2rem] text-center">
                           {quantities[selectedItem.id] || 0}
                         </span>
                         <button
                           onClick={(e) =>
                             updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
                           }
-                          className="text-gray-600 hover:text-gray-900"
+                          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                         >
                           <Plus className="h-5 w-5" />
                         </button>
@@ -4814,7 +4759,7 @@ export default function RestaurantDetails() {
 
                 {/* Schedule Bottom Sheet */}
                 <motion.div
-                  className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl max-h-[60vh] flex flex-col"
+                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[60vh] md:max-h-[90vh] md:max-w-lg w-full md:w-auto flex flex-col"
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
@@ -4834,7 +4779,7 @@ export default function RestaurantDetails() {
                   {/* Scrollable Content */}
                   <div className="flex-1 overflow-y-auto px-4 pt-10 pb-4">
                     {/* Title */}
-                    <h2 className="text-lg font-bold text-gray-900 mb-4 text-center">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 text-center">
                       Select your delivery time
                     </h2>
 
@@ -4865,7 +4810,7 @@ export default function RestaurantDetails() {
                               onClick={() => setSelectedDate(dateStr)}
                               className="flex flex-col items-center gap-0.5 flex-shrink-0 pb-1"
                             >
-                              <span className={`text-sm font-medium ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>
+                              <span className={`text-sm font-medium ${isSelected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
                                 {day} {month} {item.label}
                               </span>
                               {isSelected && (
@@ -4887,8 +4832,8 @@ export default function RestaurantDetails() {
                             onClick={() => setSelectedTimeSlot(slot)}
                             className={`w-full text-left px-4 py-2.5 rounded-lg transition-all ${
                               isSelected
-                                ? "bg-gray-100 text-gray-900 border border-gray-300"
-                                : "bg-white text-gray-600 hover:bg-gray-50 border border-transparent"
+                                ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600"
+                                : "bg-white dark:bg-[#2a2a2a] text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent"
                             }`}
                           >
                             <span className="text-sm font-medium">{slot}</span>
@@ -4935,7 +4880,7 @@ export default function RestaurantDetails() {
 
                 {/* Offers Bottom Sheet */}
                 <motion.div
-                  className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col"
+                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[85vh] md:max-h-[90vh] md:max-w-lg w-full md:w-auto flex flex-col"
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
@@ -4943,8 +4888,8 @@ export default function RestaurantDetails() {
                   style={{ willChange: "transform" }}
                 >
                   {/* Header */}
-                  <div className="px-4 pt-6 pb-4 border-b border-gray-200">
-                    <h2 className="text-lg font-bold text-gray-900">
+                  <div className="px-4 pt-6 pb-4 border-b border-gray-200 dark:border-gray-800">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                       Offers at {restaurant?.name || "Unknown Restaurant"}
                     </h2>
                   </div>
@@ -4954,17 +4899,17 @@ export default function RestaurantDetails() {
                     {/* Gold Exclusive Offer Section */}
                     {restaurant?.restaurantOffers?.goldOffer && (
                       <div className="mb-6">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
                           {restaurant.restaurantOffers.goldOffer?.title || "Gold exclusive offer"}
                         </h3>
-                        <div className="bg-gray-50 rounded-lg p-4 flex items-start justify-between gap-4">
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 flex items-start justify-between gap-4">
                           <div className="flex items-start gap-3 flex-1">
-                            <Lock className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                            <Lock className="h-5 w-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
                             <div className="flex-1">
-                              <p className="text-sm font-medium text-gray-900 mb-1">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
                                 {restaurant.restaurantOffers.goldOffer?.description || "Free delivery above ₹99"}
                               </p>
-                              <p className="text-xs text-gray-500">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
                                 {restaurant.restaurantOffers.goldOffer?.unlockText || "join Gold to unlock"}
                               </p>
                             </div>
@@ -4984,7 +4929,7 @@ export default function RestaurantDetails() {
                     {/* Restaurant Coupons Section */}
                     {restaurant?.restaurantOffers?.coupons && Array.isArray(restaurant.restaurantOffers.coupons) && restaurant.restaurantOffers.coupons.length > 0 && (
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
                           Restaurant coupons
                         </h3>
                         <div className="space-y-3">
@@ -4993,10 +4938,10 @@ export default function RestaurantDetails() {
                             return (
                               <div
                                 key={coupon.id}
-                                className="border border-gray-200 rounded-lg overflow-hidden"
+                                className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
                               >
                                 <button
-                                  className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors"
+                                  className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                                   onClick={() => {
                                     setExpandedCoupons((prev) => {
                                       const newSet = new Set(prev)
@@ -5009,18 +4954,18 @@ export default function RestaurantDetails() {
                                     })
                                   }}
                                 >
-                                  <Percent className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                                  <Percent className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                                   <div className="flex-1 text-left">
-                                    <p className="text-sm font-medium text-gray-900 mb-1">
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
                                       {coupon.title}
                                     </p>
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
                                       Use code {coupon.code}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <button
-                                      className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded"
+                                      className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-medium rounded"
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         // Copy code to clipboard
@@ -5030,15 +4975,15 @@ export default function RestaurantDetails() {
                                       {coupon.code}
                                     </button>
                                     <ChevronDown
-                                      className={`h-4 w-4 text-gray-500 transition-transform ${
+                                      className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform ${
                                         isExpanded ? "rotate-180" : ""
                                       }`}
                                     />
                                   </div>
                                 </button>
                                 {isExpanded && (
-                                  <div className="px-4 pb-4 pt-2 border-t border-gray-100">
-                                    <p className="text-xs text-gray-600">
+                                  <div className="px-4 pb-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">
                                       Terms and conditions apply
                                     </p>
                                   </div>
@@ -5052,10 +4997,10 @@ export default function RestaurantDetails() {
                   </div>
 
                   {/* Close Button */}
-                  <div className="border-t border-gray-200 px-4 py-4 bg-white">
+                  <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 bg-white dark:bg-[#1a1a1a]">
                     <Button
                       variant="outline"
-                      className="w-full bg-gray-800 hover:bg-gray-900 text-white border-0 flex items-center justify-center gap-2 py-3 rounded-lg"
+                      className="w-full bg-gray-800 dark:bg-gray-700 hover:bg-gray-900 dark:hover:bg-gray-600 text-white border-0 flex items-center justify-center gap-2 py-3 rounded-lg"
                       onClick={() => setShowOffersSheet(false)}
                     >
                       <X className="h-5 w-5" />
@@ -5087,7 +5032,7 @@ export default function RestaurantDetails() {
 
                 {/* Menu Options Bottom Sheet */}
                 <motion.div
-                  className="fixed left-0 right-0 bottom-0 z-[10000] bg-white rounded-t-3xl shadow-2xl max-h-[70vh] flex flex-col"
+                  className="fixed left-0 right-0 bottom-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:bottom-auto md:top-1/2 md:-translate-y-1/2 z-[10000] bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl shadow-2xl max-h-[70vh] md:max-h-[90vh] md:max-w-lg w-full md:w-auto flex flex-col"
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
@@ -5096,8 +5041,8 @@ export default function RestaurantDetails() {
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Header */}
-                  <div className="px-4 pt-6 pb-4 border-b border-gray-200">
-                    <h2 className="text-lg font-bold text-gray-900">
+                  <div className="px-4 pt-6 pb-4 border-b border-gray-200 dark:border-gray-800">
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                       {restaurant?.name || "Unknown Restaurant"}
                     </h2>
                   </div>
@@ -5108,74 +5053,74 @@ export default function RestaurantDetails() {
                     <div className="space-y-1">
                       {/* Add to Collection */}
                       <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
                         onClick={() => {
                           // Handle add to collection
                           setShowMenuOptionsSheet(false)
                         }}
                       >
-                        <Bookmark className="h-5 w-5 text-gray-700" />
-                        <span className="text-base text-gray-900">Add to Collection</span>
+                        <Bookmark className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                        <span className="text-base text-gray-900 dark:text-white">Add to Collection</span>
                       </button>
 
                       {/* Group Order */}
                       <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
                         onClick={() => {
                           // Handle group order
                           setShowMenuOptionsSheet(false)
                         }}
                       >
-                        <Users className="h-5 w-5 text-gray-700" />
-                        <span className="text-base text-gray-900">Group Order</span>
+                        <Users className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                        <span className="text-base text-gray-900 dark:text-white">Group Order</span>
                       </button>
 
                       {/* See more about this restaurant */}
                       <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
                         onClick={() => {
                           // Handle see more
                           setShowMenuOptionsSheet(false)
                         }}
                       >
-                        <Info className="h-5 w-5 text-gray-700" />
-                        <span className="text-base text-gray-900">See more about this restaurant</span>
+                        <Info className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                        <span className="text-base text-gray-900 dark:text-white">See more about this restaurant</span>
                       </button>
 
                       {/* Share this restaurant */}
                       <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
                         onClick={() => {
                           // Handle share
                           setShowMenuOptionsSheet(false)
                         }}
                       >
-                        <Share2 className="h-5 w-5 text-gray-700" />
-                        <span className="text-base text-gray-900">Share this restaurant</span>
+                        <Share2 className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                        <span className="text-base text-gray-900 dark:text-white">Share this restaurant</span>
                       </button>
 
                       {/* Hide this restaurant */}
                       <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
                         onClick={() => {
                           // Handle hide restaurant
                           setShowMenuOptionsSheet(false)
                         }}
                       >
-                        <Eye className="h-5 w-5 text-gray-700" />
-                        <span className="text-base text-gray-900">Hide this restaurant</span>
+                        <Eye className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                        <span className="text-base text-gray-900 dark:text-white">Hide this restaurant</span>
                       </button>
 
                       {/* Report fraud or bad practices */}
                       <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
                         onClick={() => {
                           // Handle report
                           setShowMenuOptionsSheet(false)
                         }}
                       >
-                        <AlertCircle className="h-5 w-5 text-gray-700" />
-                        <span className="text-base text-gray-900">Report fraud or bad practices</span>
+                        <AlertCircle className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                        <span className="text-base text-gray-900 dark:text-white">Report fraud or bad practices</span>
                       </button>
                     </div>
 

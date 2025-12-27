@@ -68,12 +68,14 @@ export default function Collections() {
       </button>
 
       {/* Banner Section - Clean without dark overlay */}
-      <div className="bg-gradient-to-b from-amber-50 to-white">
-        <img 
-          src={collectionsBanner} 
-          alt="Your Collections" 
-          className="w-full h-auto object-contain"
-        />
+      <div className="relative w-full overflow-hidden min-h-[25vh] md:min-h-[30vh] bg-gradient-to-b from-amber-50 to-white">
+        <div className="absolute inset-0 z-0">
+          <img 
+            src={collectionsBanner} 
+            alt="Your Collections" 
+            className="w-full h-full object-cover"
+          />
+        </div>
       </div>
 
       {/* Tabs */}
@@ -105,8 +107,9 @@ export default function Collections() {
       </div>
 
       {/* Content */}
-      <div className="px-4 py-6">
-        <div className="grid grid-cols-2 gap-4">
+      <div className="px-4 sm:px-6 md:px-8 lg:px-10 py-6 md:py-8 lg:py-10">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-5 lg:gap-6">
           {/* Collection Cards */}
           {currentCollections.map((collection, index) => (
             <Link
@@ -177,6 +180,7 @@ export default function Collections() {
               <p className="text-gray-700 font-semibold">Collection</p>
             </div>
           </button>
+        </div>
         </div>
       </div>
 

@@ -126,8 +126,8 @@ export default function OrderInvoice() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 p-3 sm:p-4">
-      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 dark:from-[#0a0a0a] dark:via-[#1a1a1a] dark:to-[#0a0a0a] p-3 sm:p-4 md:p-6 lg:p-8">
+      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 md:space-y-8">
         <ScrollReveal>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
             <div className="flex items-center gap-3 sm:gap-4">
@@ -163,8 +163,8 @@ export default function OrderInvoice() {
         </ScrollReveal>
 
         <ScrollReveal delay={0.1}>
-          <Card ref={invoiceRef}>
-            <CardContent className="p-4 sm:p-6 md:p-8">
+          <Card ref={invoiceRef} className="dark:bg-[#1a1a1a] dark:border-gray-800">
+            <CardContent className="p-4 sm:p-6 md:p-8 lg:p-10">
               {/* Invoice Header */}
               <div className="invoice-header">
                 <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">

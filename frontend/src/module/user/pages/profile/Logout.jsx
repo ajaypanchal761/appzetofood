@@ -74,44 +74,44 @@ export default function Logout() {
 
   return (
     <AnimatedPage className="min-h-screen bg-[#f5f5f5]">
-      <div className="max-w-md mx-auto px-4 py-4">
+      <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 lg:mb-8">
           <Link to="/user/profile">
-            <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-              <ArrowLeft className="h-5 w-5 text-black" />
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10 p-0">
+              <ArrowLeft className="h-4 w-4 md:h-5 md:w-5 text-black dark:text-white" />
             </Button>
           </Link>
-          <h1 className="text-xl font-bold text-black">Log out</h1>
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-black dark:text-white">Log out</h1>
         </div>
 
         {!isLoggingOut ? (
           <>
             {/* Warning Card */}
-            <Card className="bg-white rounded-xl shadow-sm border-0 mb-4">
-              <CardContent className="p-6 text-center">
-                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Power className="h-10 w-10 text-gray-700" />
+            <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-0 mb-4 md:mb-5 lg:mb-6">
+              <CardContent className="p-6 md:p-8 lg:p-10 text-center">
+                <div className="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-5 lg:mb-6">
+                  <Power className="h-8 w-8 md:h-10 md:w-10 lg:h-12 lg:w-12 text-gray-700 dark:text-gray-300" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Log out?</h2>
-                <p className="text-gray-600 mb-6">
+                <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-2 md:mb-3">Log out?</h2>
+                <p className="text-sm md:text-base lg:text-lg text-gray-600 dark:text-gray-400 mb-4 md:mb-6">
                   Are you sure you want to log out? You'll need to sign in again to access your account.
                 </p>
               </CardContent>
             </Card>
 
             {/* Info Card */}
-            <Card className="bg-yellow-50 border-yellow-200 rounded-xl shadow-sm mb-4">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="bg-yellow-100 rounded-full p-2 mt-0.5">
-                    <AlertCircle className="h-5 w-5 text-yellow-600" />
+            <Card className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 rounded-xl shadow-sm mb-4 md:mb-5 lg:mb-6">
+              <CardContent className="p-4 md:p-5 lg:p-6">
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="bg-yellow-100 dark:bg-yellow-900/40 rounded-full p-2 md:p-3 mt-0.5">
+                    <AlertCircle className="h-5 w-5 md:h-6 md:w-6 text-yellow-600 dark:text-yellow-400" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-base font-semibold text-yellow-900 mb-1">
+                    <h3 className="text-base md:text-lg lg:text-xl font-semibold text-yellow-900 dark:text-yellow-200 mb-1 md:mb-2">
                       Before you go
                     </h3>
-                    <p className="text-sm text-yellow-700">
+                    <p className="text-sm md:text-base text-yellow-700 dark:text-yellow-300">
                       Make sure you've saved any important information. Your cart and preferences will be saved for next time.
                     </p>
                   </div>
@@ -120,17 +120,17 @@ export default function Logout() {
             </Card>
 
             {/* Action Buttons */}
-            <div className="space-y-3">
+            <div className="space-y-3 md:space-y-4">
               <Button
                 onClick={handleLogout}
-                className="w-full bg-red-600 hover:bg-red-700 text-white"
+                className="w-full bg-red-600 hover:bg-red-700 text-white text-sm md:text-base h-10 md:h-12"
               >
                 Yes, Log out
               </Button>
               <Link to="/user/profile">
                 <Button
                   variant="outline"
-                  className="w-full"
+                  className="w-full text-sm md:text-base h-10 md:h-12"
                 >
                   Cancel
                 </Button>
@@ -139,18 +139,18 @@ export default function Logout() {
           </>
         ) : (
           /* Logging Out State */
-          <Card className="bg-white rounded-2xl shadow-md border-0 overflow-hidden">
-            <CardContent className="p-8 text-center">
-              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Power className="h-10 w-10 text-gray-700 animate-pulse" />
+          <Card className="bg-white dark:bg-gray-800 rounded-2xl shadow-md border-0 overflow-hidden">
+            <CardContent className="p-6 md:p-8 lg:p-10 text-center">
+              <div className="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-5 lg:mb-6">
+                <Power className="h-8 w-8 md:h-10 md:w-10 lg:h-12 lg:w-12 text-gray-700 dark:text-gray-300 animate-pulse" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Logging out...</h2>
-              <p className="text-gray-600 mb-4">
+              <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-2 md:mb-3">Logging out...</h2>
+              <p className="text-sm md:text-base lg:text-lg text-gray-600 dark:text-gray-400 mb-3 md:mb-4">
                 Please wait while we sign you out.
               </p>
               {error && (
-                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-yellow-800">{error}</p>
+                <div className="mt-4 p-3 md:p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <p className="text-xs md:text-sm text-yellow-800 dark:text-yellow-200">{error}</p>
                 </div>
               )}
             </CardContent>

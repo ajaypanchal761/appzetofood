@@ -7,15 +7,24 @@ import { OrdersProvider } from "../context/OrdersContext"
 import SearchOverlay from "./SearchOverlay"
 import LocationSelectorOverlay from "./LocationSelectorOverlay"
 import BottomNavigation from "./BottomNavigation"
+import DesktopNavbar from "./DesktopNavbar"
 
-// Create SearchOverlay context
-const SearchOverlayContext = createContext(null)
+// Create SearchOverlay context with default value
+const SearchOverlayContext = createContext({
+  isSearchOpen: false,
+  searchValue: "",
+  setSearchValue: () => {
+    console.warn("SearchOverlayProvider not available")
+  },
+  openSearch: () => {
+    console.warn("SearchOverlayProvider not available")
+  },
+  closeSearch: () => {}
+})
 
 export function useSearchOverlay() {
   const context = useContext(SearchOverlayContext)
-  if (!context) {
-    throw new Error("useSearchOverlay must be used within SearchOverlayProvider")
-  }
+  // Always return context, even if provider is not available (will use default values)
   return context
 }
 
@@ -45,8 +54,14 @@ function SearchOverlayProvider({ children }) {
   )
 }
 
-// Create LocationSelector context
-const LocationSelectorContext = createContext(null)
+// Create LocationSelector context with default value
+const LocationSelectorContext = createContext({
+  isLocationSelectorOpen: false,
+  openLocationSelector: () => {
+    console.warn("LocationSelectorProvider not available")
+  },
+  closeLocationSelector: () => {}
+})
 
 export function useLocationSelector() {
   const context = useContext(LocationSelectorContext)
@@ -67,8 +82,14 @@ function LocationSelectorProvider({ children }) {
     setIsLocationSelectorOpen(false)
   }
 
+  const value = {
+    isLocationSelectorOpen,
+    openLocationSelector,
+    closeLocationSelector
+  }
+
   return (
-    <LocationSelectorContext.Provider value={{ isLocationSelectorOpen, openLocationSelector, closeLocationSelector }}>
+    <LocationSelectorContext.Provider value={value}>
       {children}
       <LocationSelectorOverlay
         isOpen={isLocationSelectorOpen}
@@ -108,6 +129,7 @@ export default function UserLayout() {
             <SearchOverlayProvider>
               <LocationSelectorProvider>
                 {/* <Navbar /> */}
+                {showBottomNav && <DesktopNavbar />}
                 <LocationPrompt />
                 <Outlet />
                 {showBottomNav && <BottomNavigation />}

@@ -24,11 +24,13 @@ function getTokenForCurrentRoute() {
   
   if (path.startsWith('/admin')) {
     return localStorage.getItem('admin_accessToken');
-  } else if (path.startsWith('/restaurant-panel') || path.startsWith('/restaurant')) {
+  } else if (path.startsWith('/restaurant-panel') || (path.startsWith('/restaurant') && !path.startsWith('/restaurants'))) {
+    // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
     return localStorage.getItem('restaurant_accessToken');
   } else if (path.startsWith('/delivery')) {
     return localStorage.getItem('delivery_accessToken');
-  } else if (path.startsWith('/user') || path === '/' || (!path.startsWith('/admin') && !path.startsWith('/restaurant') && !path.startsWith('/restaurant-panel') && !path.startsWith('/delivery'))) {
+  } else if (path.startsWith('/user') || path === '/' || (!path.startsWith('/admin') && !path.startsWith('/restaurant-panel') && !(path.startsWith('/restaurant') && !path.startsWith('/restaurants')) && !path.startsWith('/delivery'))) {
+    // User module includes /restaurants/* paths
     return localStorage.getItem('user_accessToken');
   }
   
@@ -72,13 +74,15 @@ apiClient.interceptors.response.use(
       if (currentPath.startsWith('/admin')) {
         tokenKey = 'admin_accessToken';
         expectedRole = 'admin';
-      } else if (currentPath.startsWith('/restaurant-panel') || currentPath.startsWith('/restaurant')) {
+      } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+        // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
         tokenKey = 'restaurant_accessToken';
         expectedRole = 'restaurant';
       } else if (currentPath.startsWith('/delivery')) {
         tokenKey = 'delivery_accessToken';
         expectedRole = 'delivery';
-      } else if (currentPath.startsWith('/user') || currentPath === '/') {
+      } else if (currentPath.startsWith('/user') || currentPath === '/' || currentPath.startsWith('/restaurants')) {
+        // User module includes /restaurants/* paths
         tokenKey = 'user_accessToken';
         expectedRole = 'user';
       }
@@ -124,13 +128,15 @@ apiClient.interceptors.response.use(
           if (currentPath.startsWith('/admin')) {
             tokenKey = 'admin_accessToken';
             expectedRole = 'admin';
-          } else if (currentPath.startsWith('/restaurant-panel') || currentPath.startsWith('/restaurant')) {
+          } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+            // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
             tokenKey = 'restaurant_accessToken';
             expectedRole = 'restaurant';
           } else if (currentPath.startsWith('/delivery')) {
             tokenKey = 'delivery_accessToken';
             expectedRole = 'delivery';
-          } else if (currentPath.startsWith('/user') || currentPath === '/') {
+          } else if (currentPath.startsWith('/user') || currentPath === '/' || currentPath.startsWith('/restaurants')) {
+            // User module includes /restaurants/* paths
             tokenKey = 'user_accessToken';
             expectedRole = 'user';
           }
@@ -182,7 +188,8 @@ apiClient.interceptors.response.use(
           localStorage.removeItem('admin_authenticated');
           localStorage.removeItem('admin_user');
           window.location.href = '/admin/login';
-        } else if (currentPath.startsWith('/restaurant-panel') || currentPath.startsWith('/restaurant')) {
+        } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+          // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
           localStorage.removeItem('restaurant_accessToken');
           localStorage.removeItem('restaurant_authenticated');
           localStorage.removeItem('restaurant_user');
@@ -193,6 +200,7 @@ apiClient.interceptors.response.use(
           localStorage.removeItem('delivery_user');
           window.location.href = '/delivery/login';
         } else {
+          // User module includes /restaurants/* paths
           localStorage.removeItem('user_accessToken');
           localStorage.removeItem('user_authenticated');
           localStorage.removeItem('user');

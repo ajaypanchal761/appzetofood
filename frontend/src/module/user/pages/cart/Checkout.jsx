@@ -92,20 +92,20 @@ export default function Checkout() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-yellow-50/30 via-white to-orange-50/20 dark:from-[#0a0a0a] dark:via-[#1a1a1a] dark:to-[#0a0a0a] p-4 sm:p-6 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
         <ScrollReveal>
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center gap-4 mb-6 md:mb-8">
             <Link to="/user/cart">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 md:h-10 md:w-10">
+                <ArrowLeft className="h-5 w-5 md:h-6 md:w-6" />
               </Button>
             </Link>
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold">Checkout</h1>
+            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold dark:text-white">Checkout</h1>
           </div>
         </ScrollReveal>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
           {/* Left Column - Order Details */}
           <div className="lg:col-span-2 space-y-6">
             {/* Delivery Address */}
@@ -240,53 +240,53 @@ export default function Checkout() {
           {/* Right Column - Order Summary */}
           <div className="lg:col-span-1">
             <ScrollReveal delay={0.3}>
-              <Card className="sticky top-4">
+              <Card className="sticky top-4 md:top-6 dark:bg-[#1a1a1a] dark:border-gray-800">
                 <CardHeader>
-                  <CardTitle>Order Summary</CardTitle>
+                  <CardTitle className="text-base md:text-lg lg:text-xl dark:text-white">Order Summary</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                <CardContent className="space-y-4 md:space-y-6">
+                  <div className="space-y-3 md:space-y-4 max-h-64 md:max-h-80 overflow-y-auto">
                     {cart.map((item) => (
-                      <div key={item.id} className="flex items-center gap-3 pb-3 border-b">
+                      <div key={item.id} className="flex items-center gap-3 md:gap-4 pb-3 md:pb-4 border-b dark:border-gray-700">
                         <img
                           src={item.image}
                           alt={item.name}
-                          className="w-16 h-16 object-cover rounded-lg"
+                          className="w-16 h-16 md:w-20 md:h-20 object-cover rounded-lg"
                         />
                         <div className="flex-1">
-                          <p className="font-medium text-sm">{item.name}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="font-medium text-sm md:text-base dark:text-gray-200">{item.name}</p>
+                          <p className="text-xs md:text-sm text-muted-foreground">
                             ₹{(item.price * 83).toFixed(0)} × {item.quantity}
                           </p>
                         </div>
-                        <p className="font-semibold">
+                        <p className="font-semibold text-sm md:text-base dark:text-gray-200">
                           ₹{(item.price * 83 * item.quantity).toFixed(0)}
                         </p>
                       </div>
                     ))}
                   </div>
 
-                  <div className="space-y-2 pt-4 border-t">
-                    <div className="flex justify-between text-sm">
+                  <div className="space-y-2 md:space-y-3 pt-4 md:pt-6 border-t dark:border-gray-700">
+                    <div className="flex justify-between text-sm md:text-base">
                       <span className="text-muted-foreground">Subtotal</span>
-                      <span>₹{subtotal.toFixed(0)}</span>
+                      <span className="dark:text-gray-200">₹{subtotal.toFixed(0)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-sm md:text-base">
                       <span className="text-muted-foreground">Delivery Fee</span>
-                      <span>₹{deliveryFee.toFixed(0)}</span>
+                      <span className="dark:text-gray-200">₹{deliveryFee.toFixed(0)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-sm md:text-base">
                       <span className="text-muted-foreground">Tax</span>
-                      <span>₹{tax.toFixed(0)}</span>
+                      <span className="dark:text-gray-200">₹{tax.toFixed(0)}</span>
                     </div>
-                    <div className="flex justify-between font-bold text-lg pt-2 border-t">
-                      <span>Total</span>
-                      <span className="text-yellow-600">₹{total.toFixed(0)}</span>
+                    <div className="flex justify-between font-bold text-lg md:text-xl lg:text-2xl pt-2 md:pt-3 border-t dark:border-gray-700">
+                      <span className="dark:text-white">Total</span>
+                      <span className="text-yellow-600 dark:text-yellow-400">₹{total.toFixed(0)}</span>
                     </div>
                   </div>
 
                   <Button
-                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white mt-4"
+                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white mt-4 md:mt-6 h-11 md:h-12 text-sm md:text-base"
                     onClick={handlePlaceOrder}
                     disabled={isPlacingOrder || !selectedAddress || !selectedPayment}
                   >

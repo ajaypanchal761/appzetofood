@@ -11,9 +11,14 @@ export default function StickyCartCard() {
   const lastScrollY = useRef(0)
   const cartCount = getCartCount()
 
-  // Scroll detection for positioning
+  // Scroll detection for positioning (only on mobile)
   useEffect(() => {
     const handleScroll = () => {
+      // Only apply scroll-based positioning on mobile - desktop stays fixed
+      if (window.innerWidth >= 768) {
+        return // Desktop: don't change position
+      }
+
       const currentScrollY = window.scrollY
       const scrollDifference = Math.abs(currentScrollY - lastScrollY.current)
 
@@ -34,8 +39,35 @@ export default function StickyCartCard() {
       lastScrollY.current = currentScrollY
     }
 
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
+    // Set initial position based on screen size
+    const setInitialPosition = () => {
+      if (window.innerWidth >= 768) {
+        setBottomPosition("bottom-6") // Desktop: fixed position
+      } else {
+        setBottomPosition("bottom-[54px]") // Mobile: above bottom nav
+      }
+    }
+
+    setInitialPosition()
+
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setBottomPosition("bottom-6") // Desktop: always fixed
+      } else {
+        setBottomPosition("bottom-[54px]") // Mobile: above bottom nav
+      }
+    }
+
+    // Only add scroll listener on mobile
+    if (window.innerWidth < 768) {
+      window.addEventListener("scroll", handleScroll, { passive: true })
+    }
+    window.addEventListener("resize", handleResize)
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+      window.removeEventListener("resize", handleResize)
+    }
   }, [])
 
   // Get restaurant info from first cart item or use default
@@ -87,55 +119,55 @@ export default function StickyCartCard() {
     <AnimatePresence>
       {isVisible && (
         <motion.div
-          className={`fixed ${bottomPosition} left-0 right-0 z-50 px-4 pb-4 md:pb-6 pointer-events-none`}
+          className={`fixed ${bottomPosition} md:bottom-6 left-0 right-0 md:left-auto md:right-6 z-50 px-4 md:px-0 pb-4 md:pb-0 pointer-events-none`}
           initial="initial"
           animate="animate"
           exit="exit"
           variants={cardVariants}
         >
-          <div className="max-w-7xl mx-auto pointer-events-auto">
-            <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center gap-3 p-3">
+          <div className="max-w-7xl md:max-w-none mx-auto md:mx-0 pointer-events-auto">
+            <div className="bg-white dark:bg-[#0a0a0a] dark:text-white rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden md:max-w-md md:w-[400px]">
+              <div className="flex items-center gap-3 p-3 md:p-4">
                 {/* Restaurant Image */}
                 <div className="flex-shrink-0">
                   <img 
                     src={restaurantImage} 
                     alt={restaurantName}
-                    className="w-14 h-14 rounded-lg object-cover"
+                    className="w-14 h-14 md:w-16 md:h-16 rounded-lg object-cover"
                   />
                 </div>
 
                 {/* Restaurant Info */}
                 <Link to={`/user/restaurants/${restaurantSlug}`} className="flex-1 min-w-0">
-                  <h3 className="font-bold text-gray-900 text-base mb-0.5 line-clamp-1">
+                  <h3 className="font-bold text-gray-900 dark:text-gray-200 text-base md:text-lg mb-0.5 line-clamp-1">
                     {restaurantName}
                   </h3>
-                  <div className="flex items-center gap-1 text-gray-600 text-sm">
+                  <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400 text-sm md:text-base">
                     <span>View Menu</span>
-                    <ChevronRight className="h-3 w-3" />
+                    <ChevronRight className="h-3 w-3 md:h-4 md:w-4" />
                   </div>
                 </Link>
 
                 {/* View Cart Button */}
                 <Link 
                   to="/user/cart"
-                  className="flex-shrink-0 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-semibold transition-colors"
+                  className="flex-shrink-0 bg-green-600 dark:bg-green-700 hover:bg-green-700 text-white px-4 py-2.5 md:px-5 md:py-3 rounded-lg font-semibold transition-colors"
                 >
                   <div className="text-center">
-                    <div className="text-xs opacity-90">View Cart</div>
-                    <div className="text-xs font-bold">{cartCount} {cartCount === 1 ? 'item' : 'items'}</div>
+                    <div className="text-xs md:text-sm opacity-90">View Cart</div>
+                    <div className="text-xs md:text-sm font-bold">{cartCount} {cartCount === 1 ? 'item' : 'items'}</div>
                   </div>
                 </Link>
 
                 {/* Close Button */}
                 <motion.button
                   onClick={() => setIsVisible(false)}
-                  className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
+                  className="flex-shrink-0 w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                   transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 >
-                  <X className="h-4 w-4 text-gray-500" />
+                  <X className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
                 </motion.button>
               </div>
             </div>

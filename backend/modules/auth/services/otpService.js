@@ -15,7 +15,6 @@ const logger = winston.createLogger({
 
 // Test phone numbers that should use default OTP
 const TEST_PHONE_NUMBERS = [
-  '9098569620',
   '7610416911',
   '7691810506',
   '9009925021',

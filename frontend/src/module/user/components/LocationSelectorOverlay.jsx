@@ -141,13 +141,13 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex flex-col bg-page-bg"
+      className="fixed inset-0 z-[9999] flex flex-col bg-white dark:bg-[#0a0a0a]"
       style={{
         animation: 'fadeIn 0.3s ease-out'
       }}
     >
       {/* Header */}
-      <div className="flex-shrink-0 bg-white border-b shadow-sm">
+      <div className="flex-shrink-0 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center gap-4">
             <Button
@@ -155,17 +155,17 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="rounded-full hover:bg-gray-100 -ml-2"
+              className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 -ml-2"
             >
-              <ChevronLeft className="h-6 w-6" />
+              <ChevronLeft className="h-6 w-6 text-gray-700 dark:text-gray-300" />
             </Button>
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Select a location</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Select a location</h1>
           </div>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div className="flex-shrink-0 bg-white px-4 sm:px-6 lg:px-8 py-3 max-w-7xl mx-auto w-full">
+      <div className="flex-shrink-0 bg-white dark:bg-[#1a1a1a] px-4 sm:px-6 lg:px-8 py-3 max-w-7xl mx-auto w-full">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-primary-orange z-10" />
           <Input
@@ -173,7 +173,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             placeholder="Search for area, street name..."
-            className="pl-12 pr-4 h-12 w-full bg-gray-50 border-gray-200 focus:border-primary-orange rounded-xl text-base"
+            className="pl-12 pr-4 h-12 w-full bg-gray-50 dark:bg-[#2a2a2a] border-gray-200 dark:border-gray-700 focus:border-primary-orange dark:focus:border-primary-orange rounded-xl text-base dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
           />
         </div>
       </div>
@@ -183,40 +183,40 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         <div className="max-w-7xl mx-auto w-full">
           {/* Use Current Location */}
           <div
-            className="px-4 sm:px-6 lg:px-8 py-2 bg-white"
+            className="px-4 sm:px-6 lg:px-8 py-2 bg-white dark:bg-[#1a1a1a]"
             style={{ animation: 'slideDown 0.3s ease-out 0.1s both' }}
           >
             <button
               onClick={handleUseCurrentLocation}
               disabled={loading}
-              className="w-full flex items-center justify-between py-4 hover:bg-gray-50 rounded-lg transition-colors group"
+              className="w-full flex items-center justify-between py-4 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors group"
             >
               <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
-                  <Navigation className="h-5 w-5 text-green-600" />
+                <div className="h-10 w-10 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center group-hover:bg-green-100 dark:group-hover:bg-green-900/30 transition-colors">
+                  <Navigation className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div className="text-left">
-                  <p className="font-semibold text-green-700">Use current location</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="font-semibold text-green-700 dark:text-green-400">Use current location</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     {loading ? "Getting location..." : currentLocationText}
                   </p>
                 </div>
               </div>
-              <ChevronRight className="h-5 w-5 text-gray-400" />
+              <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             </button>
 
             {/* Add Address */}
             <button
               onClick={handleAddAddress}
-              className="w-full flex items-center justify-between py-4 hover:bg-gray-50 rounded-lg transition-colors group border-t border-gray-100"
+              className="w-full flex items-center justify-between py-4 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors group border-t border-gray-100 dark:border-gray-800"
             >
               <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
-                  <Plus className="h-5 w-5 text-green-600" />
+                <div className="h-10 w-10 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center group-hover:bg-green-100 dark:group-hover:bg-green-900/30 transition-colors">
+                  <Plus className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
-                <p className="font-semibold text-green-700">Add Address</p>
+                <p className="font-semibold text-green-700 dark:text-green-400">Add Address</p>
               </div>
-              <ChevronRight className="h-5 w-5 text-gray-400" />
+              <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             </button>
           </div>
 
@@ -227,11 +227,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               style={{ animation: 'slideDown 0.3s ease-out 0.2s both' }}
             >
               <div className="px-4 sm:px-6 lg:px-8 py-3">
-                <h2 className="text-xs font-semibold text-gray-500 tracking-wider uppercase">
+                <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
                   Saved Addresses
                 </h2>
               </div>
-              <div className="bg-white">
+              <div className="bg-white dark:bg-[#1a1a1a]">
                 {addresses.map((address, index) => {
                   const IconComponent = getAddressIcon(address)
                   return (
@@ -241,27 +241,27 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                       style={{ animation: `slideUp 0.3s ease-out ${0.25 + index * 0.05}s both` }}
                     >
                       <div 
-                        className={`py-4 ${index !== 0 ? 'border-t border-gray-100' : ''}`}
+                        className={`py-4 ${index !== 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}`}
                       >
                         <button
                           onClick={() => handleSelectSavedAddress(address)}
-                          className="w-full flex items-start gap-4 text-left hover:bg-gray-50 rounded-lg transition-colors p-2 -m-2"
+                          className="w-full flex items-start gap-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors p-2 -m-2"
                         >
                           <div className="flex flex-col items-center">
-                            <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
-                              <IconComponent className="h-5 w-5 text-gray-600" />
+                            <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                              <IconComponent className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                             </div>
-                            <span className="text-xs text-gray-400 mt-1">0 m</span>
+                            <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">0 m</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-gray-900">
+                            <p className="font-semibold text-gray-900 dark:text-white">
                               {address.label || address.additionalDetails || "Home"}
                             </p>
-                            <p className="text-sm text-gray-500 truncate">
+                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
                               {address.street}, {address.city}
                             </p>
-                            <p className="text-sm text-gray-500">
-                              Phone number: {address.phone || "+91-9098569620"}
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              Phone number: {address.phone || "+91-761041XXXX"}
                             </p>
                           </div>
                         </button>
@@ -273,18 +273,18 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                               e.stopPropagation()
                               // More options menu - could show a dropdown
                             }}
-                            className="h-9 w-9 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                            className="h-9 w-9 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                           >
-                            <MoreHorizontal className="h-4 w-4 text-gray-500" />
+                            <MoreHorizontal className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
                               handleEditAddress(address.id)
                             }}
-                            className="h-9 w-9 rounded-full border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                            className="h-9 w-9 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                           >
-                            <Navigation className="h-4 w-4 text-gray-500" />
+                            <Navigation className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                           </button>
                         </div>
                       </div>
@@ -301,11 +301,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             style={{ animation: 'slideDown 0.3s ease-out 0.3s both' }}
           >
             <div className="px-4 sm:px-6 lg:px-8 py-3">
-              <h2 className="text-xs font-semibold text-gray-500 tracking-wider uppercase">
+              <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 tracking-wider uppercase">
                 Nearby Locations
               </h2>
             </div>
-            <div className="bg-white">
+            <div className="bg-white dark:bg-[#1a1a1a]">
               {filteredLocations.length > 0 ? (
                 filteredLocations.map((loc, index) => (
                   <div
@@ -315,27 +315,27 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                   >
                     <button
                       onClick={() => handleSelectNearbyLocation(loc)}
-                      className={`w-full flex items-start gap-4 py-4 text-left hover:bg-gray-50 transition-colors ${
-                        index !== 0 ? 'border-t border-gray-100' : ''
+                      className={`w-full flex items-start gap-4 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                        index !== 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''
                       }`}
                     >
                       <div className="flex flex-col items-center">
-                        <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
-                          <MapPin className="h-5 w-5 text-gray-500" />
+                        <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                          <MapPin className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                         </div>
-                        <span className="text-xs text-gray-400 mt-1">{loc.distance}</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">{loc.distance}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900">{loc.name}</p>
-                        <p className="text-sm text-gray-500 line-clamp-2">{loc.address}</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">{loc.name}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{loc.address}</p>
                       </div>
                     </button>
                   </div>
                 ))
               ) : (
                 <div className="px-4 sm:px-6 lg:px-8 py-8 text-center">
-                  <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500">No locations found for "{searchValue}"</p>
+                  <MapPin className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400">No locations found for "{searchValue}"</p>
                 </div>
               )}
             </div>

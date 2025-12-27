@@ -23,31 +23,31 @@ export default function SendFeedback() {
 
   return (
     <AnimatedPage className="min-h-screen bg-[#f5f5f5]">
-      <div className="max-w-md mx-auto px-4 py-4">
+      <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
         {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 lg:mb-8">
           <Link to="/user/profile">
-            <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-              <ArrowLeft className="h-5 w-5 text-black" />
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10 p-0">
+              <ArrowLeft className="h-4 w-4 md:h-5 md:w-5 text-black dark:text-white" />
             </Button>
           </Link>
-          <h1 className="text-xl font-bold text-black">Send feedback</h1>
+          <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-black dark:text-white">Send feedback</h1>
         </div>
 
         {!isSubmitted ? (
           <>
             {/* Info Card */}
-            <Card className="bg-white rounded-xl shadow-sm border-0 mb-4">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="bg-gray-100 rounded-full p-2 mt-0.5">
-                    <PenSquare className="h-5 w-5 text-gray-700" />
+            <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-0 mb-4 md:mb-5 lg:mb-6">
+              <CardContent className="p-4 md:p-5 lg:p-6">
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="bg-gray-100 dark:bg-gray-700 rounded-full p-2 md:p-3 mt-0.5">
+                    <PenSquare className="h-5 w-5 md:h-6 md:w-6 text-gray-700 dark:text-gray-300" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-base font-semibold text-gray-900 mb-1">
+                    <h3 className="text-base md:text-lg lg:text-xl font-semibold text-gray-900 dark:text-white mb-1 md:mb-2">
                       We'd love to hear from you!
                     </h3>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
                       Your feedback helps us improve and serve you better. Share your thoughts, suggestions, or report any issues.
                     </p>
                   </div>
@@ -56,18 +56,18 @@ export default function SendFeedback() {
             </Card>
 
             {/* Feedback Form */}
-            <Card className="bg-white rounded-xl shadow-sm border-0 mb-4">
-              <CardContent className="p-4">
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+            <Card className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-0 mb-4 md:mb-5 lg:mb-6">
+              <CardContent className="p-4 md:p-5 lg:p-6">
+                <label className="block text-sm md:text-base font-medium text-gray-900 dark:text-white mb-2 md:mb-3">
                   Your feedback
                 </label>
                 <Textarea
                   placeholder="Tell us what you think..."
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
-                  className="min-h-[150px] resize-none"
+                  className="min-h-[150px] md:min-h-[180px] lg:min-h-[200px] resize-none text-sm md:text-base"
                 />
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-2">
                   {feedback.length} characters
                 </p>
               </CardContent>
@@ -77,20 +77,20 @@ export default function SendFeedback() {
             <Button
               onClick={handleSubmit}
               disabled={!feedback.trim()}
-              className="w-full bg-green-600 hover:bg-green-700 text-white"
+              className="w-full bg-green-600 hover:bg-green-700 text-white text-sm md:text-base h-10 md:h-12"
             >
               Submit Feedback
             </Button>
           </>
         ) : (
           /* Success State */
-          <Card className="bg-white rounded-2xl shadow-md border-0 overflow-hidden">
-            <CardContent className="p-8 text-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Check className="h-10 w-10 text-green-600" />
+          <Card className="bg-white dark:bg-gray-800 rounded-2xl shadow-md border-0 overflow-hidden">
+            <CardContent className="p-6 md:p-8 lg:p-10 text-center">
+              <div className="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-4 md:mb-5 lg:mb-6">
+                <Check className="h-8 w-8 md:h-10 md:w-10 lg:h-12 lg:w-12 text-green-600 dark:text-green-400" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Thank You!</h2>
-              <p className="text-gray-600 mb-6">
+              <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-2 md:mb-3">Thank You!</h2>
+              <p className="text-sm md:text-base lg:text-lg text-gray-600 dark:text-gray-400 mb-4 md:mb-6">
                 Your feedback has been submitted successfully. We appreciate your input!
               </p>
             </CardContent>

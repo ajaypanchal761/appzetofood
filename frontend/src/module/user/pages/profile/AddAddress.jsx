@@ -37,14 +37,14 @@ export default function AddAddress() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-background p-4">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <AnimatedPage className="min-h-screen bg-background p-4 sm:p-6 md:p-8 lg:p-10">
+      <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto space-y-6 md:space-y-8 lg:space-y-10">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">Add New Address</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl md:text-3xl">Add New Address</CardTitle>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <CardContent className="p-4 sm:p-5 md:p-6 lg:p-8">
+            <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5 lg:space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="street">Street Address *</Label>
                 <Input
@@ -56,7 +56,7 @@ export default function AddAddress() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
                 <div className="space-y-2">
                   <Label htmlFor="city">City *</Label>
                   <Input

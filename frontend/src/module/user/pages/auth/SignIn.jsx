@@ -252,33 +252,44 @@ export default function SignIn() {
   }
 
   return (
-    <AnimatedPage className="max-h-screen overflow-y-hidden flex flex-col bg-white overflow-hidden !pb-0">
+    <AnimatedPage className="min-h-screen flex flex-col bg-white dark:bg-[#0a0a0a] overflow-hidden !pb-0 md:flex-row md:overflow-hidden">
       
-      {/* Top Section - Red Background with Banner */}
-      <div className="relative w-full shrink-0" style={{ height: "45vh", minHeight: "300px" }}>
+      {/* Mobile: Top Section - Banner Image */}
+      {/* Desktop: Left Section - Banner Image */}
+      <div className="relative md:hidden w-full shrink-0" style={{ height: "45vh", minHeight: "300px" }}>
         <img 
           src={loginBanner} 
           alt="Food Banner" 
           className="w-full h-full object-cover object-center"
         />
-
       </div>
 
-      {/* Bottom Section - White Login Form */}
-      <div className="bg-white p-3 overflow-y-hidden">
-        <div className="max-w-md mx-auto space-y-6">
+      <div className="relative hidden md:block w-full shrink-0 md:w-1/2 md:h-screen md:sticky md:top-0">
+        <img 
+          src={loginBanner} 
+          alt="Food Banner" 
+          className="w-full h-full object-cover object-center"
+        />
+        {/* Overlay gradient for better text readability on desktop */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-transparent" />
+      </div>
+
+      {/* Mobile: Bottom Section - White Login Form */}
+      {/* Desktop: Right Section - Login Form */}
+      <div className="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10 overflow-y-auto md:w-1/2 md:flex md:items-center md:justify-center md:h-screen">
+        <div className="max-w-md lg:max-w-lg xl:max-w-xl mx-auto space-y-6 md:space-y-8 lg:space-y-10 w-full">
           {/* Heading */}
-          <div className="text-center space-y-1">
-            <h2 className="text-3xl sm:text-2xl font-bold text-black">
+          <div className="text-center space-y-2 md:space-y-3">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-black dark:text-white leading-tight">
               India's #1 Food Delivery and Dining App
             </h2>
-            <p className="text-sm sm:text-base text-gray-600">
+            <p className="text-sm sm:text-base md:text-lg text-gray-600 dark:text-gray-400">
               Log in or sign up
             </p>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5">
             {/* Name field for sign up - hidden by default, shown only when needed */}
             {isSignUp && (
               <div className="space-y-2">
@@ -288,7 +299,7 @@ export default function SignIn() {
                   placeholder="Enter your full name"
                   value={formData.name}
                   onChange={handleChange}
-                  className={`text-base h-12 ${errors.name ? "border-red-500" : "border-gray-300"}`}
+                  className={`text-base md:text-lg h-12 md:h-14 bg-white dark:bg-[#1a1a1a] text-black dark:text-white ${errors.name ? "border-red-500" : "border-gray-300 dark:border-gray-700"} transition-colors`}
                   aria-invalid={errors.name ? "true" : "false"}
                 />
                 {errors.name && (
@@ -308,9 +319,9 @@ export default function SignIn() {
                     value={formData.countryCode}
                     onValueChange={handleCountryCodeChange}
                   >
-                    <SelectTrigger className="w-[100px] !h-12 border-gray-300 rounded-lg flex items-center" size="default">
+                    <SelectTrigger className="w-[100px] md:w-[120px] !h-12 md:!h-14 border-gray-300 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-black dark:text-white rounded-lg flex items-center transition-colors" size="default">
                       <SelectValue>
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center gap-2 text-sm md:text-base">
                           <span>{selectedCountry.flag}</span>
                           <span>{selectedCountry.code}</span>
                         </span>
@@ -334,7 +345,7 @@ export default function SignIn() {
                     placeholder="Enter Phone Number"
                     value={formData.phone}
                     onChange={handleChange}
-                    className={`flex-1 h-12 text-base border-gray-300 rounded-lg ${errors.phone ? "border-red-500" : ""}`}
+                    className={`flex-1 h-12 md:h-14 text-base md:text-lg bg-white dark:bg-[#1a1a1a] text-black dark:text-white border-gray-300 dark:border-gray-700 rounded-lg ${errors.phone ? "border-red-500" : ""} transition-colors`}
                     aria-invalid={errors.phone ? "true" : "false"}
                   />
                 </div>
@@ -363,7 +374,7 @@ export default function SignIn() {
                   placeholder="Enter your email address"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`w-full h-12 text-base border-gray-300 rounded-lg ${errors.email ? "border-red-500" : ""}`}
+                  className={`w-full h-12 md:h-14 text-base md:text-lg bg-white dark:bg-[#1a1a1a] text-black dark:text-white border-gray-300 dark:border-gray-700 rounded-lg ${errors.email ? "border-red-500" : ""} transition-colors`}
                   aria-invalid={errors.email ? "true" : "false"}
                 />
                 {errors.email && (
@@ -403,7 +414,7 @@ export default function SignIn() {
               />
               <label 
                 htmlFor="rememberMe" 
-                className="text-sm text-gray-700 cursor-pointer select-none"
+                className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none"
               >
                 Remember my login for faster sign-in
               </label>
@@ -412,7 +423,7 @@ export default function SignIn() {
             {/* Continue Button */}
             <Button
               type="submit"
-              className="w-full h-12 bg-[#E23744] hover:bg-[#d32f3d] text-white font-bold text-base rounded-lg transition-colors"
+              className="w-full h-12 md:h-14 bg-[#E23744] hover:bg-[#d32f3d] text-white font-bold text-base md:text-lg rounded-lg transition-all hover:shadow-lg active:scale-[0.98]"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -432,19 +443,19 @@ export default function SignIn() {
               <span className="w-full border-t border-gray-300" />
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-white px-2 text-sm text-gray-500">
+              <span className="bg-white dark:bg-[#1a1a1a] px-2 text-sm text-gray-500 dark:text-gray-400">
                 or
               </span>
             </div>
           </div>
 
           {/* Social Login Icons */}
-          <div className="flex justify-center gap-4">
+          <div className="flex justify-center gap-4 md:gap-6">
             {/* Google Login */}
             <button
               type="button"
               onClick={handleGoogleSignIn}
-              className="w-12 h-12 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 transition-colors"
+              className="w-12 h-12 md:w-14 md:h-14 rounded-full border border-gray-300 dark:border-gray-700 flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800 transition-all hover:shadow-md active:scale-95"
               aria-label="Sign in with Google"
             >
               <svg className="h-6 w-6" viewBox="0 0 24 24">
@@ -471,24 +482,24 @@ export default function SignIn() {
             <button
               type="button"
               onClick={handleLoginMethodChange}
-              className="w-12 h-12 rounded-full border border-[#E23744] flex items-center justify-center hover:bg-[#d32f3d] transition-colors bg-[#E23744]"
+              className="w-12 h-12 md:w-14 md:h-14 rounded-full border border-[#E23744] flex items-center justify-center hover:bg-[#d32f3d] transition-all hover:shadow-md active:scale-95 bg-[#E23744]"
               aria-label="Sign in with Email"
             >
-              {authMethod == "phone" ? <Mail className="h-5 w-5 text-white" /> : <Phone className="h-5 w-5 text-white" />}
+              {authMethod == "phone" ? <Mail className="h-5 w-5 md:h-6 md:w-6 text-white" /> : <Phone className="h-5 w-5 md:h-6 md:w-6 text-white" />}
             </button>
           </div>
 
           {/* Legal Disclaimer */}
-          <div className="text-center text-xs text-gray-500 pt-4">
-            <p className="mb-1">
+          <div className="text-center text-xs md:text-sm text-gray-500 dark:text-gray-400 pt-4 md:pt-6">
+            <p className="mb-1 md:mb-2">
               By continuing, you agree to our
             </p>
             <div className="flex justify-center gap-2 flex-wrap">
-              <a href="#" className="underline hover:text-gray-700">Terms of Service</a>
+              <a href="#" className="underline hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Terms of Service</a>
               <span>•</span>
-              <a href="#" className="underline hover:text-gray-700">Privacy Policy</a>
+              <a href="#" className="underline hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Privacy Policy</a>
               <span>•</span>
-              <a href="#" className="underline hover:text-gray-700">Content Policy</a>
+              <a href="#" className="underline hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Content Policy</a>
             </div>
           </div>
         </div>
