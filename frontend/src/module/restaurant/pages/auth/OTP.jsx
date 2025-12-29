@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { authAPI } from "@/lib/api"
-import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
+import { restaurantAPI } from "@/lib/api"
 import { setAuthData as setRestaurantAuthData } from "@/lib/utils/auth"
 import { checkOnboardingStatus } from "../../utils/onboardingUtils"
 
@@ -42,14 +41,6 @@ export default function RestaurantOTP() {
           setContactInfo(formattedPhone)
         } else {
           setContactInfo(data.phone || "")
-        }
-        
-        // Auto-fill OTP for test phone numbers
-        if (isTestPhoneNumber(data.phone)) {
-          const defaultOtp = getDefaultOTP(data.phone)
-          if (defaultOtp) {
-            setOtp(defaultOtp.split(""))
-          }
         }
       }
     } else {
@@ -208,12 +199,12 @@ export default function RestaurantOTP() {
         nameToSend = authData.name
       }
 
-      const response = await authAPI.verifyOTP(phone, code, purpose, nameToSend, email, "restaurant")
+      const response = await restaurantAPI.verifyOTP(phone, code, purpose, nameToSend, email)
 
-      // Extract user and token or special flags (like needsName) from backend response
+      // Extract restaurant and token or special flags (like needsName) from backend response
       const data = response?.data?.data || response?.data
 
-      // If backend says we need a name (user not found on login), treat this as a new signup:
+      // If backend says we need a name (restaurant not found on login), treat this as a new signup:
       // - flip authData.isSignUp -> true so subsequent verify calls use "register"
       // - persist this updated state back to sessionStorage
       // - show the name input instead of erroring
@@ -239,11 +230,11 @@ export default function RestaurantOTP() {
       }
 
       const accessToken = data?.accessToken
-      const user = data?.user
+      const restaurant = data?.restaurant
 
-      if (accessToken && user) {
+      if (accessToken && restaurant) {
         // Store auth data using utility function to ensure proper module-specific token storage
-        setRestaurantAuthData("restaurant", accessToken, user)
+        setRestaurantAuthData("restaurant", accessToken, restaurant)
         
         // Dispatch custom event for same-tab updates
         window.dispatchEvent(new Event("restaurantAuthChanged"))
@@ -263,13 +254,13 @@ export default function RestaurantOTP() {
                 // Navigate to onboarding with the incomplete step
                 navigate(`/restaurant/onboarding?step=${incompleteStep}`, { replace: true })
               } else {
-                // Onboarding is complete, go to main restaurant page
-                navigate("/restaurant", { replace: true })
+                // Onboarding is complete, go to restaurant dashboard
+                navigate("/restaurant-panel/dashboard", { replace: true })
               }
             } catch (err) {
               console.error("Failed to check onboarding status:", err)
-              // Fallback to main restaurant page
-              navigate("/restaurant", { replace: true })
+              // Fallback to restaurant dashboard
+              navigate("/restaurant-panel/dashboard", { replace: true })
             }
           }
         }, 500)
@@ -303,7 +294,7 @@ export default function RestaurantOTP() {
       const phone = authData.method === "phone" ? authData.phone : null
       const email = authData.method === "email" ? authData.email : null
       
-      await authAPI.sendOTP(phone, purpose, email)
+      await restaurantAPI.sendOTP(phone, purpose, email)
     } catch (err) {
       const message =
         err?.response?.data?.message ||
@@ -373,7 +364,7 @@ export default function RestaurantOTP() {
                     type="text"
                     inputMode="numeric"
                     maxLength={1}
-                    value={digit}
+                    value={digit || ""}
                     onChange={(e) => handleChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={index === 0 ? handlePaste : undefined}
@@ -416,7 +407,7 @@ export default function RestaurantOTP() {
               </label>
               <input
                 type="text"
-                value={name}
+                value={name || ""}
                 onChange={(e) => {
                   setName(e.target.value)
                   if (nameError) setNameError("")

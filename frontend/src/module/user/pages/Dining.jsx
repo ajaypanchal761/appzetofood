@@ -841,7 +841,7 @@ export default function Dining() {
                   name: "Great Buffets",
                   image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop",
                 },
-              ].map((item) => (
+              ].map((item, index) => (
                 <motion.div
                   key={item.id}
                   className="relative flex-shrink-0 rounded-xl overflow-hidden shadow-sm cursor-pointer"

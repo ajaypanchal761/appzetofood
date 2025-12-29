@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { authAPI } from "@/lib/api"
+import { restaurantAPI } from "@/lib/api"
+import { setAuthData } from "@/lib/utils/auth"
 import { Mail, Lock, EyeOff, Eye, CheckSquare, UtensilsCrossed } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,13 +32,13 @@ export default function RestaurantSignIn() {
     setIsLoading(true)
 
     try {
-      // Login with restaurant role
-      const response = await authAPI.login(email, password, "restaurant")
+      // Login with restaurant auth endpoint
+      const response = await restaurantAPI.login(email, password)
       const data = response?.data?.data || response?.data
       
-      if (data.accessToken && data.user) {
+      if (data.accessToken && data.restaurant) {
         // Replace old token with new one (handles cross-module login)
-        setAuthData("restaurant", data.accessToken, data.user)
+        setAuthData("restaurant", data.accessToken, data.restaurant)
         
         // Dispatch custom event for same-tab updates
         window.dispatchEvent(new Event('restaurantAuthChanged'))

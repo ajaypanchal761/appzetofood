@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import loginBg from "@/assets/login page img.jpg"
-import { authAPI } from "@/lib/api"
+import { restaurantAPI } from "@/lib/api"
 
 export default function RestaurantSignupEmail() {
   const navigate = useNavigate()
@@ -57,7 +57,7 @@ export default function RestaurantSignupEmail() {
 
     setIsLoading(true)
     try {
-      await authAPI.sendOTP(null, "register", formData.email)
+      await restaurantAPI.sendOTP(null, "register", formData.email)
       setStep(2)
       setResendTimer(60)
       const timer = setInterval(() => {
@@ -129,24 +129,23 @@ export default function RestaurantSignupEmail() {
 
     setIsLoading(true)
     try {
-      const response = await authAPI.verifyOTP(
+      const response = await restaurantAPI.verifyOTP(
         null,
         otpCode,
         "register",
         formData.name,
-        formData.email,
-        "restaurant"
+        formData.email
       )
 
       const data = response?.data?.data || response?.data
       
-      if (data.accessToken && data.user) {
+      if (data.accessToken && data.restaurant) {
         // Replace old token with new one (handles cross-module login)
-        setAuthData("restaurant", data.accessToken, data.user)
+        setAuthData("restaurant", data.accessToken, data.restaurant)
         
         window.dispatchEvent(new Event("restaurantAuthChanged"))
         
-        navigate("/restaurant", { replace: true })
+        navigate("/restaurant-panel/dashboard", { replace: true })
       } else {
         throw new Error("Registration failed. Please try again.")
       }
@@ -170,7 +169,7 @@ export default function RestaurantSignupEmail() {
     setIsLoading(true)
     setError("")
     try {
-      await authAPI.sendOTP(null, "register", formData.email)
+      await restaurantAPI.sendOTP(null, "register", formData.email)
       setResendTimer(60)
       const timer = setInterval(() => {
         setResendTimer((prev) => {

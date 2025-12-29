@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Phone, User, AlertCircle, Loader2, UtensilsCrossed } from "lucide-react"
-import { authAPI } from "@/lib/api"
+import { restaurantAPI } from "@/lib/api"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -128,8 +128,8 @@ export default function RestaurantSignup() {
     const fullPhone = `${formData.countryCode} ${formData.phone}`.trim()
 
     try {
-      // Send OTP with purpose 'register' and role 'restaurant'
-      await authAPI.sendOTP(fullPhone, "register")
+      // Send OTP with purpose 'register'
+      await restaurantAPI.sendOTP(fullPhone, "register")
 
       // Store auth data in sessionStorage for OTP page
       const authData = {

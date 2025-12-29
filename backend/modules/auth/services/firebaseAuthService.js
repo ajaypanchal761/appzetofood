@@ -26,11 +26,21 @@ class FirebaseAuthService {
     let clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-    // Fallback: read from firebaseconfig.json in backend root if env vars are not set
+    // Fallback: read from firebaseconfig.json in backend root or config folder if env vars are not set
     if (!projectId || !clientEmail || !privateKey) {
       try {
-        const serviceAccountPath = path.resolve(process.cwd(), 'firebaseconfig.json');
-        if (fs.existsSync(serviceAccountPath)) {
+        // Try config folder first (if service account file is there)
+        const configFolderPath = path.resolve(process.cwd(), 'config', 'zomato-607fa-firebase-adminsdk-fbsvc-f5f782c2cc.json');
+        const rootPath = path.resolve(process.cwd(), 'firebaseconfig.json');
+        
+        let serviceAccountPath = null;
+        if (fs.existsSync(configFolderPath)) {
+          serviceAccountPath = configFolderPath;
+        } else if (fs.existsSync(rootPath)) {
+          serviceAccountPath = rootPath;
+        }
+        
+        if (serviceAccountPath) {
           const raw = fs.readFileSync(serviceAccountPath, 'utf-8');
           const json = JSON.parse(raw);
           projectId = projectId || json.project_id;

@@ -642,7 +642,8 @@ export default function RestaurantOnboarding() {
         await api.put("/restaurant/onboarding", payload)
         // Clear localStorage when onboarding is complete
         clearOnboardingFromLocalStorage()
-        navigate("/restaurant", { replace: true })
+        // Navigate to restaurant dashboard after onboarding completion
+        navigate("/restaurant-panel/dashboard", { replace: true })
       }
     } catch (err) {
       const msg =

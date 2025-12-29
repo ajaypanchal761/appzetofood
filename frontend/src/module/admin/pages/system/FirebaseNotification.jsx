@@ -125,13 +125,13 @@ export default function FirebaseNotification() {
   const [messages, setMessages] = useState(notificationMessages)
   const [firebaseConfig, setFirebaseConfig] = useState({
     serviceFileContent: "",
-    apiKey: "AlzaSyD0Z911mOoWCVkeGdjhIKwWFPRgvd6ZyAw",
-    fcmProjectId: "stackmart-500c7",
-    messagingSenderId: "49198793015",
-    authDomain: "stackmart-500c7.firebaseapp.com",
-    appId: "1:491987943015:web:d8bc7ab8dbc9991c8f1ec2",
-    storageBucket: "stackmart-500c7.appspot.com",
-    measurementId: ""
+    apiKey: "AIzaSyC_TqpDR7LNHxFEPd8cGjl_ka_Rj0ebECA",
+    fcmProjectId: "zomato-607fa",
+    messagingSenderId: "1065631021082",
+    authDomain: "zomato-607fa.firebaseapp.com",
+    appId: "1:1065631021082:web:7424afd0ad2054ed6879a3",
+    storageBucket: "zomato-607fa.firebasestorage.app",
+    measurementId: "G-7JJV7JYVRX"
   })
 
   const handleMessageToggle = (id) => {
@@ -160,13 +160,13 @@ export default function FirebaseNotification() {
     setMessages(notificationMessages)
     setFirebaseConfig({
       serviceFileContent: "",
-      apiKey: "AlzaSyD0Z911mOoWCVkeGdjhIKwWFPRgvd6ZyAw",
-      fcmProjectId: "stackmart-500c7",
-      messagingSenderId: "49198793015",
-      authDomain: "stackmart-500c7.firebaseapp.com",
-      appId: "1:491987943015:web:d8bc7ab8dbc9991c8f1ec2",
-      storageBucket: "stackmart-500c7.appspot.com",
-      measurementId: ""
+      apiKey: "AIzaSyC_TqpDR7LNHxFEPd8cGjl_ka_Rj0ebECA",
+      fcmProjectId: "zomato-607fa",
+      messagingSenderId: "1065631021082",
+      authDomain: "zomato-607fa.firebaseapp.com",
+      appId: "1:1065631021082:web:7424afd0ad2054ed6879a3",
+      storageBucket: "zomato-607fa.firebasestorage.app",
+      measurementId: "G-7JJV7JYVRX"
     })
   }
 

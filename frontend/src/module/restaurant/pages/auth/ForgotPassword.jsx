@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card"
 import loginBg from "@/assets/login page img.jpg"
-import { authAPI } from "@/lib/api"
-import apiClient from "@/lib/api/axios"
+import { restaurantAPI } from "@/lib/api"
 
 export default function RestaurantForgotPassword() {
   const navigate = useNavigate()
@@ -34,7 +33,7 @@ export default function RestaurantForgotPassword() {
 
     setIsLoading(true)
     try {
-      await authAPI.sendOTP(null, "reset-password", email)
+      await restaurantAPI.sendOTP(null, "reset-password", email)
       setStep(2)
       setResendTimer(60)
       const timer = setInterval(() => {
@@ -106,7 +105,7 @@ export default function RestaurantForgotPassword() {
 
     setIsLoading(true)
     try {
-      await authAPI.verifyOTP(null, otpCode, "reset-password", null, email, "restaurant")
+      await restaurantAPI.verifyOTP(null, otpCode, "reset-password", null, email)
       setStep(3)
     } catch (err) {
       const message =
@@ -128,7 +127,7 @@ export default function RestaurantForgotPassword() {
     setIsLoading(true)
     setError("")
     try {
-      await authAPI.sendOTP(null, "reset-password", email)
+      await restaurantAPI.sendOTP(null, "reset-password", email)
       setResendTimer(60)
       const timer = setInterval(() => {
         setResendTimer((prev) => {
@@ -172,12 +171,7 @@ export default function RestaurantForgotPassword() {
 
     setIsLoading(true)
     try {
-      const response = await apiClient.post("/auth/reset-password", {
-        email,
-        otp: otp.join(""),
-        newPassword,
-        role: "restaurant",
-      })
+      const response = await restaurantAPI.resetPassword(email, otp.join(""), newPassword)
 
       const data = response?.data || {}
       if (!data.success) {

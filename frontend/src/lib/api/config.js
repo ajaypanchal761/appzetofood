@@ -29,6 +29,17 @@ export const API_ENDPOINTS = {
   },
   // Restaurant endpoints
   RESTAURANT: {
+    AUTH: {
+      SEND_OTP: '/restaurant/auth/send-otp',
+      VERIFY_OTP: '/restaurant/auth/verify-otp',
+      REGISTER: '/restaurant/auth/register',
+      LOGIN: '/restaurant/auth/login',
+      FIREBASE_GOOGLE_LOGIN: '/restaurant/auth/firebase/google-login',
+      REFRESH_TOKEN: '/restaurant/auth/refresh-token',
+      LOGOUT: '/restaurant/auth/logout',
+      ME: '/restaurant/auth/me',
+      RESET_PASSWORD: '/restaurant/auth/reset-password',
+    },
     PROFILE: '/restaurant/profile',
     MENU: '/restaurant/menu',
     MENU_BY_RESTAURANT_ID: '/restaurant/:id/menu',

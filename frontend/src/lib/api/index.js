@@ -185,6 +185,66 @@ export const userAPI = {
 
 // Export restaurant API helper functions
 export const restaurantAPI = {
+  // Restaurant Authentication
+  sendOTP: (phone = null, purpose = 'login', email = null) => {
+    const payload = { purpose };
+    if (phone) payload.phone = phone;
+    if (email) payload.email = email;
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.SEND_OTP, payload);
+  },
+
+  verifyOTP: (phone = null, otp, purpose = 'login', name = null, email = null, password = null) => {
+    const payload = {
+      otp,
+      purpose,
+    };
+    if (phone != null) payload.phone = phone;
+    if (email != null) payload.email = email;
+    if (name != null) payload.name = name;
+    if (password != null) payload.password = password;
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.VERIFY_OTP, payload);
+  },
+
+  register: (name, email, password, phone = null, ownerName = null, ownerEmail = null, ownerPhone = null) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.REGISTER, {
+      name,
+      email,
+      password,
+      phone,
+      ownerName,
+      ownerEmail,
+      ownerPhone,
+    });
+  },
+
+  login: (email, password) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.LOGIN, { email, password });
+  },
+
+  firebaseGoogleLogin: (idToken) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.FIREBASE_GOOGLE_LOGIN, { idToken });
+  },
+
+  refreshToken: () => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.REFRESH_TOKEN);
+  },
+
+  logout: () => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.LOGOUT);
+  },
+
+  getCurrentRestaurant: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.AUTH.ME);
+  },
+
+  resetPassword: (email, otp, newPassword) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.RESET_PASSWORD, {
+      email,
+      otp,
+      newPassword,
+    });
+  },
+
   // Get restaurant profile
   getProfile: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.PROFILE);

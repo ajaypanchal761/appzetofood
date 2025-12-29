@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const locationSchema = new mongoose.Schema({
   latitude: Number,
@@ -19,16 +20,68 @@ const restaurantSchema = new mongoose.Schema(
   {
     restaurantId: {
       type: String,
-      required: true,
       unique: true,
       index: true,
     },
-    owner: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
+    // Authentication fields
+    email: {
+      type: String,
+      required: function() {
+        return !this.phone && !this.googleId;
+      },
       unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      index: true,
     },
+    phone: {
+      type: String,
+      required: function() {
+        return !this.email && !this.googleId;
+      },
+      unique: true,
+      sparse: true,
+      trim: true,
+      index: true,
+    },
+    phoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    password: {
+      type: String,
+      select: false, // Don't return password by default
+    },
+    googleId: {
+      type: String,
+      sparse: true,
+    },
+    googleEmail: {
+      type: String,
+      sparse: true,
+    },
+    signupMethod: {
+      type: String,
+      enum: ['google', 'phone', 'email'],
+      default: null,
+    },
+    // Owner information (now stored directly in restaurant)
+    ownerName: {
+      type: String,
+      required: true,
+    },
+    ownerEmail: {
+      type: String,
+      default: '',
+    },
+    ownerPhone: {
+      type: String,
+      required: function() {
+        return !!this.phone;
+      },
+    },
+    // Restaurant basic info
     name: {
       type: String,
       required: true,
@@ -36,14 +89,11 @@ const restaurantSchema = new mongoose.Schema(
     },
     slug: {
       type: String,
-      required: true,
       unique: true,
+      sparse: true,
       lowercase: true,
       trim: true,
     },
-    ownerName: String,
-    ownerEmail: String,
-    ownerPhone: String,
     primaryContactNumber: String,
     location: locationSchema,
     profileImage: {
@@ -103,32 +153,145 @@ const restaurantSchema = new mongoose.Schema(
       type: String,
       default: "Flat ₹50 OFF above ₹199",
     },
+    // Onboarding fields (merged from RestaurantOnboarding)
+    onboarding: {
+      step1: {
+        restaurantName: String,
+        ownerName: String,
+        ownerEmail: String,
+        ownerPhone: String,
+        primaryContactNumber: String,
+        location: locationSchema,
+      },
+      step2: {
+        menuImageUrls: [
+          {
+            url: String,
+            publicId: String,
+          },
+        ],
+        profileImageUrl: {
+          url: String,
+          publicId: String,
+        },
+        cuisines: [String],
+        deliveryTimings: {
+          openingTime: String,
+          closingTime: String,
+        },
+        openDays: [String],
+      },
+      step3: {
+        pan: {
+          panNumber: String,
+          nameOnPan: String,
+          image: {
+            url: String,
+            publicId: String,
+          },
+        },
+        gst: {
+          isRegistered: {
+            type: Boolean,
+            default: false,
+          },
+          gstNumber: String,
+          legalName: String,
+          address: String,
+          image: {
+            url: String,
+            publicId: String,
+          },
+        },
+        fssai: {
+          registrationNumber: String,
+          expiryDate: Date,
+          image: {
+            url: String,
+            publicId: String,
+          },
+        },
+        bank: {
+          accountNumber: String,
+          ifscCode: String,
+          accountHolderName: String,
+          accountType: String,
+        },
+      },
+      step4: {
+        estimatedDeliveryTime: String,
+        distance: String,
+        priceRange: String,
+        featuredDish: String,
+        featuredPrice: Number,
+        offer: String,
+      },
+      completedSteps: {
+        type: Number,
+        default: 0,
+      },
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Generate slug from name
-restaurantSchema.pre('save', function (next) {
-  if (this.isModified('name') && !this.slug) {
-    this.slug = this.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-  }
-  next();
-});
+// Indexes for authentication
+restaurantSchema.index({ email: 1 }, { unique: true, sparse: true });
+restaurantSchema.index({ phone: 1 }, { unique: true, sparse: true });
+restaurantSchema.index({ googleId: 1 }, { unique: true, sparse: true });
 
-// Generate restaurantId if not provided
-restaurantSchema.pre('save', function (next) {
+// Hash password before saving
+restaurantSchema.pre('save', async function(next) {
+  // Generate restaurantId FIRST (before any validation)
   if (!this.restaurantId) {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 10000);
     this.restaurantId = `REST-${timestamp}-${random}`;
   }
+  
+  // Generate slug from name (always generate if name exists and slug doesn't)
+  if (this.name && !this.slug) {
+    let baseSlug = this.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    
+    // Ensure slug is not empty
+    if (!baseSlug) {
+      baseSlug = `restaurant-${this.restaurantId}`;
+    }
+    
+    this.slug = baseSlug;
+  }
+  
+  // Hash password if it's modified
+  if (this.isModified('password') && this.password) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
+  
+  // Set default ownerEmail if not set and phone exists
+  if (!this.ownerEmail && this.phone && !this.email) {
+    this.ownerEmail = `${this.phone.replace(/\s+/g, '')}@restaurant.appzeto.com`;
+  }
+  
+  // Set ownerEmail from email if email exists and ownerEmail not set
+  if (this.email && !this.ownerEmail) {
+    this.ownerEmail = this.email;
+  }
+  
   next();
 });
+
+// Method to compare password
+restaurantSchema.methods.comparePassword = async function(candidatePassword) {
+  if (!this.password) {
+    return false;
+  }
+  return await bcrypt.compare(candidatePassword, this.password);
+};
 
 export default mongoose.model('Restaurant', restaurantSchema);
 

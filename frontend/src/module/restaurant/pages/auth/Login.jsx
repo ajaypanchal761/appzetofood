@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { authAPI } from "@/lib/api"
+import { restaurantAPI } from "@/lib/api"
 import { firebaseAuth, googleProvider } from "@/lib/firebase"
 
 // Common country codes
@@ -115,8 +115,8 @@ export default function RestaurantLogin() {
     try {
       setIsSending(true)
 
-      // Call backend to send OTP for login with restaurant role
-      await authAPI.sendOTP(fullPhone, "login")
+      // Call backend to send OTP for login
+      await restaurantAPI.sendOTP(fullPhone, "login")
 
       // Store auth data in sessionStorage for OTP page
       const authData = {
@@ -200,7 +200,7 @@ export default function RestaurantLogin() {
       setIsSending(true)
 
       // Call backend API to send OTP via email
-      await authAPI.sendOTP(null, "login", formData.email)
+      await restaurantAPI.sendOTP(null, "login", formData.email)
 
       // Store auth data in sessionStorage for OTP page
       const authData = {
@@ -239,24 +239,24 @@ export default function RestaurantLogin() {
       const idToken = await user.getIdToken()
 
       // Call backend to login/register via Firebase Google
-      const response = await authAPI.firebaseGoogleLogin(idToken, "restaurant")
+      const response = await restaurantAPI.firebaseGoogleLogin(idToken)
       const data = response?.data?.data || {}
 
       const accessToken = data.accessToken
-      const appUser = data.user
+      const restaurant = data.restaurant
 
-      if (!accessToken || !appUser) {
+      if (!accessToken || !restaurant) {
         throw new Error("Invalid response from server")
       }
 
       // Store auth data for restaurant module using utility function
-      setAuthData("restaurant", accessToken, appUser)
+      setAuthData("restaurant", accessToken, restaurant)
 
       // Notify any listeners that auth state has changed
       window.dispatchEvent(new Event("restaurantAuthChanged"))
 
       // Navigate to restaurant dashboard
-      navigate("/restaurant")
+      navigate("/restaurant-panel/dashboard")
     } catch (error) {
       console.error("Firebase Google login error:", error)
       const message =
