@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useLocation as useGeoLocation } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
+import { toast } from "sonner"
 
 // Mock nearby locations data - in production this would come from a maps API
 const mockNearbyLocations = [
@@ -55,7 +56,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const [searchValue, setSearchValue] = useState("")
   const [filteredLocations, setFilteredLocations] = useState(mockNearbyLocations)
   const { location, loading, requestLocation } = useGeoLocation()
-  const { addresses } = useProfile()
+  const { addresses = [] } = useProfile()
 
   // Current location display
   const currentLocationText = location?.city && location?.state 
@@ -99,8 +100,56 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   }, [searchValue])
 
   const handleUseCurrentLocation = async () => {
-    await requestLocation()
-    onClose()
+    try {
+      // Check if geolocation is supported
+      if (!navigator.geolocation) {
+        toast.error("Location services are not supported in your browser", {
+          duration: 3000,
+        })
+        return
+      }
+
+      // Show loading toast
+      toast.loading("Fetching your current location...", {
+        id: "location-request",
+      })
+
+      // Request location - this will automatically prompt for permission if needed
+      await requestLocation()
+      
+      // Success toast
+      toast.success("Location updated successfully!", {
+        id: "location-request",
+        duration: 2000,
+      })
+      
+      // Close the location selector after successful location fetch
+      onClose()
+    } catch (error) {
+      // Handle permission denied or other errors
+      if (error.code === 1 || error.message?.includes("denied") || error.message?.includes("permission")) {
+        toast.error("Location permission denied. Please enable location access in your browser settings.", {
+          id: "location-request",
+          duration: 4000,
+        })
+      } else if (error.code === 2 || error.message?.includes("unavailable")) {
+        toast.error("Location unavailable. Please check your GPS settings.", {
+          id: "location-request",
+          duration: 3000,
+        })
+      } else if (error.code === 3 || error.message?.includes("timeout")) {
+        toast.error("Location request timed out. Please try again.", {
+          id: "location-request",
+          duration: 3000,
+        })
+      } else {
+        toast.error("Failed to get location. Please try again.", {
+          id: "location-request",
+          duration: 3000,
+        })
+      }
+      // Don't close the selector if there's an error, so user can try other options
+    }
   }
 
   const handleAddAddress = () => {

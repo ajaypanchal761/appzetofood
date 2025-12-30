@@ -6,8 +6,10 @@ import restaurantAuthRoutes from './routes/restaurantAuthRoutes.js';
 import { getOnboarding, upsertOnboarding, createRestaurantFromOnboardingManual } from './controllers/restaurantOnboardingController.js';
 import { getRestaurants, getRestaurantById, getRestaurantByOwner, updateRestaurantProfile, uploadProfileImage, uploadMenuImage, deleteRestaurantAccount, updateDeliveryStatus } from './controllers/restaurantController.js';
 import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection } from './controllers/menuController.js';
+import { scheduleItemAvailability, cancelScheduledAvailability, getItemSchedule } from './controllers/menuScheduleController.js';
 import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
 import { addStaff, getStaff, getStaffById, updateStaff, deleteStaff } from './controllers/staffManagementController.js';
+import categoryRoutes from './routes/categoryRoutes.js';
 
 const router = express.Router();
 
@@ -26,10 +28,17 @@ router.post('/menu/section', authenticate, addSection);
 router.post('/menu/section/item', authenticate, addItemToSection);
 router.post('/menu/section/subsection', authenticate, addSubsectionToSection);
 router.post('/menu/subsection/item', authenticate, addItemToSubsection);
+// Menu item scheduling routes
+router.post('/menu/item/schedule', authenticate, scheduleItemAvailability);
+router.delete('/menu/item/schedule/:scheduleId', authenticate, cancelScheduledAvailability);
+router.get('/menu/item/schedule/:sectionId/:itemId', authenticate, getItemSchedule);
 
 // Inventory routes (authenticated - for restaurant module)
 router.get('/inventory', authenticate, getInventory);
 router.put('/inventory', authenticate, updateInventory);
+
+// Category routes (authenticated - for restaurant module)
+router.use('/categories', categoryRoutes);
 
 // Staff Management routes (authenticated - for restaurant module)
 // Must come before /:id to avoid route conflicts

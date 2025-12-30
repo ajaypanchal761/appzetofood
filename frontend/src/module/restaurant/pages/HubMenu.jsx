@@ -42,6 +42,8 @@ export default function HubMenu() {
   const [activeFilter, setActiveFilter] = useState(null) // Active filter for filtering menu
   const [availabilityReason, setAvailabilityReason] = useState(null)
   const [switchingOffTarget, setSwitchingOffTarget] = useState(null) // { type: 'item' | 'group', id: string, groupId?: string }
+  const [customDateTime, setCustomDateTime] = useState('')
+  const [isScheduling, setIsScheduling] = useState(false)
   const [menuData, setMenuData] = useState([]) // Store menu groups with state
   const scrollContainerRef = useRef(null)
   const [isScrolled, setIsScrolled] = useState(false)
@@ -420,25 +422,75 @@ export default function HubMenu() {
   }
 
   // Handle availability popup confirm
-  const handleAvailabilityConfirm = () => {
+  const handleAvailabilityConfirm = async () => {
     if (!availabilityReason || !switchingOffTarget) return
 
-    if (switchingOffTarget.type === 'group') {
-      setMenuData(prev => prev.map(g => 
-        g.id === switchingOffTarget.id ? { ...g, isEnabled: false } : g
-      ))
-    } else if (switchingOffTarget.type === 'item') {
-      setMenuData(prev => prev.map(g => ({
-        ...g,
-        items: g.items.map(i => 
-          i.id === switchingOffTarget.id ? { ...i, isAvailable: false } : i
-        )
-      })))
+    // Validate custom date/time if selected
+    if (availabilityReason === 'custom' && !customDateTime) {
+      toast.error('Please select a date and time for custom schedule')
+      return
     }
 
-    setIsAvailabilityPopupOpen(false)
-    setAvailabilityReason(null)
-    setSwitchingOffTarget(null)
+    try {
+      setIsScheduling(true)
+
+      if (switchingOffTarget.type === 'item') {
+        // Schedule item availability via API
+        const scheduleData = {
+          sectionId: switchingOffTarget.groupId,
+          itemId: switchingOffTarget.id,
+          scheduleType: availabilityReason,
+          ...(availabilityReason === 'custom' && { customDateTime }),
+        }
+
+        const response = await restaurantAPI.scheduleItemAvailability(scheduleData)
+
+        if (response.data && response.data.success) {
+          // Update local menu data with response
+          if (response.data.data && response.data.data.menu) {
+            setMenuData(response.data.data.menu.sections || [])
+          } else {
+            // Fallback: update locally
+            setMenuData(prev => prev.map(g => ({
+              ...g,
+              items: g.items.map(i => 
+                i.id === switchingOffTarget.id ? { ...i, isAvailable: false } : i
+              ),
+              subsections: g.subsections?.map(sub => ({
+                ...sub,
+                items: sub.items.map(i => 
+                  i.id === switchingOffTarget.id ? { ...i, isAvailable: false } : i
+                )
+              }))
+            })))
+          }
+
+          toast.success(
+            availabilityReason === 'manual'
+              ? 'Item availability updated'
+              : 'Item availability scheduled successfully'
+          )
+        } else {
+          throw new Error(response.data?.message || 'Failed to schedule availability')
+        }
+      } else if (switchingOffTarget.type === 'group') {
+        // For groups, just update locally (no API support yet)
+        setMenuData(prev => prev.map(g => 
+          g.id === switchingOffTarget.id ? { ...g, isEnabled: false } : g
+        ))
+        toast.success('Category availability updated')
+      }
+
+      setIsAvailabilityPopupOpen(false)
+      setAvailabilityReason(null)
+      setCustomDateTime('')
+      setSwitchingOffTarget(null)
+    } catch (error) {
+      console.error('Error scheduling item availability:', error)
+      toast.error(error.response?.data?.message || 'Failed to schedule item availability')
+    } finally {
+      setIsScheduling(false)
+    }
   }
 
   // Handle filter selection
@@ -900,21 +952,6 @@ export default function HubMenu() {
                     ))}
                   </div>
 
-                  {/* Add buttons at end of group */}
-                  <div className="flex items-center gap-2 pt-2">
-                    <button 
-                      onClick={() => handleOpenAddSubCategory(group)}
-                      className="flex-1 py-2 px-4 border border-gray-600 rounded-lg text-sm font-medium text-gray-900 bg-white hover:bg-gray-50 transition-colors"
-                    >
-                      + Add sub-category
-                    </button>
-                    <button 
-                      onClick={() => navigate(`/restaurant/hub-menu/item/new`, { state: { groupId: group.id, category: group.name } })}
-                      className="flex-1 py-2 px-4 border border-gray-600 rounded-lg text-sm font-medium text-gray-900 bg-white hover:bg-gray-50 transition-colors"
-                    >
-                      + Add item
-                    </button>
-                  </div>
                 </div>
               )}
             </div>
@@ -1052,6 +1089,7 @@ export default function HubMenu() {
                   onClick={() => {
                     setIsAvailabilityPopupOpen(false)
                     setAvailabilityReason(null)
+                    setCustomDateTime('')
                     setSwitchingOffTarget(null)
                   }}
                   className="p-1 rounded-full hover:bg-gray-100"
@@ -1073,21 +1111,35 @@ export default function HubMenu() {
                       { id: "next-business-day", label: "Next business day" },
                       { id: "custom", label: "Custom date & time (upto 7 days)" },
                     ].map((option) => (
-                      <label
-                        key={option.id}
-                        className="flex items-center gap-3 cursor-pointer py-2"
-                      >
-                        <input
-                          type="radio"
-                          name="availability"
-                          value={option.id}
-                          checked={availabilityReason === option.id}
-                          onChange={() => setAvailabilityReason(option.id)}
-                          className="w-5 h-5 text-black border-gray-400 focus:ring-black"
-                          style={{ accentColor: "#000000" }}
-                        />
-                        <span className="text-sm font-medium text-gray-900">{option.label}</span>
-                      </label>
+                      <div key={option.id}>
+                        <label
+                          className="flex items-center gap-3 cursor-pointer py-2"
+                        >
+                          <input
+                            type="radio"
+                            name="availability"
+                            value={option.id}
+                            checked={availabilityReason === option.id}
+                            onChange={() => setAvailabilityReason(option.id)}
+                            className="w-5 h-5 text-black border-gray-400 focus:ring-black"
+                            style={{ accentColor: "#000000" }}
+                          />
+                          <span className="text-sm font-medium text-gray-900">{option.label}</span>
+                        </label>
+                        {option.id === "custom" && availabilityReason === "custom" && (
+                          <div className="ml-8 mt-2 mb-4">
+                            <input
+                              type="datetime-local"
+                              value={customDateTime}
+                              onChange={(e) => setCustomDateTime(e.target.value)}
+                              min={new Date().toISOString().slice(0, 16)}
+                              max={new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
+                              required
+                            />
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1122,14 +1174,14 @@ export default function HubMenu() {
               <div className="px-4 py-4 border-t border-gray-200">
                 <button
                   onClick={handleAvailabilityConfirm}
-                  disabled={!availabilityReason}
+                  disabled={!availabilityReason || isScheduling || (availabilityReason === 'custom' && !customDateTime)}
                   className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
-                    availabilityReason
+                    availabilityReason && !isScheduling && (availabilityReason !== 'custom' || customDateTime)
                       ? "bg-gray-900 text-white hover:bg-gray-800"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
                 >
-                  Confirm
+                  {isScheduling ? 'Scheduling...' : 'Confirm'}
                 </button>
               </div>
             </motion.div>

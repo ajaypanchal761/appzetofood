@@ -148,6 +148,43 @@ const userSchema = new mongoose.Schema({
     startDate: Date,
     endDate: Date
   },
+  currentLocation: {
+    latitude: {
+      type: Number
+    },
+    longitude: {
+      type: Number
+    },
+    address: {
+      type: String
+    },
+    city: {
+      type: String
+    },
+    state: {
+      type: String
+    },
+    area: {
+      type: String
+    },
+    formattedAddress: {
+      type: String
+    },
+    lastUpdated: {
+      type: Date
+    },
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: [0, 0]
+      }
+    }
+  },
   isActive: {
     type: Boolean,
     default: true

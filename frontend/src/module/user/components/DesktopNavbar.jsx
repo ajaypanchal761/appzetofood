@@ -20,6 +20,7 @@ export default function DesktopNavbar() {
   const stateName = userLocation?.state || "Location"
 
   const handleLocationClick = () => {
+    // Open location selector overlay
     openLocationSelector()
   }
 

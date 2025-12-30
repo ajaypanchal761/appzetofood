@@ -1,11 +1,10 @@
-// Location module - to be implemented
 import express from 'express';
+import locationRoutes from './routes/locationRoutes.js';
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
-  res.status(501).json({ message: 'Location module not implemented yet' });
-});
+// Mount location routes
+router.use('/', locationRoutes);
 
 export default router;
 

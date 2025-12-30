@@ -447,9 +447,55 @@ export const getMenuByRestaurantId = async (req, res) => {
       });
     }
 
+    // Filter menu for user side: only show enabled sections and available items
+    const filteredSections = (menu.sections || [])
+      .filter(section => {
+        // Only show sections where isEnabled is not explicitly false
+        // If isEnabled is undefined/null, treat as enabled (default true)
+        return section.isEnabled !== false;
+      })
+      .map(section => {
+        // Filter direct items - only show available items
+        // Items where isAvailable is not explicitly false should be shown
+        const availableItems = (section.items || []).filter(item => {
+          return item.isAvailable !== false; // Include if true or undefined
+        });
+        
+        // Filter subsections and their items
+        const availableSubsections = (section.subsections || [])
+          .map(subsection => {
+            const availableSubsectionItems = (subsection.items || []).filter(item => {
+              return item.isAvailable !== false; // Include if true or undefined
+            });
+            // Only include subsection if it has available items
+            if (availableSubsectionItems.length > 0) {
+              return {
+                ...subsection,
+                items: availableSubsectionItems,
+              };
+            }
+            return null;
+          })
+          .filter(subsection => subsection !== null); // Remove null subsections
+        
+        // Include section if it has at least one available item OR at least one subsection with available items
+        // This ensures category remains visible even if some items are unavailable
+        if (availableItems.length > 0 || availableSubsections.length > 0) {
+          return {
+            ...section,
+            name: section.name || "Unnamed Section", // Ensure name is always present
+            items: availableItems,
+            subsections: availableSubsections,
+          };
+        }
+        // Return null only if section has no available items AND no subsections with available items
+        return null;
+      })
+      .filter(section => section !== null); // Remove null sections (sections with no available items)
+
     return successResponse(res, 200, 'Menu retrieved successfully', {
       menu: {
-        sections: menu.sections || [],
+        sections: filteredSections,
         isActive: menu.isActive,
       },
     });

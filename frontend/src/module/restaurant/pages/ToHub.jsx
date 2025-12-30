@@ -29,6 +29,7 @@ import {
 } from "recharts"
 import { Play } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
+import { restaurantAPI } from "@/lib/api"
 
 export default function ToHub() {
   const navigate = useNavigate()
@@ -44,6 +45,28 @@ export default function ToHub() {
   ]
   const [activeTopTab, setActiveTopTab] = useState("my-feed")
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [restaurantData, setRestaurantData] = useState(null)
+  const [loadingRestaurant, setLoadingRestaurant] = useState(true)
+
+  // Fetch restaurant data on mount
+  useEffect(() => {
+    const fetchRestaurantData = async () => {
+      try {
+        setLoadingRestaurant(true)
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantData(data)
+        }
+      } catch (error) {
+        console.error("Error fetching restaurant data:", error)
+      } finally {
+        setLoadingRestaurant(false)
+      }
+    }
+
+    fetchRestaurantData()
+  }, [])
   const topTabBarRef = useRef(null)
   const contentContainerRef = useRef(null)
   const touchStartX = useRef(0)
@@ -4708,7 +4731,7 @@ export default function ToHub() {
               Showing data for
             </p>
             <p className="text-md font-semibold text-gray-900 mt-0.5">
-              Kadhai Chammach Restaurant
+              {loadingRestaurant ? "Loading..." : restaurantData?.name || "Restaurant"}
             </p>
           </div>
 

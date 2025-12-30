@@ -6,12 +6,14 @@ import {
   ArrowLeft,
   Edit,
   Pencil,
+  Plus,
   MapPin,
   Clock,
   Phone,
   Star,
   ChevronRight,
   X,
+  Trash2,
 } from "lucide-react"
 import {
   Dialog,
@@ -38,12 +40,14 @@ export default function OutletInfo() {
   const [address, setAddress] = useState("")
   const [mainImage, setMainImage] = useState("https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=400&fit=crop")
   const [thumbnailImage, setThumbnailImage] = useState("https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=200&h=200&fit=crop")
+  const [coverImages, setCoverImages] = useState([]) // Array of cover images (separate from menu images)
   const [showEditNameDialog, setShowEditNameDialog] = useState(false)
   const [editNameValue, setEditNameValue] = useState("")
   const [restaurantId, setRestaurantId] = useState("")
   const [restaurantMongoId, setRestaurantMongoId] = useState("")
   const [uploadingImage, setUploadingImage] = useState(false)
   const [imageType, setImageType] = useState(null) // 'profile' or 'menu'
+  const [uploadingCount, setUploadingCount] = useState(0) // Track how many images are being uploaded
   const profileImageInputRef = useRef(null)
   const menuImageInputRef = useRef(null)
 
@@ -114,9 +118,25 @@ export default function OutletInfo() {
           if (data.profileImage?.url) {
             setThumbnailImage(data.profileImage.url)
           }
-          if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
+          // Use coverImages if available, otherwise fallback to menuImages for backward compatibility
+          if (data.coverImages && Array.isArray(data.coverImages) && data.coverImages.length > 0) {
+            // Store all cover images with url and publicId
+            setCoverImages(data.coverImages.map(img => ({
+              url: img.url || img,
+              publicId: img.publicId
+            })))
+            // Use first cover image as main image
+            setMainImage(data.coverImages[0].url || data.coverImages[0])
+          } else if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
+            // Fallback: Store menu images as cover images (for backward compatibility)
+            setCoverImages(data.menuImages.map(img => ({
+              url: img.url,
+              publicId: img.publicId
+            })))
             // Use first menu image as main image
             setMainImage(data.menuImages[0].url)
+          } else {
+            setCoverImages([])
           }
         }
       } catch (error) {
@@ -239,62 +259,243 @@ export default function OutletInfo() {
     }
   }
 
-  // Handle menu image replacement (main banner)
-  const handleMenuImageReplace = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  // Handle multiple cover images addition (separate from menu images)
+  const handleCoverImageAdd = async (event) => {
+    const files = Array.from(event.target.files || [])
+    if (files.length === 0) return
+
+    try {
+      setUploadingImage(true)
+      setImageType('menu')
+      setUploadingCount(files.length)
+
+      // Get current images first to preserve them
+      const currentResponse = await restaurantAPI.getCurrentRestaurant()
+      const currentData = currentResponse?.data?.data?.restaurant || currentResponse?.data?.restaurant
+      const existingImages = currentData?.menuImages && Array.isArray(currentData.menuImages)
+        ? currentData.menuImages.map(img => ({
+            url: img.url,
+            publicId: img.publicId
+          }))
+        : []
+
+      // Upload all images and collect their URLs
+      // Since backend replaces first image, we'll collect all uploaded URLs
+      // and then update profile with complete array
+      const uploadedImageData = []
+      
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const uploadResponse = await restaurantAPI.uploadMenuImage(files[i])
+          
+          // Extract uploaded image URL and publicId
+          const uploadedImage = uploadResponse?.data?.data?.menuImage
+          if (uploadedImage?.url) {
+            uploadedImageData.push({
+              url: uploadedImage.url,
+              publicId: uploadedImage.publicId || null
+            })
+          } else {
+            // Try alternative response structure
+            const menuImages = uploadResponse?.data?.data?.menuImages
+            if (menuImages && Array.isArray(menuImages) && menuImages.length > 0) {
+              uploadedImageData.push({
+                url: menuImages[0].url,
+                publicId: menuImages[0].publicId || null
+              })
+            }
+          }
+        } catch (error) {
+          console.error(`Error uploading image ${i + 1}:`, error)
+          // Continue with other images even if one fails
+        }
+      }
+
+      if (uploadedImageData.length > 0) {
+        // Combine existing images with newly uploaded ones
+        // Remove duplicates based on URL
+        const allImages = [...existingImages]
+        uploadedImageData.forEach(uploaded => {
+          if (!allImages.find(img => img.url === uploaded.url)) {
+            allImages.push(uploaded)
+          }
+        })
+
+        // Update profile with complete array of images
+        try {
+          await restaurantAPI.updateProfile({
+            menuImages: allImages
+          })
+        } catch (updateError) {
+          console.error("Error updating profile with images:", updateError)
+          // Continue anyway - images are uploaded, just not in correct order
+        }
+
+        // Update local state
+        setCoverImages(allImages)
+        if (allImages.length > 0) {
+          setMainImage(allImages[0].url)
+        }
+
+        // Refresh restaurant data to confirm
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantData(data)
+          // Update from refreshed data
+          if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
+            const refreshedImages = data.menuImages.map(img => ({
+              url: img.url,
+              publicId: img.publicId
+            }))
+            setCoverImages(refreshedImages)
+            setMainImage(refreshedImages[0].url)
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error uploading menu images:", error)
+      alert(`Failed to upload ${files.length > 1 ? 'some images' : 'image'}. Please try again.`)
+    } finally {
+      setUploadingImage(false)
+      setImageType(null)
+      setUploadingCount(0)
+      // Reset input
+      if (menuImageInputRef.current) {
+        menuImageInputRef.current.value = null
+      }
+    }
+  }
+
+  // Handle cover image deletion
+  const handleCoverImageDelete = async (indexToDelete) => {
+    if (!window.confirm("Are you sure you want to delete this cover image?")) {
+      return
+    }
+
+    // Store original state for rollback
+    const originalImages = [...coverImages]
 
     try {
       setUploadingImage(true)
       setImageType('menu')
 
-      // Upload image to Cloudinary
-      const uploadResponse = await restaurantAPI.uploadMenuImage(file)
-      const uploadedImage = uploadResponse?.data?.data?.menuImage
+      // Remove image from local state first (optimistic update)
+      const updatedImages = coverImages.filter((_, index) => index !== indexToDelete)
+      setCoverImages(updatedImages)
 
-      if (uploadedImage) {
-        // Update local state immediately for better UX
-        setMainImage(uploadedImage.url)
-        
-        // Refresh restaurant data to get latest from backend
+      // Update main image if deleted image was the first one
+      if (indexToDelete === 0 && updatedImages.length > 0) {
+        setMainImage(updatedImages[0].url)
+      } else if (updatedImages.length === 0) {
+        // If no images left, set default
+        setMainImage("https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=400&fit=crop")
+      }
+
+      // Update backend - convert coverImages back to menuImages format for API
+      const menuImagesForBackend = updatedImages.map(img => ({
+        url: typeof img === 'string' ? img : img.url,
+        publicId: typeof img === 'string' ? null : (img.publicId || null)
+      }))
+
+      // Update restaurant profile with new menuImages array
+      try {
+        const updateResponse = await restaurantAPI.updateProfile({
+          menuImages: menuImagesForBackend.length > 0 ? menuImagesForBackend : []
+        })
+
+        if (updateResponse?.data && !updateResponse.data.success) {
+          throw new Error(updateResponse.data.message || 'Failed to update profile')
+        }
+
+        // Refresh restaurant data to confirm
         const response = await restaurantAPI.getCurrentRestaurant()
         const data = response?.data?.data?.restaurant || response?.data?.restaurant
         if (data) {
           setRestaurantData(data)
-          // Use first menu image as main image (it should be the replaced one)
-          if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
-            setMainImage(data.menuImages[0].url)
-          } else if (uploadedImage.url) {
-            // Fallback to uploaded image URL
-            setMainImage(uploadedImage.url)
+          // Update cover images from refreshed data
+          if (data.coverImages && Array.isArray(data.coverImages) && data.coverImages.length > 0) {
+            setCoverImages(data.coverImages.map(img => ({
+              url: img.url || img,
+              publicId: img.publicId
+            })))
+          } else if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
+            setCoverImages(data.menuImages.map(img => ({
+              url: img.url,
+              publicId: img.publicId
+            })))
+          } else {
+            setCoverImages([])
           }
-        } else if (uploadedImage.url) {
-          // Fallback if refresh fails
-          setMainImage(uploadedImage.url)
         }
+      } catch (apiError) {
+        console.error("API Error deleting cover image:", apiError)
+        console.error("API Error details:", {
+          message: apiError.message,
+          code: apiError.code,
+          response: apiError.response?.data,
+          status: apiError.response?.status,
+          config: apiError.config
+        })
+        // Revert local state on API error
+        setCoverImages(originalImages)
+        if (originalImages.length > 0) {
+          setMainImage(typeof originalImages[0] === 'string' ? originalImages[0] : originalImages[0].url)
+        }
+        throw apiError
+      }
+    } catch (error) {
+      console.error("Error deleting cover image:", error)
+      console.error("Error details:", {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        status: error.response?.status
+      })
+      
+      let errorMessage = "Failed to delete image. Please try again."
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error.message) {
+        if (error.message.includes('Network Error') || error.code === 'ERR_NETWORK') {
+          errorMessage = "Network error. Please check your connection and ensure the backend server is running."
+        } else {
+          errorMessage = error.message
+        }
+      }
+      alert(errorMessage)
+      
+      // Revert local state on error
+      setCoverImages(originalImages)
+      if (originalImages.length > 0) {
+        setMainImage(typeof originalImages[0] === 'string' ? originalImages[0] : originalImages[0].url)
       } else {
-        // If response structure is different, try to get from menuImages array
-        const menuImages = uploadResponse?.data?.data?.menuImages
-        if (menuImages && Array.isArray(menuImages) && menuImages.length > 0) {
-          setMainImage(menuImages[0].url)
-          // Refresh restaurant data
+        // Try to refresh from server
+        try {
           const response = await restaurantAPI.getCurrentRestaurant()
           const data = response?.data?.data?.restaurant || response?.data?.restaurant
           if (data) {
-            setRestaurantData(data)
+            if (data.coverImages && Array.isArray(data.coverImages) && data.coverImages.length > 0) {
+              setCoverImages(data.coverImages.map(img => ({
+                url: img.url || img,
+                publicId: img.publicId
+              })))
+              setMainImage(data.coverImages[0].url || data.coverImages[0])
+            } else if (data.menuImages && Array.isArray(data.menuImages) && data.menuImages.length > 0) {
+              setCoverImages(data.menuImages.map(img => ({
+                url: img.url,
+                publicId: img.publicId
+              })))
+              setMainImage(data.menuImages[0].url)
+            }
           }
+        } catch (refreshError) {
+          console.error("Error refreshing data:", refreshError)
         }
       }
-    } catch (error) {
-      console.error("Error uploading menu image:", error)
-      alert("Failed to upload image. Please try again.")
     } finally {
       setUploadingImage(false)
       setImageType(null)
-      // Reset input
-      if (menuImageInputRef.current) {
-        menuImageInputRef.current.value = null
-      }
     }
   }
 
@@ -387,22 +588,63 @@ export default function OutletInfo() {
           className="w-full h-full object-cover"
         />
         
-        {/* Replace Image Button - Black background with white text */}
+        {/* Add Image Button - Black background with white text */}
         <button
           onClick={() => menuImageInputRef.current?.click()}
           disabled={uploadingImage}
           className="absolute top-4 right-4 bg-black/90 hover:bg-black px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium text-white transition-colors shadow-lg z-10 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Pencil className="w-4 h-4" />
-          <span>{uploadingImage && imageType === 'menu' ? 'Uploading...' : 'Replace image'}</span>
+          <Plus className="w-4 h-4" />
+          <span>
+            {uploadingImage && imageType === 'menu' 
+              ? `Uploading ${uploadingCount} image${uploadingCount > 1 ? 's' : ''}...` 
+              : 'Add image'}
+          </span>
         </button>
         <input
           ref={menuImageInputRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
-          onChange={handleMenuImageReplace}
+          onChange={handleCoverImageAdd}
         />
+        
+        {/* Cover Images Gallery - Show all cover images with delete buttons */}
+        {coverImages.length > 0 && (
+          <div className="absolute bottom-2 right-4 flex gap-1.5 z-10">
+            {coverImages.slice(0, 4).map((img, index) => (
+              <div
+                key={index}
+                className="relative w-8 h-8 rounded border-2 border-white overflow-hidden bg-gray-200"
+              >
+                <img
+                  src={typeof img === 'string' ? img : img.url}
+                  alt={`Cover ${index + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                {/* Delete Button - Top Left */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleCoverImageDelete(index)
+                  }}
+                  disabled={uploadingImage}
+                  className="absolute top-0 left-0 bg-red-500/90 hover:bg-red-600 p-0.5 rounded-br-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
+                  aria-label={`Delete cover image ${index + 1}`}
+                >
+                  <Trash2 className="w-2.5 h-2.5 text-white" />
+                </button>
+              </div>
+            ))}
+            {coverImages.length > 4 && (
+              <div className="w-8 h-8 rounded border-2 border-white bg-black/70 flex items-center justify-center">
+                <span className="text-white text-xs font-bold">+{coverImages.length - 4}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Thumbnail Section - Overlapping bottom edge */}
         <div className="absolute bottom-0 left-4 -mb-[45px] flex flex-col gap-2 shrink-0 z-10">

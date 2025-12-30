@@ -18,10 +18,13 @@ export default function PageNavbar({
   const { openLocationSelector } = useLocationSelector()
   const cartCount = getCartCount()
 
-  const cityName = location?.city || "Select"
+  // Display more detailed location information
+  const cityName = location?.city || location?.area || "Select"
   const stateName = location?.state || "Location"
+  const areaName = location?.area && location?.area !== location?.city ? location.area : null
 
   const handleLocationClick = () => {
+    // Open location selector overlay
     openLocationSelector()
   }
 
@@ -59,13 +62,13 @@ export default function PageNavbar({
                     strokeWidth={2} 
                   />
                   <span className={`text-md sm:text-lg font-bold ${textColorClass} truncate max-w-[120px] sm:max-w-[180px] ${textColor === "white" ? "drop-shadow-lg" : ""}`}>
-                    {cityName}
+                    {areaName || cityName}
                   </span>
                   <ChevronDown className={`h-4 w-4 sm:h-5 sm:w-5 ${textColorClass} flex-shrink-0 ${textColor === "white" ? "drop-shadow-lg" : ""}`} strokeWidth={2.5} />
                 </div>
-                {location?.state && (
+                {(location?.city || location?.state) && (
                   <span className={`text-xs font-bold ${textColorClass}${textColor === "white" ? "/90" : ""} truncate max-w-[120px] sm:max-w-[180px] mt-0.5 ${textColor === "white" ? "drop-shadow-md" : ""}`}>
-                    {stateName}
+                    {location?.city && location?.state ? `${location.city}, ${location.state}` : (location?.city || location?.state || "")}
                   </span>
                 )}
               </div>

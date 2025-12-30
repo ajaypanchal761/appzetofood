@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import AuthRedirect from "@/components/AuthRedirect"
-import { ProfileProvider } from "@/module/user/context/ProfileContext"
 
 import Home from "@/pages/Home"
 import UserRouter from "@/module/user/components/UserRouter"
@@ -52,6 +51,7 @@ import PrivacyPolicyPage from "@/module/restaurant/pages/PrivacyPolicyPage"
 import TermsAndConditionsPage from "@/module/restaurant/pages/TermsAndConditionsPage"
 import RestaurantConfigPage from "@/module/restaurant/pages/RestaurantConfigPage"
 import RestaurantCategoriesPage from "@/module/restaurant/pages/RestaurantCategoriesPage"
+import MenuCategoriesPage from "@/module/restaurant/pages/MenuCategoriesPage"
 import BusinessPlanPage from "@/module/restaurant/pages/BusinessPlanPage"
 import ConversationListPage from "@/module/restaurant/pages/ConversationListPage"
 import ChatDetailPage from "@/module/restaurant/pages/ChatDetailPage"
@@ -381,6 +381,14 @@ export default function App() {
         element={
           <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
             <RestaurantCategoriesPage />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/restaurant/menu-categories" 
+        element={
+          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
+            <MenuCategoriesPage />
           </ProtectedRoute>
         } 
       />
@@ -813,11 +821,7 @@ export default function App() {
 
       <Route 
         path="/*" 
-        element={
-          <ProfileProvider>
-            <UserRouter />
-          </ProfileProvider>
-        } 
+        element={<UserRouter />}
       />
     </Routes>
   )

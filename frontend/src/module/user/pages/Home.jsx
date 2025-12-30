@@ -43,21 +43,6 @@ import exploreGiftCard from "@/assets/explore more icons/gift catrd.png"
 
 // Banner images for hero carousel - will be fetched from API
 
-const categories = [
-  { id: 1, name: "Biryani", image: foodImages[0] },
-  { id: 2, name: "Cake", image: foodImages[1] },
-  { id: 3, name: "Chhole Bhature", image: foodImages[2] },
-  { id: 4, name: "Chicken Tanduri", image: foodImages[3] },
-  { id: 5, name: "Donuts", image: foodImages[4] },
-  { id: 6, name: "Dosa", image: foodImages[5] },
-  { id: 7, name: "French Fries", image: foodImages[6] },
-  { id: 8, name: "Idli", image: foodImages[7] },
-  { id: 9, name: "Momos", image: foodImages[8] },
-  { id: 10, name: "Samosa", image: foodImages[9] },
-  { id: 11, name: "Starters", image: foodImages[10] },
-  { id: 12, name: "Biryani", image: foodImages[0] }, // Repeat first image
-]
-
 // Animated placeholder for search - moved outside component to prevent recreation
 const placeholders = [
   "Search \"burger\"",
@@ -70,277 +55,155 @@ const placeholders = [
   "Search \"dosa\""
 ]
 
-// Deals data - moved outside component
-const dealsData = [
-  { id: 1, title: "50% Off First Order", description: "Get 50% off on your first order above ₹1667", discount: "50%", color: "from-red-500 to-pink-500" },
-  { id: 2, title: "Free Delivery", description: "Free delivery on orders above ₹1245", discount: "FREE", color: "from-green-600 to-emerald-500" },
-  { id: 3, title: "Buy 2 Get 1", description: "Buy any 2 items and get 1 free", discount: "B2G1", color: "from-purple-500 to-indigo-500" },
-  { id: 4, title: "Weekend Special", description: "Extra 20% off on weekends", discount: "20%", color: "from-blue-500 to-cyan-500" },
-]
+// Restaurant Image Carousel Component
+function RestaurantImageCarousel({ images, restaurantName, restaurantId, priority = false }) {
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const touchStartX = useRef(0)
+  const touchEndX = useRef(0)
+  const isSwiping = useRef(false)
 
-// Quick Bites data - moved outside component
-const quickBitesData = [
-  { id: 9, name: "Chicken Wings", price: 8.99, image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=600&h=400&fit=crop&q=80", rating: 4.8 },
-  { id: 10, name: "French Fries", price: 4.99, image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=600&h=400&fit=crop&q=80", rating: 4.7 },
-  { id: 11, name: "Onion Rings", price: 5.99, image: "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=600&h=400&fit=crop&q=80", rating: 4.6 },
-  { id: 12, name: "Mozzarella Sticks", price: 6.99, image: "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=600&h=400&fit=crop&q=80", rating: 4.9 },
-  { id: 13, name: "Nachos", price: 7.99, image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=600&h=400&fit=crop&q=80", rating: 4.8 },
-  { id: 14, name: "Garlic Bread", price: 4.49, image: "https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=600&h=400&fit=crop&q=80", rating: 4.7 },
-]
+  if (!images || images.length === 0) {
+    return (
+      <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 bg-gray-200">
+        <OptimizedImage
+          src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"
+          alt={restaurantName}
+          className="w-full h-full"
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          objectFit="cover"
+          placeholder="blur"
+          priority={priority}
+        />
+      </div>
+    )
+  }
 
-// Trending Now data - moved outside component
-const trendingData = [
-  { id: 15, name: "Spicy Ramen", restaurant: "Noodle House", price: 11.99, image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&h=400&fit=crop&q=80", rating: 4.9 },
-  { id: 16, name: "BBQ Chicken Pizza", restaurant: "Pizza Corner", price: 13.99, image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=600&h=400&fit=crop&q=80", rating: 4.8 },
-  { id: 17, name: "Sushi Platter", restaurant: "Sushi Master", price: 19.99, image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=600&h=400&fit=crop&q=80", rating: 4.9 },
-  { id: 18, name: "Loaded Burger", restaurant: "Burger Paradise", price: 10.99, image: "https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=400&fit=crop&q=80", rating: 4.7 },
-]
+  // Handle touch events for swipe
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX
+    isSwiping.current = false
+  }
 
-// Best Value Meals data - moved outside component
-const bestValueData = [
-  { id: 1, name: "Family Combo", description: "2 Pizzas + 2 Sides + 4 Drinks", price: 29.99, originalPrice: 39.99, image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600&h=400&fit=crop&q=80", rating: 4.8 },
-  { id: 2, name: "Lunch Special", description: "Main Course + Soup + Dessert", price: 12.99, originalPrice: 18.99, image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&h=400&fit=crop&q=80", rating: 4.7 },
-  { id: 3, name: "Party Pack", description: "10 Items + 6 Drinks + Desserts", price: 49.99, originalPrice: 69.99, image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=600&h=400&fit=crop&q=80", rating: 4.9 },
-]
+  const handleTouchMove = (e) => {
+    const currentX = e.touches[0].clientX
+    const diff = touchStartX.current - currentX
+    
+    // If swipe distance is significant, mark as swiping
+    if (Math.abs(diff) > 10) {
+      isSwiping.current = true
+    }
+  }
 
-const restaurants = [
-  {
-    id: 1,
-    name: "Golden Dragon",
-    cuisine: "Chinese",
-    rating: 4.8,
-    deliveryTime: "25-30 mins",
-    distance: "1.2 km",
-    image: "https://images.unsplash.com/photo-1525755662778-989d0524087e?w=800&h=600&fit=crop",
-    priceRange: "$$",
-    featuredDish: "Kung Pao Chicken",
-    featuredPrice: 249,
-    offer: "Flat ₹50 OFF above ₹199",
-  },
-  {
-    id: 2,
-    name: "Burger Paradise",
-    cuisine: "American",
-    rating: 4.6,
-    deliveryTime: "20-25 mins",
-    distance: "0.8 km",
-    image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=600&fit=crop",
-    priceRange: "$",
-    featuredDish: "Classic Burger",
-    featuredPrice: 179,
-    offer: "20% OFF up to ₹100",
-  },
-  {
-    id: 3,
-    name: "Sushi Master",
-    cuisine: "Japanese",
-    rating: 4.9,
-    deliveryTime: "30-35 mins",
-    distance: "2.1 km",
-    image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&h=600&fit=crop",
-    priceRange: "$$$",
-    featuredDish: "Salmon Sushi Roll",
-    featuredPrice: 399,
-    offer: "Free Delivery above ₹499",
-  },
-  {
-    id: 4,
-    name: "Pizza Corner",
-    cuisine: "Italian",
-    rating: 4.7,
-    deliveryTime: "15-20 mins",
-    distance: "0.5 km",
-    image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800&h=600&fit=crop",
-    priceRange: "$$",
-    featuredDish: "Margherita Pizza",
-    featuredPrice: 299,
-    offer: "Flat ₹40 OFF above ₹149",
-  },
-  {
-    id: 5,
-    name: "Taco Fiesta",
-    cuisine: "Mexican",
-    rating: 4.5,
-    deliveryTime: "20-25 mins",
-    distance: "1.5 km",
-    image: "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=800&h=600&fit=crop",
-    priceRange: "$",
-    featuredDish: "Chicken Tacos",
-    featuredPrice: 159,
-    offer: "Buy 1 Get 1 Free",
-  },
-  {
-    id: 6,
-    name: "Fresh Salad Bar",
-    cuisine: "Healthy",
-    rating: 4.4,
-    deliveryTime: "15-20 mins",
-    distance: "0.9 km",
-    image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&h=600&fit=crop",
-    priceRange: "$$",
-    featuredDish: "Caesar Salad",
-    featuredPrice: 199,
-    offer: "15% OFF on first order",
-  },
-  {
-    id: 7,
-    name: "Spice Garden",
-    cuisine: "Indian",
-    rating: 4.7,
-    deliveryTime: "25-30 mins",
-    distance: "1.8 km",
-    image: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&h=600&fit=crop",
-    priceRange: "$$",
-    featuredDish: "Butter Chicken",
-    featuredPrice: 329,
-    offer: "Flat ₹75 OFF above ₹299",
-  },
-  {
-    id: 9,
-    name: "Ocean Breeze",
-    cuisine: "Seafood",
-    rating: 4.8,
-    deliveryTime: "30-35 mins",
-    distance: "2.5 km",
-    image: "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&h=600&fit=crop",
-    priceRange: "$$$",
-    featuredDish: "Grilled Salmon",
-    featuredPrice: 449,
-    offer: "Free Delivery above ₹399",
-  },
-  {
-    id: 10,
-    name: "Smokehouse BBQ",
-    cuisine: "American",
-    rating: 4.5,
-    deliveryTime: "35-40 mins",
-    distance: "2.8 km",
-    image: "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&h=600&fit=crop",
-    priceRange: "$$",
-    featuredDish: "BBQ Ribs",
-    featuredPrice: 379,
-    offer: "Buy 2 Get 1 Free",
-  },
-  {
-    id: 11,
-    name: "Noodle House",
-    cuisine: "Asian",
-    rating: 4.6,
-    deliveryTime: "18-22 mins",
-    distance: "1.0 km",
-    image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&h=600&fit=crop",
-    priceRange: "$",
-    featuredDish: "Spicy Ramen",
-    featuredPrice: 199,
-    offer: "Flat ₹30 OFF above ₹149",
-  },
-  {
-    id: 12,
-    name: "Dessert Delight",
-    cuisine: "Desserts",
-    rating: 4.9,
-    deliveryTime: "15-20 mins",
-    distance: "0.7 km",
-    image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800&h=600&fit=crop",
-    priceRange: "$",
-    featuredDish: "Chocolate Cake",
-    featuredPrice: 149,
-    offer: "20% OFF on desserts",
-  },
-  {
-    id: 13,
-    name: "Cafe Mocha",
-    cuisine: "Cafe",
-    rating: 4.4,
-    deliveryTime: "12-15 mins",
-    distance: "0.4 km",
-    image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&h=600&fit=crop",
-    priceRange: "$",
-    featuredDish: "Cappuccino & Croissant",
-    featuredPrice: 129,
-    offer: "Flat ₹25 OFF above ₹99",
-  },
-  {
-    id: 14,
-    name: "Apna Sweets",
-    cuisine: "Indian",
-    rating: 4.7,
-    deliveryTime: "20-25 mins",
-    distance: "1.1 km",
-    image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&h=600&fit=crop",
-    priceRange: "$",
-    featuredDish: "Gulab Jamun",
-    featuredPrice: 89,
-    offer: "50% OFF on sweets",
-  },
-]
+  const handleTouchEnd = (e) => {
+    if (!isSwiping.current) return
+    
+    touchEndX.current = e.changedTouches[0].clientX
+    const diff = touchStartX.current - touchEndX.current
+    const minSwipeDistance = 50 // Minimum distance for swipe
 
-const featuredFoods = [
-  {
-    id: 1,
-    name: "Margherita Pizza",
-    restaurant: "Pizza Corner",
-    price: 12.99,
-    image: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=600&h=400&fit=crop&q=80",
-    rating: 4.8,
-  },
-  {
-    id: 2,
-    name: "Classic Burger",
-    restaurant: "Burger Paradise",
-    price: 9.99,
-    image: "https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=400&fit=crop&q=80",
-    rating: 4.7,
-  },
-  {
-    id: 3,
-    name: "Salmon Sushi Roll",
-    restaurant: "Sushi Master",
-    price: 15.99,
-    image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=600&h=400&fit=crop&q=80",
-    rating: 4.9,
-  },
-  {
-    id: 4,
-    name: "Chicken Tacos",
-    restaurant: "Taco Fiesta",
-    price: 8.99,
-    image: "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=600&h=400&fit=crop&q=80",
-    rating: 4.6,
-  },
-  {
-    id: 5,
-    name: "Chicken Biryani",
-    restaurant: "Spice Garden",
-    price: 14.99,
-    image: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=600&h=400&fit=crop&q=80",
-    rating: 4.8,
-  },
-  {
-    id: 6,
-    name: "Pad Thai",
-    restaurant: "Thai Express",
-    price: 13.99,
-    image: "https://images.unsplash.com/photo-1559314809-0d155b1c5b8e?w=600&h=400&fit=crop&q=80",
-    rating: 4.7,
-  },
-  {
-    id: 7,
-    name: "Grilled Salmon",
-    restaurant: "Ocean Breeze",
-    price: 18.99,
-    image: "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=600&h=400&fit=crop&q=80",
-    rating: 4.9,
-  },
-  {
-    id: 8,
-    name: "BBQ Ribs",
-    restaurant: "Smokehouse",
-    price: 16.99,
-    image: "https://images.unsplash.com/photo-1544025162-d76694265947?w=600&h=400&fit=crop&q=80",
-    rating: 4.8,
-  },
-]
+    if (Math.abs(diff) > minSwipeDistance) {
+      if (diff > 0) {
+        // Swipe left - next image
+        setCurrentIndex((prev) => (prev + 1) % images.length)
+      } else {
+        // Swipe right - previous image
+        setCurrentIndex((prev) => (prev - 1 + images.length) % images.length)
+      }
+    }
+    
+    // Reset
+    isSwiping.current = false
+    touchStartX.current = 0
+    touchEndX.current = 0
+  }
+
+  return (
+    <div 
+      className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 group"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentIndex}
+          className="absolute inset-0"
+          initial={{ opacity: 0, scale: 1.1 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.5, ease: "easeInOut" }}
+        >
+          <motion.div
+            className="absolute inset-0"
+            variants={{
+              rest: { scale: 1 },
+              hover: { scale: 1.15 }
+            }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <OptimizedImage
+              src={images[currentIndex]}
+              alt={`${restaurantName} - Image ${currentIndex + 1}`}
+              className="w-full h-full"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              objectFit="cover"
+              placeholder="blur"
+              priority={priority && currentIndex === 0}
+            />
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Image Indicators - only show if more than 1 image */}
+      {images.length > 1 && (
+        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1.5 z-10">
+          {images.map((_, index) => (
+            <button
+              key={index}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setCurrentIndex(index)
+              }}
+              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                index === currentIndex
+                  ? "w-6 bg-white"
+                  : "w-1.5 bg-white/50 hover:bg-white/75"
+              }`}
+              aria-label={`Go to image ${index + 1}`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Gradient Overlay on Hover */}
+      <motion.div
+        className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0"
+        variants={{
+          rest: { opacity: 0 },
+          hover: { opacity: 1 }
+        }}
+        transition={{ duration: 0.4 }}
+      />
+      
+      {/* Shine Effect */}
+      <motion.div
+        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full"
+        variants={{
+          rest: { x: "-100%" },
+          hover: { 
+            x: "200%",
+            transition: {
+              duration: 0.8,
+              ease: "easeInOut",
+              delay: 0.2
+            }
+          }
+        }}
+      />
+    </div>
+  )
+}
 
 export default function Home() {
   const navigate = useNavigate()
@@ -529,7 +392,7 @@ export default function Home() {
       if (!isSwiping.current) {
         setCurrentBannerIndex((prev) => (prev + 1) % heroBannerImages.length)
       }
-    }, 3500) // Change every 3.5 seconds
+    }, 10000) // Change every 10 seconds
 
     return () => {
       if (autoSlideIntervalRef.current) {
@@ -548,7 +411,7 @@ export default function Home() {
         if (!isSwiping.current) {
           setCurrentBannerIndex((prev) => (prev + 1) % heroBannerImages.length)
         }
-      }, 3500)
+      }, 10000)
     }
   }, [heroBannerImages.length])
 
@@ -742,11 +605,27 @@ export default function Home() {
               ? restaurant.cuisines[0] 
               : "Multi-cuisine"
             
-            // Get profile image or first menu image
-            const image = restaurant.profileImage?.url 
-              || (restaurant.menuImages && restaurant.menuImages.length > 0 
-                ? restaurant.menuImages[0].url 
-                : "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop")
+            // Get cover images (separate from menu images) for carousel
+            const coverImages = restaurant.coverImages && restaurant.coverImages.length > 0
+              ? restaurant.coverImages.map(img => img.url || img)
+              : []
+            
+            // Fallback to menuImages only if coverImages don't exist (for backward compatibility)
+            const fallbackImages = restaurant.menuImages && restaurant.menuImages.length > 0
+              ? restaurant.menuImages.map(img => img.url)
+              : []
+            
+            // Use cover images first, then fallback to menu images, then profile image
+            const allImages = coverImages.length > 0 
+              ? coverImages 
+              : (fallbackImages.length > 0
+                  ? fallbackImages
+                  : (restaurant.profileImage?.url 
+                      ? [restaurant.profileImage.url]
+                      : ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"]))
+            
+            // Keep single image for backward compatibility
+            const image = allImages[0]
             
             return {
               id: restaurant.restaurantId || restaurant._id,
@@ -756,6 +635,7 @@ export default function Home() {
               deliveryTime: deliveryTime,
               distance: distance,
               image: image,
+              images: allImages, // Array of cover images for carousel (separate from menu images)
               priceRange: restaurant.priceRange || "$$", // Use from API or default
               featuredDish: restaurant.featuredDish || (restaurant.cuisines && restaurant.cuisines.length > 0 
                 ? `${restaurant.cuisines[0]} Special` 
@@ -789,22 +669,8 @@ export default function Home() {
 
   // Filter restaurants and foods based on active filters
   const filteredRestaurants = useMemo(() => {
-    // Only use hardcoded restaurants while loading - once API loads, always use fetched data
-    const restaurantsToUse = loadingRestaurants ? restaurants : restaurantsData
-    console.log('🔍 filteredRestaurants calculation:', {
-      restaurantsDataLength: restaurantsData.length,
-      loadingRestaurants,
-      restaurantsToUseLength: restaurantsToUse.length,
-      usingFetchedData: !loadingRestaurants,
-      usingHardcodedData: loadingRestaurants,
-    })
-    console.log('filteredRestaurants calculation:', {
-      restaurantsDataLength: restaurantsData.length,
-      loadingRestaurants,
-      restaurantsToUseLength: restaurantsToUse.length,
-      usingFetchedData: restaurantsData.length > 0,
-    })
-    let filtered = [...restaurantsToUse]
+    // Use only API data - no mock data fallback
+    let filtered = [...restaurantsData]
 
     // Apply filters
     if (activeFilters.has('price-under-200')) {
@@ -885,37 +751,12 @@ export default function Home() {
     }
 
     return filtered
-  }, [activeFilters, selectedCuisine, sortBy])
+  }, [restaurantsData, activeFilters, selectedCuisine, sortBy])
 
+  // Featured foods removed - will be handled by restaurants data from API
   const filteredFeaturedFoods = useMemo(() => {
-    let filtered = [...featuredFoods]
-
-    // Apply filters
-    if (activeFilters.has('price-under-200')) {
-      filtered = filtered.filter(f => f.price * 83 <= 200)
-    }
-    if (activeFilters.has('price-under-500')) {
-      filtered = filtered.filter(f => f.price * 83 <= 500)
-    }
-    if (activeFilters.has('rating-4-plus')) {
-      filtered = filtered.filter(f => f.rating >= 4.0)
-    }
-    if (activeFilters.has('rating-45-plus')) {
-      filtered = filtered.filter(f => f.rating >= 4.5)
-    }
-
-    // Apply sorting
-    if (sortBy === 'price-low') {
-      filtered.sort((a, b) => a.price - b.price)
-    } else if (sortBy === 'price-high') {
-      filtered.sort((a, b) => b.price - a.price)
-    } else if (sortBy === 'rating-high') {
-      filtered.sort((a, b) => b.rating - a.rating)
-    } else if (sortBy === 'rating-low') {
-      filtered.sort((a, b) => a.rating - b.rating)
-    }
-
-    return filtered
+    // Return empty array - featured foods will come from API if needed
+    return []
   }, [activeFilters, sortBy])
 
   // Memoize callbacks to prevent unnecessary re-renders
@@ -1093,7 +934,7 @@ export default function Home() {
           </div>
         ) : heroBannerImages.length > 0 ? (
           <div
-            className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing"
+            className="absolute top-0 left-0 right-0 bottom-0 z-0 cursor-grab active:cursor-grabbing overflow-hidden"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -1102,31 +943,37 @@ export default function Home() {
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
           >
-            <AnimatePresence mode="wait">
-              {heroBannerImages.map((image, index) => {
-                if (index !== currentBannerIndex) return null
-                return (
-                  <motion.div
-                    key={index}
-                    className="absolute inset-0 w-full h-full"
-                    initial={{ opacity: 0, scale: 1.1 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.8, ease: "easeInOut" }}
-                  >
-                    <OptimizedImage
-                      src={image}
-                      alt={`Hero Banner ${index + 1}`}
-                      className="w-full h-full"
-                      priority={index === 0}
-                      sizes="100vw"
-                      objectFit="cover"
-                      placeholder="blur"
-                    />
-                  </motion.div>
-                )
-              })}
-            </AnimatePresence>
+            <motion.div
+              className="flex h-full"
+              animate={{
+                x: `-${currentBannerIndex * 100}vw`
+              }}
+              transition={{
+                duration: 0.6,
+                ease: "easeInOut"
+              }}
+              style={{
+                width: `${heroBannerImages.length * 100}vw`
+              }}
+            >
+              {heroBannerImages.map((image, index) => (
+                <div
+                  key={index}
+                  className="h-full flex-shrink-0"
+                  style={{ width: '100vw' }}
+                >
+                  <OptimizedImage
+                    src={image}
+                    alt={`Hero Banner ${index + 1}`}
+                    className="w-full h-full"
+                    priority={index === 0}
+                    sizes="100vw"
+                    objectFit="cover"
+                    placeholder="blur"
+                  />
+                </div>
+              ))}
+            </motion.div>
           </div>
         ) : (
           <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-400 to-green-600" />
@@ -1358,43 +1205,10 @@ export default function Home() {
                 </motion.div>
               ))
             ) : (
-              // Final fallback to hardcoded categories
-              categories.map((category, index) => (
-                <motion.div 
-                  key={category.id} 
-                  className="flex-shrink-0"
-                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ 
-                    duration: 0.4, 
-                    delay: index * 0.05,
-                    type: "spring",
-                    stiffness: 100
-                  }}
-                  whileHover={{ scale: 1.1, y: -5 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Link to={`/user/category/${category.name.toLowerCase()}`}>
-                    <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
-                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden transition-all">
-                        <OptimizedImage
-                          src={category.image}
-                          alt={category.name}
-                          className="w-full h-full rounded-full"
-                          sizes="(max-width: 640px) 56px, (max-width: 768px) 80px, 96px"
-                          objectFit="cover"
-                          placeholder="blur"
-                          onError={() => {}}
-                        />
-                      </div>
-                      <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center">
-                        {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
-                      </span>
-                    </div>
-                  </Link>
-                </motion.div>
-              ))
+              // No categories available from API
+              <div className="flex items-center justify-center py-4 text-gray-500 text-sm">
+                No categories available
+              </div>
             )}
           </div>
         </motion.section>
@@ -1726,51 +1540,13 @@ export default function Home() {
                     >
                       <Link to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
                         <Card className="overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] border-background transition-all duration-500 py-0 rounded-md flex flex-col h-full w-full relative">
-                          {/* Image Section */}
-                          <div className="relative h-48 sm:h-56 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0">
-                            <motion.div
-                              className="absolute inset-0"
-                              variants={{
-                                rest: { scale: 1 },
-                                hover: { scale: 1.15 }
-                              }}
-                              transition={{ duration: 0.6, ease: "easeOut" }}
-                            >
-                              <OptimizedImage
-                                src={restaurant.image}
-                                alt={restaurant.name}
-                                className="w-full h-full"
-                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                                objectFit="cover"
-                                placeholder="blur"
+                          {/* Image Section with Carousel */}
+                          <div className="relative">
+                            <RestaurantImageCarousel 
+                              images={restaurant.images || [restaurant.image]}
+                              restaurantName={restaurant.name}
+                              restaurantId={restaurant.id}
                                 priority={index < 3}
-                              />
-                            </motion.div>
-                            
-                            {/* Gradient Overlay on Hover */}
-                            <motion.div
-                              className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0"
-                              variants={{
-                                rest: { opacity: 0 },
-                                hover: { opacity: 1 }
-                              }}
-                              transition={{ duration: 0.4 }}
-                            />
-                            
-                            {/* Shine Effect */}
-                            <motion.div
-                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full"
-                              variants={{
-                                rest: { x: "-100%" },
-                                hover: { 
-                                  x: "200%",
-                                  transition: {
-                                    duration: 0.8,
-                                    ease: "easeInOut",
-                                    delay: 0.2
-                                  }
-                                }
-                              }}
                             />
 
                             {/* Featured Dish Badge - Top Left */}
@@ -1814,7 +1590,7 @@ export default function Home() {
                             {/* FREE delivery Badge - Bottom Left (only for first 3 restaurants) */}
                             {index < 3 && (
                               <motion.div 
-                                className="absolute bottom-0 left-0 sm:bottom-0 sm:left-0 z-10"
+                                className="absolute bottom-2 left-0 sm:bottom-2 sm:left-0 z-10"
                                 variants={{
                                   rest: { x: 0, opacity: 1 },
                                   hover: { x: 4, opacity: 1 }
@@ -2784,8 +2560,8 @@ export default function Home() {
                   {/* Collections List */}
                   <div className="px-4 py-4 space-y-2 max-h-[60vh] overflow-y-auto">
                     {/* Bookmarks Collection */}
-                    <button
-                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                    <div
+                      className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
                       onClick={(e) => {
                         e.stopPropagation()
                         // Don't close modal on click, let checkbox handle it
@@ -2798,18 +2574,19 @@ export default function Home() {
                         <div className="flex items-center justify-between">
                           <span className="text-base font-medium text-gray-900">Bookmarks</span>
                           {selectedRestaurantSlug && (
-                            <Checkbox
-                              checked={isFavorite(selectedRestaurantSlug)}
-                              onCheckedChange={(checked) => {
-                                if (!checked) {
-                                  removeFavorite(selectedRestaurantSlug)
-                                  setSelectedRestaurantSlug(null)
-                                  setShowManageCollections(false)
-                                }
-                              }}
-                              className="h-5 w-5 rounded border-2 border-red-500 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
-                              onClick={(e) => e.stopPropagation()}
-                            />
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={isFavorite(selectedRestaurantSlug)}
+                                onCheckedChange={(checked) => {
+                                  if (!checked) {
+                                    removeFavorite(selectedRestaurantSlug)
+                                    setSelectedRestaurantSlug(null)
+                                    setShowManageCollections(false)
+                                  }
+                                }}
+                                className="h-5 w-5 rounded border-2 border-red-500 data-[state=checked]:bg-red-500 data-[state=checked]:border-red-500"
+                              />
+                            </div>
                           )}
                           {!selectedRestaurantSlug && (
                             <div className="h-5 w-5 rounded border-2 border-red-500 bg-red-500 flex items-center justify-center">
@@ -2821,7 +2598,7 @@ export default function Home() {
                           {getFavorites().length} restaurant{getFavorites().length !== 1 ? 's' : ''}
                         </p>
                       </div>
-                    </button>
+                    </div>
 
                     {/* Create new Collection */}
                     <button

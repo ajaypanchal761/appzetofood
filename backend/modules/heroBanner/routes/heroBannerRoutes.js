@@ -1,6 +1,6 @@
 import express from 'express';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
-import { authenticate, authorize } from '../../../modules/auth/middleware/auth.js';
+import { authenticateAdmin } from '../../../modules/admin/middleware/adminAuth.js';
 import {
   getHeroBanners,
   getAllHeroBanners,
@@ -31,54 +31,50 @@ router.get('/public', getHeroBanners);
 router.get('/landing/public', getLandingConfig);
 
 // Admin routes - Hero Banners
-router.get('/', authenticate, authorize('admin'), getAllHeroBanners);
+router.get('/', authenticateAdmin, getAllHeroBanners);
 router.post(
   '/',
-  authenticate,
-  authorize('admin'),
+  authenticateAdmin,
   uploadMiddleware.single('image'),
   createHeroBanner
 );
 router.post(
   '/multiple',
-  authenticate,
-  authorize('admin'),
+  authenticateAdmin,
   uploadMiddleware.array('images', 5),
   createMultipleHeroBanners
 );
-router.delete('/:id', authenticate, authorize('admin'), deleteHeroBanner);
-router.patch('/:id/order', authenticate, authorize('admin'), updateBannerOrder);
-router.patch('/:id/status', authenticate, authorize('admin'), toggleBannerStatus);
+router.delete('/:id', authenticateAdmin, deleteHeroBanner);
+router.patch('/:id/order', authenticateAdmin, updateBannerOrder);
+router.patch('/:id/status', authenticateAdmin, toggleBannerStatus);
 
 // Admin routes - Landing Page Categories
-router.get('/landing/categories', authenticate, authorize('admin'), getLandingCategories);
+router.get('/landing/categories', authenticateAdmin, getLandingCategories);
 router.post(
   '/landing/categories',
-  authenticate,
-  authorize('admin'),
+  authenticateAdmin,
   uploadMiddleware.single('image'),
   createLandingCategory
 );
-router.delete('/landing/categories/:id', authenticate, authorize('admin'), deleteLandingCategory);
-router.patch('/landing/categories/:id/order', authenticate, authorize('admin'), updateLandingCategoryOrder);
-router.patch('/landing/categories/:id/status', authenticate, authorize('admin'), toggleLandingCategoryStatus);
+router.delete('/landing/categories/:id', authenticateAdmin, deleteLandingCategory);
+router.patch('/landing/categories/:id/order', authenticateAdmin, updateLandingCategoryOrder);
+router.patch('/landing/categories/:id/status', authenticateAdmin, toggleLandingCategoryStatus);
 
 // Admin routes - Landing Page Explore More
-router.get('/landing/explore-more', authenticate, authorize('admin'), getLandingExploreMore);
+router.get('/landing/explore-more', authenticateAdmin, getLandingExploreMore);
 router.post(
   '/landing/explore-more',
-  authenticate,
-  authorize('admin'),
+  authenticateAdmin,
   uploadMiddleware.single('image'),
   createLandingExploreMore
 );
-router.delete('/landing/explore-more/:id', authenticate, authorize('admin'), deleteLandingExploreMore);
-router.patch('/landing/explore-more/:id/order', authenticate, authorize('admin'), updateLandingExploreMoreOrder);
-router.patch('/landing/explore-more/:id/status', authenticate, authorize('admin'), toggleLandingExploreMoreStatus);
+router.delete('/landing/explore-more/:id', authenticateAdmin, deleteLandingExploreMore);
+router.patch('/landing/explore-more/:id/order', authenticateAdmin, updateLandingExploreMoreOrder);
+router.patch('/landing/explore-more/:id/status', authenticateAdmin, toggleLandingExploreMoreStatus);
 
 // Admin routes - Landing Page Settings
-router.get('/landing/settings', authenticate, authorize('admin'), getLandingSettings);
-router.patch('/landing/settings', authenticate, authorize('admin'), updateLandingSettings);
+router.get('/landing/settings', authenticateAdmin, getLandingSettings);
+router.patch('/landing/settings', authenticateAdmin, updateLandingSettings);
 
 export default router;
 

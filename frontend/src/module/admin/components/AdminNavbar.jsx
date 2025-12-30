@@ -5,9 +5,7 @@ import {
   Search,
   User,
   MessageCircle,
-  ShoppingCart,
   ChevronDown,
-  Globe,
   UtensilsCrossed,
   Mail,
   LogOut,
@@ -15,7 +13,6 @@ import {
   FileText,
   Package,
   Users,
-  CheckCircle2,
   AlertCircle,
   ArrowRight,
 } from "lucide-react";
@@ -43,7 +40,6 @@ export default function AdminNavbar({ onMenuClick }) {
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [language, setLanguage] = useState("En");
   const [adminData, setAdminData] = useState(null);
   const searchInputRef = useRef(null);
 
@@ -111,16 +107,6 @@ export default function AdminNavbar({ onMenuClick }) {
     item.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const languages = [
-    { code: "En", name: "English", flag: "🇬🇧" },
-    { code: "Bn", name: "Bengali - বাংলা", flag: "🇧🇩" },
-    { code: "Ar", name: "Arabic - العربية", flag: "🇸🇦" },
-    { code: "Es", name: "Spanish - español", flag: "🇪🇸" },
-    { code: "Hi", name: "Hindi - हिन्दी", flag: "🇮🇳" },
-  ];
-
-  const currentLanguage = languages.find((lang) => lang.code === language) || languages[0];
-
   // Mock data for dropdowns
   const messages = [
     { id: 1, sender: "Sarah Johnson", message: "Order #12345 needs attention", time: "2m ago", unread: true },
@@ -133,15 +119,6 @@ export default function AdminNavbar({ onMenuClick }) {
     { id: 2, subject: "New Order Notification", from: "orders@appzeto.com", time: "1h ago", unread: true },
     { id: 3, subject: "System Update", from: "admin@appzeto.com", time: "2h ago", unread: false },
   ];
-
-  const cartItems = [
-    { id: 1, name: "Chicken Biryani", quantity: 2, price: 450 },
-    { id: 2, name: "Butter Naan", quantity: 4, price: 120 },
-    { id: 3, name: "Mango Lassi", quantity: 2, price: 100 },
-  ];
-
-  const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-  const totalCartPrice = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   // Handle logout
   const handleLogout = async () => {
@@ -220,39 +197,8 @@ export default function AdminNavbar({ onMenuClick }) {
             </button>
           </div>
 
-          {/* Right: Language, Notifications, and User Profile */}
+          {/* Right: Notifications and User Profile */}
           <div className="flex items-center gap-3">
-            {/* Language Selector */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-1 px-3 py-2 rounded-md border border-neutral-200 bg-white text-neutral-800 hover:bg-neutral-50 transition-colors">
-                  <Globe className="w-4 h-4 text-neutral-700" />
-                  <span className="text-sm">{currentLanguage.code}</span>
-                  <ChevronDown className="w-4 h-4 text-neutral-700" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                align="end" 
-                className="w-56 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 text-neutral-900 animate-in fade-in-0 zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
-              >
-                <DropdownMenuLabel>Select Language</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {languages.map((lang) => (
-                  <DropdownMenuItem
-                    key={lang.code}
-                    onClick={() => setLanguage(lang.code)}
-                    className="cursor-pointer focus:bg-neutral-100 hover:bg-neutral-100"
-                  >
-                    <span className="mr-2">{lang.flag}</span>
-                    <span>{lang.name}</span>
-                    {lang.code === language && (
-                      <CheckCircle2 className="ml-auto w-4 h-4 text-black" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             {/* Chat/MessageCircle */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -357,68 +303,6 @@ export default function AdminNavbar({ onMenuClick }) {
                   View all emails
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Shopping Cart with badge */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="relative p-2 rounded-md text-neutral-700 hover:bg-neutral-100 hover:text-black transition-colors">
-                  <ShoppingCart className="w-5 h-5" />
-                  {totalCartItems > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-black text-white text-[10px] rounded-full flex items-center justify-center font-semibold px-1">
-                      {totalCartItems > 9 ? "9+" : totalCartItems}
-                    </span>
-                  )}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                align="end" 
-                className="w-80 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 text-neutral-900 animate-in fade-in-0 zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
-              >
-                <DropdownMenuLabel className="flex items-center justify-between">
-                  <span>Shopping Cart</span>
-                  <span className="text-xs text-neutral-500 font-normal">
-                    {totalCartItems} items
-                  </span>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <div className="max-h-96 overflow-y-auto">
-                  {cartItems.length === 0 ? (
-                    <div className="p-6 text-center">
-                      <ShoppingCart className="w-12 h-12 text-neutral-300 mx-auto mb-2" />
-                      <p className="text-sm text-neutral-500">Your cart is empty</p>
-                    </div>
-                  ) : (
-                    <>
-                      {cartItems.map((item) => (
-                        <DropdownMenuItem
-                          key={item.id}
-                          className="flex items-center justify-between p-3 cursor-default hover:bg-neutral-50"
-                        >
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-neutral-900">{item.name}</p>
-                            <p className="text-xs text-neutral-500">
-                              Qty: {item.quantity} × ₹{item.price}
-                            </p>
-                          </div>
-                          <p className="text-sm font-semibold text-neutral-900">
-                            ₹{item.price * item.quantity}
-                          </p>
-                        </DropdownMenuItem>
-                      ))}
-                      <DropdownMenuSeparator />
-                      <div className="p-3 flex items-center justify-between bg-neutral-50 rounded-md mx-2">
-                        <span className="text-sm font-semibold text-neutral-900">Total:</span>
-                        <span className="text-lg font-bold text-black">₹{totalCartPrice}</span>
-                      </div>
-                      <DropdownMenuItem className="justify-center cursor-pointer bg-black text-white hover:bg-neutral-900 mt-2 mx-2 rounded-md">
-                        Checkout
-                        <ArrowRight className="ml-2 w-4 h-4" />
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </div>
               </DropdownMenuContent>
             </DropdownMenu>
 

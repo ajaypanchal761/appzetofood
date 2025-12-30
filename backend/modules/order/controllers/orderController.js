@@ -4,6 +4,7 @@ import { createOrder as createRazorpayOrder, verifyPayment } from '../../payment
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import mongoose from 'mongoose';
 import winston from 'winston';
+import { calculateOrderPricing } from '../services/orderCalculationService.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -395,6 +396,49 @@ export const getOrderDetails = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch order details'
+    });
+  }
+};
+
+/**
+ * Calculate order pricing
+ */
+export const calculateOrder = async (req, res) => {
+  try {
+    const { items, restaurantId, deliveryAddress, couponCode, deliveryFleet } = req.body;
+
+    // Validate required fields
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order must have at least one item'
+      });
+    }
+
+    // Calculate pricing
+    const pricing = await calculateOrderPricing({
+      items,
+      restaurantId,
+      deliveryAddress,
+      couponCode,
+      deliveryFleet: deliveryFleet || 'standard'
+    });
+
+    res.json({
+      success: true,
+      data: {
+        pricing
+      }
+    });
+  } catch (error) {
+    logger.error(`Error calculating order pricing: ${error.message}`, {
+      error: error.message,
+      stack: error.stack
+    });
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to calculate order pricing',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

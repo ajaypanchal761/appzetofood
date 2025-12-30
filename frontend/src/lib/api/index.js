@@ -181,6 +181,26 @@ export const userAPI = {
   getOrders: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.USER.ORDERS, { params });
   },
+
+  // Get user location
+  getLocation: () => {
+    return apiClient.get(API_ENDPOINTS.USER.LOCATION);
+  },
+
+  // Update user location
+  updateLocation: (locationData) => {
+    return apiClient.put(API_ENDPOINTS.USER.LOCATION, locationData);
+  },
+};
+
+// Export location API helper functions
+export const locationAPI = {
+  // Reverse geocode coordinates to address
+  reverseGeocode: (lat, lng) => {
+    return apiClient.get(API_ENDPOINTS.LOCATION.REVERSE_GEOCODE, {
+      params: { lat, lng }
+    });
+  },
 };
 
 // Export restaurant API helper functions
@@ -389,6 +409,41 @@ export const restaurantAPI = {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.MENU_BY_RESTAURANT_ID.replace(':id', restaurantId));
   },
 
+  // Menu item scheduling operations
+  scheduleItemAvailability: (scheduleData) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.MENU_ITEM_SCHEDULE, scheduleData);
+  },
+  cancelScheduledAvailability: (scheduleId) => {
+    return apiClient.delete(API_ENDPOINTS.RESTAURANT.MENU_ITEM_SCHEDULE_BY_ID.replace(':scheduleId', scheduleId));
+  },
+  getItemSchedule: (sectionId, itemId) => {
+    return apiClient.get(
+      API_ENDPOINTS.RESTAURANT.MENU_ITEM_SCHEDULE_BY_ITEM
+        .replace(':sectionId', sectionId)
+        .replace(':itemId', itemId)
+    );
+  },
+
+  // Category operations (for restaurant module)
+  getCategories: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.CATEGORIES);
+  },
+  getAllCategories: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.CATEGORIES_ALL);
+  },
+  createCategory: (categoryData) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.CATEGORIES, categoryData);
+  },
+  updateCategory: (id, categoryData) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.CATEGORY_BY_ID.replace(':id', id), categoryData);
+  },
+  deleteCategory: (id) => {
+    return apiClient.delete(API_ENDPOINTS.RESTAURANT.CATEGORY_BY_ID.replace(':id', id));
+  },
+  reorderCategories: (categories) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.CATEGORIES_REORDER, { categories });
+  },
+
   // Inventory operations (for restaurant module)
   getInventory: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.INVENTORY);
@@ -575,6 +630,11 @@ export const uploadAPI = {
 
 // Export order API helper functions
 export const orderAPI = {
+  // Calculate order pricing
+  calculateOrder: (orderData) => {
+    return apiClient.post(API_ENDPOINTS.ORDER.CALCULATE, orderData);
+  },
+
   // Create order and get Razorpay order
   createOrder: (orderData) => {
     return apiClient.post(API_ENDPOINTS.ORDER.CREATE, orderData);

@@ -23,6 +23,7 @@ export default function Navbar() {
   const stateName = location?.state || "Location"
 
   const handleLocationClick = () => {
+    // Open location selector overlay
     openLocationSelector()
   }
 

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { useCart } from "../../context/CartContext"
 import { useProfile } from "../../context/ProfileContext"
 import { useOrders } from "../../context/OrdersContext"
-import { orderAPI } from "@/lib/api"
+import { orderAPI, restaurantAPI } from "@/lib/api"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
 // Payment method icons as SVG components
@@ -104,11 +104,20 @@ export default function Cart() {
   const [showOrderSuccess, setShowOrderSuccess] = useState(false)
   const [placedOrderId, setPlacedOrderId] = useState(null)
   
+  // Restaurant and pricing state
+  const [restaurantData, setRestaurantData] = useState(null)
+  const [loadingRestaurant, setLoadingRestaurant] = useState(false)
+  const [pricing, setPricing] = useState(null)
+  const [loadingPricing, setLoadingPricing] = useState(false)
+  
   const paymentOptionsRef = useRef(null)
 
   const cartCount = getCartCount()
   const defaultAddress = getDefaultAddress()
   const defaultPayment = getDefaultPaymentMethod()
+  
+  // Get restaurant ID from cart
+  const restaurantId = cart.length > 0 ? cart[0]?.restaurantId || cart[0]?.restaurant?.toLowerCase().replace(/\s+/g, "-") : null
   
   // Check if banner has been shown before (using sessionStorage for this session)
   useEffect(() => {
@@ -185,21 +194,148 @@ export default function Cart() {
     }
   }, [showPlacingOrder, showOrderSuccess, showPaymentSelection])
 
-  // Calculate prices
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity * 83, 0)
-  const deliveryFee = subtotal > 149 && appliedCoupon?.freeDelivery ? 0 : 25
-  const platformFee = 5
-  const gstCharges = Math.round(subtotal * 0.05)
-  const discount = appliedCoupon ? Math.min(appliedCoupon.discount, subtotal * 0.5) : 0
-  const totalBeforeDiscount = subtotal + deliveryFee + platformFee + gstCharges
-  const total = totalBeforeDiscount - discount
-  const savings = discount + (subtotal > 500 ? 32 : 0)
+  // Fetch restaurant data when cart has items
+  useEffect(() => {
+    const fetchRestaurantData = async () => {
+      if (!restaurantId || cart.length === 0) {
+        setRestaurantData(null)
+        return
+      }
 
-  const handleApplyCoupon = (coupon) => {
+      // Skip fetch if restaurantId looks like a slug/name (contains spaces or special chars)
+      // Only fetch if it looks like a valid ID (alphanumeric, dashes, or ObjectId format)
+      const isValidIdFormat = /^[a-zA-Z0-9\-_]+$/.test(restaurantId) && restaurantId.length >= 3
+
+      if (!isValidIdFormat) {
+        // Restaurant ID is likely a name/slug, skip API call
+        setRestaurantData(null)
+        return
+      }
+
+      try {
+        setLoadingRestaurant(true)
+        const response = await restaurantAPI.getRestaurantById(restaurantId)
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantData(data)
+        }
+      } catch (error) {
+        // Silently handle 404 errors - restaurant might not exist in DB, which is OK
+        // Only log non-404 errors
+        if (error.response?.status !== 404) {
+          console.error("Error fetching restaurant data:", error)
+        }
+        // Continue with cart even if restaurant fetch fails
+        setRestaurantData(null)
+      } finally {
+        setLoadingRestaurant(false)
+      }
+    }
+
+    fetchRestaurantData()
+  }, [restaurantId, cart.length])
+
+  // Calculate pricing from backend whenever cart, address, or coupon changes
+  useEffect(() => {
+    const calculatePricing = async () => {
+      if (cart.length === 0 || !defaultAddress) {
+        setPricing(null)
+        return
+      }
+
+      try {
+        setLoadingPricing(true)
+        const items = cart.map(item => ({
+          itemId: item.id,
+          name: item.name,
+          price: item.price, // Price should already be in INR
+          quantity: item.quantity || 1,
+          image: item.image,
+          description: item.description,
+          isVeg: item.isVeg !== false
+        }))
+
+        const response = await orderAPI.calculateOrder({
+          items,
+          restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+          deliveryAddress: defaultAddress,
+          couponCode: appliedCoupon?.code || couponCode || null,
+          deliveryFleet: deliveryFleet || 'standard'
+        })
+
+        if (response?.data?.success && response?.data?.data?.pricing) {
+          setPricing(response.data.data.pricing)
+          
+          // Update applied coupon if backend returns one
+          if (response.data.data.pricing.appliedCoupon && !appliedCoupon) {
+            const coupon = availableCoupons.find(c => c.code === response.data.data.pricing.appliedCoupon.code)
+            if (coupon) {
+              setAppliedCoupon(coupon)
+            }
+          }
+        }
+      } catch (error) {
+        // Only log non-404 errors, 404 is expected if restaurant doesn't exist
+        if (error.response?.status !== 404) {
+          console.error("Error calculating pricing:", error)
+        }
+        // Fallback to frontend calculation if backend fails
+        setPricing(null)
+      } finally {
+        setLoadingPricing(false)
+      }
+    }
+
+    calculatePricing()
+  }, [cart, defaultAddress, appliedCoupon, couponCode, deliveryFleet, restaurantId])
+
+  // Use backend pricing if available, otherwise fallback to frontend calculation
+  const subtotal = pricing?.subtotal || cart.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0)
+  const deliveryFee = pricing?.deliveryFee ?? (subtotal > 149 && appliedCoupon?.freeDelivery ? 0 : 25)
+  const platformFee = pricing?.platformFee || 5
+  const gstCharges = pricing?.tax || Math.round(subtotal * 0.05)
+  const discount = pricing?.discount || (appliedCoupon ? Math.min(appliedCoupon.discount, subtotal * 0.5) : 0)
+  const totalBeforeDiscount = subtotal + deliveryFee + platformFee + gstCharges
+  const total = pricing?.total || (totalBeforeDiscount - discount)
+  const savings = pricing?.savings || (discount + (subtotal > 500 ? 32 : 0))
+  
+  // Restaurant name from data or cart
+  const restaurantName = restaurantData?.name || cart[0]?.restaurant || "Restaurant"
+
+  const handleApplyCoupon = async (coupon) => {
     if (subtotal >= coupon.minOrder) {
       setAppliedCoupon(coupon)
       setCouponCode(coupon.code)
       setShowCoupons(false)
+      
+      // Recalculate pricing with new coupon
+      if (cart.length > 0 && defaultAddress) {
+        try {
+          const items = cart.map(item => ({
+            itemId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity || 1,
+            image: item.image,
+            description: item.description,
+            isVeg: item.isVeg !== false
+          }))
+
+          const response = await orderAPI.calculateOrder({
+            items,
+            restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+            deliveryAddress: defaultAddress,
+            couponCode: coupon.code,
+            deliveryFleet: deliveryFleet || 'standard'
+          })
+
+          if (response?.data?.success && response?.data?.data?.pricing) {
+            setPricing(response.data.data.pricing)
+          }
+        } catch (error) {
+          console.error("Error recalculating pricing:", error)
+        }
+      }
     }
   }
 
@@ -258,9 +394,38 @@ export default function Cart() {
     sessionStorage.setItem('cartDiscountBannerShown', 'true')
   }
 
-  const handleRemoveCoupon = () => {
+  const handleRemoveCoupon = async () => {
     setAppliedCoupon(null)
     setCouponCode("")
+    
+    // Recalculate pricing without coupon
+    if (cart.length > 0 && defaultAddress) {
+      try {
+        const items = cart.map(item => ({
+          itemId: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity || 1,
+          image: item.image,
+          description: item.description,
+          isVeg: item.isVeg !== false
+        }))
+
+          const response = await orderAPI.calculateOrder({
+            items,
+            restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || null,
+            deliveryAddress: defaultAddress,
+            couponCode: null,
+            deliveryFleet: deliveryFleet || 'standard'
+          })
+
+        if (response?.data?.success && response?.data?.data?.pricing) {
+          setPricing(response.data.data.pricing)
+        }
+      } catch (error) {
+        console.error("Error recalculating pricing:", error)
+      }
+    }
   }
 
   const handleSelectPayment = (payment) => {
@@ -331,9 +496,9 @@ export default function Cart() {
           isVeg: item.isVeg !== false
         })),
         address: defaultAddress,
-        restaurantId: cart[0]?.restaurant?.toLowerCase().replace(/\s+/g, "-") || "unknown",
-        restaurantName: cart[0]?.restaurant || "Unknown Restaurant",
-        pricing: {
+        restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || "unknown",
+        restaurantName: restaurantData?.name || cart[0]?.restaurant || "Unknown Restaurant",
+        pricing: pricing || {
           subtotal,
           deliveryFee,
           tax: gstCharges,
@@ -463,10 +628,10 @@ export default function Cart() {
                 </Button>
               </Link>
               <div className="min-w-0">
-                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Apna Sweets</p>
+                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">{restaurantName}</p>
                 <p className="text-sm md:text-base font-medium text-gray-800 dark:text-white truncate">
-                  10-15 mins to <span className="font-semibold">Home</span>
-                  <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs md:text-sm">{defaultAddress?.city || "Select address"}</span>
+                  {restaurantData?.estimatedDeliveryTime || "10-15 mins"} to <span className="font-semibold">{defaultAddress?.label || "Home"}</span>
+                  <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs md:text-sm">{defaultAddress?.city || defaultAddress?.area || "Select address"}</span>
                 </p>
               </div>
             </div>
@@ -552,7 +717,7 @@ export default function Cart() {
                         </div>
                         
                         <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200 min-w-[50px] md:min-w-[70px] text-right">
-                          ₹{(item.price * item.quantity * 83).toFixed(0)}
+                          ₹{((item.price || 0) * (item.quantity || 1)).toFixed(0)}
                         </p>
                       </div>
                     </div>
@@ -716,7 +881,7 @@ export default function Cart() {
                 <div className="flex items-center gap-3 md:gap-4">
                   <Clock className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
                   <div className="flex-1">
-                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">Delivery in <span className="font-semibold">10-15 mins</span></p>
+                    <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">Delivery in <span className="font-semibold">{restaurantData?.estimatedDeliveryTime || "10-15 mins"}</span></p>
                     <button className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Want this later? <span className="text-blue-600 dark:text-blue-400 font-medium">Schedule it</span></button>
                   </div>
                 </div>

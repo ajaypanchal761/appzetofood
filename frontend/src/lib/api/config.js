@@ -26,6 +26,11 @@ export const API_ENDPOINTS = {
     PREFERENCES: '/user/preferences',
     WALLET: '/user/wallet',
     ORDERS: '/user/orders',
+    LOCATION: '/user/location',
+  },
+  // Location endpoints
+  LOCATION: {
+    REVERSE_GEOCODE: '/location/reverse',
   },
   // Restaurant endpoints
   RESTAURANT: {
@@ -45,6 +50,13 @@ export const API_ENDPOINTS = {
     STAFF: '/restaurant/staff',
     MENU: '/restaurant/menu',
     MENU_BY_RESTAURANT_ID: '/restaurant/:id/menu',
+    MENU_ITEM_SCHEDULE: '/restaurant/menu/item/schedule',
+    MENU_ITEM_SCHEDULE_BY_ID: '/restaurant/menu/item/schedule/:scheduleId',
+    MENU_ITEM_SCHEDULE_BY_ITEM: '/restaurant/menu/item/schedule/:sectionId/:itemId',
+    CATEGORIES: '/restaurant/categories',
+    CATEGORIES_ALL: '/restaurant/categories/all',
+    CATEGORY_BY_ID: '/restaurant/categories/:id',
+    CATEGORIES_REORDER: '/restaurant/categories/reorder',
     INVENTORY: '/restaurant/inventory',
     INVENTORY_BY_RESTAURANT_ID: '/restaurant/:id/inventory',
     ORDERS: '/restaurant/orders',
@@ -92,6 +104,7 @@ export const API_ENDPOINTS = {
     DETAILS: '/order/:id',
     UPDATE_STATUS: '/order/:id/status',
     VERIFY_PAYMENT: '/order/verify-payment',
+    CALCULATE: '/order/calculate',
   },
   // Payment endpoints
   PAYMENT: {

@@ -7,6 +7,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import cron from 'node-cron';
 
 // Load environment variables
 dotenv.config();
@@ -179,7 +180,35 @@ const PORT = process.env.PORT || 5000;
 
 httpServer.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  
+  // Initialize scheduled tasks after DB connection is established
+  // Wait a bit for DB to connect, then start cron jobs
+  setTimeout(() => {
+    initializeScheduledTasks();
+  }, 5000);
 });
+
+// Initialize scheduled tasks
+function initializeScheduledTasks() {
+  // Import menu schedule service
+  import('./modules/restaurant/services/menuScheduleService.js').then(({ processScheduledAvailability }) => {
+    // Run every minute to check for due schedules
+    cron.schedule('* * * * *', async () => {
+      try {
+        const result = await processScheduledAvailability();
+        if (result.processed > 0) {
+          console.log(`[Menu Schedule Cron] ${result.message}`);
+        }
+      } catch (error) {
+        console.error('[Menu Schedule Cron] Error:', error);
+      }
+    });
+    
+    console.log('✅ Menu item availability scheduler initialized (runs every minute)');
+  }).catch((error) => {
+    console.error('❌ Failed to initialize menu schedule service:', error);
+  });
+}
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {

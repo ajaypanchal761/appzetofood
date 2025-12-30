@@ -2,7 +2,9 @@ import express from 'express';
 import {
   getUserProfile,
   updateUserProfile,
-  uploadProfileImage
+  uploadProfileImage,
+  updateUserLocation,
+  getUserLocation
 } from '../controllers/userController.js';
 import { authenticate } from '../../auth/middleware/auth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
@@ -22,6 +24,10 @@ router.post(
   uploadMiddleware.single('image'),
   uploadProfileImage
 );
+
+// Location routes
+router.get('/location', getUserLocation);
+router.put('/location', updateUserLocation);
 
 export default router;
 

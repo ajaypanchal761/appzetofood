@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
-import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Settings, Layout, Tag, Link as LinkIcon } from "lucide-react"
+import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Layout, Link as LinkIcon } from "lucide-react"
 import api from "@/lib/api"
+import { getModuleToken } from "@/lib/utils/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -42,12 +43,60 @@ export default function LandingPageManagement() {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 
-  // Fetch all data on mount
+  // Helper function to filter out token-related errors
+  const setErrorSafely = (errorMessage) => {
+    if (!errorMessage) {
+      setError(null)
+      return
+    }
+    const lowerMessage = errorMessage.toLowerCase()
+    // Don't show token/unauthorized/auth errors
+    if (lowerMessage.includes('token') || 
+        lowerMessage.includes('unauthorized') || 
+        lowerMessage.includes('no token') ||
+        lowerMessage.includes('authentication') ||
+        lowerMessage.includes('session expired')) {
+      setError(null)
+    } else {
+      setError(errorMessage)
+    }
+  }
+
+  // Helper function to get admin token and add to request config
+  const getAuthConfig = (additionalConfig = {}) => {
+    const adminToken = getModuleToken('admin')
+    
+    // Debug logging in development
+    if (import.meta.env.DEV) {
+      console.log('[LandingPageManagement] Token check:', {
+        token: adminToken ? 'exists' : 'missing',
+        tokenLength: adminToken?.length || 0,
+        path: window.location.pathname
+      })
+    }
+    
+    if (!adminToken || adminToken.trim() === '' || adminToken === 'null' || adminToken === 'undefined') {
+      // Token not found, return config without auth header (will be handled by error)
+      console.warn('[LandingPageManagement] Admin token not found!')
+      return additionalConfig
+    }
+    
+    // Merge headers properly - ensure Authorization is always set
+    const mergedHeaders = {
+      ...additionalConfig.headers,
+      Authorization: `Bearer ${adminToken.trim()}`,
+    }
+    
+    return {
+      ...additionalConfig,
+      headers: mergedHeaders,
+    }
+  }
+
+  // Fetch data on mount (authentication is handled by ProtectedRoute)
   useEffect(() => {
     fetchBanners()
-    fetchCategories()
     fetchExploreMore()
-    fetchSettings()
   }, [])
 
   // ==================== HERO BANNERS ====================
@@ -55,13 +104,26 @@ export default function LandingPageManagement() {
     try {
       setBannersLoading(true)
       setError(null)
-      const response = await api.get('/hero-banners')
+      const response = await api.get('/hero-banners', getAuthConfig())
       if (response.data.success) {
         setBanners(response.data.data.banners || [])
       }
     } catch (err) {
-      console.error('Error fetching banners:', err)
-      setError('Failed to load hero banners. Please try again.')
+      // Handle 401/404 errors gracefully - don't show error messages
+      if (err.response?.status === 401) {
+        // Token expired or invalid - will be handled by axios interceptor
+        // Don't show error message or set banners
+        setBanners([])
+        setError(null)
+      } else if (err.response?.status === 404) {
+        // Endpoint doesn't exist, set empty array
+        setBanners([])
+        setError(null)
+      } else {
+        // Filter out token-related errors
+        const errorMessage = err.response?.data?.message || 'Failed to load hero banners'
+        setErrorSafely(errorMessage)
+      }
     } finally {
       setBannersLoading(false)
     }
@@ -79,48 +141,76 @@ export default function LandingPageManagement() {
 
   const uploadBanners = async (files) => {
     try {
+      // Check token first before proceeding
+      const adminToken = getModuleToken('admin')
+      if (!adminToken || adminToken.trim() === '' || adminToken === 'null' || adminToken === 'undefined') {
+        setErrorSafely('Authentication required. Please login again.')
+        return
+      }
+
       setBannersUploading(true)
       setError(null)
       setSuccess(null)
       setBannersUploadProgress({ current: 0, total: files.length })
 
-      let successCount = 0
-      let failCount = 0
-      const errors = []
+      // Use batch upload endpoint for multiple files
+      const formData = new FormData()
+      files.forEach((file) => {
+        formData.append('images', file) // Field name must be 'images' for multiple upload
+      })
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        try {
-          setBannersUploadProgress({ current: i + 1, total: files.length })
-          const formData = new FormData()
-          formData.append('image', file)
-          const response = await api.post('/hero-banners', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          })
-          if (response.data.success) successCount++
-          else { failCount++; errors.push(`File ${i + 1}: Upload failed`) }
-        } catch (err) {
-          failCount++
-          errors.push(`File ${i + 1}: ${err.response?.data?.message || 'Upload failed'}`)
+      // Use getAuthConfig to ensure proper Authorization header
+      // Don't set Content-Type - axios will set it automatically with boundary for FormData
+      const config = getAuthConfig()
+      
+      // Debug: Log the config to verify Authorization header is set
+      if (import.meta.env.DEV) {
+        console.log('[uploadBanners] Request config:', {
+          hasAuthHeader: !!config.headers?.Authorization,
+          authHeaderPrefix: config.headers?.Authorization?.substring(0, 20),
+          hasFormData: formData instanceof FormData
+        })
+      }
+
+      const response = await api.post('/hero-banners/multiple', formData, config)
+
+      if (response.data.success) {
+        const uploadedBanners = response.data.data?.banners || []
+        const errors = response.data.data?.errors || []
+        const successCount = uploadedBanners.length
+        const failCount = errors.length
+
+        await fetchBanners()
+        if (bannersFileInputRef.current) bannersFileInputRef.current.value = ''
+
+        if (failCount === 0) {
+          setSuccess(`${successCount} hero banner${successCount > 1 ? 's' : ''} uploaded successfully!`)
+          setTimeout(() => setSuccess(null), 5000)
+        } else if (successCount > 0) {
+          setSuccess(`${successCount} banner${successCount > 1 ? 's' : ''} uploaded, ${failCount} failed.`)
+          setErrorSafely(errors.join(', '))
+          setTimeout(() => { setSuccess(null); setError(null) }, 5000)
+        } else {
+          setErrorSafely(`Failed to upload banners. ${errors.join(', ')}`)
         }
-      }
-
-      await fetchBanners()
-      if (bannersFileInputRef.current) bannersFileInputRef.current.value = ''
-
-      if (successCount > 0 && failCount === 0) {
-        setSuccess(`${successCount} hero banner${successCount > 1 ? 's' : ''} uploaded successfully!`)
-        setTimeout(() => setSuccess(null), 5000)
-      } else if (successCount > 0 && failCount > 0) {
-        setSuccess(`${successCount} banner${successCount > 1 ? 's' : ''} uploaded, ${failCount} failed.`)
-        setError(errors.join(', '))
-        setTimeout(() => { setSuccess(null); setError(null) }, 5000)
       } else {
-        setError(`Failed to upload banners. ${errors.join(', ')}`)
+        setErrorSafely(response.data.message || 'Failed to upload banners')
       }
+
       setBannersUploadProgress({ current: 0, total: 0 })
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to upload banners.')
+      console.error('Error uploading banners:', err)
+      
+      // Handle 401 unauthorized errors - don't show token-related errors
+      if (err.response?.status === 401 || err.message === 'Authentication token not found') {
+        // Don't show error - let axios interceptor handle logout
+        setError(null)
+      } else {
+        // Filter out token-related errors
+        const errorMessage = err.response?.data?.message || 'Failed to upload banners'
+        setErrorSafely(errorMessage)
+      }
+      
       setBannersUploadProgress({ current: 0, total: 0 })
     } finally {
       setBannersUploading(false)
@@ -133,14 +223,14 @@ export default function LandingPageManagement() {
       setBannersDeleting(id)
       setError(null)
       setSuccess(null)
-      const response = await api.delete(`/hero-banners/${id}`)
+      const response = await api.delete(`/hero-banners/${id}`, getAuthConfig())
       if (response.data.success) {
         setSuccess('Hero banner deleted successfully!')
         await fetchBanners()
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete banner.')
+      setErrorSafely(err.response?.data?.message || 'Failed to delete banner.')
     } finally {
       setBannersDeleting(null)
     }
@@ -150,14 +240,14 @@ export default function LandingPageManagement() {
     try {
       setError(null)
       setSuccess(null)
-      const response = await api.patch(`/hero-banners/${id}/status`)
+      const response = await api.patch(`/hero-banners/${id}/status`, {}, getAuthConfig())
       if (response.data.success) {
         setSuccess(`Banner ${currentStatus ? 'deactivated' : 'activated'} successfully!`)
         await fetchBanners()
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update banner status.')
+      setErrorSafely(err.response?.data?.message || 'Failed to update banner status.')
     }
   }
 
@@ -169,13 +259,13 @@ export default function LandingPageManagement() {
     if (!otherBanner && newOrder < 0) return
     try {
       setError(null)
-      await api.patch(`/hero-banners/${id}/order`, { order: newOrder })
+      await api.patch(`/hero-banners/${id}/order`, { order: newOrder }, getAuthConfig())
       if (otherBanner) {
-        await api.patch(`/hero-banners/${otherBanner._id}/order`, { order: banner.order })
+        await api.patch(`/hero-banners/${otherBanner._id}/order`, { order: banner.order }, getAuthConfig())
       }
       await fetchBanners()
     } catch (err) {
-      setError('Failed to update banner order.')
+      setErrorSafely('Failed to update banner order.')
     }
   }
 
@@ -184,13 +274,20 @@ export default function LandingPageManagement() {
     try {
       setCategoriesLoading(true)
       setError(null)
-      const response = await api.get('/hero-banners/landing/categories')
+      const response = await api.get('/hero-banners/landing/categories', getAuthConfig())
       if (response.data.success) {
         setCategories(response.data.data.categories || [])
       }
     } catch (err) {
-      console.error('Error fetching categories:', err)
-      setError('Failed to load categories. Please try again.')
+      // Silently handle 401/404 errors - endpoints may not exist yet
+      if (err.response?.status === 401 || err.response?.status === 404) {
+        setCategories([]) // Set empty array if endpoint doesn't exist
+        setError(null) // Clear any previous error
+      } else {
+        // Filter out token-related errors
+        const errorMessage = err.response?.data?.message || 'Failed to load categories'
+        setErrorSafely(errorMessage)
+      }
     } finally {
       setCategoriesLoading(false)
     }
@@ -276,9 +373,9 @@ export default function LandingPageManagement() {
         formData.append('label', item.label.trim())
 
         try {
-          const response = await api.post('/hero-banners/landing/categories', formData, {
+          const response = await api.post('/hero-banners/landing/categories', formData, getAuthConfig({
             headers: { 'Content-Type': 'multipart/form-data' },
-          })
+          }))
           if (response.data.success) {
             successCount++
           } else {
@@ -319,7 +416,7 @@ export default function LandingPageManagement() {
           setError(null)
         }, 5000)
       } else {
-        setError(`Failed to create categories. ${errors.join(', ')}`)
+        setErrorSafely(`Failed to create categories. ${errors.join(', ')}`)
       }
     } finally {
       setCategoriesUploading(false)
@@ -332,14 +429,14 @@ export default function LandingPageManagement() {
       setCategoriesDeleting(id)
       setError(null)
       setSuccess(null)
-      const response = await api.delete(`/hero-banners/landing/categories/${id}`)
+      const response = await api.delete(`/hero-banners/landing/categories/${id}`, getAuthConfig())
       if (response.data.success) {
         setSuccess('Category deleted successfully!')
         await fetchCategories()
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete category.')
+      setErrorSafely(err.response?.data?.message || 'Failed to delete category.')
     } finally {
       setCategoriesDeleting(null)
     }
@@ -349,14 +446,14 @@ export default function LandingPageManagement() {
     try {
       setError(null)
       setSuccess(null)
-      const response = await api.patch(`/hero-banners/landing/categories/${id}/status`)
+      const response = await api.patch(`/hero-banners/landing/categories/${id}/status`, {}, getAuthConfig())
       if (response.data.success) {
         setSuccess(`Category ${currentStatus ? 'deactivated' : 'activated'} successfully!`)
         await fetchCategories()
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update category status.')
+      setErrorSafely(err.response?.data?.message || 'Failed to update category status.')
     }
   }
 
@@ -368,13 +465,13 @@ export default function LandingPageManagement() {
     if (!otherCategory && newOrder < 0) return
     try {
       setError(null)
-      await api.patch(`/hero-banners/landing/categories/${id}/order`, { order: newOrder })
+      await api.patch(`/hero-banners/landing/categories/${id}/order`, { order: newOrder }, getAuthConfig())
       if (otherCategory) {
-        await api.patch(`/hero-banners/landing/categories/${otherCategory._id}/order`, { order: category.order })
+        await api.patch(`/hero-banners/landing/categories/${otherCategory._id}/order`, { order: category.order }, getAuthConfig())
       }
       await fetchCategories()
     } catch (err) {
-      setError('Failed to update category order.')
+      setErrorSafely('Failed to update category order.')
     }
   }
 
@@ -383,13 +480,20 @@ export default function LandingPageManagement() {
     try {
       setExploreMoreLoading(true)
       setError(null)
-      const response = await api.get('/hero-banners/landing/explore-more')
+      const response = await api.get('/hero-banners/landing/explore-more', getAuthConfig())
       if (response.data.success) {
         setExploreMore(response.data.data.items || [])
       }
     } catch (err) {
-      console.error('Error fetching explore more:', err)
-      setError('Failed to load explore more items. Please try again.')
+      // Silently handle 401/404 errors - endpoints may not exist yet
+      if (err.response?.status === 401 || err.response?.status === 404) {
+        setExploreMore([]) // Set empty array if endpoint doesn't exist
+        setError(null) // Clear any previous error
+      } else {
+        // Filter out token-related errors
+        const errorMessage = err.response?.data?.message || 'Failed to load explore more items'
+        setErrorSafely(errorMessage)
+      }
     } finally {
       setExploreMoreLoading(false)
     }
@@ -419,9 +523,9 @@ export default function LandingPageManagement() {
       formData.append('image', file)
       formData.append('label', exploreMoreLabel.trim())
       formData.append('link', exploreMoreLink.trim())
-      const response = await api.post('/hero-banners/landing/explore-more', formData, {
+      const response = await api.post('/hero-banners/landing/explore-more', formData, getAuthConfig({
         headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      }))
       if (response.data.success) {
         setSuccess('Explore more item created successfully!')
         setExploreMoreLabel("")
@@ -431,7 +535,7 @@ export default function LandingPageManagement() {
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create explore more item.')
+      setErrorSafely(err.response?.data?.message || 'Failed to create explore more item.')
     } finally {
       setExploreMoreUploading(false)
     }
@@ -443,14 +547,14 @@ export default function LandingPageManagement() {
       setExploreMoreDeleting(id)
       setError(null)
       setSuccess(null)
-      const response = await api.delete(`/hero-banners/landing/explore-more/${id}`)
+      const response = await api.delete(`/hero-banners/landing/explore-more/${id}`, getAuthConfig())
       if (response.data.success) {
         setSuccess('Explore more item deleted successfully!')
         await fetchExploreMore()
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete explore more item.')
+      setErrorSafely(err.response?.data?.message || 'Failed to delete explore more item.')
     } finally {
       setExploreMoreDeleting(null)
     }
@@ -460,14 +564,14 @@ export default function LandingPageManagement() {
     try {
       setError(null)
       setSuccess(null)
-      const response = await api.patch(`/hero-banners/landing/explore-more/${id}/status`)
+      const response = await api.patch(`/hero-banners/landing/explore-more/${id}/status`, {}, getAuthConfig())
       if (response.data.success) {
         setSuccess(`Explore more item ${currentStatus ? 'deactivated' : 'activated'} successfully!`)
         await fetchExploreMore()
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update explore more status.')
+      setErrorSafely(err.response?.data?.message || 'Failed to update explore more status.')
     }
   }
 
@@ -479,13 +583,13 @@ export default function LandingPageManagement() {
     if (!otherItem && newOrder < 0) return
     try {
       setError(null)
-      await api.patch(`/hero-banners/landing/explore-more/${id}/order`, { order: newOrder })
+      await api.patch(`/hero-banners/landing/explore-more/${id}/order`, { order: newOrder }, getAuthConfig())
       if (otherItem) {
-        await api.patch(`/hero-banners/landing/explore-more/${otherItem._id}/order`, { order: item.order })
+        await api.patch(`/hero-banners/landing/explore-more/${otherItem._id}/order`, { order: item.order }, getAuthConfig())
       }
       await fetchExploreMore()
     } catch (err) {
-      setError('Failed to update explore more order.')
+      setErrorSafely('Failed to update explore more order.')
     }
   }
 
@@ -494,13 +598,20 @@ export default function LandingPageManagement() {
     try {
       setSettingsLoading(true)
       setError(null)
-      const response = await api.get('/hero-banners/landing/settings')
+      const response = await api.get('/hero-banners/landing/settings', getAuthConfig())
       if (response.data.success) {
         setSettings(response.data.data.settings || { exploreMoreHeading: "Explore More" })
       }
     } catch (err) {
-      console.error('Error fetching settings:', err)
-      setError('Failed to load settings. Please try again.')
+      // Silently handle 401/404 errors - endpoints may not exist yet, use default settings
+      if (err.response?.status === 401 || err.response?.status === 404) {
+        setSettings({ exploreMoreHeading: "Explore More" }) // Use default settings
+        setError(null) // Clear any previous error
+      } else {
+        // Filter out token-related errors
+        const errorMessage = err.response?.data?.message || 'Failed to load settings'
+        setErrorSafely(errorMessage)
+      }
     } finally {
       setSettingsLoading(false)
     }
@@ -513,13 +624,13 @@ export default function LandingPageManagement() {
       setSuccess(null)
       const response = await api.patch('/hero-banners/landing/settings', {
         exploreMoreHeading: settings.exploreMoreHeading
-      })
+      }, getAuthConfig())
       if (response.data.success) {
         setSuccess('Settings saved successfully!')
         setTimeout(() => setSuccess(null), 3000)
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save settings.')
+      setErrorSafely(err.response?.data?.message || 'Failed to save settings.')
     } finally {
       setSettingsSaving(false)
     }
@@ -528,9 +639,7 @@ export default function LandingPageManagement() {
   // ==================== RENDER ====================
   const tabs = [
     { id: 'banners', label: 'Hero Banners', icon: ImageIcon },
-    { id: 'categories', label: 'Categories', icon: Tag },
     { id: 'explore-more', label: 'Explore More', icon: LinkIcon },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
   return (
@@ -544,7 +653,7 @@ export default function LandingPageManagement() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Landing Page Management</h1>
-              <p className="text-sm text-slate-600 mt-1">Manage hero banners, categories, explore more items, and settings</p>
+              <p className="text-sm text-slate-600 mt-1">Manage hero banners and explore more items</p>
             </div>
           </div>
         </div>
@@ -703,158 +812,6 @@ export default function LandingPageManagement() {
           </>
         )}
 
-        {/* Categories Tab */}
-        {activeTab === 'categories' && (
-          <>
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Add New Categories</h2>
-              <div className="space-y-4">
-                <div>
-                  <Label>Category Images (1:1 ratio recommended)</Label>
-                  <div
-                    className="border-2 border-dashed border-blue-300 rounded-lg p-6 text-center bg-blue-50/30 cursor-pointer hover:border-blue-400"
-                    onClick={() => categoriesFileInputRef.current?.click()}
-                  >
-                    <input
-                      ref={categoriesFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleCategoryFileSelect}
-                      className="hidden"
-                      disabled={categoriesUploading}
-                    />
-                    {categoriesUploading ? (
-                      <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
-                    ) : (
-                      <>
-                        <Upload className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                        <p className="text-sm text-slate-600">
-                          Click to select one or more images. Labels will be pre-filled from file
-                          names and can be edited.
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          PNG, JPG, WEBP up to 5MB each
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {pendingCategories.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        Pending Categories ({pendingCategories.length})
-                      </h3>
-                      <Button
-                        size="sm"
-                        onClick={handleUploadPendingCategories}
-                        disabled={categoriesUploading}
-                      >
-                        {categoriesUploading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                            Uploading...
-                          </>
-                        ) : (
-                          'Upload All'
-                        )}
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {pendingCategories.map((item) => (
-                        <div
-                          key={item.id}
-                          className="border border-slate-200 rounded-lg p-3 flex items-center gap-3 bg-slate-50"
-                        >
-                          <div className="w-16 h-16 rounded-md overflow-hidden bg-slate-100 flex-shrink-0">
-                            <img
-                              src={item.previewUrl}
-                              alt={item.label || 'New category'}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="flex-1 space-y-1">
-                            <Label htmlFor={`pending-label-${item.id}`} className="text-xs">
-                              Label
-                            </Label>
-                            <Input
-                              id={`pending-label-${item.id}`}
-                              value={item.label}
-                              onChange={(e) =>
-                                handlePendingCategoryLabelChange(item.id, e.target.value)
-                              }
-                              placeholder="Category name"
-                              className="h-8 text-sm"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePendingCategory(item.id)}
-                            className="p-1.5 rounded-full hover:bg-red-100 text-red-600 flex-shrink-0"
-                            aria-label="Remove"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Categories ({categories.length})</h2>
-              {categoriesLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                </div>
-              ) : categories.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  <Tag className="w-12 h-12 mx-auto mb-3 text-slate-400" />
-                  <p>No categories added yet.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {categories.map((category, index) => (
-                    <div key={category._id} className="border border-slate-200 rounded-lg overflow-hidden">
-                      <div className="relative aspect-square bg-slate-100">
-                        <img src={category.imageUrl} alt={category.label} className="w-full h-full object-cover" />
-                        <div className="absolute top-2 right-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${category.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {category.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <h3 className="font-semibold text-slate-900 mb-2">{category.label}</h3>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleCategoryOrderChange(category._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowUp className="w-4 h-4 text-slate-600" />
-                            </button>
-                            <button onClick={() => handleCategoryOrderChange(category._id, 'down')} disabled={index === categories.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowDown className="w-4 h-4 text-slate-600" />
-                            </button>
-                          </div>
-                          <button onClick={() => handleToggleCategoryStatus(category._id, category.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${category.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                            {category.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button onClick={() => handleDeleteCategory(category._id)} disabled={categoriesDeleting === category._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
-                            {categoriesDeleting === category._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
         {/* Explore More Tab */}
         {activeTab === 'explore-more' && (
           <>
@@ -960,40 +917,6 @@ export default function LandingPageManagement() {
           </>
         )}
 
-        {/* Settings Tab */}
-        {activeTab === 'settings' && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Landing Page Settings</h2>
-            {settingsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-              </div>
-            ) : (
-              <div className="space-y-4 max-w-md">
-                <div>
-                  <Label htmlFor="explore-heading">Explore More Section Heading</Label>
-                  <Input
-                    id="explore-heading"
-                    value={settings.exploreMoreHeading}
-                    onChange={(e) => setSettings({ ...settings, exploreMoreHeading: e.target.value })}
-                    placeholder="Explore More"
-                    className="mt-1"
-                  />
-                </div>
-                <Button onClick={handleSaveSettings} disabled={settingsSaving} className="w-full">
-                  {settingsSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Save Settings'
-                  )}
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )

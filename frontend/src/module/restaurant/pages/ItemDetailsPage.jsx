@@ -237,68 +237,29 @@ export default function ItemDetailsPage() {
     fetchItemData()
   }, [id, isNewItem, location.state, defaultCategory])
 
-  // Fetch categories from API
+  // Fetch categories from restaurant-specific API
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         setLoadingCategories(true)
-        const response = await api.get('/categories/public')
+        const response = await restaurantAPI.getCategories()
         if (response.data.success && response.data.data.categories) {
-          // Group categories by type
-          const categoriesByType = {}
-          
-          response.data.data.categories.forEach(cat => {
-            // Use the type from API, default to 'Varieties' if not set
-            const type = cat.type && cat.type.trim() ? cat.type.trim() : 'Varieties'
-            if (!categoriesByType[type]) {
-              categoriesByType[type] = []
-            }
-            categoriesByType[type].push({
-              id: cat.id,
+          // Format categories for the UI - flat list, no subcategories
+          const formattedCategories = response.data.data.categories.map(cat => ({
+            id: cat._id || cat.id,
               name: cat.name
-            })
-          })
-
-          // Convert to the format needed for the UI
-          // Sort types in a specific order: Starters, Main course, Desserts, Beverages, Varieties
-          const typeOrder = ['Starters', 'Main course', 'Desserts', 'Beverages', 'Varieties']
-          const sortedTypes = Object.keys(categoriesByType).sort((a, b) => {
-            const indexA = typeOrder.indexOf(a)
-            const indexB = typeOrder.indexOf(b)
-            if (indexA === -1 && indexB === -1) return a.localeCompare(b)
-            if (indexA === -1) return 1
-            if (indexB === -1) return -1
-            return indexA - indexB
-          })
-
-          const formattedCategories = sortedTypes.map(type => ({
-            id: type.toLowerCase().replace(/\s+/g, '-'),
-            name: type,
-            subCategories: categoriesByType[type].map(cat => cat.name)
           }))
 
-          console.log('Formatted categories:', formattedCategories)
+          console.log('Formatted restaurant categories:', formattedCategories)
           setCategories(formattedCategories)
         } else {
-          // Fallback to default categories if API fails
-          setCategories([
-            { id: "starters", name: "Starters", subCategories: ["Starters", "Appetizers", "Snacks"] },
-            { id: "main-course", name: "Main Course", subCategories: ["Main Course", "Curries", "Biryani"] },
-            { id: "desserts", name: "Desserts", subCategories: ["Desserts", "Ice Cream", "Sweets"] },
-            { id: "beverages", name: "Beverages", subCategories: ["Beverages", "Juices", "Soft Drinks"] },
-            { id: "varieties", name: "Varieties", subCategories: ["Varieties", "Combo", "Special"] },
-          ])
+          // If no categories exist, show empty array (user can add categories)
+          setCategories([])
         }
       } catch (error) {
-        console.error('Error fetching categories:', error)
-        // Fallback to default categories on error
-        setCategories([
-          { id: "starters", name: "Starters", subCategories: ["Starters", "Appetizers", "Snacks"] },
-          { id: "main-course", name: "Main Course", subCategories: ["Main Course", "Curries", "Biryani"] },
-          { id: "desserts", name: "Desserts", subCategories: ["Desserts", "Ice Cream", "Sweets"] },
-          { id: "beverages", name: "Beverages", subCategories: ["Beverages", "Juices", "Soft Drinks"] },
-          { id: "varieties", name: "Varieties", subCategories: ["Varieties", "Combo", "Special"] },
-        ])
+        console.error('Error fetching restaurant categories:', error)
+        // Show empty array on error - user can add categories
+        setCategories([])
       } finally {
         setLoadingCategories(false)
       }
@@ -702,8 +663,12 @@ export default function ItemDetailsPage() {
         toast.error(updateResponse.data?.message || "Failed to save item")
       }
     } catch (error) {
-      console.error('Error saving item:', error)
+      console.error('Error saving menu:', error)
+      if (error.code === 'ERR_NETWORK') {
+        toast.error('Network error. Please check if backend server is running and try again.')
+      } else {
       toast.error(error.response?.data?.message || error.message || "Failed to save item. Please try again.")
+      }
     } finally {
       setUploadingImages(false)
     }
@@ -867,7 +832,7 @@ export default function ItemDetailsPage() {
           {/* Category Selector */}
           <div>
             <label className="block text-sm font-medium text-gray-900 mb-2">
-              Category (sub-category)
+              Category
             </label>
             <button
               onClick={() => setIsCategoryPopupOpen(true)}
@@ -1244,12 +1209,25 @@ export default function ItemDetailsPage() {
             >
               <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-bold text-gray-900">Select category</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setIsCategoryPopupOpen(false)
+                      navigate('/restaurant/menu-categories')
+                    }}
+                    className="p-2 rounded-lg bg-black text-white hover:bg-gray-800 transition-colors flex items-center gap-1.5"
+                    title="Add Category"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="text-sm font-medium">Add</span>
+                  </button>
                 <button
                   onClick={() => setIsCategoryPopupOpen(false)}
                   className="p-1 rounded-full hover:bg-gray-100"
                 >
                   <X className="w-5 h-5 text-gray-600" />
                 </button>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto p-2">
                 {loadingCategories ? (
@@ -1257,30 +1235,33 @@ export default function ItemDetailsPage() {
                     <Loader2 className="w-6 h-6 animate-spin text-gray-600" />
                   </div>
                 ) : categories.length === 0 ? (
-                  <div className="text-center py-12">
+                  <div className="text-center py-12 space-y-4">
                     <p className="text-sm text-gray-500">No categories available</p>
+                    <button
+                      onClick={() => {
+                        setIsCategoryPopupOpen(false)
+                        navigate('/restaurant/menu-categories')
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Add Category
+                    </button>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {categories.map((cat) => (
-                      <div key={cat.id}>
-                        <h3 className="text-sm font-bold text-gray-900 mb-2">{cat.name}</h3>
                         <div className="space-y-2">
-                          {cat.subCategories.map((subCat) => (
+                    {categories.map((cat) => (
                             <button
-                              key={subCat}
-                              onClick={() => handleCategorySelect(cat.id, subCat)}
+                        key={cat.id}
+                        onClick={() => handleCategorySelect(cat.id, cat.name)}
                               className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                                category === cat.name && subCategory === subCat
+                          category === cat.name
                                   ? "bg-gray-900 text-white"
                                   : "bg-gray-50 text-gray-900 hover:bg-gray-100"
                               }`}
                             >
-                              {subCat}
+                        {cat.name}
                             </button>
-                          ))}
-                        </div>
-                      </div>
                     ))}
                   </div>
                 )}

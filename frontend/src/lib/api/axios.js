@@ -45,17 +45,92 @@ function getTokenForCurrentRoute() {
 apiClient.interceptors.request.use(
   (config) => {
     // Get access token for the current module based on route
-    const accessToken = getTokenForCurrentRoute();
+    let accessToken = getTokenForCurrentRoute();
     
-    // Add token to Authorization header if available
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
+    // Fallback to legacy token if module-specific token not found
+    if (!accessToken || accessToken.trim() === '') {
+      accessToken = localStorage.getItem('accessToken');
+    }
+    
+    // Ensure headers object exists
+    if (!config.headers) {
+      config.headers = {};
+    }
+    
+    // Debug logging for FormData requests
+    if (import.meta.env.DEV && config.data instanceof FormData) {
+      console.log('[API Interceptor] FormData request detected:', {
+        url: config.url,
+        method: config.method,
+        hasAuthHeader: !!config.headers.Authorization,
+        authHeaderPrefix: config.headers.Authorization?.substring(0, 30),
+        hasAccessToken: !!accessToken
+      });
+    }
+
+    // Determine if this is an authenticated route
+    const path = window.location.pathname;
+    const isAuthenticatedRoute = path.startsWith('/admin') || path.startsWith('/restaurant') || path.startsWith('/delivery');
+    
+    // For authenticated routes, ALWAYS ensure Authorization header is set if we have a token
+    // This ensures FormData requests and other requests always have the token
+    if (isAuthenticatedRoute) {
+      // If no Authorization header or invalid format, set it
+      if (!config.headers.Authorization || 
+          (typeof config.headers.Authorization === 'string' && !config.headers.Authorization.startsWith('Bearer '))) {
+        if (accessToken && accessToken.trim() !== '' && accessToken !== 'null' && accessToken !== 'undefined') {
+          config.headers.Authorization = `Bearer ${accessToken.trim()}`;
+          if (import.meta.env.DEV && config.data instanceof FormData) {
+            console.log('[API Interceptor] Added Authorization header for authenticated FormData request');
+          }
+        } else {
+          // Log warning in development if token is missing for authenticated routes
+          if (import.meta.env.DEV) {
+            console.warn(`[API Interceptor] No access token found for authenticated route: ${path}. Request may fail with 401.`);
+            console.warn(`[API Interceptor] Available tokens:`, {
+              admin: localStorage.getItem('admin_accessToken') ? 'exists' : 'missing',
+              restaurant: localStorage.getItem('restaurant_accessToken') ? 'exists' : 'missing',
+              delivery: localStorage.getItem('delivery_accessToken') ? 'exists' : 'missing',
+              user: localStorage.getItem('user_accessToken') ? 'exists' : 'missing',
+              legacy: localStorage.getItem('accessToken') ? 'exists' : 'missing',
+            });
+          }
+        }
+      } else {
+        // Authorization header already set (from getAuthConfig), log in dev mode for FormData
+        if (import.meta.env.DEV && config.data instanceof FormData) {
+          console.log('[API Interceptor] Authorization header already set, preserving it for FormData request');
+        }
+      }
+    } else {
+      // For non-authenticated routes, only add token if no Authorization header is set
+      if (!config.headers.Authorization && accessToken && accessToken.trim() !== '' && accessToken !== 'null' && accessToken !== 'undefined') {
+        config.headers.Authorization = `Bearer ${accessToken.trim()}`;
+      }
     }
 
     // If data is FormData, remove Content-Type header to let axios set it with boundary
+    // BUT: Make sure Authorization header is preserved
     if (config.data instanceof FormData) {
+      // Preserve Authorization header before removing Content-Type
+      const authHeader = config.headers.Authorization;
+      // Remove Content-Type to let axios set it with proper boundary
       delete config.headers['Content-Type'];
+      // Always restore Authorization header if it was set (critical for authentication)
+      if (authHeader) {
+        config.headers.Authorization = authHeader;
+        if (import.meta.env.DEV) {
+          console.log('[API Interceptor] Preserved Authorization header for FormData request');
+        }
+      } else if (accessToken && accessToken.trim() !== '' && accessToken !== 'null' && accessToken !== 'undefined') {
+        // If no auth header but we have a token, add it
+        config.headers.Authorization = `Bearer ${accessToken.trim()}`;
+        if (import.meta.env.DEV) {
+          console.log('[API Interceptor] Added Authorization header for FormData request');
+        }
+      }
     }
+
 
     return config;
   },
@@ -200,11 +275,14 @@ apiClient.interceptors.response.use(
         }
         
         // Refresh failed, clear module-specific token and redirect to login
-        // BUT: Don't redirect if we're on onboarding page - let the component handle the error
+        // BUT: Don't auto-redirect on certain pages - let them handle errors gracefully
         const currentPath = window.location.pathname;
         const isOnboardingPage = currentPath.includes('/onboarding');
+        const isLandingPageManagement = currentPath.includes('/hero-banner-management') || currentPath.includes('/landing-page');
         
-        if (!isOnboardingPage) {
+        // For landing page management, don't auto-logout on 401 - let component handle it
+        // Only auto-logout for other pages after token refresh fails
+        if (!isOnboardingPage && !isLandingPageManagement) {
           if (currentPath.startsWith('/admin')) {
             localStorage.removeItem('admin_accessToken');
             localStorage.removeItem('admin_authenticated');
