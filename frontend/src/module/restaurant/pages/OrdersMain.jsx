@@ -7,6 +7,8 @@ import BottomNavOrders from "../components/BottomNavOrders"
 import RestaurantNavbar from "../components/RestaurantNavbar"
 import notificationSound from "@/assets/audio/alert.mp3"
 
+const STORAGE_KEY = "restaurant_online_status"
+
 // Top filter tabs
 const filterTabs = [
   { id: "preparing", label: "Preparing" },
@@ -71,13 +73,40 @@ export default function OrdersMain() {
     }
   }, [])
 
-  // Show new order popup after 15 seconds
+  // Check delivery status before showing new order popup
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowNewOrderPopup(true)
-    }, 15000)
+    const checkDeliveryStatus = () => {
+      try {
+        const savedStatus = localStorage.getItem(STORAGE_KEY)
+        const isOnline = savedStatus ? JSON.parse(savedStatus) : false
+        
+        // Only show new order popup if delivery status is ON
+        if (isOnline) {
+          const timer = setTimeout(() => {
+            setShowNewOrderPopup(true)
+          }, 15000)
+          return () => clearTimeout(timer)
+        } else {
+          // If delivery status is off, don't show new order popup
+          setShowNewOrderPopup(false)
+        }
+      } catch (error) {
+        console.error("Error checking delivery status:", error)
+      }
+    }
 
-    return () => clearTimeout(timer)
+    checkDeliveryStatus()
+    
+    // Listen for delivery status changes
+    const handleStatusChange = () => {
+      checkDeliveryStatus()
+    }
+    
+    window.addEventListener('restaurantStatusChanged', handleStatusChange)
+    
+    return () => {
+      window.removeEventListener('restaurantStatusChanged', handleStatusChange)
+    }
   }, [])
 
   // Play audio when popup opens

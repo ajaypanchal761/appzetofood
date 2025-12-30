@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import AuthRedirect from "@/components/AuthRedirect"
+import { ProfileProvider } from "@/module/user/context/ProfileContext"
 
 import Home from "@/pages/Home"
 import UserRouter from "@/module/user/components/UserRouter"
@@ -36,8 +37,6 @@ import RestaurantForgotPassword from "@/module/restaurant/pages/auth/ForgotPassw
 import RestaurantOTP from "@/module/restaurant/pages/auth/OTP"
 import RestaurantGoogleCallback from "@/module/restaurant/pages/auth/GoogleCallback"
 import RestaurantWelcome from "@/module/restaurant/pages/auth/Welcome"
-
-import RestaurantPanelRouter from "@/module/restaurant/panel/components/RestaurantPanelRouter"
 
 import AdvertisementsPage from "@/module/restaurant/pages/AdvertisementsPage"
 import AdDetailsPage from "@/module/restaurant/pages/AdDetailsPage"
@@ -144,14 +143,6 @@ export default function App() {
         }
       />
 
-      <Route 
-        path="/restaurant-panel/*" 
-        element={
-          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
-            <RestaurantPanelRouter />
-          </ProtectedRoute>
-        } 
-      />
 
       <Route path="/usermain" element={<HomePage />} />
       <Route path="/usermain/categories" element={<CategoriesPage />} />
@@ -820,7 +811,14 @@ export default function App() {
         } 
       />
 
-      <Route path="/*" element={<UserRouter />} />
+      <Route 
+        path="/*" 
+        element={
+          <ProfileProvider>
+            <UserRouter />
+          </ProfileProvider>
+        } 
+      />
     </Routes>
   )
 }

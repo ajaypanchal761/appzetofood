@@ -1,5 +1,7 @@
 import Restaurant from '../models/Restaurant.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
+import { uploadToCloudinary, deleteFromCloudinary } from '../../../shared/utils/cloudinaryService.js';
+import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import mongoose from 'mongoose';
 
 // Get all restaurants (for user module)
@@ -134,18 +136,32 @@ export const createRestaurantFromOnboarding = async (onboardingData, restaurantI
     }
     
     // Update existing restaurant with latest onboarding data
-    existing.name = step1.restaurantName;
+    existing.name = step1.restaurantName || existing.name;
     existing.slug = slug;
     existing.ownerName = step1.ownerName || existing.ownerName;
     existing.ownerEmail = step1.ownerEmail || existing.ownerEmail;
     existing.ownerPhone = step1.ownerPhone || existing.ownerPhone;
     existing.primaryContactNumber = step1.primaryContactNumber || existing.primaryContactNumber;
     if (step1.location) existing.location = step1.location;
-    if (step2.profileImageUrl) existing.profileImage = step2.profileImageUrl;
-    if (step2.menuImageUrls && step2.menuImageUrls.length > 0) existing.menuImages = step2.menuImageUrls;
-    if (step2.cuisines && step2.cuisines.length > 0) existing.cuisines = step2.cuisines;
-    if (step2.deliveryTimings) existing.deliveryTimings = step2.deliveryTimings;
-    if (step2.openDays && step2.openDays.length > 0) existing.openDays = step2.openDays;
+    
+    // Update step2 data - always update even if empty arrays
+    if (step2) {
+      if (step2.profileImageUrl) {
+        existing.profileImage = step2.profileImageUrl;
+      }
+      if (step2.menuImageUrls) {
+        existing.menuImages = step2.menuImageUrls; // Update even if empty array
+      }
+      if (step2.cuisines) {
+        existing.cuisines = step2.cuisines; // Update even if empty array
+      }
+      if (step2.deliveryTimings) {
+        existing.deliveryTimings = step2.deliveryTimings;
+      }
+      if (step2.openDays) {
+        existing.openDays = step2.openDays; // Update even if empty array
+      }
+    }
     
     // Update step4 data if available
     if (step4) {
@@ -198,4 +214,302 @@ export const createRestaurantFromOnboarding = async (onboardingData, restaurantI
     throw error;
   }
 };
+
+/**
+ * Update restaurant profile
+ * PUT /api/restaurant/profile
+ */
+export const updateRestaurantProfile = asyncHandler(async (req, res) => {
+  try {
+    const restaurantId = req.restaurant._id;
+    const { profileImage, menuImages, name, cuisines, location, ownerName, ownerEmail, ownerPhone } = req.body;
+
+    const restaurant = await Restaurant.findById(restaurantId);
+
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    const updateData = {};
+
+    // Update profile image if provided
+    if (profileImage) {
+      updateData.profileImage = profileImage;
+    }
+
+    // Update menu images if provided
+    if (menuImages !== undefined) {
+      updateData.menuImages = menuImages;
+    }
+
+    // Update name if provided
+    if (name) {
+      updateData.name = name;
+      // Regenerate slug if name changed
+      if (name !== restaurant.name) {
+        let baseSlug = name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+        
+        // Check if slug already exists for another restaurant
+        let slug = baseSlug;
+        const existingBySlug = await Restaurant.findOne({ slug: baseSlug, _id: { $ne: restaurantId } });
+        if (existingBySlug) {
+          let counter = 1;
+          let uniqueSlug = `${baseSlug}-${counter}`;
+          while (await Restaurant.findOne({ slug: uniqueSlug, _id: { $ne: restaurantId } })) {
+            counter++;
+            uniqueSlug = `${baseSlug}-${counter}`;
+          }
+          slug = uniqueSlug;
+        }
+        updateData.slug = slug;
+      }
+    }
+
+    // Update cuisines if provided
+    if (cuisines !== undefined) {
+      updateData.cuisines = cuisines;
+    }
+
+    // Update location if provided
+    if (location) {
+      updateData.location = location;
+    }
+
+    // Update owner details if provided
+    if (ownerName !== undefined) {
+      updateData.ownerName = ownerName;
+    }
+    if (ownerEmail !== undefined) {
+      updateData.ownerEmail = ownerEmail;
+    }
+    if (ownerPhone !== undefined) {
+      updateData.ownerPhone = ownerPhone;
+    }
+
+    // Update restaurant
+    Object.assign(restaurant, updateData);
+    await restaurant.save();
+
+    return successResponse(res, 200, 'Restaurant profile updated successfully', {
+      restaurant: {
+        id: restaurant._id,
+        restaurantId: restaurant.restaurantId,
+        name: restaurant.name,
+        slug: restaurant.slug,
+        profileImage: restaurant.profileImage,
+        menuImages: restaurant.menuImages,
+        cuisines: restaurant.cuisines,
+        location: restaurant.location,
+        ownerName: restaurant.ownerName,
+        ownerEmail: restaurant.ownerEmail,
+        ownerPhone: restaurant.ownerPhone,
+      }
+    });
+  } catch (error) {
+    console.error('Error updating restaurant profile:', error);
+    return errorResponse(res, 500, 'Failed to update restaurant profile');
+  }
+});
+
+/**
+ * Upload restaurant profile image
+ * POST /api/restaurant/profile/image
+ */
+export const uploadProfileImage = asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return errorResponse(res, 400, 'No image file provided');
+    }
+
+    const restaurantId = req.restaurant._id;
+    const restaurant = await Restaurant.findById(restaurantId);
+
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    // Upload to Cloudinary
+    const folder = 'appzeto/restaurant/profile';
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder,
+      resource_type: 'image',
+      transformation: [
+        { width: 800, height: 800, crop: 'fill', gravity: 'auto' },
+        { quality: 'auto' }
+      ]
+    });
+
+    // Update restaurant profile image
+    restaurant.profileImage = {
+      url: result.secure_url,
+      publicId: result.public_id
+    };
+    await restaurant.save();
+
+    return successResponse(res, 200, 'Profile image uploaded successfully', {
+      profileImage: restaurant.profileImage
+    });
+  } catch (error) {
+    console.error('Error uploading profile image:', error);
+    return errorResponse(res, 500, 'Failed to upload profile image');
+  }
+});
+
+/**
+ * Upload restaurant menu image
+ * POST /api/restaurant/profile/menu-image
+ */
+export const uploadMenuImage = asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      return errorResponse(res, 400, 'No image file provided');
+    }
+
+    const restaurantId = req.restaurant._id;
+    const restaurant = await Restaurant.findById(restaurantId);
+
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    // Upload to Cloudinary
+    const folder = 'appzeto/restaurant/menu';
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder,
+      resource_type: 'image',
+      transformation: [
+        { width: 1200, height: 800, crop: 'fill', gravity: 'auto' },
+        { quality: 'auto' }
+      ]
+    });
+
+    // Replace first menu image (main banner) or add if none exists
+    if (!restaurant.menuImages) {
+      restaurant.menuImages = [];
+    }
+    
+    // Replace the first menu image (main banner) instead of adding a new one
+    const newMenuImage = {
+      url: result.secure_url,
+      publicId: result.public_id
+    };
+    
+    if (restaurant.menuImages.length > 0) {
+      // Replace the first image (main banner)
+      restaurant.menuImages[0] = newMenuImage;
+    } else {
+      // Add as first image if array is empty
+      restaurant.menuImages.push(newMenuImage);
+    }
+    
+    await restaurant.save();
+
+    return successResponse(res, 200, 'Menu image uploaded successfully', {
+      menuImage: {
+        url: result.secure_url,
+        publicId: result.public_id
+      },
+      menuImages: restaurant.menuImages
+    });
+  } catch (error) {
+    console.error('Error uploading menu image:', error);
+    return errorResponse(res, 500, 'Failed to upload menu image');
+  }
+});
+
+/**
+ * Update restaurant delivery status (isAcceptingOrders)
+ * PUT /api/restaurant/delivery-status
+ */
+export const updateDeliveryStatus = asyncHandler(async (req, res) => {
+  try {
+    const restaurantId = req.restaurant._id;
+    const { isAcceptingOrders } = req.body;
+
+    if (typeof isAcceptingOrders !== 'boolean') {
+      return errorResponse(res, 400, 'isAcceptingOrders must be a boolean value');
+    }
+
+    const restaurant = await Restaurant.findByIdAndUpdate(
+      restaurantId,
+      { isAcceptingOrders },
+      { new: true }
+    ).select('-password');
+
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    return successResponse(res, 200, 'Delivery status updated successfully', {
+      restaurant: {
+        id: restaurant._id,
+        isAcceptingOrders: restaurant.isAcceptingOrders
+      }
+    });
+  } catch (error) {
+    console.error('Error updating delivery status:', error);
+    return errorResponse(res, 500, 'Failed to update delivery status');
+  }
+});
+
+/**
+ * Delete restaurant account
+ * DELETE /api/restaurant/profile
+ */
+export const deleteRestaurantAccount = asyncHandler(async (req, res) => {
+  try {
+    const restaurantId = req.restaurant._id;
+    const restaurant = await Restaurant.findById(restaurantId);
+
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    // Delete Cloudinary images if they exist
+    try {
+      // Delete profile image
+      if (restaurant.profileImage?.publicId) {
+        try {
+          await deleteFromCloudinary(restaurant.profileImage.publicId);
+        } catch (error) {
+          console.error('Error deleting profile image from Cloudinary:', error);
+          // Continue with account deletion even if image deletion fails
+        }
+      }
+
+      // Delete menu images
+      if (restaurant.menuImages && Array.isArray(restaurant.menuImages)) {
+        for (const menuImage of restaurant.menuImages) {
+          if (menuImage?.publicId) {
+            try {
+              await deleteFromCloudinary(menuImage.publicId);
+            } catch (error) {
+              console.error('Error deleting menu image from Cloudinary:', error);
+              // Continue with account deletion even if image deletion fails
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting images from Cloudinary:', error);
+      // Continue with account deletion even if image deletion fails
+    }
+
+    // Delete the restaurant from database
+    await Restaurant.findByIdAndDelete(restaurantId);
+
+    console.log(`Restaurant account deleted: ${restaurantId}`, { 
+      restaurantId: restaurant.restaurantId,
+      name: restaurant.name 
+    });
+
+    return successResponse(res, 200, 'Restaurant account deleted successfully');
+  } catch (error) {
+    console.error('Error deleting restaurant account:', error);
+    return errorResponse(res, 500, 'Failed to delete restaurant account');
+  }
+});
 

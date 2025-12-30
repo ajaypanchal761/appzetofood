@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import Lenis from "lenis"
 import { ArrowLeft, ChevronDown } from "lucide-react"
 import BottomPopup from "@/module/delivery/components/BottomPopup"
+import { restaurantAPI } from "@/lib/api"
 
 const ADDRESS_STORAGE_KEY = "restaurant_address"
 
@@ -12,37 +13,88 @@ const DEFAULT_LNG = 75.8577
 
 export default function EditRestaurantAddress() {
   const navigate = useNavigate()
-  const [address, setAddress] = useState("Musakhedi, Idrish Nagar, By Pass Road (South), Indore")
-  const [restaurantName, setRestaurantName] = useState("Kadhai Chammach Restaurant")
+  const [address, setAddress] = useState("")
+  const [restaurantName, setRestaurantName] = useState("")
+  const [location, setLocation] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [showSelectOptionDialog, setShowSelectOptionDialog] = useState(false)
   const [selectedOption, setSelectedOption] = useState("minor_correction") // "update_address" or "minor_correction"
   const [lat, setLat] = useState(DEFAULT_LAT)
   const [lng, setLng] = useState(DEFAULT_LNG)
 
-  // Load data from localStorage and listen for updates
-  useEffect(() => {
-    const loadData = () => {
-      try {
-        const savedAddress = localStorage.getItem(ADDRESS_STORAGE_KEY)
-        if (savedAddress) {
-          setAddress(savedAddress)
-        }
+  // Format address from location object
+  const formatAddress = (loc) => {
+    if (!loc) return ""
+    const parts = []
+    if (loc.addressLine1) parts.push(loc.addressLine1.trim())
+    if (loc.addressLine2) parts.push(loc.addressLine2.trim())
+    if (loc.area) parts.push(loc.area.trim())
+    if (loc.city) {
+      const city = loc.city.trim()
+      if (!loc.area || !loc.area.includes(city)) {
+        parts.push(city)
+      }
+    }
+    if (loc.landmark) parts.push(loc.landmark.trim())
+    return parts.join(", ") || ""
+  }
 
-        // Try to get restaurant name from various possible storage keys
-        const savedName = localStorage.getItem("restaurant_name") || 
-                         localStorage.getItem("restaurantName") ||
-                         "Kadhai Chammach Restaurant"
-        setRestaurantName(savedName)
+  // Fetch restaurant data from backend
+  useEffect(() => {
+    const fetchRestaurantData = async () => {
+      try {
+        setLoading(true)
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantName(data.name || "")
+          if (data.location) {
+            setLocation(data.location)
+            const formatted = formatAddress(data.location)
+            setAddress(formatted)
+            // Set coordinates if available
+            if (data.location.latitude && data.location.longitude) {
+              setLat(data.location.latitude)
+              setLng(data.location.longitude)
+            }
+          } else {
+            // Fallback to localStorage
+            try {
+              const savedAddress = localStorage.getItem(ADDRESS_STORAGE_KEY)
+              if (savedAddress) {
+                setAddress(savedAddress)
+              }
+            } catch (error) {
+              console.error("Error loading address from storage:", error)
+            }
+          }
+        }
       } catch (error) {
-        console.error("Error loading data from storage:", error)
+        console.error("Error fetching restaurant data:", error)
+        // Fallback to localStorage
+        try {
+          const savedAddress = localStorage.getItem(ADDRESS_STORAGE_KEY)
+          if (savedAddress) {
+            setAddress(savedAddress)
+          }
+          // Try to get restaurant name from localStorage, but prefer empty string over hardcoded value
+          const savedName = localStorage.getItem("restaurant_name") || 
+                           localStorage.getItem("restaurantName") ||
+                           ""
+          setRestaurantName(savedName)
+        } catch (e) {
+          console.error("Error loading from localStorage:", e)
+        }
+      } finally {
+        setLoading(false)
       }
     }
 
-    loadData()
+    fetchRestaurantData()
 
     // Listen for address updates
     const handleAddressUpdate = () => {
-      loadData()
+      fetchRestaurantData()
     }
 
     window.addEventListener("addressUpdated", handleAddressUpdate)
@@ -84,18 +136,43 @@ export default function EditRestaurantAddress() {
   }
 
   // Handle Proceed to update
-  const handleProceedUpdate = () => {
-    // Here you would handle the actual update logic based on selectedOption
-    if (selectedOption === "update_address") {
-      // Navigate to FSSAI update or address update flow
-      console.log("Update outlet address (FSSAI required)")
-    } else {
-      // Handle minor correction
-      console.log("Make a minor correction to the location pin")
+  const handleProceedUpdate = async () => {
+    try {
+      // For now, we'll update the location in the database
+      // In a real scenario, you might want to handle FSSAI update flow separately
+      if (selectedOption === "update_address") {
+        // For major address update, you might want to navigate to a form
+        // For now, we'll just show a message
+        alert("For major address updates, FSSAI verification may be required. Please contact support.")
+        setShowSelectOptionDialog(false)
+        return
+      } else {
+        // Minor correction - update location coordinates
+        // Note: This is a simplified version. In production, you'd want to let the user
+        // drag the pin on the map and then save the new coordinates
+        const updatedLocation = {
+          ...location,
+          latitude: lat,
+          longitude: lng,
+        }
+        
+        const response = await restaurantAPI.updateProfile({ location: updatedLocation })
+        
+        if (response?.data?.data?.restaurant) {
+          // Update local state
+          setLocation(updatedLocation)
+          // Dispatch event to notify other components
+          window.dispatchEvent(new Event("addressUpdated"))
+          setShowSelectOptionDialog(false)
+          navigate(-1)
+        } else {
+          throw new Error("Invalid response from server")
+        }
+      }
+    } catch (error) {
+      console.error("Error updating address:", error)
+      alert(`Failed to update address: ${error.response?.data?.message || error.message || "Please try again."}`)
     }
-    
-    setShowSelectOptionDialog(false)
-    // You can navigate or show success message here
   }
 
   // Get simplified address for navbar (last two parts: area, city)

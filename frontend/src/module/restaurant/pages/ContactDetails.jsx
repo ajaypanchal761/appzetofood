@@ -1,98 +1,78 @@
 import { useState, useEffect } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
 import {
   ArrowLeft,
   Edit,
   User,
-  Users,
-  UserCog,
   Plus,
-  X,
-  Check,
   Coffee,
-  Mail,
+  Trash2,
 } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import BottomPopup from "@/module/delivery/components/BottomPopup"
-
-// Permissions data structure
-const permissionsData = {
-  owner: {
-    "Home": { description: "Business reports, payouts etc.", allowed: true },
-    "Menu management": { description: "Edit items and item details", allowed: true },
-    "Marketing | Promo": { description: "Create and manage discounts", allowed: true },
-    "Marketing | Ads": { description: "Create and manage ad campaigns", allowed: true },
-    "Operations": { description: "Orders & items management, action on complaints etc.", allowed: true },
-    "Manage Hyperpure": { description: "Purchase and track food raw materials", allowed: true },
-    "Manage users": { description: "Edit owner, manager, staff contact details", allowed: true },
-    "Manage outlet settings": { description: "Adjust outlet timings, contact info & more", allowed: true },
-    "Manage payouts": { description: "View payouts, invoices & tax certificates", allowed: true },
-  },
-  manager: {
-    "Home": { description: "Business reports, payouts etc.", allowed: true },
-    "Menu management": { description: "Edit items and item details", allowed: true },
-    "Marketing | Promo": { description: "Create and manage discounts", allowed: true },
-    "Marketing | Ads": { description: "Create and manage ad campaigns", allowed: false },
-    "Operations": { description: "Orders & items management, action on complaints etc.", allowed: true },
-    "Manage Hyperpure": { description: "Purchase and track food raw materials", allowed: true },
-    "Manage users": { description: "Edit owner, manager, staff contact details", allowed: true },
-    "Manage outlet settings": { description: "Adjust outlet timings, contact info & more", allowed: true },
-    "Manage payouts": { description: "View payouts, invoices & tax certificates", allowed: true },
-  },
-  staff: {
-    "Home": { description: "Business reports, payouts etc.", allowed: false },
-    "Menu management": { description: "Edit items and item details", allowed: false },
-    "Marketing | Promo": { description: "Create and manage discounts", allowed: false },
-    "Marketing | Ads": { description: "Create and manage ad campaigns", allowed: false },
-    "Operations": { description: "Orders & items management, action on complaints etc.", allowed: true },
-    "Manage Hyperpure": { description: "Purchase and track food raw materials", allowed: false },
-    "Manage users": { description: "Edit owner, manager, staff contact details", allowed: false },
-    "Manage outlet settings": { description: "Adjust outlet timings, contact info & more", allowed: false },
-    "Manage payouts": { description: "View payouts, invoices & tax certificates", allowed: false },
-  }
-}
-
-const INVITES_STORAGE_KEY = "restaurant_invited_users"
+import { restaurantAPI } from "@/lib/api"
+import OptimizedImage from "@/components/OptimizedImage"
+import { ImageIcon } from "lucide-react"
 
 export default function ContactDetails() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const [showPermissionsPopup, setShowPermissionsPopup] = useState(false)
-  const [selectedRole, setSelectedRole] = useState("owner")
   const [invitedUsers, setInvitedUsers] = useState([])
   
-  // Owner data - Load from localStorage
+  // Owner data - Load from backend
   const STORAGE_KEY = "restaurant_owner_contact"
-  
-  const getDefaultOwnerData = () => ({
-    name: "RAJKUMAR CHOUHAN Raj",
-    phone: "+91-9981127415",
-    email: "rrajkumarchouhan96@gmail.com",
+  const [ownerData, setOwnerData] = useState({
+    name: "",
+    phone: "",
+    email: "",
     photo: null
   })
+  const [loading, setLoading] = useState(true)
+  const [loadingStaff, setLoadingStaff] = useState(true)
 
-  const [ownerData, setOwnerData] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        return JSON.parse(saved)
+  // Fetch restaurant data from backend
+  useEffect(() => {
+    const fetchRestaurantData = async () => {
+      try {
+        setLoading(true)
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setOwnerData({
+            name: data.ownerName || data.name || "",
+            phone: data.ownerPhone || data.primaryContactNumber || data.phone || "",
+            email: data.ownerEmail || data.email || "",
+            photo: data.profileImage?.url || null
+          })
+        }
+      } catch (error) {
+        console.error("Error fetching restaurant data:", error)
+        // Fallback to localStorage
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY)
+          if (saved) {
+            const parsed = JSON.parse(saved)
+            setOwnerData(parsed)
+          }
+        } catch (e) {
+          console.error("Error loading owner data from localStorage:", e)
+        }
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error("Error loading owner data:", error)
     }
-    return getDefaultOwnerData()
-  })
+
+    fetchRestaurantData()
+
+    // Listen for owner data updates
+    const handleOwnerDataUpdate = () => {
+      fetchRestaurantData()
+    }
+
+    window.addEventListener("ownerDataUpdated", handleOwnerDataUpdate)
+    return () => {
+      window.removeEventListener("ownerDataUpdated", handleOwnerDataUpdate)
+    }
+  }, [])
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -114,13 +94,6 @@ export default function ContactDetails() {
     }
   }, [])
 
-  // Open permissions popup when coming from InviteUser with query param
-  useEffect(() => {
-    const view = searchParams.get("view")
-    if (view === "permissions") {
-      setShowPermissionsPopup(true)
-    }
-  }, [searchParams])
 
   const handleInviteClick = (role = "") => {
     navigate(`/restaurant/invite-user?role=${role}`)
@@ -130,30 +103,45 @@ export default function ContactDetails() {
     navigate("/restaurant/edit-owner")
   }
 
-  // Load invited users from localStorage
+  // Load staff/manager from backend API
   useEffect(() => {
-    const loadInvitedUsers = () => {
+    const fetchStaff = async () => {
       try {
-        const saved = localStorage.getItem(INVITES_STORAGE_KEY)
-        if (saved) {
-          const parsed = JSON.parse(saved)
-          setInvitedUsers(parsed)
-        }
+        setLoadingStaff(true)
+        const response = await restaurantAPI.getStaff()
+        const staffData = response?.data?.data?.staff || response?.data?.staff || []
+        
+        // Transform API data to match frontend format
+        const transformedStaff = staffData.map((staff) => ({
+          id: staff._id || staff.id,
+          name: staff.name,
+          phone: staff.phone,
+          email: staff.email,
+          role: staff.role,
+          status: staff.status,
+          profileImage: staff.profileImage || null,
+          addedAt: staff.addedAt
+        }))
+        
+        setInvitedUsers(transformedStaff)
       } catch (error) {
-        console.error("Error loading invited users:", error)
+        console.error("Error fetching staff:", error)
+        setInvitedUsers([])
+      } finally {
+        setLoadingStaff(false)
       }
     }
 
-    loadInvitedUsers()
+    fetchStaff()
 
-    // Listen for invites updates
-    const handleInvitesUpdate = () => {
-      loadInvitedUsers()
+    // Listen for staff updates
+    const handleStaffUpdate = () => {
+      fetchStaff()
     }
 
-    window.addEventListener("invitesUpdated", handleInvitesUpdate)
+    window.addEventListener("invitesUpdated", handleStaffUpdate)
     return () => {
-      window.removeEventListener("invitesUpdated", handleInvitesUpdate)
+      window.removeEventListener("invitesUpdated", handleStaffUpdate)
     }
   }, [])
 
@@ -177,33 +165,25 @@ export default function ContactDetails() {
     }
   }, [])
 
-  // Calculate days until expiration
-  const getDaysUntilExpiration = (expiresAt) => {
-    const now = new Date()
-    const expiry = new Date(expiresAt)
-    const diffTime = expiry - now
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays > 0 ? diffDays : 0
-  }
-
-  // Resend invite
-  const handleResendInvite = (inviteId) => {
-    try {
-      const updatedInvites = invitedUsers.map(invite => {
-        if (invite.id === inviteId) {
-          return {
-            ...invite,
-            invitedAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-          }
+  // Delete user
+  const handleDeleteInvite = async (userId) => {
+    if (window.confirm("Are you sure you want to remove this user?")) {
+      try {
+        const response = await restaurantAPI.deleteStaff(userId)
+        
+        if (response?.data?.success) {
+          // Remove from local state
+          setInvitedUsers(prev => prev.filter(user => user.id !== userId))
+          // Dispatch event to notify other components
+          window.dispatchEvent(new Event("invitesUpdated"))
+        } else {
+          throw new Error("Failed to delete user")
         }
-        return invite
-      })
-      localStorage.setItem(INVITES_STORAGE_KEY, JSON.stringify(updatedInvites))
-      setInvitedUsers(updatedInvites)
-      window.dispatchEvent(new Event("invitesUpdated"))
-    } catch (error) {
-      console.error("Error resending invite:", error)
+      } catch (error) {
+        console.error("Error deleting user:", error)
+        const errorMessage = error.response?.data?.message || error.message || "Failed to remove user. Please try again."
+        alert(errorMessage)
+      }
     }
   }
 
@@ -212,23 +192,15 @@ export default function ContactDetails() {
     <div className="min-h-screen bg-gray-100 overflow-x-hidden pb-24">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 flex-1">
-            <button
-              onClick={() => navigate("/restaurant")}
-              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-              aria-label="Go back"
-            >
-              <ArrowLeft className="w-6 h-6 text-gray-900" />
-            </button>
-            <h1 className="text-lg font-bold text-gray-900">Contact details</h1>
-          </div>
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowPermissionsPopup(true)}
-            className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition-colors"
+            onClick={() => navigate("/restaurant")}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Go back"
           >
-            View permissions
+            <ArrowLeft className="w-6 h-6 text-gray-900" />
           </button>
+          <h1 className="text-lg font-bold text-gray-900">Contact details</h1>
         </div>
       </div>
 
@@ -240,9 +212,9 @@ export default function ContactDetails() {
           <div className="bg-white rounded-0 p-4 flex items-center gap-4">
             <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
               {ownerData.photo ? (
-                <img 
-                  src={ownerData.photo} 
-                  alt="Owner profile" 
+                <OptimizedImage
+                  src={ownerData.photo}
+                  alt="Owner profile"
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -250,9 +222,15 @@ export default function ContactDetails() {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-base font-bold text-gray-900 mb-1">{ownerData.name || "RAJKUMAR CHOUHAN Raj"}</p>
-              <p className="text-sm text-gray-900 font-normal">{ownerData.phone || "+91-9981127415"}</p>
-              <p className="text-sm text-gray-900 font-normal">{ownerData.email || "rrajkumarchouhan96@gmail.com"}</p>
+              <p className="text-base font-bold text-gray-900 mb-1">
+                {loading ? "Loading..." : (ownerData.name || "N/A")}
+              </p>
+              <p className="text-sm text-gray-900 font-normal">
+                {loading ? "Loading..." : (ownerData.phone || "N/A")}
+              </p>
+              <p className="text-sm text-gray-900 font-normal">
+                {loading ? "Loading..." : (ownerData.email || "N/A")}
+              </p>
             </div>
             <button
               onClick={handleEditOwner}
@@ -275,59 +253,56 @@ export default function ContactDetails() {
                   onClick={() => handleInviteClick("manager")}
                   className="text-blue-600 hover:text-blue-700 transition-colors"
                 >
-                  Invite someone now
+                  Add someone
                 </button>
               </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {invitedUsers
-                .filter(invite => invite.role === "manager")
-                .map((invite) => {
-                  const daysLeft = getDaysUntilExpiration(invite.expiresAt)
-                  return (
-                    <div key={invite.id} className="bg-white rounded-0 p-4">
+              {loadingStaff ? (
+                <div className="bg-white rounded-0 p-4">
+                  <p className="text-sm text-gray-500">Loading...</p>
+                </div>
+              ) : (
+                invitedUsers
+                  .filter(user => user.role === "manager")
+                  .map((user) => {
+                    return (
+                    <div key={user.id} className="bg-white rounded-0 p-4">
                       <div className="flex items-start gap-3">
-                        <div className="w-12 h-12 bg-orange-100 border border-orange-300 rounded-full flex items-center justify-center shrink-0">
-                          <Coffee className="w-6 h-6 text-orange-700" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="bg-orange-500 text-white text-xs font-semibold px-2 py-0.5 rounded">
-                              INVITED
-                            </span>
-                            <button
-                              onClick={() => handleResendInvite(invite.id)}
-                              className="text-blue-600 text-xs font-normal hover:text-blue-700 transition-colors"
-                            >
-                              Resend invite
-                            </button>
-                          </div>
-                          <p className="text-sm text-gray-900 font-normal">
-                            {invite.phone || invite.email}
-                          </p>
-                          {daysLeft > 0 ? (
-                            <p className="text-sm text-red-600 font-normal mt-1">
-                              Invite expires in {daysLeft} {daysLeft === 1 ? "day" : "days"}.
-                            </p>
+                        <div className="w-12 h-12 bg-orange-100 border border-orange-300 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
+                          {user.profileImage?.url ? (
+                            <img
+                              src={user.profileImage.url}
+                              alt={user.name}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <p className="text-sm text-red-600 font-normal mt-1">
-                              Invite has expired.
-                            </p>
+                            <Coffee className="w-6 h-6 text-orange-700" />
                           )}
                         </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 -mb-5">
+                              <button
+                                onClick={() => handleDeleteInvite(user.id)}
+                                className="text-red-600 text-xs font-normal hover:text-red-700 transition-colors ml-auto"
+                                aria-label="Delete user"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </div>
+                            <p className="text-base font-bold text-gray-900 mb-0.5 ">
+                              {user.name || "N/A"}
+                            </p>
+                            <p className="text-sm text-gray-900 font-normal">
+                              {user.phone || user.email}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-              <div className="bg-white rounded-0 p-4">
-                <button
-                  onClick={() => handleInviteClick("manager")}
-                  className="text-blue-600 hover:text-blue-700 transition-colors text-sm font-normal"
-                >
-                  + Invite another manager
-                </button>
-              </div>
+                    )
+                  })
+              )}
             </div>
           )}
         </div>
@@ -343,59 +318,56 @@ export default function ContactDetails() {
                   onClick={() => handleInviteClick("staff")}
                   className="text-blue-600 hover:text-blue-700 transition-colors"
                 >
-                  Invite someone now
+                  Add someone
                 </button>
               </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {invitedUsers
-                .filter(invite => invite.role === "staff")
-                .map((invite) => {
-                  const daysLeft = getDaysUntilExpiration(invite.expiresAt)
-                  return (
-                    <div key={invite.id} className="bg-white rounded-0 p-4">
+              {loadingStaff ? (
+                <div className="bg-white rounded-0 p-4">
+                  <p className="text-sm text-gray-500">Loading...</p>
+                </div>
+              ) : (
+                invitedUsers
+                  .filter(user => user.role === "staff")
+                  .map((user) => {
+                    return (
+                    <div key={user.id} className="bg-white rounded-0 p-4">
                       <div className="flex items-start gap-3">
-                        <div className="w-12 h-12 bg-orange-100 border border-orange-300 rounded-full flex items-center justify-center shrink-0">
-                          <Coffee className="w-6 h-6 text-orange-700" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="bg-orange-500 text-white text-xs font-semibold px-2 py-0.5 rounded">
-                              INVITED
-                            </span>
-                            <button
-                              onClick={() => handleResendInvite(invite.id)}
-                              className="text-blue-600 text-xs font-normal hover:text-blue-700 transition-colors"
-                            >
-                              Resend invite
-                            </button>
-                          </div>
-                          <p className="text-sm text-gray-900 font-normal">
-                            {invite.phone || invite.email}
-                          </p>
-                          {daysLeft > 0 ? (
-                            <p className="text-sm text-red-600 font-normal mt-1">
-                              Invite expires in {daysLeft} {daysLeft === 1 ? "day" : "days"}.
-                            </p>
+                        <div className="w-12 h-12 bg-orange-100 border border-orange-300 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
+                          {user.profileImage?.url ? (
+                            <img
+                              src={user.profileImage.url}
+                              alt={user.name}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
-                            <p className="text-sm text-red-600 font-normal mt-1">
-                              Invite has expired.
-                            </p>
+                            <Coffee className="w-6 h-6 text-orange-700" />
                           )}
                         </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 -mb-5">
+                              <button
+                                onClick={() => handleDeleteInvite(user.id)}
+                                className="text-red-600 text-xs font-normal hover:text-red-700 transition-colors ml-auto"
+                                aria-label="Delete user"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </div>
+                            <p className="text-base font-bold text-gray-900 mb-0.5">
+                              {user.name || "N/A"}
+                            </p>
+                            <p className="text-sm text-gray-900 font-normal">
+                              {user.phone || user.email}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-              <div className="bg-white rounded-0 p-4">
-                <button
-                  onClick={() => handleInviteClick("staff")}
-                  className="text-blue-600 hover:text-blue-700 transition-colors text-sm font-normal"
-                >
-                  + Invite another staff
-                </button>
-              </div>
+                    )
+                  })
+              )}
             </div>
           )}
         </div>
@@ -409,91 +381,9 @@ export default function ContactDetails() {
         className="fixed bottom-6 right-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold shadow-lg flex items-center gap-2 transition-colors z-40"
       >
         <Plus className="w-5 h-5" />
-        <span>Invite user</span>
+        <span>Add user</span>
       </motion.button>
 
-      {/* View Permissions Bottom Popup */}
-      <BottomPopup
-        isOpen={showPermissionsPopup}
-        onClose={() => setShowPermissionsPopup(false)}
-        showHandle={true}
-        title="View permissions"
-        maxHeight="90vh"
-      >
-        <div className="pb-4">
-          {/* Role Selection Tabs */}
-          <div className="flex gap-3 mb-6">
-            <button
-              onClick={() => setSelectedRole("owner")}
-              className={`flex-1 flex flex-col items-center gap-2 py-3 px-4 rounded-lg transition-colors ${
-                selectedRole === "owner"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-900"
-              }`}
-            >
-              <Users className={`w-6 h-6 ${selectedRole === "owner" ? "text-white" : "text-gray-600"}`} />
-              <span className="text-sm font-bold">Owner</span>
-            </button>
-            <button
-              onClick={() => setSelectedRole("manager")}
-              className={`flex-1 flex flex-col items-center gap-2 py-3 px-4 rounded-lg transition-colors ${
-                selectedRole === "manager"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-900"
-              }`}
-            >
-              <UserCog className={`w-6 h-6 ${selectedRole === "manager" ? "text-white" : "text-gray-600"}`} />
-              <span className="text-sm font-bold">Manager</span>
-            </button>
-            <button
-              onClick={() => setSelectedRole("staff")}
-              className={`flex-1 flex flex-col items-center gap-2 py-3 px-4 rounded-lg transition-colors ${
-                selectedRole === "staff"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-900"
-              }`}
-            >
-              <Users className={`w-6 h-6 ${selectedRole === "staff" ? "text-white" : "text-gray-600"}`} />
-              <span className="text-sm font-bold">Staff</span>
-            </button>
-          </div>
-
-          {/* Permissions List */}
-          <div className="space-y-0">
-            {Object.entries(permissionsData[selectedRole])
-              .sort(([, a], [, b]) => {
-                // Sort: allowed permissions first (true comes before false)
-                if (a.allowed && !b.allowed) return -1
-                if (!a.allowed && b.allowed) return 1
-                return 0
-              })
-              .map(([permission, data], index, sortedArray) => (
-              <div key={permission}>
-                <div className="flex items-start justify-between py-4">
-                  <div className="flex-1 min-w-0 pr-4">
-                    <p className="text-base font-bold text-gray-900 mb-1">{permission}</p>
-                    <p className="text-sm text-gray-500 font-normal">{data.description}</p>
-                  </div>
-                  <div className="shrink-0">
-                    {data.allowed ? (
-                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                        <Check className="w-4 h-4 text-white" />
-                      </div>
-                    ) : (
-                      <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
-                        <X className="w-4 h-4 text-gray-600" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {index < sortedArray.length - 1 && (
-                  <div className="border-b border-gray-200" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </BottomPopup>
     </div>
   )
 }

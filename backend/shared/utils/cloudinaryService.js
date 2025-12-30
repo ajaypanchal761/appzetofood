@@ -59,4 +59,17 @@ export function uploadToCloudinary(buffer, options = {}) {
   });
 }
 
+/**
+ * Delete a file from Cloudinary by public ID
+ * @param {string} publicId - Cloudinary public ID
+ * @returns {Promise<Object>} Cloudinary deletion result
+ */
+export function deleteFromCloudinary(publicId) {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.destroy(publicId, (error, result) => {
+      if (error) return reject(error);
+      resolve(result);
+    });
+  });
+}
 

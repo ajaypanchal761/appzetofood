@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Search, Menu, ChevronRight, MapPin, X, Bell } from "lucide-react"
+import { restaurantAPI } from "@/lib/api"
 
 export default function RestaurantNavbar({
-  restaurantName = "Kadhai Chammach Restaurant",
-  location = "By Pass Road (South)",
+  restaurantName: propRestaurantName,
+  location: propLocation,
   showSearch = true,
   showOfflineOnlineTag = true,
   showNotifications = true,
@@ -13,29 +14,99 @@ export default function RestaurantNavbar({
   const [isSearchActive, setIsSearchActive] = useState(false)
   const [searchValue, setSearchValue] = useState("")
   const [status, setStatus] = useState("Offline")
+  const [restaurantData, setRestaurantData] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  // Load status from localStorage on mount
+  // Fetch restaurant data on mount
   useEffect(() => {
-    try {
-      const savedStatus = localStorage.getItem('restaurant_online_status')
-      if (savedStatus !== null) {
-        setStatus(JSON.parse(savedStatus) ? "Online" : "Offline")
+    const fetchRestaurantData = async () => {
+      try {
+        setLoading(true)
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantData(data)
+        }
+      } catch (error) {
+        console.error("Error fetching restaurant data:", error)
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error("Error loading restaurant status:", error)
     }
+
+    fetchRestaurantData()
   }, [])
 
-  // Listen for status changes
+  // Format address from location object
+  const formatAddress = (location) => {
+    if (!location) return ""
+    
+    const parts = []
+    
+    // Add area if available
+    if (location.area) {
+      parts.push(location.area.trim())
+    }
+    
+    // Add city if available and not already in area
+    if (location.city) {
+      const city = location.city.trim()
+      // Only add city if it's not already included in area
+      if (!location.area || !location.area.includes(city)) {
+        parts.push(city)
+      }
+    }
+    
+    // Add landmark if available (optional, can be shown separately)
+    // For now, we'll include it in the address
+    // if (location.landmark) {
+    //   parts.push(location.landmark.trim())
+    // }
+    
+    return parts.join(", ") || ""
+  }
+
+  // Get restaurant name (use prop if provided, otherwise use fetched data)
+  const restaurantName = propRestaurantName || restaurantData?.name || "Restaurant"
+
+  // Get location (use prop if provided, otherwise format from fetched data)
+  const location = propLocation || (restaurantData?.location ? formatAddress(restaurantData.location) : "")
+
+  // Load status from localStorage on mount and listen for changes
   useEffect(() => {
+    const updateStatus = () => {
+      try {
+        const savedStatus = localStorage.getItem('restaurant_online_status')
+        if (savedStatus !== null) {
+          const isOnline = JSON.parse(savedStatus)
+          setStatus(isOnline ? "Online" : "Offline")
+        } else {
+          // Default to Offline if not set
+          setStatus("Offline")
+        }
+      } catch (error) {
+        console.error("Error loading restaurant status:", error)
+        setStatus("Offline")
+      }
+    }
+
+    // Load initial status
+    updateStatus()
+
+    // Listen for status changes from RestaurantStatus page
     const handleStatusChange = (event) => {
-      setStatus(event.detail.isOnline ? "Online" : "Offline")
+      const isOnline = event.detail?.isOnline ?? false
+      setStatus(isOnline ? "Online" : "Offline")
     }
 
     window.addEventListener('restaurantStatusChanged', handleStatusChange)
     
+    // Also check localStorage periodically to catch direct changes
+    const interval = setInterval(updateStatus, 1000)
+    
     return () => {
       window.removeEventListener('restaurantStatusChanged', handleStatusChange)
+      clearInterval(interval)
     }
   }, [])
 
@@ -98,16 +169,18 @@ export default function RestaurantNavbar({
       <div className="flex-1 min-w-0 pr-4">
         {/* Restaurant Name */}
         <h1 className="text-base font-bold text-gray-900 truncate">
-          {restaurantName}
+          {loading ? "Loading..." : restaurantName}
         </h1>
         
         {/* Location */}
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <MapPin className="w-3 h-3 text-gray-500 shrink-0" />
-          <p className="text-xs text-gray-600 truncate">
-            {location}
-          </p>
-        </div>
+        {location && (
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <MapPin className="w-3 h-3 text-gray-500 shrink-0" />
+            <p className="text-xs text-gray-600 truncate">
+              {location}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Right Side - Interactive Elements */}

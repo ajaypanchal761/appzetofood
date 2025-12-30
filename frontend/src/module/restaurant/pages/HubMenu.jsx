@@ -19,7 +19,7 @@ import {
   Trash2
 } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
-import { getAllFoods, saveFood, deleteFood } from "../utils/foodManagement"
+// Removed foodManagement - now using backend API directly
 import { Switch } from "@/components/ui/switch"
 import { useNavigate } from "react-router-dom"
 import { restaurantAPI } from "@/lib/api"
@@ -28,7 +28,6 @@ import { toast } from "sonner"
 export default function HubMenu() {
   const navigate = useNavigate()
   const [loadingMenu, setLoadingMenu] = useState(true)
-  const [allFoods, setAllFoods] = useState([])
   const [activeTab, setActiveTab] = useState("all")
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isAddPopupOpen, setIsAddPopupOpen] = useState(false)
@@ -54,10 +53,13 @@ export default function HubMenu() {
   const [newCategoryName, setNewCategoryName] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [restaurantData, setRestaurantData] = useState(null)
 
-  // Restaurant info
-  const restaurantName = "Kadhai Chammach Restaurant"
-  const restaurantExpertise = "Pizza, Burger"
+  // Restaurant info - fetch from backend
+  const restaurantName = restaurantData?.name || ""
+  const restaurantExpertise = restaurantData?.cuisines?.length > 0 
+    ? restaurantData.cuisines.join(", ") 
+    : ""
 
   // Handle scroll to change title
   useEffect(() => {
@@ -74,88 +76,85 @@ export default function HubMenu() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  // Filter options with counts
-  const filterOptions = [
-    { id: "recommended", label: "Recommended", count: 50 },
-    { id: "out-of-stock", label: "Out of stock", count: 97 },
-    { id: "goods", label: "Goods", count: 0 },
-    { id: "services", label: "Services", count: 101 },
-    { id: "item-not-live", label: "Item not live", count: 0 },
-    { id: "photos-rejected", label: "Photos rejected", count: 0 },
-    { id: "no-photos", label: "No photos", count: 27 },
-    { id: "under-review", label: "Under review", count: 0 },
-    { id: "without-description", label: "Without description", count: 89 },
-    { id: "without-serving-info", label: "Without serving info", count: 79 },
-  ]
-
-  // Quick filter buttons (horizontally scrollable)
-  const quickFilters = [
-    { id: "out-of-stock", label: "Out of stock", count: 97 },
-    { id: "no-photos", label: "No photos", count: 27 },
-    { id: "recommended", label: "Recommended", count: 50 },
-    { id: "services", label: "Services", count: 100 },
-    { id: "photos-rejected", label: "Photos Rejected", count: 2 },
-  ]
-
-  // Transform and group foods
-  const transformedFoods = allFoods.map(food => ({
-    ...food,
-    price: food.price || 0,
-    category: food.category || "Varieties",
-    foodType: food.foodType || "Non-Veg",
-    isAvailable: food.isAvailable !== undefined ? food.isAvailable : true,
-    isRecommended: food.isRecommended || false,
-    image: food.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop",
-    photoCount: 1, // Mock photo count
-  }))
-
-  // Group foods by category
-  const menuGroups = useMemo(() => {
-    const grouped = {}
-    transformedFoods.forEach(food => {
-      const category = food.category || "Other"
-      if (!grouped[category]) {
-        grouped[category] = []
+  // Calculate filter counts from menu data
+  const calculateFilterCounts = useMemo(() => {
+    // Get all items from menuData (including subsections)
+    const allItems = []
+    menuData.forEach(section => {
+      if (section.items && Array.isArray(section.items)) {
+        allItems.push(...section.items)
       }
-      grouped[category].push(food)
+      if (section.subsections && Array.isArray(section.subsections)) {
+        section.subsections.forEach(subsection => {
+          if (subsection.items && Array.isArray(subsection.items)) {
+            allItems.push(...subsection.items)
+          }
+        })
+      }
     })
+
+    // Calculate counts for each filter (matching the filtering logic exactly)
+    const counts = {
+      recommended: allItems.filter(item => item.isRecommended === true).length,
+      "out-of-stock": allItems.filter(item => !item.isAvailable).length,
+      "no-photos": allItems.filter(item => !item.image || item.photoCount === 0).length,
+      "without-description": allItems.filter(item => !item.description || item.description.trim() === "").length,
+      "without-serving-info": allItems.filter(item => !item.variations || item.variations.length === 0).length,
+      "item-not-live": allItems.filter(item => !item.isAvailable).length,
+      "photos-rejected": 0, // This would need a status field in the item model
+      "under-review": 0, // This would need a status field in the item model
+      goods: 0, // This would need a category type field
+      services: 0, // This would need a category type field
+    }
+
+    return counts
+  }, [menuData])
+
+  // Filter options with dynamic counts
+  const filterOptions = useMemo(() => [
+    { id: "recommended", label: "Recommended", count: calculateFilterCounts.recommended },
+    { id: "out-of-stock", label: "Out of stock", count: calculateFilterCounts["out-of-stock"] },
+    { id: "goods", label: "Goods", count: calculateFilterCounts.goods },
+    { id: "services", label: "Services", count: calculateFilterCounts.services },
+    { id: "item-not-live", label: "Item not live", count: calculateFilterCounts["item-not-live"] },
+    { id: "photos-rejected", label: "Photos rejected", count: calculateFilterCounts["photos-rejected"] },
+    { id: "no-photos", label: "No photos", count: calculateFilterCounts["no-photos"] },
+    { id: "under-review", label: "Under review", count: calculateFilterCounts["under-review"] },
+    { id: "without-description", label: "Without description", count: calculateFilterCounts["without-description"] },
+    { id: "without-serving-info", label: "Without serving info", count: calculateFilterCounts["without-serving-info"] },
+  ], [calculateFilterCounts])
+
+  // Quick filter buttons (horizontally scrollable) - only show filters with count > 0
+  const quickFilters = useMemo(() => {
+    const filters = [
+      { id: "out-of-stock", label: "Out of stock", count: calculateFilterCounts["out-of-stock"] },
+      { id: "no-photos", label: "No photos", count: calculateFilterCounts["no-photos"] },
+      { id: "recommended", label: "Recommended", count: calculateFilterCounts.recommended },
+      { id: "services", label: "Services", count: calculateFilterCounts.services },
+      { id: "photos-rejected", label: "Photos Rejected", count: calculateFilterCounts["photos-rejected"] },
+    ]
+    // Only return filters with count > 0
+    return filters.filter(f => f.count > 0)
+  }, [calculateFilterCounts])
+
+  // Menu groups are now directly from menuData (fetched from backend)
+
+  // Fetch restaurant data on mount
+  useEffect(() => {
+    const fetchRestaurantData = async () => {
+      try {
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantData(data)
+        }
+      } catch (error) {
+        console.error('Error fetching restaurant data:', error)
+      }
+    }
     
-    return Object.entries(grouped).map(([category, items], index) => ({
-      id: category.toLowerCase().replace(/\s+/g, "-"),
-      name: category,
-      items: items.map(item => ({
-        ...item,
-        id: String(item.id || Date.now() + Math.random()), // Ensure id is string
-        isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
-        isRecommended: item.isRecommended || false,
-        // Ensure all required fields are present
-        name: item.name || "Unnamed Item",
-        price: item.price || 0,
-        category: item.category || category,
-        foodType: item.foodType || "Non-Veg",
-        image: item.image || "",
-        nameArabic: item.nameArabic || "",
-        rating: item.rating ?? 0.0,
-        reviews: item.reviews ?? 0,
-        stock: item.stock || "Unlimited",
-        discount: item.discount || null,
-        originalPrice: item.originalPrice || null,
-        availabilityTimeStart: item.availabilityTimeStart || "12:01 AM",
-        availabilityTimeEnd: item.availabilityTimeEnd || "11:57 PM",
-        description: item.description || "",
-        discountType: item.discountType || "Percent",
-        discountAmount: item.discountAmount ?? 0.0,
-        variations: Array.isArray(item.variations) ? item.variations : [],
-        tags: Array.isArray(item.tags) ? item.tags : [],
-        nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
-        allergies: Array.isArray(item.allergies) ? item.allergies : [],
-        photoCount: item.photoCount ?? 1,
-      })),
-      subsections: [], // Always include subsections array
-      isEnabled: true,
-      order: index, // Add order field
-    }))
-  }, [transformedFoods])
+    fetchRestaurantData()
+  }, [])
 
   // Fetch menu from API on mount
   useEffect(() => {
@@ -168,31 +167,20 @@ export default function HubMenu() {
           const menuSections = response.data.data.menu.sections || []
           setMenuData(menuSections)
           
-          // Transform menu sections to foods format for backward compatibility
-          const foods = []
-          menuSections.forEach((section) => {
-            if (section.items && section.items.length > 0) {
-              foods.push(...section.items)
-            }
-            if (section.subsections && section.subsections.length > 0) {
-              section.subsections.forEach((subsection) => {
-                if (subsection.items && subsection.items.length > 0) {
-                  foods.push(...subsection.items)
-                }
-              })
-            }
-          })
-          setAllFoods(foods)
+          // Menu data is now directly from backend, no need to transform
         } else {
           // Empty menu - start fresh
           setMenuData([])
-          setAllFoods([])
         }
       } catch (error) {
         console.error('Error fetching menu:', error)
-        toast.error('Failed to load menu')
+        // Check if it's a network error (backend not running)
+        if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+          toast.error('Cannot connect to server. Please check if backend is running.')
+        } else {
+          toast.error('Failed to load menu')
+        }
         setMenuData([])
-        setAllFoods([])
       } finally {
         setLoadingMenu(false)
       }
@@ -284,7 +272,14 @@ export default function HubMenu() {
           console.log('✅ Menu saved successfully with', normalizedSections.length, 'sections')
         } catch (error) {
           console.error('Error saving menu:', error)
-          toast.error('Failed to save menu changes')
+          // Check if it's a network error (backend not running)
+          if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+            console.warn('Backend server may not be running. Menu changes will be saved when connection is restored.')
+            // Don't show error toast for network errors during auto-save to avoid spam
+            // The user will see the error when they manually try to save
+          } else {
+            toast.error('Failed to save menu changes')
+          }
         }
       }, 1000) // Debounce: save 1 second after last change
       
@@ -301,93 +296,12 @@ export default function HubMenu() {
   //   }
   // }, [menuGroups, loadingMenu])
 
-  // Listen for food changes and refresh menu data
-  useEffect(() => {
-    const handleFoodsChanged = () => {
-      const updatedFoods = getAllFoods()
-      const updatedTransformedFoods = updatedFoods.map(food => ({
-        ...food,
-        price: food.price || 0,
-        category: food.category || "Varieties",
-        foodType: food.foodType || "Non-Veg",
-        isAvailable: food.isAvailable !== undefined ? food.isAvailable : true,
-        isRecommended: food.isRecommended || false,
-        image: food.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop",
-        photoCount: 1,
-      }))
-      
-      const grouped = {}
-      updatedTransformedFoods.forEach(food => {
-        const category = food.category || "Other"
-        if (!grouped[category]) {
-          grouped[category] = []
-        }
-        grouped[category].push(food)
-      })
-      
-      const updatedMenuGroups = Object.entries(grouped).map(([category, items], index) => ({
-        id: category.toLowerCase().replace(/\s+/g, "-"),
-        name: category,
-        items: items.map(item => ({
-          ...item,
-          id: String(item.id || Date.now() + Math.random()), // Ensure id is string
-          isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
-          isRecommended: item.isRecommended || false,
-          // Ensure all required fields are present
-          name: item.name || "Unnamed Item",
-          price: item.price || 0,
-          category: item.category || category,
-          foodType: item.foodType || "Non-Veg",
-          image: item.image || "",
-          nameArabic: item.nameArabic || "",
-          rating: item.rating ?? 0.0,
-          reviews: item.reviews ?? 0,
-          stock: item.stock || "Unlimited",
-          discount: item.discount || null,
-          originalPrice: item.originalPrice || null,
-          availabilityTimeStart: item.availabilityTimeStart || "12:01 AM",
-          availabilityTimeEnd: item.availabilityTimeEnd || "11:57 PM",
-          description: item.description || "",
-          discountType: item.discountType || "Percent",
-          discountAmount: item.discountAmount ?? 0.0,
-          variations: Array.isArray(item.variations) ? item.variations.map(v => ({
-            id: String(v.id || Date.now() + Math.random()),
-            name: v.name || "",
-            price: v.price || 0,
-            stock: v.stock || "Unlimited",
-          })) : [],
-          tags: Array.isArray(item.tags) ? item.tags : [],
-          nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
-          allergies: Array.isArray(item.allergies) ? item.allergies : [],
-          photoCount: item.photoCount ?? 1,
-        })),
-        subsections: [], // Always include subsections array
-        isEnabled: true,
-        order: index, // Add order field
-      }))
-      
-      setMenuData(updatedMenuGroups)
-    }
-
-    window.addEventListener('foodsChanged', handleFoodsChanged)
-    window.addEventListener('foodAdded', handleFoodsChanged)
-    window.addEventListener('foodUpdated', handleFoodsChanged)
-    window.addEventListener('storage', handleFoodsChanged)
-
-    return () => {
-      window.removeEventListener('foodsChanged', handleFoodsChanged)
-      window.removeEventListener('foodAdded', handleFoodsChanged)
-      window.removeEventListener('foodUpdated', handleFoodsChanged)
-      window.removeEventListener('storage', handleFoodsChanged)
-    }
-  }, [])
-
   // Expand all groups by default on mount
   useEffect(() => {
-    if (expandedGroups.size === 0 && menuGroups.length > 0) {
-      setExpandedGroups(new Set(menuGroups.map(g => g.id)))
+    if (expandedGroups.size === 0 && menuData.length > 0) {
+      setExpandedGroups(new Set(menuData.map(g => g.id)))
     }
-  }, [menuGroups, expandedGroups])
+  }, [menuData, expandedGroups])
 
   // Prevent body scroll when popups are open
   useEffect(() => {
@@ -614,41 +528,65 @@ export default function HubMenu() {
     setIsAddPopupOpen(false) // Close the main add popup
   }
 
-  const handleContinueAddCategory = () => {
-    if (!newCategoryName.trim()) return
+  const handleContinueAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error('Please enter a category name')
+      return
+    }
     
-    // Navigate to new item page with new category
-    navigate('/restaurant/hub-menu/item/new', {
-      state: {
-        category: newCategoryName.trim(),
-        isNewCategory: true
+    try {
+      // Add category to backend
+      const response = await restaurantAPI.addSection(newCategoryName.trim())
+      
+      if (response.data && response.data.success) {
+        // Refresh menu data
+        const menuResponse = await restaurantAPI.getMenu()
+        if (menuResponse.data && menuResponse.data.success && menuResponse.data.data && menuResponse.data.data.menu) {
+          setMenuData(menuResponse.data.data.menu.sections || [])
+        }
+        
+        toast.success('Category added successfully!')
+        
+        // Navigate to new item page with new category
+        navigate('/restaurant/hub-menu/item/new', {
+          state: {
+            category: newCategoryName.trim(),
+            isNewCategory: true,
+            sectionId: response.data.data.section.id
+          }
+        })
+      } else {
+        toast.error(response.data?.message || 'Failed to add category')
       }
-    })
+    } catch (error) {
+      console.error('Error adding category:', error)
+      toast.error(error.response?.data?.message || 'Failed to add category')
+    }
     
     // Close popup and reset
     setIsAddCategoryPopupOpen(false)
     setNewCategoryName("")
   }
 
-  const handleDeleteCategory = () => {
+  const handleDeleteCategory = async () => {
     if (!selectedCategory) return
     
     if (!window.confirm(`Are you sure you want to delete the category "${selectedCategory.name}"? This will delete all items in this category.`)) {
       return
     }
 
-    // Delete all foods in this category
-    const allFoods = getAllFoods()
-    const updatedFoods = allFoods.filter(food => food.category !== selectedCategory.name)
-
-    // Save updated foods
     try {
-      localStorage.setItem('restaurant_foods', JSON.stringify(updatedFoods))
-      window.dispatchEvent(new CustomEvent('foodsChanged'))
-      window.dispatchEvent(new Event('storage'))
+      // Remove section from menuData and update backend
+      const updatedSections = menuData.filter(section => section.id !== selectedCategory.id)
+      
+      await restaurantAPI.updateMenu({ sections: updatedSections })
+      
+      // Update local state
+      setMenuData(updatedSections)
+      toast.success('Category deleted successfully')
     } catch (error) {
       console.error('Error deleting category:', error)
-      alert('Error deleting category')
+      toast.error('Failed to delete category')
       return
     }
 
@@ -832,8 +770,8 @@ export default function HubMenu() {
               className="bg-white rounded-lg  overflow-hidden"
             >
               {/* Group Header */}
-              <div className="py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="py-3 flex items-center justify-between px-4">
+                <div className="flex items-center gap-3 flex-1">
                   <div className="w-1 h-6 bg-red-500 rounded-r-full" />
                   <h3 className="text-base font-bold text-gray-900">
                     {group.name} ({enabledItems})
@@ -841,8 +779,14 @@ export default function HubMenu() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => toggleGroup(group.id)}
-                    className="p-1 rounded-full hover:bg-gray-100"
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleGroup(group.id)
+                    }}
+                    className="p-1 rounded-full hover:bg-gray-100 transition-colors z-10 relative"
+                    aria-label={isExpanded ? "Collapse section" : "Expand section"}
                   >
                     {isExpanded ? (
                       <ChevronUp className="w-5 h-5 text-gray-600" />
@@ -851,8 +795,14 @@ export default function HubMenu() {
                     )}
                   </button>
                   <button 
-                    onClick={() => handleOpenCategoryOptions(group)}
-                    className="p-1 rounded-full hover:bg-gray-100"
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleOpenCategoryOptions(group)
+                    }}
+                    className="p-1 rounded-full hover:bg-gray-100 transition-colors z-10 relative"
+                    aria-label="Category options"
                   >
                     <MoreVertical className="w-5 h-5 text-gray-600" />
                   </button>
@@ -1069,7 +1019,7 @@ export default function HubMenu() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-4 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900 text-center">Add item or category</h2>
+                <h2 className="text-lg font-bold text-gray-900 text-center">Add item</h2>
               </div>
               <div className="px-4 py-4 space-y-2">
                 <button
@@ -1079,12 +1029,6 @@ export default function HubMenu() {
                   className="w-full py-3 px-4 text-left rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <span className="text-sm font-medium text-gray-900">Add item</span>
-                </button>
-                <button
-                  onClick={handleOpenAddCategory}
-                  className="w-full py-3 px-4 text-left rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <span className="text-sm font-medium text-gray-900">Add category</span>
                 </button>
               </div>
             </motion.div>

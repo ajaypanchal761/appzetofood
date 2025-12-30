@@ -453,3 +453,257 @@ export const changeAdminPassword = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Get All Users (Customers) with Order Statistics
+ * GET /api/admin/users
+ */
+export const getUsers = asyncHandler(async (req, res) => {
+  try {
+    const { limit = 100, offset = 0, search, status, sortBy, orderDate, joiningDate } = req.query;
+    const User = (await import('../../auth/models/User.js')).default;
+
+    // Build query
+    const query = { role: 'user' }; // Only get users, not restaurants/delivery/admins
+    
+    // Search filter
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Status filter
+    if (status === 'active') {
+      query.isActive = true;
+    } else if (status === 'inactive') {
+      query.isActive = false;
+    }
+
+    // Joining date filter
+    if (joiningDate) {
+      const startDate = new Date(joiningDate);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(joiningDate);
+      endDate.setHours(23, 59, 59, 999);
+      query.createdAt = { $gte: startDate, $lte: endDate };
+    }
+
+    // Get users
+    const users = await User.find(query)
+      .select('-password -__v')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(offset))
+      .lean();
+
+    // Get user IDs
+    const userIds = users.map(user => user._id);
+
+    // Get order statistics for each user
+    const orderStats = await Order.aggregate([
+      {
+        $match: {
+          userId: { $in: userIds }
+        }
+      },
+      {
+        $group: {
+          _id: '$userId',
+          totalOrders: { $sum: 1 },
+          totalAmount: { $sum: '$pricing.total' }
+        }
+      }
+    ]);
+
+    // Create a map of userId -> stats
+    const statsMap = {};
+    orderStats.forEach(stat => {
+      statsMap[stat._id.toString()] = {
+        totalOrder: stat.totalOrders || 0,
+        totalOrderAmount: stat.totalAmount || 0
+      };
+    });
+
+    // Format users with order statistics
+    const formattedUsers = users.map((user, index) => {
+      const stats = statsMap[user._id.toString()] || { totalOrder: 0, totalOrderAmount: 0 };
+      
+      // Format joining date
+      const joiningDate = new Date(user.createdAt);
+      const formattedDate = joiningDate.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+
+      return {
+        sl: parseInt(offset) + index + 1,
+        id: user._id.toString(),
+        name: user.name || 'N/A',
+        email: user.email || 'N/A',
+        phone: user.phone || 'N/A',
+        totalOrder: stats.totalOrder,
+        totalOrderAmount: stats.totalOrderAmount,
+        joiningDate: formattedDate,
+        status: user.isActive !== false, // Default to true if not set
+        createdAt: user.createdAt
+      };
+    });
+
+    // Apply sorting
+    if (sortBy) {
+      if (sortBy === 'name-asc') {
+        formattedUsers.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sortBy === 'name-desc') {
+        formattedUsers.sort((a, b) => b.name.localeCompare(a.name));
+      } else if (sortBy === 'orders-asc') {
+        formattedUsers.sort((a, b) => a.totalOrder - b.totalOrder);
+      } else if (sortBy === 'orders-desc') {
+        formattedUsers.sort((a, b) => b.totalOrder - a.totalOrder);
+      }
+    }
+
+    // Order date filter (filter by order date after aggregation)
+    let filteredUsers = formattedUsers;
+    if (orderDate) {
+      // This would require additional query to filter by order date
+      // For now, we'll skip this as it's complex and may require different approach
+    }
+
+    const total = await User.countDocuments(query);
+
+    return successResponse(res, 200, 'Users retrieved successfully', {
+      users: filteredUsers,
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+  } catch (error) {
+    logger.error(`Error fetching users: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to fetch users');
+  }
+});
+
+/**
+ * Get User by ID with Full Details
+ * GET /api/admin/users/:id
+ */
+export const getUserById = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const User = (await import('../../auth/models/User.js')).default;
+
+    const user = await User.findById(id)
+      .select('-password -__v')
+      .lean();
+
+    if (!user) {
+      return errorResponse(res, 404, 'User not found');
+    }
+
+    // Get order statistics
+    const orderStats = await Order.aggregate([
+      {
+        $match: { userId: user._id }
+      },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalAmount: { $sum: '$pricing.total' },
+          orders: {
+            $push: {
+              orderId: '$orderId',
+              status: '$status',
+              total: '$pricing.total',
+              createdAt: '$createdAt',
+              restaurantName: '$restaurantName'
+            }
+          }
+        }
+      }
+    ]);
+
+    const stats = orderStats[0] || { totalOrders: 0, totalAmount: 0, orders: [] };
+
+    // Format joining date
+    const joiningDate = new Date(user.createdAt);
+    const formattedDate = joiningDate.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    return successResponse(res, 200, 'User retrieved successfully', {
+      user: {
+        id: user._id.toString(),
+        name: user.name || 'N/A',
+        email: user.email || 'N/A',
+        phone: user.phone || 'N/A',
+        phoneVerified: user.phoneVerified || false,
+        profileImage: user.profileImage || null,
+        role: user.role,
+        signupMethod: user.signupMethod,
+        isActive: user.isActive !== false,
+        addresses: user.addresses || [],
+        preferences: user.preferences || {},
+        wallet: user.wallet || {},
+        dateOfBirth: user.dateOfBirth || null,
+        anniversary: user.anniversary || null,
+        gender: user.gender || null,
+        joiningDate: formattedDate,
+        createdAt: user.createdAt,
+        totalOrders: stats.totalOrders,
+        totalOrderAmount: stats.totalAmount,
+        orders: stats.orders.slice(0, 10) // Last 10 orders
+      }
+    });
+  } catch (error) {
+    logger.error(`Error fetching user: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to fetch user');
+  }
+});
+
+/**
+ * Update User Status (Active/Inactive)
+ * PUT /api/admin/users/:id/status
+ */
+export const updateUserStatus = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+    const User = (await import('../../auth/models/User.js')).default;
+
+    if (typeof isActive !== 'boolean') {
+      return errorResponse(res, 400, 'isActive must be a boolean value');
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return errorResponse(res, 404, 'User not found');
+    }
+
+    user.isActive = isActive;
+    await user.save();
+
+    logger.info(`User status updated: ${id}`, {
+      isActive,
+      updatedBy: req.user._id
+    });
+
+    return successResponse(res, 200, 'User status updated successfully', {
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        isActive: user.isActive
+      }
+    });
+  } catch (error) {
+    logger.error(`Error updating user status: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to update user status');
+  }
+});
+

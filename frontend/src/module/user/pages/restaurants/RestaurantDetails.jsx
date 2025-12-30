@@ -3124,8 +3124,13 @@ export default function RestaurantDetails() {
           setRestaurant(restaurantsData[slug] || restaurantsData["golden-dragon"])
         }
       } catch (error) {
-        console.error('Error fetching restaurant:', error)
-        setRestaurantError(error.message || 'Failed to load restaurant')
+        // Only log non-404 errors (404 is expected when restaurant doesn't exist in DB)
+        if (error.response?.status !== 404) {
+          console.error('Error fetching restaurant:', error)
+        } else {
+          console.log(`Restaurant "${slug}" not found in database, using fallback data`)
+        }
+        setRestaurantError(error.response?.status === 404 ? null : (error.message || 'Failed to load restaurant'))
         // Fallback to hardcoded data if API fails
         setRestaurant(restaurantsData[slug] || restaurantsData["golden-dragon"])
       } finally {

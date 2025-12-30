@@ -22,20 +22,6 @@ export const sidebarMenuData = [
         icon: "FolderTree",
         subItems: [
           { label: "Category", path: "/admin/categories" },
-          { label: "Sub Category", path: "/admin/categories/sub-category" },
-          { label: "Bulk Import", path: "/admin/categories/bulk-import" },
-          { label: "Bulk Export", path: "/admin/categories/bulk-export" },
-        ],
-      },
-      {
-        type: "expandable",
-        label: "Addons",
-        icon: "Plus",
-        subItems: [
-          { label: "Addon Category", path: "/admin/addons/category" },
-          { label: "List", path: "/admin/addons" },
-          { label: "Bulk Import", path: "/admin/addons/bulk-import" },
-          { label: "Bulk Export", path: "/admin/addons/bulk-export" },
         ],
       },
       {
@@ -43,11 +29,7 @@ export const sidebarMenuData = [
         label: "Foods",
         icon: "Utensils",
         subItems: [
-          { label: "Add New", path: "/admin/foods/add" },
           { label: "List", path: "/admin/foods" },
-          { label: "Review", path: "/admin/foods/review" },
-          { label: "Bulk Import", path: "/admin/foods/bulk-import" },
-          { label: "Bulk Export", path: "/admin/foods/bulk-export" },
         ],
       },
     ],

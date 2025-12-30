@@ -18,11 +18,11 @@ export default function RestaurantSignIn() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
-  // Redirect to restaurant panel if already authenticated
+  // Redirect to restaurant home if already authenticated
   useEffect(() => {
     const isAuthenticated = localStorage.getItem("restaurant_authenticated") === "true"
     if (isAuthenticated) {
-      navigate("/restaurant-panel/dashboard", { replace: true })
+      navigate("/restaurant", { replace: true })
     }
   }, [navigate])
 
@@ -43,7 +43,7 @@ export default function RestaurantSignIn() {
         // Dispatch custom event for same-tab updates
         window.dispatchEvent(new Event('restaurantAuthChanged'))
         
-        navigate("/restaurant-panel/dashboard", { replace: true })
+        navigate("/restaurant", { replace: true })
       } else {
         throw new Error("Login failed. Please try again.")
       }

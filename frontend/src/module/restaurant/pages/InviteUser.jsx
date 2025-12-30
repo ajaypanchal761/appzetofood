@@ -7,6 +7,9 @@ import {
   ChevronDown,
   Mail,
   CheckCircle2,
+  Upload,
+  ImageIcon,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,8 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-
-const STORAGE_KEY = "restaurant_invited_users"
+import { restaurantAPI } from "@/lib/api"
 
 // Country codes
 const countryCodes = [
@@ -56,15 +58,21 @@ export default function InviteUser() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const roleFromUrl = searchParams.get("role") || "staff"
+  // Ensure role is not "owner" - default to "staff" if owner is provided
+  const validRole = roleFromUrl === "owner" ? "staff" : (roleFromUrl === "manager" ? "manager" : "staff")
   
   const [countryCode, setCountryCode] = useState("+91")
   const [phoneNumber, setPhoneNumber] = useState("")
   const [email, setEmail] = useState("")
-  const [selectedRole, setSelectedRole] = useState(roleFromUrl)
+  const [selectedRole, setSelectedRole] = useState(validRole)
   const [phoneError, setPhoneError] = useState("")
   const [emailError, setEmailError] = useState("")
-  const [showInviteSentDialog, setShowInviteSentDialog] = useState(false)
-  const [inviteMethod, setInviteMethod] = useState("phone") // "phone" or "email"
+  const [name, setName] = useState("")
+  const [nameError, setNameError] = useState("")
+  const [showUserAddedDialog, setShowUserAddedDialog] = useState(false)
+  const [addMethod, setAddMethod] = useState("phone") // "phone" or "email"
+  const [photo, setPhoto] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(null)
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -141,10 +149,60 @@ export default function InviteUser() {
     }
   }
 
-  const handleSendInvite = () => {
-    let isValid = false
+  // Name validation
+  const validateName = (name) => {
+    if (!name.trim()) {
+      setNameError("Name is required")
+      return false
+    }
+    if (name.trim().length < 2) {
+      setNameError("Name must be at least 2 characters")
+      return false
+    }
+    setNameError("")
+    return true
+  }
 
-    if (inviteMethod === "phone") {
+  const handleNameChange = (e) => {
+    const value = e.target.value
+    setName(value)
+    if (value) {
+      validateName(value)
+    } else {
+      setNameError("")
+    }
+  }
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPhoto(file)
+      // Create preview
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setPhotoPreview(event.target?.result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleRemovePhoto = () => {
+    setPhoto(null)
+    setPhotoPreview(null)
+    // Reset file input
+    const fileInput = document.getElementById('photoInput')
+    if (fileInput) {
+      fileInput.value = ''
+    }
+  }
+
+  const handleAddUser = async () => {
+    // Validate name
+    if (!validateName(name)) return
+
+    // Validate phone or email based on method
+    let isValid = false
+    if (addMethod === "phone") {
       isValid = validatePhone(phoneNumber)
     } else {
       isValid = validateEmail(email)
@@ -152,35 +210,43 @@ export default function InviteUser() {
 
     if (!isValid) return
 
-    // Create invite object
-    const invite = {
-      id: Date.now().toString(),
-      role: selectedRole,
-      phone: inviteMethod === "phone" ? `${countryCode}-${phoneNumber}` : null,
-      email: inviteMethod === "email" ? email : null,
-      invitedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
-      status: "invited"
-    }
-
-    // Save to localStorage
     try {
-      const existingInvites = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]")
-      existingInvites.push(invite)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(existingInvites))
+      // Prepare FormData for API (to support file upload)
+      const formData = new FormData()
+      formData.append('name', name.trim())
+      formData.append('role', selectedRole)
+      if (addMethod === "phone") {
+        formData.append('phone', phoneNumber)
+      } else {
+        formData.append('email', email.trim())
+      }
       
-      // Dispatch event to notify ContactDetails page
-      window.dispatchEvent(new Event("invitesUpdated"))
+      // Add photo if selected
+      if (photo) {
+        formData.append('photo', photo)
+      }
+
+      // Call backend API to add staff
+      const response = await restaurantAPI.addStaff(formData)
       
-      // Show success dialog
-      setShowInviteSentDialog(true)
+      if (response?.data?.success) {
+        // Dispatch event to notify ContactDetails page
+        window.dispatchEvent(new Event("invitesUpdated"))
+        
+        // Show success dialog
+        setShowUserAddedDialog(true)
+      } else {
+        throw new Error("Invalid response from server")
+      }
     } catch (error) {
-      console.error("Error saving invite:", error)
+      console.error("Error adding user:", error)
+      const errorMessage = error.response?.data?.message || error.message || "Failed to add user. Please try again."
+      alert(errorMessage)
     }
   }
 
-  const handleInviteSentClose = () => {
-    setShowInviteSentDialog(false)
+  const handleUserAddedClose = () => {
+    setShowUserAddedDialog(false)
     // Navigate back after a short delay
     setTimeout(() => {
       navigate(-1)
@@ -189,9 +255,11 @@ export default function InviteUser() {
 
   const selectedCountry = countryCodes.find(c => c.code === countryCode) || countryCodes[2]
 
-  const isFormValid = inviteMethod === "phone" 
-    ? phoneNumber.trim().length >= 10 && !phoneError
-    : email.trim() && !emailError
+  const isFormValid = name.trim().length >= 2 && !nameError && (
+    addMethod === "phone" 
+      ? phoneNumber.trim().length >= 10 && !phoneError
+      : email.trim() && !emailError
+  )
 
   return (
     <div className="min-h-screen bg-white overflow-x-hidden pb-24">
@@ -206,22 +274,32 @@ export default function InviteUser() {
             >
               <ArrowLeft className="w-6 h-6 text-gray-900" />
             </button>
-            <h1 className="text-lg font-bold text-gray-900">Invite user</h1>
+            <h1 className="text-lg font-bold text-gray-900">Add user</h1>
           </div>
-          <button
-            onClick={() => navigate("/restaurant/contact-details?view=permissions")}
-            className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition-colors"
-          >
-            View permissions
-          </button>
         </div>
       </div>
 
       {/* Content */}
       <div className="px-4 py-6 space-y-6">
+        {/* Name Input Section */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 mb-2 block">Name *</label>
+          <Input
+            type="text"
+            value={name}
+            onChange={handleNameChange}
+            placeholder="Enter full name"
+            className={`w-full h-12 border-gray-200 rounded-lg ${nameError ? "border-red-500" : ""}`}
+          />
+          {nameError && (
+            <p className="text-sm text-red-600 mt-1">{nameError}</p>
+          )}
+        </div>
+
         {/* Phone Number Input Section */}
         <div>
-          <div className="flex gap-2 items-stretch mb-3">
+          <label className="text-sm font-medium text-gray-700 mb-2 block">Phone number *</label>
+          <div className="flex gap-2 items-stretch">
             <Select value={countryCode} onValueChange={setCountryCode}>
               <SelectTrigger className="w-[100px] h-12! border-gray-200 rounded-lg flex items-center shrink-0">
                 <SelectValue>
@@ -254,24 +332,22 @@ export default function InviteUser() {
           {phoneError && (
             <p className="text-sm text-red-600 mt-1">{phoneError}</p>
           )}
-          <p className="text-sm text-gray-600 font-normal mt-2">
-            This user will receive a link by SMS which they need to click on to accept the invite and be added to your outlet.
-          </p>
           <button
             onClick={() => {
-              setInviteMethod("email")
+              setAddMethod("email")
               setPhoneNumber("")
               setPhoneError("")
             }}
             className="text-blue-600 text-sm font-normal hover:text-blue-700 transition-colors mt-2"
           >
-            Invite by email
+            Add by email instead
           </button>
         </div>
 
-        {/* Email Input Section (shown when invite by email is clicked) */}
-        {inviteMethod === "email" && (
+        {/* Email Input Section (shown when add by email is clicked) */}
+        {addMethod === "email" && (
           <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Email address *</label>
             <Input
               type="email"
               value={email}
@@ -282,21 +358,65 @@ export default function InviteUser() {
             {emailError && (
               <p className="text-sm text-red-600 mt-1">{emailError}</p>
             )}
-            <p className="text-sm text-gray-600 font-normal mt-2">
-              This user will receive a link by email which they need to click on to accept the invite and be added to your outlet.
-            </p>
             <button
               onClick={() => {
-                setInviteMethod("phone")
+                setAddMethod("phone")
                 setEmail("")
                 setEmailError("")
               }}
               className="text-blue-600 text-sm font-normal hover:text-blue-700 transition-colors mt-2"
             >
-              Invite by phone
+              Add by phone instead
             </button>
           </div>
         )}
+
+        {/* Photo Upload Section */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 mb-2 block">Photo (Optional)</label>
+          <div className="flex items-center gap-4">
+            <div className="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-gray-200">
+              {photoPreview ? (
+                <img
+                  src={photoPreview}
+                  alt="Staff photo preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <ImageIcon className="w-8 h-8 text-gray-400" />
+              )}
+            </div>
+            <div className="flex-1">
+              {photo ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">{photo.name}</span>
+                  <button
+                    onClick={handleRemovePhoto}
+                    className="text-red-600 hover:text-red-700"
+                    aria-label="Remove photo"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label
+                  htmlFor="photoInput"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-300 text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Upload Photo</span>
+                </label>
+              )}
+              <input
+                id="photoInput"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+            </div>
+          </div>
+        </div>
 
         {/* User Role Selection */}
         <div>
@@ -304,7 +424,7 @@ export default function InviteUser() {
             Select user role
           </h2>
           <div className="mt-2 border-b border-gray-200">
-            {["staff", "manager", "owner"].map((role, index, arr) => (
+            {["staff", "manager"].map((role, index, arr) => (
               <button
                 key={role}
                 onClick={() => setSelectedRole(role)}
@@ -328,10 +448,10 @@ export default function InviteUser() {
         </div>
       </div>
 
-      {/* Send Invite Button - Fixed at bottom */}
+      {/* Add User Button - Fixed at bottom */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-4 z-40">
         <Button
-          onClick={handleSendInvite}
+          onClick={handleAddUser}
           disabled={!isFormValid}
           className={`w-full py-3 ${
             isFormValid
@@ -339,29 +459,27 @@ export default function InviteUser() {
               : "bg-gray-200 text-gray-500 cursor-not-allowed"
           } transition-colors`}
         >
-          Send invite
+          Add user
         </Button>
       </div>
 
-      {/* Invite Sent Success Dialog */}
-      <Dialog open={showInviteSentDialog} onOpenChange={setShowInviteSentDialog}>
+      {/* User Added Success Dialog */}
+      <Dialog open={showUserAddedDialog} onOpenChange={setShowUserAddedDialog}>
         <DialogContent className="sm:max-w-md p-4 w-[90%] gap-2 flex flex-col"> 
           <DialogHeader className="text-center">
             <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
               <CheckCircle2 className="w-8 h-8 text-green-600" />
             </div>
             <DialogTitle className="text-lg font-semibold text-gray-900 text-center">
-              Invite sent successfully!
+              {selectedRole === 'manager' ? 'Manager added successfully!' : 'Staff added successfully!'}
             </DialogTitle>
             <DialogDescription className="mt-2 text-sm text-gray-600">
-              {inviteMethod === "phone"
-                ? `An invitation has been sent to ${countryCode}-${phoneNumber}. The user will receive an SMS with a link to accept the invite.`
-                : `An invitation has been sent to ${email}. The user will receive an email with a link to accept the invite.`}
+              {name} has been successfully added as {selectedRole === 'manager' ? 'manager' : 'staff'} to your outlet.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
-              onClick={handleInviteSentClose}
+              onClick={handleUserAddedClose}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white"
             >
               Done

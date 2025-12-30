@@ -32,6 +32,14 @@ const menuItemSchema = new mongoose.Schema({
   nutrition: { type: [String], default: [] },
   allergies: { type: [String], default: [] },
   photoCount: { type: Number, default: 1 },
+  // Additional fields for item details
+  subCategory: { type: String, default: '' },
+  servesInfo: { type: String, default: '' },
+  itemSize: { type: String, default: '' },
+  itemSizeQuantity: { type: String, default: '' },
+  itemSizeUnit: { type: String, default: 'piece' },
+  gst: { type: Number, default: 0 },
+  images: { type: [String], default: [] }, // Multiple images support
 }, { _id: false });
 
 const subsectionSchema = new mongoose.Schema({

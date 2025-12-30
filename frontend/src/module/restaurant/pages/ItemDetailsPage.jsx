@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useNavigate, useParams, useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
@@ -12,10 +12,14 @@ import {
   Camera,
   ThumbsUp,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
-import { getAllFoods, saveFood } from "../utils/foodManagement"
+// Removed getAllFoods and saveFood - now using menu API
+import api from "@/lib/api"
+import { restaurantAPI, uploadAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 export default function ItemDetailsPage() {
   const navigate = useNavigate()
@@ -24,21 +28,22 @@ export default function ItemDetailsPage() {
   const isNewItem = id === "new"
   const groupId = location.state?.groupId
   const defaultCategory = location.state?.category || "Varieties"
-  const itemData = isNewItem ? null : (location.state?.item || getAllFoods().find(f => f.id === parseInt(id)))
   const fileInputRef = useRef(null)
 
-  const [itemName, setItemName] = useState(itemData?.name || "")
-  const [category, setCategory] = useState(itemData?.category || "Varieties")
-  const [subCategory, setSubCategory] = useState("Starters")
+  // Initialize state with empty values - will be populated from API
+  const [itemData, setItemData] = useState(null) // Store the full item data for saving
+  const [itemName, setItemName] = useState("")
+  const [category, setCategory] = useState(defaultCategory)
+  const [subCategory, setSubCategory] = useState("")
   const [servesInfo, setServesInfo] = useState("")
   const [itemSizeQuantity, setItemSizeQuantity] = useState("")
   const [itemSizeUnit, setItemSizeUnit] = useState("piece")
   const [itemDescription, setItemDescription] = useState("")
-  const [foodType, setFoodType] = useState(itemData?.foodType === "Veg" ? "Veg" : "Non-Veg")
-  const [basePrice, setBasePrice] = useState(itemData?.price?.toString() || "159.0")
+  const [foodType, setFoodType] = useState("Non-Veg")
+  const [basePrice, setBasePrice] = useState("0")
   const [gst, setGst] = useState("5.0")
-  const [isRecommended, setIsRecommended] = useState(itemData?.isRecommended || false)
-  const [isInStock, setIsInStock] = useState(itemData?.isAvailable !== false)
+  const [isRecommended, setIsRecommended] = useState(false)
+  const [isInStock, setIsInStock] = useState(true)
   const [weightPerServing, setWeightPerServing] = useState("")
   const [calorieCount, setCalorieCount] = useState("")
   const [proteinCount, setProteinCount] = useState("")
@@ -47,9 +52,11 @@ export default function ItemDetailsPage() {
   const [fibreCount, setFibreCount] = useState("")
   const [allergens, setAllergens] = useState("")
   const [showMoreNutrition, setShowMoreNutrition] = useState(false)
-  const [selectedTags, setSelectedTags] = useState(itemData?.tags || [])
+  const [selectedTags, setSelectedTags] = useState([])
   const [disclaimerChecked, setDisclaimerChecked] = useState(false)
-  const [images, setImages] = useState(itemData?.image ? [itemData.image] : [])
+  const [images, setImages] = useState([])
+  const [imageFiles, setImageFiles] = useState(new Map()) // Track File objects by preview URL
+  const [uploadingImages, setUploadingImages] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [touchStart, setTouchStart] = useState(null)
   const [touchEnd, setTouchEnd] = useState(null)
@@ -60,21 +67,245 @@ export default function ItemDetailsPage() {
   const [isItemSizePopupOpen, setIsItemSizePopupOpen] = useState(false)
   const [isGstPopupOpen, setIsGstPopupOpen] = useState(false)
   const [isTagsPopupOpen, setIsTagsPopupOpen] = useState(false)
+  const [categories, setCategories] = useState([])
+  const [loadingCategories, setLoadingCategories] = useState(true)
+  const [loadingItem, setLoadingItem] = useState(false)
 
   const maxNameLength = 70
-  const maxDescriptionLength = 100
-  const descriptionLength = 50
+  const maxDescriptionLength = 1000
+  const descriptionLength = itemDescription.length
   const minDescriptionLength =  5
   const nameLength = itemName.length
 
-  // Category options
-  const categories = [
-    { id: "starters", name: "Starters", subCategories: ["Starters", "Appetizers", "Snacks"] },
-    { id: "main-course", name: "Main Course", subCategories: ["Main Course", "Curries", "Biryani"] },
-    { id: "desserts", name: "Desserts", subCategories: ["Desserts", "Ice Cream", "Sweets"] },
-    { id: "beverages", name: "Beverages", subCategories: ["Beverages", "Juices", "Soft Drinks"] },
-    { id: "varieties", name: "Varieties", subCategories: ["Varieties", "Combo", "Special"] },
-  ]
+  // Fetch item data from menu API when editing
+  useEffect(() => {
+    const fetchItemData = async () => {
+      // If itemData is already in location.state, use it
+      if (location.state?.item) {
+        const item = location.state.item
+        // Store the full item data for saving
+        setItemData(item)
+        
+        setItemName(item.name || "")
+        setCategory(item.category || defaultCategory)
+        setSubCategory(item.subCategory || item.category || "Starters")
+        setServesInfo(item.servesInfo || "")
+        setItemSizeQuantity(item.itemSizeQuantity || "")
+        setItemSizeUnit(item.itemSizeUnit || "piece")
+        setItemDescription(item.description || "")
+        setFoodType(item.foodType === "Veg" ? "Veg" : (item.foodType === "Egg" ? "Egg" : "Non-Veg"))
+        setBasePrice(item.price?.toString() || "0")
+        setGst(item.gst?.toString() || "5.0")
+        setIsRecommended(item.isRecommended || false)
+        setIsInStock(item.isAvailable !== false)
+        setSelectedTags(item.tags || [])
+        setImages(item.images && item.images.length > 0 ? item.images : (item.image ? [item.image] : []))
+        
+        // Parse nutrition data
+        if (item.nutrition && Array.isArray(item.nutrition)) {
+          item.nutrition.forEach(nut => {
+            if (typeof nut === 'string') {
+              if (nut.includes('Weight per serving')) {
+                const match = nut.match(/(\d+)\s*grams?/i)
+                if (match) setWeightPerServing(match[1])
+              } else if (nut.includes('Calorie count')) {
+                const match = nut.match(/(\d+)\s*Kcal/i)
+                if (match) setCalorieCount(match[1])
+              } else if (nut.includes('Protein count')) {
+                const match = nut.match(/(\d+)\s*mg/i)
+                if (match) setProteinCount(match[1])
+              } else if (nut.includes('Carbohydrates')) {
+                const match = nut.match(/(\d+)\s*mg/i)
+                if (match) setCarbohydrates(match[1])
+              } else if (nut.includes('Fat count')) {
+                const match = nut.match(/(\d+)\s*mg/i)
+                if (match) setFatCount(match[1])
+              } else if (nut.includes('Fibre count')) {
+                const match = nut.match(/(\d+)\s*mg/i)
+                if (match) setFibreCount(match[1])
+              }
+            }
+          })
+        }
+        
+        // Set allergens
+        if (item.allergies && Array.isArray(item.allergies) && item.allergies.length > 0) {
+          setAllergens(item.allergies.join(", "))
+        }
+        return
+      }
+
+      // If no item in location.state but we have an id, fetch from menu API
+      if (!isNewItem && id) {
+        try {
+          setLoadingItem(true)
+          const menuResponse = await restaurantAPI.getMenu()
+          const menu = menuResponse.data?.data?.menu
+          const sections = menu?.sections || []
+          
+          // Find the item across all sections
+          let foundItem = null
+          const searchId = String(id).trim()
+          for (const section of sections) {
+            // Check items in section
+            const item = section.items?.find(i => {
+              const itemId = String(i.id || i._id || '').trim()
+              return itemId === searchId || itemId === id
+            })
+            if (item) {
+              foundItem = item
+              break
+            }
+            // Check items in subsections
+            if (section.subsections) {
+              for (const subsection of section.subsections) {
+                const subItem = subsection.items?.find(i => {
+                  const itemId = String(i.id || i._id || '').trim()
+                  return itemId === searchId || itemId === id
+                })
+                if (subItem) {
+                  foundItem = subItem
+                  break
+                }
+              }
+              if (foundItem) break
+            }
+          }
+          
+          if (foundItem) {
+            // Store the full item data for saving
+            setItemData(foundItem)
+            
+            setItemName(foundItem.name || "")
+            setCategory(foundItem.category || defaultCategory)
+            setSubCategory(foundItem.subCategory || foundItem.category || "Starters")
+            setServesInfo(foundItem.servesInfo || "")
+            setItemSizeQuantity(foundItem.itemSizeQuantity || "")
+            setItemSizeUnit(foundItem.itemSizeUnit || "piece")
+            setItemDescription(foundItem.description || "")
+            setFoodType(foundItem.foodType === "Veg" ? "Veg" : (foundItem.foodType === "Egg" ? "Egg" : "Non-Veg"))
+            setBasePrice(foundItem.price?.toString() || "0")
+            setGst(foundItem.gst?.toString() || "5.0")
+            setIsRecommended(foundItem.isRecommended || false)
+            setIsInStock(foundItem.isAvailable !== false)
+            setSelectedTags(foundItem.tags || [])
+            setImages(foundItem.images && foundItem.images.length > 0 ? foundItem.images : (foundItem.image ? [foundItem.image] : []))
+            
+            // Parse nutrition data
+            if (foundItem.nutrition && Array.isArray(foundItem.nutrition)) {
+              foundItem.nutrition.forEach(nut => {
+                if (typeof nut === 'string') {
+                  if (nut.includes('Weight per serving')) {
+                    const match = nut.match(/(\d+)\s*grams?/i)
+                    if (match) setWeightPerServing(match[1])
+                  } else if (nut.includes('Calorie count')) {
+                    const match = nut.match(/(\d+)\s*Kcal/i)
+                    if (match) setCalorieCount(match[1])
+                  } else if (nut.includes('Protein count')) {
+                    const match = nut.match(/(\d+)\s*mg/i)
+                    if (match) setProteinCount(match[1])
+                  } else if (nut.includes('Carbohydrates')) {
+                    const match = nut.match(/(\d+)\s*mg/i)
+                    if (match) setCarbohydrates(match[1])
+                  } else if (nut.includes('Fat count')) {
+                    const match = nut.match(/(\d+)\s*mg/i)
+                    if (match) setFatCount(match[1])
+                  } else if (nut.includes('Fibre count')) {
+                    const match = nut.match(/(\d+)\s*mg/i)
+                    if (match) setFibreCount(match[1])
+                  }
+                }
+              })
+            }
+            
+            // Set allergens
+            if (foundItem.allergies && Array.isArray(foundItem.allergies) && foundItem.allergies.length > 0) {
+              setAllergens(foundItem.allergies.join(", "))
+            }
+          } else {
+            toast.error("Item not found")
+          }
+        } catch (error) {
+          console.error('Error fetching item data:', error)
+          toast.error("Failed to load item data")
+        } finally {
+          setLoadingItem(false)
+        }
+      }
+    }
+
+    fetchItemData()
+  }, [id, isNewItem, location.state, defaultCategory])
+
+  // Fetch categories from API
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true)
+        const response = await api.get('/categories/public')
+        if (response.data.success && response.data.data.categories) {
+          // Group categories by type
+          const categoriesByType = {}
+          
+          response.data.data.categories.forEach(cat => {
+            // Use the type from API, default to 'Varieties' if not set
+            const type = cat.type && cat.type.trim() ? cat.type.trim() : 'Varieties'
+            if (!categoriesByType[type]) {
+              categoriesByType[type] = []
+            }
+            categoriesByType[type].push({
+              id: cat.id,
+              name: cat.name
+            })
+          })
+
+          // Convert to the format needed for the UI
+          // Sort types in a specific order: Starters, Main course, Desserts, Beverages, Varieties
+          const typeOrder = ['Starters', 'Main course', 'Desserts', 'Beverages', 'Varieties']
+          const sortedTypes = Object.keys(categoriesByType).sort((a, b) => {
+            const indexA = typeOrder.indexOf(a)
+            const indexB = typeOrder.indexOf(b)
+            if (indexA === -1 && indexB === -1) return a.localeCompare(b)
+            if (indexA === -1) return 1
+            if (indexB === -1) return -1
+            return indexA - indexB
+          })
+
+          const formattedCategories = sortedTypes.map(type => ({
+            id: type.toLowerCase().replace(/\s+/g, '-'),
+            name: type,
+            subCategories: categoriesByType[type].map(cat => cat.name)
+          }))
+
+          console.log('Formatted categories:', formattedCategories)
+          setCategories(formattedCategories)
+        } else {
+          // Fallback to default categories if API fails
+          setCategories([
+            { id: "starters", name: "Starters", subCategories: ["Starters", "Appetizers", "Snacks"] },
+            { id: "main-course", name: "Main Course", subCategories: ["Main Course", "Curries", "Biryani"] },
+            { id: "desserts", name: "Desserts", subCategories: ["Desserts", "Ice Cream", "Sweets"] },
+            { id: "beverages", name: "Beverages", subCategories: ["Beverages", "Juices", "Soft Drinks"] },
+            { id: "varieties", name: "Varieties", subCategories: ["Varieties", "Combo", "Special"] },
+          ])
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+        // Fallback to default categories on error
+        setCategories([
+          { id: "starters", name: "Starters", subCategories: ["Starters", "Appetizers", "Snacks"] },
+          { id: "main-course", name: "Main Course", subCategories: ["Main Course", "Curries", "Biryani"] },
+          { id: "desserts", name: "Desserts", subCategories: ["Desserts", "Ice Cream", "Sweets"] },
+          { id: "beverages", name: "Beverages", subCategories: ["Beverages", "Juices", "Soft Drinks"] },
+          { id: "varieties", name: "Varieties", subCategories: ["Varieties", "Combo", "Special"] },
+        ])
+      } finally {
+        setLoadingCategories(false)
+      }
+    }
+
+    fetchCategories()
+  }, [])
 
   // Serves info options
   const servesOptions = [
@@ -118,16 +349,56 @@ export default function ItemDetailsPage() {
 
   const handleImageAdd = (e) => {
     const files = Array.from(e.target.files)
-    const newImages = files.map(file => URL.createObjectURL(file))
-    setImages([...images, ...newImages])
+    
+    // Validate file types
+    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"]
+    const validFiles = files.filter(file => {
+      if (!allowedTypes.includes(file.type)) {
+        toast.error(`${file.name}: Invalid file type. Please upload PNG, JPG, JPEG, or WEBP.`)
+        return false
+      }
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024 // 5MB
+      if (file.size > maxSize) {
+        toast.error(`${file.name}: File size exceeds 5MB limit.`)
+        return false
+      }
+      return true
+    })
+
+    if (validFiles.length === 0) return
+
+    // Create preview URLs for display and map them to File objects
+    const newImagePreviews = []
+    const newImageFilesMap = new Map(imageFiles)
+    
+    validFiles.forEach(file => {
+      const previewUrl = URL.createObjectURL(file)
+      newImagePreviews.push(previewUrl)
+      newImageFilesMap.set(previewUrl, file)
+    })
+    
+    setImages([...images, ...newImagePreviews])
+    setImageFiles(newImageFilesMap)
+    
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
   }
 
   const handleImageDelete = (index) => {
+    const imageToDelete = images[index]
     const newImages = images.filter((_, i) => i !== index)
+    const newImageFilesMap = new Map(imageFiles)
+    
+    // Remove the file mapping and revoke the blob URL if it's a preview
+    if (imageToDelete && imageToDelete.startsWith('blob:')) {
+      newImageFilesMap.delete(imageToDelete)
+      URL.revokeObjectURL(imageToDelete)
+    }
+    
     setImages(newImages)
+    setImageFiles(newImageFilesMap)
     if (currentImageIndex >= newImages.length && newImages.length > 0) {
       setCurrentImageIndex(newImages.length - 1)
     } else if (newImages.length === 0) {
@@ -204,57 +475,237 @@ export default function ItemDetailsPage() {
     )
   }
 
-  const handleSave = () => {
-    if (!disclaimerChecked) return
+  const handleSave = async () => {
+    if (!disclaimerChecked) {
+      toast.error("Please accept the authorization disclaimer")
+      return
+    }
     if (!itemName.trim()) {
-      alert("Please enter an item name")
+      toast.error("Please enter an item name")
       return
     }
 
-    // Prepare food data
-    const foodData = {
-      id: itemData?.id || undefined, // Let saveFood assign ID for new items
-      name: itemName.trim(),
-      category: category,
-      price: parseFloat(basePrice) || 0,
-      image: images.length > 0 ? images[0] : "",
-      foodType: foodType,
-      description: itemDescription,
-      isAvailable: isInStock,
-      isRecommended: isRecommended,
-      availabilityTimeStart: "12:01 AM",
-      availabilityTimeEnd: "11:57 PM",
-      discountType: "Percent",
-      discountAmount: 0.0,
-      discount: null,
-      originalPrice: null,
-      rating: itemData?.rating || 0.0,
-      reviews: itemData?.reviews || 0,
-      stock: "Unlimited",
-      variations: [],
-      tags: selectedTags,
-      nutrition: [
-        ...(weightPerServing ? [{ name: "Weight per serving", value: weightPerServing, unit: "grams" }] : []),
-        ...(calorieCount ? [{ name: "Calorie count", value: calorieCount, unit: "Kcal" }] : []),
-        ...(proteinCount ? [{ name: "Protein count", value: proteinCount, unit: "mg" }] : []),
-        ...(carbohydrates ? [{ name: "Carbohydrates", value: carbohydrates, unit: "mg" }] : []),
-        ...(fatCount ? [{ name: "Fat count", value: fatCount, unit: "mg" }] : []),
-        ...(fibreCount ? [{ name: "Fibre count", value: fibreCount, unit: "mg" }] : []),
-      ],
-      allergies: allergens ? allergens.split(",").map(a => a.trim()) : [],
-      nameArabic: "",
-    }
+    try {
+      setUploadingImages(true)
 
-    // Save food using the utility function
-    const savedFood = saveFood(foodData)
-    
-    if (savedFood) {
-      // Navigate back to HubMenu
-      navigate("/restaurant/hub-menu")
-      // Trigger a page refresh by dispatching event
-      window.dispatchEvent(new CustomEvent('foodsChanged'))
-    } else {
-      alert("Error saving item. Please try again.")
+      // Upload new images to Cloudinary
+      const uploadedImageUrls = []
+      const existingImageUrls = images.filter(img => 
+        typeof img === 'string' && (img.startsWith('http') || img.startsWith('https')) && !img.startsWith('blob:')
+      )
+      
+      // Upload new File objects to Cloudinary
+      const filesToUpload = Array.from(imageFiles.values())
+      if (filesToUpload.length > 0) {
+        toast.info(`Uploading ${filesToUpload.length} image(s)...`)
+        for (const file of filesToUpload) {
+          try {
+            const uploadResponse = await uploadAPI.uploadMedia(file, {
+              folder: 'appzeto/restaurant/menu-items'
+            })
+            const imageUrl = uploadResponse?.data?.data?.url || uploadResponse?.data?.url
+            if (imageUrl) {
+              uploadedImageUrls.push(imageUrl)
+            } else {
+              throw new Error("Failed to get uploaded image URL")
+            }
+          } catch (uploadError) {
+            console.error("Error uploading image:", uploadError)
+            toast.error(`Failed to upload ${file.name}. Please try again.`)
+            setUploadingImages(false)
+            return
+          }
+        }
+      }
+
+      // Combine existing URLs and newly uploaded URLs
+      // Filter out blob URLs (previews) and keep only actual URLs
+      const allImageUrls = [
+        ...existingImageUrls,
+        ...uploadedImageUrls
+      ]
+
+      // Get current menu
+      const menuResponse = await restaurantAPI.getMenu()
+      let menu = menuResponse.data?.data?.menu
+      let sections = menu?.sections || []
+
+      // Prepare item data according to menu model
+      // For editing, use the existing ID; for new items, generate a new ID
+      // Ensure we use the ID from itemData if available, otherwise use the URL param id
+      let itemId
+      if (isNewItem) {
+        itemId = `item-${Date.now()}-${Math.random()}`
+      } else {
+        // Try to get ID from itemData first (most reliable), then from URL param
+        itemId = itemData?.id || id
+        if (!itemId) {
+          console.warn('No item ID found, generating new one')
+          itemId = `item-${Date.now()}-${Math.random()}`
+        }
+        // Ensure ID is a string
+        itemId = String(itemId)
+      }
+      
+      console.log('Item ID for save:', itemId, 'From itemData:', itemData?.id, 'From URL:', id)
+
+      // If editing, remove item from its current location (in case category changed or it's in a subsection)
+      if (!isNewItem && itemId) {
+        const searchId = String(itemId).trim()
+        const urlId = String(id || '').trim()
+        let itemRemoved = false
+        
+        for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+          const section = sections[sectionIndex]
+          
+          // Check items in section
+          if (section.items && Array.isArray(section.items)) {
+            const itemIndex = section.items.findIndex(item => {
+              const itemIdStr = String(item.id || item._id || '').trim()
+              // Try multiple ID formats
+              return itemIdStr === searchId || itemIdStr === urlId || 
+                     String(item.id) === String(itemId) || String(item.id) === String(id)
+            })
+            if (itemIndex !== -1) {
+              section.items.splice(itemIndex, 1)
+              itemRemoved = true
+              console.log(`Removed item from section: ${section.name}, item ID was: ${section.items[itemIndex]?.id}`)
+              break
+            }
+          }
+          
+          // Check items in subsections
+          if (!itemRemoved && section.subsections && Array.isArray(section.subsections)) {
+            for (let subIndex = 0; subIndex < section.subsections.length; subIndex++) {
+              const subsection = section.subsections[subIndex]
+              if (subsection.items && Array.isArray(subsection.items)) {
+                const subItemIndex = subsection.items.findIndex(item => {
+                  const itemIdStr = String(item.id || item._id || '').trim()
+                  // Try multiple ID formats
+                  return itemIdStr === searchId || itemIdStr === urlId || 
+                         String(item.id) === String(itemId) || String(item.id) === String(id)
+                })
+                if (subItemIndex !== -1) {
+                  subsection.items.splice(subItemIndex, 1)
+                  itemRemoved = true
+                  console.log(`Removed item from subsection: ${subsection.name} in section: ${section.name}`)
+                  break
+                }
+              }
+            }
+            if (itemRemoved) break
+          }
+        }
+        
+        if (!itemRemoved && !isNewItem) {
+          console.warn(`Item with ID ${itemId} (URL: ${id}) not found in menu for removal. It will be added as new.`)
+        }
+      }
+
+      // Find or create the category section
+      let targetSection = sections.find(s => s.name === category)
+      if (!targetSection) {
+        // Create new section for this category
+        targetSection = {
+          id: `section-${Date.now()}`,
+          name: category,
+          items: [],
+          subsections: [],
+          isEnabled: true,
+          order: sections.length
+        }
+        sections.push(targetSection)
+      }
+
+      // Ensure items array exists
+      if (!targetSection.items) {
+        targetSection.items = []
+      }
+
+      // Prepare nutrition data as strings (as per menu model)
+      const nutritionStrings = []
+      if (weightPerServing) nutritionStrings.push(`Weight per serving: ${weightPerServing} grams`)
+      if (calorieCount) nutritionStrings.push(`Calorie count: ${calorieCount} Kcal`)
+      if (proteinCount) nutritionStrings.push(`Protein count: ${proteinCount} mg`)
+      if (carbohydrates) nutritionStrings.push(`Carbohydrates: ${carbohydrates} mg`)
+      if (fatCount) nutritionStrings.push(`Fat count: ${fatCount} mg`)
+      if (fibreCount) nutritionStrings.push(`Fibre count: ${fibreCount} mg`)
+
+      // Prepare item data according to menu model
+      const itemDataToSave = {
+        id: String(itemId), // Ensure ID is a string
+        name: itemName.trim(),
+        nameArabic: "",
+        image: allImageUrls.length > 0 ? allImageUrls[0] : "",
+        images: allImageUrls, // Multiple images support - all Cloudinary URLs
+        category: category,
+        rating: itemData?.rating || 0.0,
+        reviews: itemData?.reviews || 0,
+        price: parseFloat(basePrice) || 0,
+        stock: "Unlimited",
+        discount: null,
+        originalPrice: null,
+        foodType: foodType === "Egg" ? "Non-Veg" : foodType, // Menu model only supports Veg/Non-Veg
+        availabilityTimeStart: "12:01 AM",
+        availabilityTimeEnd: "11:57 PM",
+        description: itemDescription.trim(),
+        discountType: "Percent",
+        discountAmount: 0.0,
+        isAvailable: isInStock,
+        isRecommended: isRecommended,
+        variations: [],
+        tags: selectedTags,
+        nutrition: nutritionStrings,
+        allergies: allergens ? allergens.split(",").map(a => a.trim()).filter(a => a) : [],
+        photoCount: allImageUrls.length || 1,
+        // Additional fields for complete item details
+        subCategory: subCategory || "",
+        servesInfo: servesInfo || "",
+        itemSize: itemSizeQuantity ? `${itemSizeQuantity} ${itemSizeUnit}` : "",
+        itemSizeQuantity: itemSizeQuantity || "",
+        itemSizeUnit: itemSizeUnit || "piece",
+        gst: parseFloat(gst) || 0,
+      }
+
+      // Add or update item in target section
+      // Since we already removed the item from its old location, we should always add it here
+      // But check if it somehow still exists (shouldn't happen, but safety check)
+      const existingItemIndex = targetSection.items.findIndex(item => {
+        const itemIdStr = String(item.id || item._id || '').trim()
+        return itemIdStr === String(itemId).trim()
+      })
+      
+      if (existingItemIndex !== -1) {
+        // Update existing item (shouldn't happen if removal worked, but handle it)
+        console.log(`Updating existing item at index ${existingItemIndex} in section: ${targetSection.name}`)
+        targetSection.items[existingItemIndex] = itemDataToSave
+      } else {
+        // Add new item (or re-add after removal)
+        console.log(`Adding item to section: ${targetSection.name}`)
+        targetSection.items.push(itemDataToSave)
+      }
+
+      // Update menu with new sections
+      console.log('Updating menu with sections. Item ID:', itemId, 'Is new item:', isNewItem)
+      const updateResponse = await restaurantAPI.updateMenu({ sections })
+      
+      if (updateResponse.data?.success) {
+        toast.success(isNewItem ? "Item created successfully" : "Item updated successfully")
+        // Small delay to ensure backend has processed the update
+        await new Promise(resolve => setTimeout(resolve, 300))
+        // Navigate back to HubMenu with replace to prevent back navigation issues
+        navigate("/restaurant/hub-menu", { replace: true })
+        // Trigger a page refresh event
+        window.dispatchEvent(new CustomEvent('foodsChanged'))
+      } else {
+        console.error('Update failed:', updateResponse.data)
+        toast.error(updateResponse.data?.message || "Failed to save item")
+      }
+    } catch (error) {
+      console.error('Error saving item:', error)
+      toast.error(error.response?.data?.message || error.message || "Failed to save item. Please try again.")
+    } finally {
+      setUploadingImages(false)
     }
   }
 
@@ -574,10 +1025,27 @@ export default function ItemDetailsPage() {
                 <div className="relative">
                   <input
                     type="text"
-                    value={`₹ ${basePrice}`}
-                    onChange={(e) => setBasePrice(e.target.value)}
-                    className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50"
+                    value={basePrice}
+                    onChange={(e) => {
+                      // Remove rupee symbol and any non-numeric characters except decimal point
+                      const value = e.target.value.replace(/[₹\s,]/g, '').replace(/[^0-9.]/g, '')
+                      // Allow only one decimal point
+                      const parts = value.split('.')
+                      const cleanedValue = parts.length > 2 
+                        ? parts[0] + '.' + parts.slice(1).join('')
+                        : value
+                      setBasePrice(cleanedValue)
+                    }}
+                    onFocus={(e) => {
+                      // Remove rupee symbol when focused for easier editing
+                      if (e.target.value.startsWith('₹')) {
+                        e.target.value = e.target.value.replace(/₹\s*/g, '')
+                      }
+                    }}
+                    placeholder="Enter price"
+                    className="w-full pl-8 pr-12 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-600">₹</span>
                   <button className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100">
                     <EditIcon className="w-4 h-4 text-gray-500" />
                   </button>
@@ -784,28 +1252,38 @@ export default function ItemDetailsPage() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-2">
-                <div className="space-y-4">
-                  {categories.map((cat) => (
-                    <div key={cat.id}>
-                      <h3 className="text-sm font-bold text-gray-900 mb-2">{cat.name}</h3>
-                      <div className="space-y-2">
-                        {cat.subCategories.map((subCat) => (
-                          <button
-                            key={subCat}
-                            onClick={() => handleCategorySelect(cat.id, subCat)}
-                            className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                              category === cat.name && subCategory === subCat
-                                ? "bg-gray-900 text-white"
-                                : "bg-gray-50 text-gray-900 hover:bg-gray-100"
-                            }`}
-                          >
-                            {subCat}
-                          </button>
-                        ))}
+                {loadingCategories ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-600" />
+                  </div>
+                ) : categories.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-sm text-gray-500">No categories available</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {categories.map((cat) => (
+                      <div key={cat.id}>
+                        <h3 className="text-sm font-bold text-gray-900 mb-2">{cat.name}</h3>
+                        <div className="space-y-2">
+                          {cat.subCategories.map((subCat) => (
+                            <button
+                              key={subCat}
+                              onClick={() => handleCategorySelect(cat.id, subCat)}
+                              className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                                category === cat.name && subCategory === subCat
+                                  ? "bg-gray-900 text-white"
+                                  : "bg-gray-50 text-gray-900 hover:bg-gray-100"
+                              }`}
+                            >
+                              {subCat}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </motion.div>
           </>
@@ -1058,14 +1536,21 @@ export default function ItemDetailsPage() {
           )}
           <button
             onClick={handleSave}
-            disabled={!disclaimerChecked}
-            className={`${isNewItem ? 'w-full' : 'flex-1'} py-3 px-4 rounded-lg text-sm font-semibold transition-colors ${
-              disclaimerChecked
+            disabled={!disclaimerChecked || uploadingImages}
+            className={`${isNewItem ? 'w-full' : 'flex-1'} py-3 px-4 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+              disclaimerChecked && !uploadingImages
                 ? "bg-black text-white hover:bg-black"
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
           >
-            Save
+            {uploadingImages ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Uploading...</span>
+              </>
+            ) : (
+              "Save"
+            )}
           </button>
         </div>
       </div>

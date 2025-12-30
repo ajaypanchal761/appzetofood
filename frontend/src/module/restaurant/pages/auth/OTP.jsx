@@ -254,13 +254,13 @@ export default function RestaurantOTP() {
                 // Navigate to onboarding with the incomplete step
                 navigate(`/restaurant/onboarding?step=${incompleteStep}`, { replace: true })
               } else {
-                // Onboarding is complete, go to restaurant dashboard
-                navigate("/restaurant-panel/dashboard", { replace: true })
+                // Onboarding is complete, go to restaurant home
+                navigate("/restaurant", { replace: true })
               }
             } catch (err) {
               console.error("Failed to check onboarding status:", err)
-              // Fallback to restaurant dashboard
-              navigate("/restaurant-panel/dashboard", { replace: true })
+              // Fallback to restaurant home
+              navigate("/restaurant", { replace: true })
             }
           }
         }, 500)

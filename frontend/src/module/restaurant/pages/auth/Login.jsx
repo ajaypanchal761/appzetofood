@@ -255,8 +255,8 @@ export default function RestaurantLogin() {
       // Notify any listeners that auth state has changed
       window.dispatchEvent(new Event("restaurantAuthChanged"))
 
-      // Navigate to restaurant dashboard
-      navigate("/restaurant-panel/dashboard")
+      // Navigate to restaurant home
+      navigate("/restaurant")
     } catch (error) {
       console.error("Firebase Google login error:", error)
       const message =

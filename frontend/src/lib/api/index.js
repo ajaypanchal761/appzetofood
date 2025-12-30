@@ -255,9 +255,85 @@ export const restaurantAPI = {
     return apiClient.put(API_ENDPOINTS.RESTAURANT.PROFILE, data);
   },
 
-  // Get menu
+  // Delete restaurant account
+  deleteAccount: () => {
+    return apiClient.delete(API_ENDPOINTS.RESTAURANT.PROFILE);
+  },
+
+  // Update delivery status (isAcceptingOrders)
+  updateDeliveryStatus: (isAcceptingOrders) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.DELIVERY_STATUS, { isAcceptingOrders });
+  },
+
+  // Upload profile image
+  uploadProfileImage: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.PROFILE}/image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  // Upload menu image
+  uploadMenuImage: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.PROFILE}/menu-image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  // Staff Management
+  addStaff: (data) => {
+    // If data is FormData, set appropriate headers
+    const config = data instanceof FormData
+      ? {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      : {};
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.STAFF, data, config);
+  },
+  getStaff: (role) => {
+    const url = role ? `${API_ENDPOINTS.RESTAURANT.STAFF}?role=${role}` : API_ENDPOINTS.RESTAURANT.STAFF;
+    return apiClient.get(url);
+  },
+  getStaffById: (id) => {
+    return apiClient.get(`${API_ENDPOINTS.RESTAURANT.STAFF}/${id}`);
+  },
+  updateStaff: (id, data) => {
+    return apiClient.put(`${API_ENDPOINTS.RESTAURANT.STAFF}/${id}`, data);
+  },
+  deleteStaff: (id) => {
+    return apiClient.delete(`${API_ENDPOINTS.RESTAURANT.STAFF}/${id}`);
+  },
+
+  // Menu operations
   getMenu: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.MENU);
+  },
+  updateMenu: (menuData) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.MENU, menuData);
+  },
+  addSection: (name) => {
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/section`, { name });
+  },
+  addItemToSection: (sectionId, item) => {
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/section/item`, { sectionId, item });
+  },
+  addSubsectionToSection: (sectionId, name) => {
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/section/subsection`, { sectionId, name });
+  },
+  addItemToSubsection: (sectionId, subsectionId, item) => {
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/subsection/item`, { sectionId, subsectionId, item });
+  },
+  getMenuByRestaurantId: (restaurantId) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.MENU_BY_RESTAURANT_ID.replace(':id', restaurantId));
   },
 
   // Get orders
@@ -296,6 +372,18 @@ export const restaurantAPI = {
   },
   updateMenu: (menuData) => {
     return apiClient.put(API_ENDPOINTS.RESTAURANT.MENU, menuData);
+  },
+  addSection: (name) => {
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/section`, { name });
+  },
+  addItemToSection: (sectionId, item) => {
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/section/item`, { sectionId, item });
+  },
+  addSubsectionToSection: (sectionId, name) => {
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/section/subsection`, { sectionId, name });
+  },
+  addItemToSubsection: (sectionId, subsectionId, item) => {
+    return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/subsection/item`, { sectionId, subsectionId, item });
   },
   getMenuByRestaurantId: (restaurantId) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.MENU_BY_RESTAURANT_ID.replace(':id', restaurantId));
@@ -399,6 +487,16 @@ export const adminAPI = {
     return apiClient.get(API_ENDPOINTS.ADMIN.USERS, { params });
   },
 
+  // Get user by ID
+  getUserById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.USER_BY_ID.replace(':id', id));
+  },
+
+  // Update user status
+  updateUserStatus: (id, isActive) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.USER_STATUS.replace(':id', id), { isActive });
+  },
+
   // Get restaurants
   getRestaurants: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANTS, { params });
@@ -417,6 +515,39 @@ export const adminAPI = {
   // Get analytics
   getAnalytics: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.ANALYTICS, { params });
+  },
+
+  // Category Management
+  getCategories: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.CATEGORIES, { params });
+  },
+
+  getCategoryById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.CATEGORY_BY_ID.replace(':id', id));
+  },
+
+  createCategory: (data) => {
+    // Axios will automatically handle FormData headers (including boundary)
+    // No need to manually set Content-Type for FormData
+    return apiClient.post(API_ENDPOINTS.ADMIN.CATEGORIES, data);
+  },
+
+  updateCategory: (id, data) => {
+    // Axios will automatically handle FormData headers (including boundary)
+    // No need to manually set Content-Type for FormData
+    return apiClient.put(API_ENDPOINTS.ADMIN.CATEGORY_BY_ID.replace(':id', id), data);
+  },
+
+  deleteCategory: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.CATEGORY_BY_ID.replace(':id', id));
+  },
+
+  toggleCategoryStatus: (id) => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.CATEGORY_STATUS.replace(':id', id));
+  },
+
+  updateCategoryPriority: (id, priority) => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.CATEGORY_PRIORITY.replace(':id', id), { priority });
   },
 };
 

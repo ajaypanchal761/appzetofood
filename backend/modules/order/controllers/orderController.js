@@ -1,6 +1,8 @@
 import Order from '../models/Order.js';
 import Payment from '../../payment/models/Payment.js';
 import { createOrder as createRazorpayOrder, verifyPayment } from '../../payment/services/razorpayService.js';
+import Restaurant from '../../restaurant/models/Restaurant.js';
+import mongoose from 'mongoose';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -51,6 +53,38 @@ export const createOrder = async (req, res) => {
         success: false,
         message: 'Order total is required'
       });
+    }
+
+    // Check if restaurant is accepting orders
+    if (restaurantId) {
+      let restaurant = null;
+      // Try to find restaurant by restaurantId, _id, or slug
+      if (mongoose.Types.ObjectId.isValid(restaurantId) && restaurantId.length === 24) {
+        restaurant = await Restaurant.findById(restaurantId);
+      }
+      if (!restaurant) {
+        restaurant = await Restaurant.findOne({
+          $or: [
+            { restaurantId: restaurantId },
+            { slug: restaurantId }
+          ]
+        });
+      }
+
+      if (restaurant) {
+        if (!restaurant.isAcceptingOrders) {
+          return res.status(403).json({
+            success: false,
+            message: 'Restaurant is currently not accepting orders'
+          });
+        }
+        if (!restaurant.isActive) {
+          return res.status(403).json({
+            success: false,
+            message: 'Restaurant is currently inactive'
+          });
+        }
+      }
     }
 
     // Generate order ID before creating order

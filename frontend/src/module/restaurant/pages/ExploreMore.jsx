@@ -11,7 +11,6 @@ import {
   ChevronRight,
   Info,
   Clock,
-  Phone,
   Users,
   Settings,
   Bell,
@@ -34,6 +33,8 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { DateRangeCalendar } from "@/components/ui/date-range-calendar"
 import { clearModuleAuth, clearAuthData } from "@/lib/utils/auth"
+import { restaurantAPI } from "@/lib/api"
+import { firebaseAuth } from "@/lib/firebase"
 
 // Time Picker Wheel Component
 function TimePickerWheel({ 
@@ -354,36 +355,198 @@ export default function ExploreMore() {
 
   const STORAGE_KEY = "restaurant_schedule_off"
 
-  // Mock user data - replace with actual user data from your auth context/store
-  const userData = {
-    name: "RAJKUMAR CHOUHAN Raj",
-    phone: "9981127415",
-    email: "rrajkumarchouhan96@gmail.com",
+  // Restaurant data state
+  const [restaurantData, setRestaurantData] = useState(null)
+  const [loadingRestaurant, setLoadingRestaurant] = useState(true)
+
+  // Fetch restaurant data on mount
+  useEffect(() => {
+    const fetchRestaurantData = async () => {
+      try {
+        setLoadingRestaurant(true)
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantData(data)
+        }
+      } catch (error) {
+        console.error("Error fetching restaurant data:", error)
+      } finally {
+        setLoadingRestaurant(false)
+      }
+    }
+
+    fetchRestaurantData()
+  }, [])
+
+  // Format address from location object
+  const formatAddress = (location) => {
+    if (!location) return ""
+    
+    const parts = []
+    
+    // Add area if available
+    if (location.area) {
+      parts.push(location.area.trim())
+    }
+    
+    // Add city if available and not already in area
+    if (location.city) {
+      const city = location.city.trim()
+      // Only add city if it's not already included in area
+      if (!location.area || !location.area.includes(city)) {
+        parts.push(city)
+      }
+    }
+    
+    return parts.join(", ") || ""
+  }
+
+  // Get user data from restaurant data
+  const userData = restaurantData ? {
+    name: restaurantData.ownerName || restaurantData.name || "Restaurant Owner",
+    phone: restaurantData.ownerPhone || restaurantData.phone || "N/A",
+    email: restaurantData.ownerEmail || restaurantData.email || "N/A",
+    role: "OWNER",
+    profileImage: restaurantData.profileImage
+  } : {
+    name: "Loading...",
+    phone: "",
+    email: "",
     role: "OWNER"
   }
 
-  const handleLogout = () => {
-    // Clear only restaurant module auth and redirect to restaurant auth entry
-    try {
-      clearModuleAuth("restaurant")
-      window.dispatchEvent(new Event("restaurantAuthChanged"))
-    } catch (error) {
-      console.error("Error during restaurant logout:", error)
-    }
+  // Get restaurant display data
+  const restaurantDisplayName = restaurantData?.name || "Loading..."
+  const restaurantDisplayAddress = restaurantData?.location ? formatAddress(restaurantData.location) : ""
+
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return // Prevent multiple clicks
+    
+    setIsLoggingOut(true)
     setProfileOpen(false)
-    navigate("/restaurant/welcome")
+
+    try {
+      // Call backend logout API to invalidate refresh token
+      try {
+        await restaurantAPI.logout()
+      } catch (apiError) {
+        // Continue with logout even if API call fails (network issues, etc.)
+        console.warn("Logout API call failed, continuing with local cleanup:", apiError)
+      }
+
+      // Sign out from Firebase if restaurant logged in via Google
+      try {
+        const { signOut } = await import("firebase/auth")
+        const currentUser = firebaseAuth.currentUser
+        if (currentUser) {
+          await signOut(firebaseAuth)
+        }
+      } catch (firebaseError) {
+        // Continue even if Firebase logout fails
+        console.warn("Firebase logout failed, continuing with local cleanup:", firebaseError)
+      }
+
+      // Clear restaurant module authentication data
+      clearModuleAuth("restaurant")
+      
+      // Clear any onboarding data from localStorage
+      localStorage.removeItem("restaurant_onboarding")
+      localStorage.removeItem("restaurant_accessToken")
+      localStorage.removeItem("restaurant_authenticated")
+      localStorage.removeItem("restaurant_user")
+      
+      // Clear sessionStorage
+      sessionStorage.removeItem("restaurantAuthData")
+      
+      // Dispatch auth change event to notify other components
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+
+      // Small delay for UX, then navigate to welcome page
+      setTimeout(() => {
+        navigate("/restaurant/welcome", { replace: true })
+      }, 300)
+    } catch (error) {
+      // Even if there's an error, we should still clear local data and logout
+      console.error("Error during logout:", error)
+      clearModuleAuth("restaurant")
+      localStorage.removeItem("restaurant_onboarding")
+      localStorage.removeItem("restaurant_accessToken")
+      localStorage.removeItem("restaurant_authenticated")
+      localStorage.removeItem("restaurant_user")
+      sessionStorage.removeItem("restaurantAuthData")
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+      navigate("/restaurant/welcome", { replace: true })
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
-  const handleLogoutAllDevices = () => {
-    // Clear auth for all modules (admin, restaurant, delivery, user)
-    try {
-      clearAuthData()
-      window.dispatchEvent(new Event("restaurantAuthChanged"))
-    } catch (error) {
-      console.error("Error during logout from all devices:", error)
-    }
+  const handleLogoutAllDevices = async () => {
+    if (isLoggingOut) return // Prevent multiple clicks
+    
+    setIsLoggingOut(true)
     setProfileOpen(false)
-    navigate("/restaurant/welcome")
+
+    try {
+      // Call backend logout API to invalidate refresh token
+      try {
+        await restaurantAPI.logout()
+      } catch (apiError) {
+        // Continue with logout even if API call fails (network issues, etc.)
+        console.warn("Logout API call failed, continuing with local cleanup:", apiError)
+      }
+
+      // Sign out from Firebase if restaurant logged in via Google
+      try {
+        const { signOut } = await import("firebase/auth")
+        const currentUser = firebaseAuth.currentUser
+        if (currentUser) {
+          await signOut(firebaseAuth)
+        }
+      } catch (firebaseError) {
+        // Continue even if Firebase logout fails
+        console.warn("Firebase logout failed, continuing with local cleanup:", firebaseError)
+      }
+
+      // Clear auth for all modules (admin, restaurant, delivery, user)
+      clearAuthData()
+      
+      // Clear any onboarding data from localStorage
+      localStorage.removeItem("restaurant_onboarding")
+      
+      // Clear sessionStorage for all modules
+      sessionStorage.removeItem("restaurantAuthData")
+      sessionStorage.removeItem("adminAuthData")
+      sessionStorage.removeItem("deliveryAuthData")
+      sessionStorage.removeItem("userAuthData")
+      
+      // Dispatch auth change events to notify other components
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+      window.dispatchEvent(new Event("adminAuthChanged"))
+      window.dispatchEvent(new Event("deliveryAuthChanged"))
+      window.dispatchEvent(new Event("userAuthChanged"))
+
+      // Small delay for UX, then navigate to welcome page
+      setTimeout(() => {
+        navigate("/restaurant/welcome", { replace: true })
+      }, 300)
+    } catch (error) {
+      // Even if there's an error, we should still clear local data and logout
+      console.error("Error during logout from all devices:", error)
+      clearAuthData()
+      localStorage.removeItem("restaurant_onboarding")
+      sessionStorage.removeItem("restaurantAuthData")
+      sessionStorage.removeItem("adminAuthData")
+      sessionStorage.removeItem("deliveryAuthData")
+      sessionStorage.removeItem("userAuthData")
+      window.dispatchEvent(new Event("restaurantAuthChanged"))
+      navigate("/restaurant/welcome", { replace: true })
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
   const scheduleOffReasons = [
@@ -510,8 +673,7 @@ export default function ExploreMore() {
   const manageOutletItems = [
     { id: 1, label: "Outlet info", icon: Info, route: "/restaurant/outlet-info" },
     { id: 2, label: "Outlet timings", icon: Clock, route: "/restaurant/outlet-timings" },
-    { id: 3, label: "Phone numbers", icon: Phone, route: "/restaurant/phone" },
-    { id: 4, label: "Manage staff", icon: Users, route: "/restaurant/contact-details" },
+    { id: 3, label: "Manage staff", icon: Users, route: "/restaurant/contact-details" },
   ]
 
   const settingsItems = [
@@ -583,7 +745,7 @@ export default function ExploreMore() {
       >
         {title}
       </motion.h2>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-4">
         {items.map((item, index) => {
           const IconComponent = item.icon
           return (
@@ -609,15 +771,15 @@ export default function ExploreMore() {
                     navigate(item.route)
                   }
                 }}
-                className="w-full flex items-center justify-center p-4 bg-white rounded-lg shadow-md border-2 border-gray-200 hover:shadow-md transition-shadow duration-200 min-h-[80px]"
+                className="w-full flex items-center justify-center p-6 bg-white rounded-lg shadow-md border-2 border-gray-200 hover:shadow-md transition-shadow duration-200 min-h-[110px]"
               >
                 <div className="relative flex items-center justify-center">
                   {item.customIcon ? (
-                    <div className="w-10 h-10 flex items-center justify-center">
-                      <span className="text-base font-bold text-gray-900">hp</span>
+                    <div className="w-12 h-12 flex items-center justify-center">
+                      <span className="text-lg font-bold text-gray-900">hp</span>
                     </div>
                   ) : (
-                    <IconComponent className="w-6 h-6 text-gray-900" strokeWidth={1.5} />
+                    <IconComponent className="w-8 h-8 text-gray-900" strokeWidth={1.5} />
                   )}
                   {item.badge && (
                     <motion.span 
@@ -631,7 +793,7 @@ export default function ExploreMore() {
                   )}
                 </div>
               </motion.button>
-              <span className="text-xs text-gray-700 text-center leading-tight font-normal mt-3">
+              <span className="text-sm text-gray-700 text-center leading-tight font-normal mt-3">
                 {item.label}
               </span>
             </motion.div>
@@ -716,11 +878,13 @@ export default function ExploreMore() {
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <h2 className="text-base font-semibold text-gray-900 mb-0.5">
-                      Kadhai Chammach Restaurant
+                      {restaurantDisplayName}
                     </h2>
-                    <p className="text-sm text-gray-500 truncate">
-                      By Pass Road (South)
-                    </p>
+                    {restaurantDisplayAddress && (
+                      <p className="text-sm text-gray-500 truncate">
+                        {restaurantDisplayAddress}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
@@ -934,21 +1098,33 @@ export default function ExploreMore() {
               <div className="px-6 py-6">
                 <div className="flex items-start gap-4">
                   {/* Avatar */}
-                  <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center shrink-0">
-                    <User className="w-8 h-8 text-gray-400" />
+                  <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
+                    {userData.profileImage?.url ? (
+                      <img
+                        src={userData.profileImage.url}
+                        alt={userData.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User className="w-8 h-8 text-gray-400" />
+                    )}
                   </div>
 
                   {/* User Details */}
                   <div className="flex-1 min-w-0">
                     <h3 className="text-base font-bold text-gray-900 mb-1">
-                      {userData.name}
+                      {loadingRestaurant ? "Loading..." : userData.name}
                     </h3>
-                    <p className="text-sm text-gray-900 mb-1">
-                      {userData.phone}
-                    </p>
-                    <p className="text-sm text-gray-900 mb-1">
-                      {userData.email}
-                    </p>
+                    {userData.phone && (
+                      <p className="text-sm text-gray-900 mb-1">
+                        {userData.phone}
+                      </p>
+                    )}
+                    {userData.email && (
+                      <p className="text-sm text-gray-900 mb-1">
+                        {userData.email}
+                      </p>
+                    )}
                     <p className="text-sm font-bold text-gray-900 mt-2">
                       {userData.role}
                     </p>
@@ -961,17 +1137,19 @@ export default function ExploreMore() {
                 {/* Logout Button */}
                 <button
                   onClick={handleLogout}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
+                  disabled={isLoggingOut}
+                  className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                 >
-                  Logout
+                  {isLoggingOut ? "Logging out..." : "Logout"}
                 </button>
 
                 {/* Logout from all devices Button */}
                 <button
                   onClick={handleLogoutAllDevices}
-                  className="w-full bg-white border-2 border-red-600 text-red-600 hover:bg-red-50 font-semibold py-3 px-4 rounded-lg transition-colors"
+                  disabled={isLoggingOut}
+                  className="w-full bg-white border-2 border-red-600 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-3 px-4 rounded-lg transition-colors"
                 >
-                  Logout from all devices
+                  {isLoggingOut ? "Logging out..." : "Logout from all devices"}
                 </button>
               </div>
 

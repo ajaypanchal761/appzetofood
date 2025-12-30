@@ -242,16 +242,60 @@ export default function RestaurantOnboarding() {
     const localData = loadOnboardingFromLocalStorage()
     if (localData) {
       if (localData.step1) {
-        setStep1(localData.step1)
+        setStep1({
+          restaurantName: localData.step1.restaurantName || "",
+          ownerName: localData.step1.ownerName || "",
+          ownerEmail: localData.step1.ownerEmail || "",
+          ownerPhone: localData.step1.ownerPhone || "",
+          primaryContactNumber: localData.step1.primaryContactNumber || "",
+          location: {
+            addressLine1: localData.step1.location?.addressLine1 || "",
+            addressLine2: localData.step1.location?.addressLine2 || "",
+            area: localData.step1.location?.area || "",
+            city: localData.step1.location?.city || "",
+            landmark: localData.step1.location?.landmark || "",
+          },
+        })
       }
       if (localData.step2) {
-        setStep2(localData.step2)
+        setStep2({
+          menuImages: localData.step2.menuImages || [],
+          profileImage: localData.step2.profileImage || null,
+          cuisines: localData.step2.cuisines || [],
+          openingTime: localData.step2.openingTime || "",
+          closingTime: localData.step2.closingTime || "",
+          openDays: localData.step2.openDays || [],
+        })
       }
       if (localData.step3) {
-        setStep3(localData.step3)
+        setStep3({
+          panNumber: localData.step3.panNumber || "",
+          nameOnPan: localData.step3.nameOnPan || "",
+          panImage: localData.step3.panImage || null,
+          gstRegistered: localData.step3.gstRegistered || false,
+          gstNumber: localData.step3.gstNumber || "",
+          gstLegalName: localData.step3.gstLegalName || "",
+          gstAddress: localData.step3.gstAddress || "",
+          gstImage: localData.step3.gstImage || null,
+          fssaiNumber: localData.step3.fssaiNumber || "",
+          fssaiExpiry: localData.step3.fssaiExpiry || "",
+          fssaiImage: localData.step3.fssaiImage || null,
+          accountNumber: localData.step3.accountNumber || "",
+          confirmAccountNumber: localData.step3.confirmAccountNumber || "",
+          ifscCode: localData.step3.ifscCode || "",
+          accountHolderName: localData.step3.accountHolderName || "",
+          accountType: localData.step3.accountType || "",
+        })
       }
       if (localData.step4) {
-        setStep4(localData.step4)
+        setStep4({
+          estimatedDeliveryTime: localData.step4.estimatedDeliveryTime || "",
+          distance: localData.step4.distance || "",
+          priceRange: localData.step4.priceRange || "$$",
+          featuredDish: localData.step4.featuredDish || "",
+          featuredPrice: localData.step4.featuredPrice || "",
+          offer: localData.step4.offer || "",
+        })
       }
       // Only set step from localStorage if URL doesn't have a step parameter
       if (localData.currentStep && !stepParam) {
@@ -281,14 +325,21 @@ export default function RestaurantOnboarding() {
               ownerPhone: data.step1.ownerPhone || "",
               primaryContactNumber: data.step1.primaryContactNumber || "",
               location: {
-                ...prev.location,
-                ...data.step1.location,
+                addressLine1: data.step1.location?.addressLine1 || "",
+                addressLine2: data.step1.location?.addressLine2 || "",
+                area: data.step1.location?.area || "",
+                city: data.step1.location?.city || "",
+                landmark: data.step1.location?.landmark || "",
               },
             }))
           }
           if (data.step2) {
             setStep2((prev) => ({
               ...prev,
+              // Load menu images from URLs if available
+              menuImages: data.step2.menuImageUrls || [],
+              // Load profile image URL if available
+              profileImage: data.step2.profileImageUrl || null,
               cuisines: data.step2.cuisines || [],
               openingTime: data.step2.deliveryTimings?.openingTime || "",
               closingTime: data.step2.deliveryTimings?.closingTime || "",
@@ -559,73 +610,135 @@ export default function RestaurantOnboarding() {
         setStep(2)
       } else if (step === 2) {
         const menuUploads = []
+        // Upload menu images if they are File objects
         for (const file of step2.menuImages.filter((f) => f instanceof File)) {
           const uploaded = await handleUpload(file, "appzeto/restaurant/menu")
           menuUploads.push(uploaded)
         }
-        const profileUpload =
-          step2.profileImage && step2.profileImage instanceof File
-            ? await handleUpload(step2.profileImage, "appzeto/restaurant/profile")
-            : null
+        // If menuImages already have URLs (from previous save), include them
+        const existingMenuUrls = step2.menuImages.filter((img) => !(img instanceof File) && img?.url)
+        const allMenuUrls = [...existingMenuUrls, ...menuUploads]
+        
+        // Upload profile image if it's a File object
+        let profileUpload = null
+        if (step2.profileImage instanceof File) {
+          profileUpload = await handleUpload(step2.profileImage, "appzeto/restaurant/profile")
+        } else if (step2.profileImage?.url) {
+          // If profileImage already has a URL (from previous save), use it
+          profileUpload = step2.profileImage
+        }
 
         const payload = {
           step2: {
-            menuImageUrls: menuUploads,
+            menuImageUrls: allMenuUrls.length > 0 ? allMenuUrls : [],
             profileImageUrl: profileUpload,
-            cuisines: step2.cuisines,
+            cuisines: step2.cuisines || [],
             deliveryTimings: {
-              openingTime: step2.openingTime,
-              closingTime: step2.closingTime,
+              openingTime: step2.openingTime || "",
+              closingTime: step2.closingTime || "",
             },
-            openDays: step2.openDays,
+            openDays: step2.openDays || [],
           },
           completedSteps: 2,
         }
-        await api.put("/restaurant/onboarding", payload)
-        setStep(3)
+        console.log('📤 Step2 payload:', {
+          menuImageUrlsCount: payload.step2.menuImageUrls.length,
+          hasProfileImage: !!payload.step2.profileImageUrl,
+          cuisines: payload.step2.cuisines,
+          openDays: payload.step2.openDays,
+          deliveryTimings: payload.step2.deliveryTimings,
+        })
+        
+        const response = await api.put("/restaurant/onboarding", payload)
+        console.log('✅ Step2 response:', response?.data)
+        
+        // Verify response is successful
+        if (!response || !response.data) {
+          throw new Error('Invalid response from server')
+        }
+        
+        // After step2, also update restaurant schema with step2 data
+        // This ensures data is saved immediately, not just in onboarding subdocument
+        if (response?.data?.data?.restaurant) {
+          console.log('✅ Step2 data saved and restaurant updated')
+        }
+        
+        // Only proceed to step 3 if save was successful
+        if (response?.data?.data?.onboarding || response?.data?.data) {
+          console.log('✅ Step2 completed successfully, moving to step 3')
+          setStep(3)
+        } else {
+          throw new Error('Failed to save step2 data')
+        }
       } else if (step === 3) {
+        // Upload PAN image if it's a File object
         let panImageUpload = null
-        if (step3.panImage && step3.panImage instanceof File) {
+        if (step3.panImage instanceof File) {
           panImageUpload = await handleUpload(step3.panImage, "appzeto/restaurant/pan")
+        } else if (step3.panImage?.url) {
+          // If panImage already has a URL (from previous save), use it
+          panImageUpload = step3.panImage
         }
+        
+        // Upload GST image if it's a File object
         let gstImageUpload = null
-        if (step3.gstImage && step3.gstImage instanceof File) {
+        if (step3.gstImage instanceof File) {
           gstImageUpload = await handleUpload(step3.gstImage, "appzeto/restaurant/gst")
+        } else if (step3.gstImage?.url) {
+          // If gstImage already has a URL (from previous save), use it
+          gstImageUpload = step3.gstImage
         }
+        
+        // Upload FSSAI image if it's a File object
         let fssaiImageUpload = null
-        if (step3.fssaiImage && step3.fssaiImage instanceof File) {
+        if (step3.fssaiImage instanceof File) {
           fssaiImageUpload = await handleUpload(step3.fssaiImage, "appzeto/restaurant/fssai")
+        } else if (step3.fssaiImage?.url) {
+          // If fssaiImage already has a URL (from previous save), use it
+          fssaiImageUpload = step3.fssaiImage
         }
 
         const payload = {
           step3: {
             pan: {
-              panNumber: step3.panNumber,
-              nameOnPan: step3.nameOnPan,
+              panNumber: step3.panNumber || "",
+              nameOnPan: step3.nameOnPan || "",
               image: panImageUpload,
             },
             gst: {
-              isRegistered: step3.gstRegistered,
-              gstNumber: step3.gstNumber,
-              legalName: step3.gstLegalName,
-              address: step3.gstAddress,
+              isRegistered: step3.gstRegistered || false,
+              gstNumber: step3.gstNumber || "",
+              legalName: step3.gstLegalName || "",
+              address: step3.gstAddress || "",
               image: gstImageUpload,
             },
             fssai: {
-              registrationNumber: step3.fssaiNumber,
+              registrationNumber: step3.fssaiNumber || "",
               expiryDate: step3.fssaiExpiry || null,
               image: fssaiImageUpload,
             },
             bank: {
-              accountNumber: step3.accountNumber,
-              ifscCode: step3.ifscCode,
-              accountHolderName: step3.accountHolderName,
-              accountType: step3.accountType,
+              accountNumber: step3.accountNumber || "",
+              ifscCode: step3.ifscCode || "",
+              accountHolderName: step3.accountHolderName || "",
+              accountType: step3.accountType || "",
             },
           },
           completedSteps: 3,
         }
-        await api.put("/restaurant/onboarding", payload)
+        console.log('📤 Step3 payload:', {
+          hasPan: !!payload.step3.pan.panNumber,
+          hasGst: payload.step3.gst.isRegistered,
+          hasFssai: !!payload.step3.fssai.registrationNumber,
+          hasBank: !!payload.step3.bank.accountNumber,
+        })
+        
+        const response = await api.put("/restaurant/onboarding", payload)
+        console.log('✅ Step3 response:', response?.data)
+        
+        if (response?.data?.data?.onboarding) {
+          console.log('✅ Step3 data saved successfully')
+        }
         setStep(4)
       } else if (step === 4) {
         const payload = {
@@ -639,11 +752,26 @@ export default function RestaurantOnboarding() {
           },
           completedSteps: 4,
         }
-        await api.put("/restaurant/onboarding", payload)
+        const response = await api.put("/restaurant/onboarding", payload)
+        console.log('✅ Step4 completed, response:', response?.data)
+        
+        // Verify response is successful
+        if (!response || !response.data) {
+          throw new Error('Invalid response from server')
+        }
+        
         // Clear localStorage when onboarding is complete
         clearOnboardingFromLocalStorage()
-        // Navigate to restaurant dashboard after onboarding completion
-        navigate("/restaurant-panel/dashboard", { replace: true })
+        
+        // Show success message briefly, then navigate
+        console.log('✅ Onboarding completed successfully, redirecting to restaurant home...')
+        
+        // Wait a moment to ensure data is saved, then navigate
+        setTimeout(() => {
+          // Navigate to restaurant home page after onboarding completion
+          console.log('🚀 Navigating to restaurant home page...')
+          navigate("/restaurant", { replace: true })
+        }, 800)
       }
     } catch (err) {
       const msg =
@@ -858,10 +986,13 @@ export default function RestaurantOnboarding() {
               onChange={(e) => {
                 const files = Array.from(e.target.files || [])
                 if (!files.length) return
+                console.log('📸 Menu images selected:', files.length, 'files')
                 setStep2((prev) => ({
                   ...prev,
-                  menuImages: files,
+                  menuImages: [...(prev.menuImages || []), ...files], // Append new files to existing ones
                 }))
+                // Reset input to allow selecting same file again
+                e.target.value = ''
               }}
             />
           </div>
@@ -870,15 +1001,30 @@ export default function RestaurantOnboarding() {
           {!!step2.menuImages.length && (
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
               {step2.menuImages.map((file, idx) => {
-                const url = file instanceof File ? URL.createObjectURL(file) : null
+                // Handle both File objects and URL objects
+                let imageUrl = null
+                let imageName = `Image ${idx + 1}`
+                
+                if (file instanceof File) {
+                  imageUrl = URL.createObjectURL(file)
+                  imageName = file.name
+                } else if (file?.url) {
+                  // If it's an object with url property (from backend)
+                  imageUrl = file.url
+                  imageName = file.name || `Image ${idx + 1}`
+                } else if (typeof file === 'string') {
+                  // If it's a direct URL string
+                  imageUrl = file
+                }
+                
                 return (
                   <div
                     key={idx}
                     className="relative aspect-[4/5] rounded-md overflow-hidden bg-gray-100"
                   >
-                    {url ? (
+                    {imageUrl ? (
                       <img
-                        src={url}
+                        src={imageUrl}
                         alt={`Menu ${idx + 1}`}
                         className="w-full h-full object-cover"
                       />
@@ -889,7 +1035,7 @@ export default function RestaurantOnboarding() {
                     )}
                     <div className="absolute bottom-0 inset-x-0 bg-black/60 px-2 py-1">
                       <p className="text-[10px] text-white truncate">
-                        {file?.name || `Image ${idx + 1}`}
+                        {imageName}
                       </p>
                     </div>
                   </div>
@@ -905,15 +1051,29 @@ export default function RestaurantOnboarding() {
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
               {step2.profileImage ? (
-                <img
-                  src={
-                    step2.profileImage instanceof File
-                      ? URL.createObjectURL(step2.profileImage)
-                      : ""
+                (() => {
+                  let imageSrc = null;
+                  
+                  if (step2.profileImage instanceof File) {
+                    imageSrc = URL.createObjectURL(step2.profileImage);
+                  } else if (step2.profileImage?.url) {
+                    // If it's an object with url property (from backend)
+                    imageSrc = step2.profileImage.url;
+                  } else if (typeof step2.profileImage === 'string') {
+                    // If it's a direct URL string
+                    imageSrc = step2.profileImage;
                   }
-                  alt="Restaurant profile"
-                  className="w-full h-full object-cover"
-                />
+                  
+                  return imageSrc ? (
+                    <img
+                      src={imageSrc}
+                      alt="Restaurant profile"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon className="w-6 h-6 text-gray-500" />
+                  );
+                })()
               ) : (
                 <ImageIcon className="w-6 h-6 text-gray-500" />
               )}
@@ -941,12 +1101,18 @@ export default function RestaurantOnboarding() {
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) =>
-                  setStep2((prev) => ({
-                    ...prev,
-                    profileImage: e.target.files?.[0] || null,
-                  }))
-                }
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  if (file) {
+                    console.log('📸 Profile image selected:', file.name)
+                    setStep2((prev) => ({
+                      ...prev,
+                      profileImage: file,
+                    }))
+                  }
+                  // Reset input to allow selecting same file again
+                  e.target.value = ''
+                }}
               />
         </div>
       </section>

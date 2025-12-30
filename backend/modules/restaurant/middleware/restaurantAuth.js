@@ -29,10 +29,20 @@ export const authenticate = async (req, res, next) => {
     const restaurant = await Restaurant.findById(decoded.userId).select('-password');
     
     if (!restaurant) {
+      console.error('❌ Restaurant not found in database:', {
+        userId: decoded.userId,
+        role: decoded.role,
+        email: decoded.email,
+      });
       return errorResponse(res, 401, 'Restaurant not found');
     }
 
     if (!restaurant.isActive) {
+      console.error('❌ Restaurant account is inactive:', {
+        restaurantId: restaurant._id,
+        restaurantName: restaurant.name,
+        isActive: restaurant.isActive,
+      });
       return errorResponse(res, 401, 'Restaurant account is inactive');
     }
 

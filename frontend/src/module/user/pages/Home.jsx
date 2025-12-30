@@ -367,6 +367,8 @@ export default function Home() {
   const [loadingLandingConfig, setLoadingLandingConfig] = useState(true)
   const [restaurantsData, setRestaurantsData] = useState([])
   const [loadingRestaurants, setLoadingRestaurants] = useState(true)
+  const [realCategories, setRealCategories] = useState([])
+  const [loadingRealCategories, setLoadingRealCategories] = useState(true)
   const isHandlingSwitchOff = useRef(false)
 
   // Swipe functionality for hero banner carousel
@@ -451,6 +453,35 @@ export default function Home() {
     }
 
     fetchHeroBanners()
+  }, [])
+
+  // Fetch real categories from backend API
+  useEffect(() => {
+    const fetchRealCategories = async () => {
+      try {
+        setLoadingRealCategories(true)
+        const response = await api.get('/categories/public')
+        if (response.data.success && response.data.data.categories) {
+          const adminCategories = response.data.data.categories.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            image: cat.image || foodImages[0], // Fallback to default image if not provided
+            slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-'),
+            label: cat.name // For compatibility with existing code
+          }))
+          setRealCategories(adminCategories)
+        } else {
+          setRealCategories([])
+        }
+      } catch (error) {
+        console.error('Error fetching real categories:', error)
+        setRealCategories([])
+      } finally {
+        setLoadingRealCategories(false)
+      }
+    }
+
+    fetchRealCategories()
   }, [])
 
   // Fetch landing page config (categories, explore more, settings)
@@ -1246,15 +1277,15 @@ export default function Home() {
                 />
               </div>
             </motion.div>
-            {loadingLandingConfig ? (
+            {loadingRealCategories ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
               </div>
-            ) : landingCategories.length === 0 ? (
-              // Fallback to hardcoded categories if API returns empty
-              categories.map((category, index) => (
+            ) : realCategories.length > 0 ? (
+              // Show real categories from backend
+              realCategories.map((category, index) => (
                 <motion.div 
-                  key={category.id} 
+                  key={category.id || index} 
                   className="flex-shrink-0"
                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
                   whileInView={{ opacity: 1, y: 0, scale: 1 }}
@@ -1268,13 +1299,13 @@ export default function Home() {
                   whileHover={{ scale: 1.1, y: -5 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Link to={`/user/category/${category.name.toLowerCase()}`}>
+                  <Link to={`/user/category/${category.slug || category.name.toLowerCase().replace(/\s+/g, '-')}`}>
                     <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
-                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden transition-all">
+                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
                         <OptimizedImage
                           src={category.image}
                           alt={category.name}
-                          className="w-full h-full rounded-full"
+                          className="w-full h-full bg-white rounded-full"
                           sizes="(max-width: 640px) 56px, (max-width: 768px) 80px, 96px"
                           objectFit="cover"
                           placeholder="blur"
@@ -1288,7 +1319,8 @@ export default function Home() {
                   </Link>
                 </motion.div>
               ))
-            ) : (
+            ) : landingCategories.length > 0 ? (
+              // Fallback to landing config categories if real categories are empty
               landingCategories.map((category, index) => (
                 <motion.div 
                   key={category._id || index} 
@@ -1320,6 +1352,44 @@ export default function Home() {
                       </div>
                       <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center">
                         {category.label.length > 7 ? `${category.label.slice(0, 7)}...` : category.label}
+                      </span>
+                    </div>
+                  </Link>
+                </motion.div>
+              ))
+            ) : (
+              // Final fallback to hardcoded categories
+              categories.map((category, index) => (
+                <motion.div 
+                  key={category.id} 
+                  className="flex-shrink-0"
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ 
+                    duration: 0.4, 
+                    delay: index * 0.05,
+                    type: "spring",
+                    stiffness: 100
+                  }}
+                  whileHover={{ scale: 1.1, y: -5 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Link to={`/user/category/${category.name.toLowerCase()}`}>
+                    <div className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28">
+                      <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden transition-all">
+                        <OptimizedImage
+                          src={category.image}
+                          alt={category.name}
+                          className="w-full h-full rounded-full"
+                          sizes="(max-width: 640px) 56px, (max-width: 768px) 80px, 96px"
+                          objectFit="cover"
+                          placeholder="blur"
+                          onError={() => {}}
+                        />
+                      </div>
+                      <span className="text-xs sm:text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200 text-center">
+                        {category.name.length > 7 ? `${category.name.slice(0, 7)}...` : category.name}
                       </span>
                     </div>
                   </Link>

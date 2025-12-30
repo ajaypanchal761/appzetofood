@@ -2,19 +2,49 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
-import { ArrowLeft, ChevronUp, ChevronDown, Clock } from "lucide-react"
+import { ArrowLeft, ChevronUp, ChevronDown, Clock, Edit2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
+import { MobileTimePicker } from "@mui/x-date-pickers/MobileTimePicker"
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns"
 
 const STORAGE_KEY = "restaurant_outlet_timings"
 
+// Helper function to convert "HH:mm" string to Date object
+const stringToTime = (timeString) => {
+  if (!timeString || !timeString.includes(":")) {
+    return new Date(2000, 0, 1, 9, 0) // Default to 9:00 AM
+  }
+  const [hours, minutes] = timeString.split(":").map(Number)
+  return new Date(2000, 0, 1, hours || 9, minutes || 0)
+}
+
+// Helper function to convert Date object to "HH:mm" string
+const timeToString = (date) => {
+  if (!date) return "09:00"
+  const hours = date.getHours().toString().padStart(2, "0")
+  const minutes = date.getMinutes().toString().padStart(2, "0")
+  return `${hours}:${minutes}`
+}
+
+// Format time from 24-hour to 12-hour format for display
+const formatTime12Hour = (time24) => {
+  if (!time24) return "09:00 AM"
+  const [hours, minutes] = time24.split(":").map(Number)
+  const period = hours >= 12 ? 'PM' : 'AM'
+  const hours12 = hours % 12 || 12
+  const minutesStr = minutes.toString().padStart(2, '0')
+  return `${hours12}:${minutesStr} ${period}`
+}
+
 const getDefaultDays = () => ({
-  Monday: { isOpen: true, slots: [{ id: Date.now(), start: "03:45", end: "02:15", startPeriod: "am", endPeriod: "pm" }] },
-  Tuesday: { isOpen: true, slots: [{ id: Date.now() + 1, start: "03:45", end: "02:15", startPeriod: "am", endPeriod: "pm" }] },
-  Wednesday: { isOpen: true, slots: [{ id: Date.now() + 2, start: "03:45", end: "02:15", startPeriod: "am", endPeriod: "pm" }] },
-  Thursday: { isOpen: true, slots: [{ id: Date.now() + 3, start: "03:45", end: "02:15", startPeriod: "am", endPeriod: "pm" }] },
-  Friday: { isOpen: true, slots: [{ id: Date.now() + 4, start: "03:45", end: "02:15", startPeriod: "am", endPeriod: "pm" }] },
-  Saturday: { isOpen: true, slots: [{ id: Date.now() + 5, start: "03:45", end: "02:15", startPeriod: "am", endPeriod: "pm" }] },
-  Sunday: { isOpen: true, slots: [{ id: Date.now() + 6, start: "03:45", end: "02:15", startPeriod: "am", endPeriod: "pm" }] },
+  Monday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Tuesday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Wednesday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Thursday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Friday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Saturday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
+  Sunday: { isOpen: true, openingTime: "09:00", closingTime: "22:00" },
 })
 
 export default function OutletTimings() {
@@ -30,13 +60,33 @@ export default function OutletTimings() {
         const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         const validated = {}
         dayNames.forEach(day => {
-          if (parsed[day] && parsed[day].slots && Array.isArray(parsed[day].slots)) {
-            validated[day] = {
-              isOpen: parsed[day].isOpen !== undefined ? parsed[day].isOpen : true,
-              slots: parsed[day].slots.filter(slot => slot && slot.start && slot.end)
+          if (parsed[day]) {
+            // Migrate from old slot-based format to new time-based format
+            if (parsed[day].slots && Array.isArray(parsed[day].slots) && parsed[day].slots.length > 0) {
+              const firstSlot = parsed[day].slots[0]
+              // Convert slot format to time format
+              const parseSlotTime = (time, period) => {
+                if (!time) return "09:00"
+                const [hours, minutes] = time.split(":").map(Number)
+                let hour24 = hours || 9
+                if (period === "pm" && hour24 !== 12) hour24 += 12
+                if (period === "am" && hour24 === 12) hour24 = 0
+                return `${hour24.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
+              }
+              validated[day] = {
+                isOpen: parsed[day].isOpen !== undefined ? parsed[day].isOpen : true,
+                openingTime: parseSlotTime(firstSlot.start, firstSlot.startPeriod || "am"),
+                closingTime: parseSlotTime(firstSlot.end, firstSlot.endPeriod || "pm"),
+              }
+            } else {
+              validated[day] = {
+                isOpen: parsed[day].isOpen !== undefined ? parsed[day].isOpen : true,
+                openingTime: parsed[day].openingTime || "09:00",
+                closingTime: parsed[day].closingTime || "22:00",
+              }
             }
           } else {
-            validated[day] = { isOpen: true, slots: [] }
+            validated[day] = { isOpen: true, openingTime: "09:00", closingTime: "22:00" }
           }
         })
         return validated
@@ -52,7 +102,7 @@ export default function OutletTimings() {
     if (isInternalUpdate.current) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(days))
-        // Dispatch event to notify other components (like DaySlots page)
+        // Dispatch event to notify other components
         window.dispatchEvent(new Event("outletTimingsUpdated"))
       } catch (error) {
         console.error("Error saving outlet timings:", error)
@@ -61,17 +111,15 @@ export default function OutletTimings() {
     }
   }, [days])
 
-  // Listen for updates from day slots page (external updates)
+  // Listen for updates from other components
   useEffect(() => {
     const handleUpdate = () => {
-      // Only update if it's not our own update
       if (!isInternalUpdate.current) {
         try {
           const saved = localStorage.getItem(STORAGE_KEY)
           if (saved) {
             const newDays = JSON.parse(saved)
             setDays(prevDays => {
-              // Only update if data actually changed
               if (JSON.stringify(newDays) !== JSON.stringify(prevDays)) {
                 return newDays
               }
@@ -123,162 +171,204 @@ export default function OutletTimings() {
     }))
   }
 
-  // Calculate duration between two times
-  const calculateDuration = (start, end, startPeriod, endPeriod) => {
-    const parseTime = (timeStr, period) => {
-      if (!timeStr || !timeStr.includes(":")) return 0
-      const [hours, minutes] = timeStr.split(":")
-      let hour = parseInt(hours) || 0
-      const mins = parseInt(minutes) || 0
-      if (period === "pm" && hour !== 12) hour += 12
-      if (period === "am" && hour === 12) hour = 0
-      return hour * 60 + mins
-    }
-
-    const startMinutes = parseTime(start, startPeriod)
-    const endMinutes = parseTime(end, endPeriod)
-    let diff = endMinutes - startMinutes
-    
-    // Handle next day
-    if (diff < 0) diff += 24 * 60
-    
-    const hours = Math.floor(diff / 60)
-    const minutes = diff % 60
-    
-    if (minutes === 0) {
-      return `${hours} hrs`
-    }
-    return `${hours} hrs ${minutes} mins`
+  const handleTimeChange = (day, timeType, newTime) => {
+    isInternalUpdate.current = true
+    const timeString = timeToString(newTime)
+    setDays(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        [timeType]: timeString
+      }
+    }))
   }
 
   const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate("/restaurant")}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="w-6 h-6 text-gray-900" />
-          </button>
-          <h1 className="text-lg font-bold text-gray-900">Outlet timings</h1>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="px-4 py-6">
-        {/* Appzeto delivery Section Header */}
-        <div className="mb-6">
-          <div className="text-center mb-2">
-            <h2 className="text-base font-semibold text-blue-600">Appzeto delivery</h2>
+    <LocalizationProvider dateAdapter={AdapterDateFns}>
+      <div className="min-h-screen bg-white overflow-x-hidden">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-50">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/restaurant")}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="w-6 h-6 text-gray-900" />
+            </button>
+            <h1 className="text-lg font-bold text-gray-900">Outlet timings</h1>
           </div>
-          <div className="h-0.5 bg-blue-600"></div>
         </div>
 
-        {/* Day-wise Accordion */}
-        <div className="space-y-2">
-          {dayNames.map((day, index) => {
-            const dayData = days[day] || { isOpen: true, slots: [] }
-            const isExpanded = expandedDay === day
+        {/* Main Content */}
+        <div className="px-4 py-6">
+          {/* Appzeto delivery Section Header */}
+          <div className="mb-6">
+            <div className="text-center mb-2">
+              <h2 className="text-base font-semibold text-blue-600">Appzeto delivery</h2>
+            </div>
+            <div className="h-0.5 bg-blue-600"></div>
+          </div>
 
-            return (
-              <motion.div
-                key={day}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: index * 0.03 }}
-                className="bg-white border border-gray-200 rounded-sm overflow-hidden"
-              >
-                {/* Day Header */}
-                <button
-                  onClick={() => toggleDay(day)}
-                  className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-color transition-all ${isExpanded ? "bg-gray-100" : ""}`}
+          {/* Day-wise Accordion */}
+          <div className="space-y-2">
+            {dayNames.map((day, index) => {
+              const dayData = days[day] || { isOpen: true, openingTime: "09:00", closingTime: "22:00" }
+              const isExpanded = expandedDay === day
+
+              return (
+                <motion.div
+                  key={day}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, delay: index * 0.03 }}
+                  className="bg-white border border-gray-200 rounded-sm overflow-hidden"
                 >
-                  <div className="flex items-center gap-3">
-                    {isExpanded ? (
-                      <ChevronUp className="w-5 h-5 text-gray-700" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-gray-700" />
-                    )}
-                    <span className="text-base font-medium text-gray-900">{day}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-700">{dayData.isOpen ? "Open" : "Close"}</span>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <Switch
-                        checked={dayData.isOpen}
-                        onCheckedChange={() => toggleDayOpen(day)}
-                        className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-300"
-                      />
+                  {/* Day Header */}
+                  <div
+                    className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-color transition-all ${isExpanded ? "bg-gray-100" : ""}`}
+                  >
+                    <button
+                      onClick={() => toggleDay(day)}
+                      className="flex items-center gap-3 flex-1 text-left"
+                    >
+                      {isExpanded ? (
+                        <ChevronUp className="w-5 h-5 text-gray-700" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-gray-700" />
+                      )}
+                      <span className="text-base font-medium text-gray-900">{day}</span>
+                    </button>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-700">{dayData.isOpen ? "Open" : "Close"}</span>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Switch
+                          checked={dayData.isOpen}
+                          onCheckedChange={() => toggleDayOpen(day)}
+                          className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-gray-300"
+                        />
+                      </div>
                     </div>
                   </div>
-                </button>
 
-                {/* Expanded Content */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="p-4 space-y-4 border-t border-gray-100">
-                        {dayData.slots && Array.isArray(dayData.slots) && dayData.slots.length > 0 ? (
-                          dayData.slots.map((slot, slotIndex) => {
-                            if (!slot || !slot.start || !slot.end) return null
-                            const duration = calculateDuration(
-                              slot.start,
-                              slot.end,
-                              slot.startPeriod || "am",
-                              slot.endPeriod || "pm"
-                            )
-                            return (
-                              <motion.div
-                                key={slot.id || slotIndex}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ duration: 0.2, delay: slotIndex * 0.1 }}
-                                className="pl-6 space-y-2"
-                              >
-                                <p className="text-sm text-gray-900 font-medium">Slot {slotIndex + 1}</p>
-                                <div className="flex items-center justify-between">
-                                  <p className="text-sm text-gray-700">
-                                    {slot.start || "00:00"} {(slot.startPeriod || "am").toUpperCase()} to {slot.end || "00:00"} {(slot.endPeriod || "pm").toUpperCase()}
-                                  </p>
-                                  <div className="flex items-center gap-1.5">
-                                    <Clock className="w-4 h-4 text-gray-600" />
-                                    <span className="text-sm text-gray-600">{duration}</span>
-                                  </div>
+                  {/* Expanded Content */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-4 space-y-4 border-t border-gray-100">
+                          {dayData.isOpen ? (
+                            <>
+                              {/* Opening Time */}
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                  <Clock className="w-4 h-4" />
+                                  Opening time
+                                </label>
+                                <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50/60">
+                                  <MobileTimePicker
+                                    value={stringToTime(dayData.openingTime)}
+                                    onChange={(newValue) => handleTimeChange(day, "openingTime", newValue)}
+                                    slotProps={{
+                                      textField: {
+                                        variant: "outlined",
+                                        size: "small",
+                                        placeholder: "Select opening time",
+                                        sx: {
+                                          "& .MuiOutlinedInput-root": {
+                                            height: "36px",
+                                            fontSize: "12px",
+                                            backgroundColor: "white",
+                                            "& fieldset": {
+                                              borderColor: "#e5e7eb",
+                                            },
+                                            "&:hover fieldset": {
+                                              borderColor: "#d1d5db",
+                                            },
+                                            "&.Mui-focused fieldset": {
+                                              borderColor: "#000",
+                                            },
+                                          },
+                                          "& .MuiInputBase-input": {
+                                            padding: "8px 12px",
+                                            fontSize: "12px",
+                                          },
+                                        },
+                                      },
+                                    }}
+                                    format="hh:mm a"
+                                  />
                                 </div>
-                              </motion.div>
-                            )
-                          })
-                        ) : (
-                          <p className="pl-6 text-sm text-gray-500">No slots configured</p>
-                        )}
-                        <button
-                          onClick={() => {
-                            navigate(`/restaurant/outlet-timings/${day.toLowerCase()}`)
-                          }}
-                          className="pl-6 text-blue-600 hover:text-blue-700 text-sm font-medium transition-colors"
-                        >
-                          + Add / Edit time
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            )
-          })}
+                                <p className="text-xs text-gray-500">
+                                  Current: {formatTime12Hour(dayData.openingTime)}
+                                </p>
+                              </div>
+
+                              {/* Closing Time */}
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                  <Clock className="w-4 h-4" />
+                                  Closing time
+                                </label>
+                                <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50/60">
+                                  <MobileTimePicker
+                                    value={stringToTime(dayData.closingTime)}
+                                    onChange={(newValue) => handleTimeChange(day, "closingTime", newValue)}
+                                    slotProps={{
+                                      textField: {
+                                        variant: "outlined",
+                                        size: "small",
+                                        placeholder: "Select closing time",
+                                        sx: {
+                                          "& .MuiOutlinedInput-root": {
+                                            height: "36px",
+                                            fontSize: "12px",
+                                            backgroundColor: "white",
+                                            "& fieldset": {
+                                              borderColor: "#e5e7eb",
+                                            },
+                                            "&:hover fieldset": {
+                                              borderColor: "#d1d5db",
+                                            },
+                                            "&.Mui-focused fieldset": {
+                                              borderColor: "#000",
+                                            },
+                                          },
+                                          "& .MuiInputBase-input": {
+                                            padding: "8px 12px",
+                                            fontSize: "12px",
+                                          },
+                                        },
+                                      },
+                                    }}
+                                    format="hh:mm a"
+                                  />
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                  Current: {formatTime12Hour(dayData.closingTime)}
+                                </p>
+                              </div>
+                            </>
+                          ) : (
+                            <p className="text-sm text-gray-500 pl-6">This day is closed</p>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              )
+            })}
+          </div>
         </div>
       </div>
-    </div>
+    </LocalizationProvider>
   )
 }

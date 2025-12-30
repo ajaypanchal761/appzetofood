@@ -1,20 +1,35 @@
 import { useState, useMemo, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { Search, Download, ChevronDown, Plus, Edit, Trash2, Info, MapPin, SlidersHorizontal, ArrowDownUp, Timer, Star, IndianRupee, UtensilsCrossed, BadgePercent, ShieldCheck, X } from "lucide-react"
-import { categoriesDummy } from "../../data/categoriesDummy"
+import { Search, Download, ChevronDown, Plus, Edit, Trash2, Info, MapPin, SlidersHorizontal, ArrowDownUp, Timer, Star, IndianRupee, UtensilsCrossed, BadgePercent, ShieldCheck, X, Loader2, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { adminAPI } from "@/lib/api"
+import { toast } from "sonner"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 export default function Category() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [categories, setCategories] = useState(categoriesDummy)
-  const [selectedPriority, setSelectedPriority] = useState("")
+  const [categories, setCategories] = useState([])
+  const [loading, setLoading] = useState(true)
   const [activeFilters, setActiveFilters] = useState(new Set())
   const [sortBy, setSortBy] = useState(null)
   const [selectedCuisine, setSelectedCuisine] = useState(null)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [activeFilterTab, setActiveFilterTab] = useState('sort')
   const [activeScrollSection, setActiveScrollSection] = useState('sort')
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState(null)
+  const [formData, setFormData] = useState({
+    name: "",
+    image: "https://via.placeholder.com/40",
+    status: true,
+    type: ""
+  })
+  const [selectedImageFile, setSelectedImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const fileInputRef = useRef(null)
   const filterSectionRefs = useRef({})
   const rightContentRef = useRef(null)
 
@@ -30,6 +45,33 @@ export default function Category() {
       return newSet
     })
   }
+
+  // Fetch categories from API
+  useEffect(() => {
+    // Check if admin is authenticated
+    const adminToken = localStorage.getItem('admin_accessToken')
+    if (!adminToken) {
+      console.warn('No admin token found. User may need to login.')
+      toast.error('Please login to access categories')
+      setLoading(false)
+      return
+    }
+    
+    // Log API base URL for debugging
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+    console.log('API Base URL:', apiBaseUrl)
+    console.log('Admin Token:', adminToken ? 'Present' : 'Missing')
+    
+    fetchCategories()
+  }, [])
+
+  // Debounced search
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchCategories()
+    }, 500)
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery])
 
   // Scroll tracking effect for filter modal
   useEffect(() => {
@@ -60,39 +102,374 @@ export default function Category() {
     return () => observer.disconnect()
   }, [isFilterOpen])
 
+  // Fetch categories
+  const fetchCategories = async () => {
+    try {
+      setLoading(true)
+      const params = {}
+      if (searchQuery) params.search = searchQuery
+      
+      const response = await adminAPI.getCategories(params)
+      if (response.data.success) {
+        setCategories(response.data.data.categories || [])
+      } else {
+        toast.error(response.data.message || 'Failed to load categories')
+        setCategories([])
+      }
+    } catch (error) {
+      // More detailed error logging
+      console.error('Error fetching categories:', error)
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        response: error.response ? {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        } : null,
+        request: error.request ? {
+          url: error.config?.url,
+          method: error.config?.method,
+          baseURL: error.config?.baseURL
+        } : null
+      })
+      
+      if (error.response) {
+        // Server responded with error status
+        const status = error.response.status
+        const errorData = error.response.data
+        
+        if (status === 401) {
+          toast.error('Authentication required. Please login again.')
+        } else if (status === 403) {
+          toast.error('Access denied. You do not have permission.')
+        } else if (status === 404) {
+          toast.error('Categories endpoint not found. Please check backend server.')
+        } else if (status >= 500) {
+          toast.error('Server error. Please try again later.')
+        } else {
+          toast.error(errorData?.message || `Error ${status}: Failed to load categories`)
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        console.error('Network error - No response from server')
+        console.error('Request URL:', error.config?.baseURL + error.config?.url)
+        toast.error('Cannot connect to server. Please check if backend is running on ' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'))
+      } else {
+        // Something else happened
+        console.error('Request setup error:', error.message)
+        toast.error(error.message || 'Failed to load categories')
+      }
+      
+      setCategories([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const filteredCategories = useMemo(() => {
     let result = [...categories]
     
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
       result = result.filter(cat =>
-        cat.name.toLowerCase().includes(query) ||
-        cat.id.toString().includes(query)
+        cat.name?.toLowerCase().includes(query) ||
+        cat.id?.toString().includes(query)
       )
     }
 
-    if (selectedPriority) {
-      result = result.filter(cat => cat.priority === selectedPriority)
+    return result
+  }, [categories, searchQuery])
+
+  const handleToggleStatus = async (id) => {
+    try {
+      const response = await adminAPI.toggleCategoryStatus(id)
+      if (response.data.success) {
+        toast.success('Category status updated successfully')
+        // Update local state immediately for better UX
+        setCategories(prevCategories =>
+          prevCategories.map(cat =>
+            cat.id === id ? { ...cat, status: !cat.status } : cat
+          )
+        )
+        // Refresh from server to ensure consistency
+        setTimeout(() => fetchCategories(), 500)
+      }
+    } catch (error) {
+      console.error('Error toggling status:', error)
+      const errorMessage = error.response?.data?.message || 'Failed to update category status'
+      toast.error(errorMessage)
+    }
+  }
+
+
+  const handleDelete = async (id) => {
+    const categoryName = categories.find(cat => cat.id === id)?.name || 'this category'
+    if (window.confirm(`Are you sure you want to delete "${categoryName}"? This action cannot be undone.`)) {
+      try {
+        const response = await adminAPI.deleteCategory(id)
+        if (response.data.success) {
+          toast.success('Category deleted successfully')
+          // Remove from local state immediately for better UX
+          setCategories(prevCategories => prevCategories.filter(cat => cat.id !== id))
+          // Refresh from server to ensure consistency
+          setTimeout(() => fetchCategories(), 500)
+        }
+      } catch (error) {
+        console.error('Error deleting category:', error)
+        const errorMessage = error.response?.data?.message || 'Failed to delete category'
+        toast.error(errorMessage)
+      }
+    }
+  }
+
+  const handleEdit = (category) => {
+    setEditingCategory(category)
+    setFormData({
+      name: category.name || "",
+      image: category.image || "https://via.placeholder.com/40",
+      status: category.status !== undefined ? category.status : true,
+      type: category.type || ""
+    })
+    setSelectedImageFile(null)
+    setImagePreview(category.image || null)
+    setIsModalOpen(true)
+  }
+
+  const handleAddNew = () => {
+    setEditingCategory(null)
+    setFormData({
+      name: "",
+      image: "https://via.placeholder.com/40",
+      status: true,
+      type: ""
+    })
+    setSelectedImageFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+    setIsModalOpen(true)
+  }
+
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF()
+      
+      // Add title
+      doc.setFontSize(18)
+      doc.setTextColor(30, 30, 30)
+      doc.text('Category List', 14, 20)
+      
+      // Add date
+      doc.setFontSize(10)
+      doc.setTextColor(100, 100, 100)
+      const date = new Date().toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+      doc.text(`Generated on: ${date}`, 14, 28)
+      
+      // Prepare table data
+      const tableData = filteredCategories.map((category, index) => [
+        category.sl || index + 1,
+        category.name || 'N/A',
+        category.type || 'N/A',
+        category.status ? 'Active' : 'Inactive',
+        category.id || 'N/A'
+      ])
+      
+      // Add table
+      autoTable(doc, {
+        startY: 35,
+        head: [['SL', 'Category Name', 'Type', 'Status', 'ID']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [59, 130, 246], // Blue color
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 10
+        },
+        bodyStyles: {
+          fontSize: 9,
+          textColor: [30, 30, 30]
+        },
+        alternateRowStyles: {
+          fillColor: [245, 247, 250]
+        },
+        styles: {
+          cellPadding: 5,
+          lineColor: [200, 200, 200],
+          lineWidth: 0.5
+        },
+        columnStyles: {
+          0: { cellWidth: 20 }, // SL
+          1: { cellWidth: 70 }, // Category Name
+          2: { cellWidth: 50 }, // Type
+          3: { cellWidth: 40 }, // Status
+          4: { cellWidth: 50 }  // ID
+        }
+      })
+      
+      // Add footer
+      const pageCount = doc.internal.pages.length - 1
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.text(
+          `Page ${i} of ${pageCount}`,
+          doc.internal.pageSize.getWidth() / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        )
+      }
+      
+      // Save PDF
+      const fileName = `Categories_${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(fileName)
+      
+      toast.success('PDF exported successfully!')
+    } catch (error) {
+      console.error('Error exporting PDF:', error)
+      toast.error('Failed to export PDF')
+    }
+  }
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"]
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Invalid file type. Please upload PNG, JPG, JPEG, or WEBP.")
+      return
     }
 
-    return result
-  }, [categories, searchQuery, selectedPriority])
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      toast.error("File size exceeds 5MB limit.")
+      return
+    }
 
-  const handleToggleStatus = (id) => {
-    setCategories(categories.map(cat =>
-      cat.id === id ? { ...cat, status: !cat.status } : cat
-    ))
+    // Set file and create preview
+    setSelectedImageFile(file)
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result)
+    }
+    reader.readAsDataURL(file)
   }
 
-  const handlePriorityChange = (id, newPriority) => {
-    setCategories(categories.map(cat =>
-      cat.id === id ? { ...cat, priority: newPriority } : cat
-    ))
+  const handleRemoveImage = () => {
+    setSelectedImageFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this category?")) {
-      setCategories(categories.filter(cat => cat.id !== id))
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setEditingCategory(null)
+    setSelectedImageFile(null)
+    setImagePreview(null)
+    setFormData({
+      name: "",
+      image: "https://via.placeholder.com/40",
+      status: true,
+      type: ""
+    })
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    try {
+      setUploadingImage(true)
+
+      // Prepare FormData for file upload
+      const formDataToSend = new FormData()
+      formDataToSend.append('name', formData.name)
+      formDataToSend.append('type', formData.type)
+      formDataToSend.append('status', formData.status.toString())
+
+      // Add image file if selected, otherwise use existing image URL
+      if (selectedImageFile) {
+        formDataToSend.append('image', selectedImageFile)
+      } else if (formData.image && formData.image !== 'https://via.placeholder.com/40') {
+        // If no new file but existing image URL, send it as string
+        formDataToSend.append('image', formData.image)
+      }
+
+      console.log('Sending category data:', {
+        name: formData.name,
+        type: formData.type,
+        status: formData.status,
+        hasImageFile: !!selectedImageFile,
+        imageUrl: formData.image
+      })
+
+      if (editingCategory) {
+        const response = await adminAPI.updateCategory(editingCategory.id, formDataToSend)
+        console.log('Category update response:', response.data)
+        if (response.data.success) {
+          toast.success('Category updated successfully')
+          // Update local state immediately for better UX
+          const updatedCategory = response.data.data.category
+          setCategories(prevCategories =>
+            prevCategories.map(cat =>
+              cat.id === editingCategory.id
+                ? { ...cat, ...updatedCategory, id: updatedCategory.id || cat.id }
+                : cat
+            )
+          )
+        }
+      } else {
+        const response = await adminAPI.createCategory(formDataToSend)
+        console.log('Category create response:', response.data)
+        if (response.data.success) {
+          toast.success('Category created successfully')
+        }
+      }
+      
+      // Close modal and reset form
+      handleCloseModal()
+      
+      // Refresh from server to ensure consistency
+      setTimeout(() => fetchCategories(), 500)
+    } catch (error) {
+      console.error('Error saving category:', error)
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        response: error.response ? {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        } : null,
+        request: error.request ? {
+          url: error.config?.url,
+          method: error.config?.method,
+          baseURL: error.config?.baseURL
+        } : null
+      })
+      
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        toast.error('Cannot connect to server. Please check if backend is running on ' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'))
+      } else if (error.response) {
+        toast.error(error.response.data?.message || `Error ${error.response.status}: Failed to save category`)
+      } else {
+        toast.error(error.message || 'Failed to save category')
+      }
+    } finally {
+      setUploadingImage(false)
     }
   }
 
@@ -121,20 +498,6 @@ export default function Category() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative">
-              <select
-                value={selectedPriority}
-                onChange={(e) => setSelectedPriority(e.target.value)}
-                className="px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-400"
-              >
-                <option value="">Select priority</option>
-                <option value="High">High</option>
-                <option value="Normal">Normal</option>
-                <option value="Low">Low</option>
-              </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-            </div>
-
             <div className="relative flex-1 sm:flex-initial min-w-[200px]">
               <input
                 type="text"
@@ -146,13 +509,20 @@ export default function Category() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             </div>
 
-            <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
+            <button 
+              onClick={handleExportPDF}
+              disabled={filteredCategories.length === 0}
+              className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <Download className="w-4 h-4" />
               <span>Export</span>
               <ChevronDown className="w-3 h-3" />
             </button>
 
-            <button className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 transition-all shadow-sm">
+            <button 
+              onClick={handleAddNew}
+              className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 transition-all shadow-sm"
+            >
               <Plus className="w-4 h-4" />
               <span>Add New Category</span>
             </button>
@@ -239,10 +609,7 @@ export default function Category() {
                   Title
                 </th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                  <div className="flex items-center gap-1">
-                    <span>Priority Level</span>
-                    <Info className="w-3 h-3 text-slate-400" />
-                  </div>
+                  Type
                 </th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Status
@@ -253,7 +620,16 @@ export default function Category() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
-              {filteredCategories.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-20 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+                      <p className="text-sm text-slate-500">Loading categories...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredCategories.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
@@ -269,7 +645,7 @@ export default function Category() {
                     className="hover:bg-slate-50 transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-medium text-slate-700">{index + 1}</span>
+                      <span className="text-sm font-medium text-slate-700">{category.sl || index + 1}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center">
@@ -284,49 +660,33 @@ export default function Category() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-slate-900">{category.name}</span>
-                        <span className="text-xs text-slate-500">ID #{category.id}</span>
-                      </div>
+                      <span className="text-sm font-medium text-slate-900">{category.name}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="relative">
-                        <select
-                          value={category.priority}
-                          onChange={(e) => handlePriorityChange(category.id, e.target.value)}
-                          className="px-3 py-1.5 pr-6 text-xs rounded-md border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-400"
-                        >
-                          <option value="High">High</option>
-                          <option value="Normal">Normal</option>
-                          <option value="Low">Low</option>
-                        </select>
-                        <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
-                      </div>
+                      <span className="text-sm font-medium text-slate-700">{category.type || 'N/A'}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
                         onClick={() => handleToggleStatus(category.id)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
+                        disabled={loading}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                           category.status
                             ? "bg-blue-600"
-                            : category.id === 14
-                            ? "bg-slate-300"
                             : "bg-slate-300"
                         }`}
+                        title={category.status ? "Click to deactivate" : "Click to activate"}
                       >
                         <span
                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                             category.status ? "translate-x-6" : "translate-x-1"
                           }`}
                         />
-                        {category.id === 14 && !category.status && (
-                          <span className="absolute left-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-slate-500"></span>
-                        )}
                       </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          onClick={() => handleEdit(category)}
                           className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
                           title="Edit"
                         >
@@ -658,6 +1018,167 @@ export default function Category() {
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+
+      {/* Create/Edit Category Modal */}
+      {typeof window !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {isModalOpen && (
+              <div className="fixed inset-0 z-[200]">
+                {/* Backdrop */}
+                <div 
+                  className="absolute inset-0 bg-black/50" 
+                  onClick={handleCloseModal}
+                />
+                
+                {/* Modal Content */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b">
+                    <h2 className="text-xl font-bold text-slate-900">
+                      {editingCategory ? 'Edit Category' : 'Add New Category'}
+                    </h2>
+                    <button 
+                      onClick={handleCloseModal}
+                      className="p-1 rounded hover:bg-slate-100 transition-colors"
+                    >
+                      <X className="w-5 h-5 text-slate-500" />
+                    </button>
+                  </div>
+                  
+                  {/* Form */}
+                  <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Category Type *
+                      </label>
+                      <select
+                        required
+                        value={formData.type}
+                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">Select category type</option>
+                        <option value="Starters">Starters</option>
+                        <option value="Main course">Main course</option>
+                        <option value="Desserts">Desserts</option>
+                        <option value="Beverages">Beverages</option>
+                        <option value="Varieties">Varieties</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Category Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter category name"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Category Image
+                      </label>
+                      <div className="space-y-3">
+                        {/* Image Preview */}
+                        {(imagePreview || formData.image) && (
+                          <div className="relative w-32 h-32 rounded-lg overflow-hidden border border-slate-300">
+                            <img
+                              src={imagePreview || formData.image}
+                              alt="Category preview"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.target.src = "https://via.placeholder.com/128"
+                              }}
+                            />
+                            {imagePreview && (
+                              <button
+                                type="button"
+                                onClick={handleRemoveImage}
+                                className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* File Input */}
+                        <div className="flex items-center gap-3">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                            id="category-image-upload"
+                          />
+                          <label
+                            htmlFor="category-image-upload"
+                            className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
+                          >
+                            <Upload className="w-4 h-4 text-slate-600" />
+                            <span className="text-sm text-slate-700">
+                              {imagePreview ? 'Change Image' : 'Upload Image'}
+                            </span>
+                          </label>
+                          {uploadingImage && (
+                            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Supported formats: PNG, JPG, JPEG, WEBP (Max 5MB)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="status"
+                        checked={formData.status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                      />
+                      <label htmlFor="status" className="text-sm font-medium text-slate-700">
+                        Active Status
+                      </label>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center gap-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={handleCloseModal}
+                        className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        {editingCategory ? 'Update' : 'Create'}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
               </div>
             )}
           </AnimatePresence>,

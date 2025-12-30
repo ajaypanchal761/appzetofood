@@ -1,105 +1,86 @@
 import Inventory from '../models/Inventory.js';
 import Restaurant from '../models/Restaurant.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
+import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import mongoose from 'mongoose';
 
 // Get inventory for a restaurant
-export const getInventory = async (req, res) => {
-  try {
-    const ownerId = req.user._id;
-    
-    // Find restaurant by owner
-    const restaurant = await Restaurant.findOne({ owner: ownerId });
-    if (!restaurant) {
-      return errorResponse(res, 404, 'Restaurant not found');
-    }
+export const getInventory = asyncHandler(async (req, res) => {
+  // Restaurant is attached by authenticate middleware
+  const restaurantId = req.restaurant._id;
 
-    // Find or create inventory
-    let inventory = await Inventory.findOne({ restaurant: restaurant._id });
-    
-    if (!inventory) {
-      // Create empty inventory
-      inventory = new Inventory({
-        restaurant: restaurant._id,
-        categories: [],
-        isActive: true,
-      });
-      await inventory.save();
-    }
-
-    return successResponse(res, 200, 'Inventory retrieved successfully', {
-      inventory: {
-        categories: inventory.categories || [],
-        isActive: inventory.isActive,
-      },
+  // Find or create inventory
+  let inventory = await Inventory.findOne({ restaurant: restaurantId });
+  
+  if (!inventory) {
+    // Create empty inventory
+    inventory = new Inventory({
+      restaurant: restaurantId,
+      categories: [],
+      isActive: true,
     });
-  } catch (error) {
-    console.error('Error fetching inventory:', error);
-    return errorResponse(res, 500, 'Failed to fetch inventory');
+    await inventory.save();
   }
-};
+
+  return successResponse(res, 200, 'Inventory retrieved successfully', {
+    inventory: {
+      categories: inventory.categories || [],
+      isActive: inventory.isActive,
+    },
+  });
+});
 
 // Update inventory (upsert)
-export const updateInventory = async (req, res) => {
-  try {
-    const ownerId = req.user._id;
-    const { categories } = req.body;
+export const updateInventory = asyncHandler(async (req, res) => {
+  // Restaurant is attached by authenticate middleware
+  const restaurantId = req.restaurant._id;
+  const { categories } = req.body;
 
-    // Find restaurant by owner
-    const restaurant = await Restaurant.findOne({ owner: ownerId });
-    if (!restaurant) {
-      return errorResponse(res, 404, 'Restaurant not found');
-    }
+  // Normalize and validate categories
+  const normalizedCategories = Array.isArray(categories) ? categories.map((category, index) => {
+    const items = Array.isArray(category.items) ? category.items : [];
+    return {
+      id: category.id || `category-${index}`,
+      name: category.name || "Unnamed Category",
+      description: category.description || "",
+      itemCount: category.itemCount ?? items.length,
+      inStock: category.inStock !== undefined ? category.inStock : true,
+      items: items.map(item => ({
+        id: String(item.id || Date.now() + Math.random()),
+        name: item.name || "Unnamed Item",
+        inStock: item.inStock !== undefined ? item.inStock : true,
+        isVeg: item.isVeg !== undefined ? item.isVeg : true,
+        stockQuantity: item.stockQuantity || "Unlimited",
+        unit: item.unit || "piece",
+        expiryDate: item.expiryDate || null,
+        lastRestocked: item.lastRestocked || null,
+      })),
+      order: category.order !== undefined ? category.order : index,
+    };
+  }) : [];
 
-    // Normalize and validate categories
-    const normalizedCategories = Array.isArray(categories) ? categories.map((category, index) => {
-      const items = Array.isArray(category.items) ? category.items : [];
-      return {
-        id: category.id || `category-${index}`,
-        name: category.name || "Unnamed Category",
-        description: category.description || "",
-        itemCount: category.itemCount ?? items.length,
-        inStock: category.inStock !== undefined ? category.inStock : true,
-        items: items.map(item => ({
-          id: String(item.id || Date.now() + Math.random()),
-          name: item.name || "Unnamed Item",
-          inStock: item.inStock !== undefined ? item.inStock : true,
-          isVeg: item.isVeg !== undefined ? item.isVeg : true,
-          stockQuantity: item.stockQuantity || "Unlimited",
-          unit: item.unit || "piece",
-          expiryDate: item.expiryDate || null,
-          lastRestocked: item.lastRestocked || null,
-        })),
-        order: category.order !== undefined ? category.order : index,
-      };
-    }) : [];
-
-    // Find or create inventory
-    let inventory = await Inventory.findOne({ restaurant: restaurant._id });
-    
-    if (!inventory) {
-      inventory = new Inventory({
-        restaurant: restaurant._id,
-        categories: normalizedCategories,
-        isActive: true,
-      });
-    } else {
-      inventory.categories = normalizedCategories;
-    }
-
-    await inventory.save();
-
-    return successResponse(res, 200, 'Inventory updated successfully', {
-      inventory: {
-        categories: inventory.categories,
-        isActive: inventory.isActive,
-      },
+  // Find or create inventory
+  let inventory = await Inventory.findOne({ restaurant: restaurantId });
+  
+  if (!inventory) {
+    inventory = new Inventory({
+      restaurant: restaurantId,
+      categories: normalizedCategories,
+      isActive: true,
     });
-  } catch (error) {
-    console.error('Error updating inventory:', error);
-    return errorResponse(res, 500, 'Failed to update inventory');
+  } else {
+    inventory.categories = normalizedCategories;
   }
-};
+
+  await inventory.save();
+
+  return successResponse(res, 200, 'Inventory updated successfully', {
+    inventory: {
+      categories: inventory.categories,
+      isActive: inventory.isActive,
+    },
+  });
+});
 
 // Get inventory by restaurant ID (public - for user module)
 export const getInventoryByRestaurantId = async (req, res) => {

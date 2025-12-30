@@ -585,7 +585,16 @@ export const getCurrentRestaurant = asyncHandler(async (req, res) => {
       onboarding: req.restaurant.onboarding,
       ownerName: req.restaurant.ownerName,
       ownerEmail: req.restaurant.ownerEmail,
-      ownerPhone: req.restaurant.ownerPhone
+      ownerPhone: req.restaurant.ownerPhone,
+      // Include additional restaurant details
+      cuisines: req.restaurant.cuisines,
+      openDays: req.restaurant.openDays,
+      location: req.restaurant.location,
+      primaryContactNumber: req.restaurant.primaryContactNumber,
+      deliveryTimings: req.restaurant.deliveryTimings,
+      menuImages: req.restaurant.menuImages,
+      slug: req.restaurant.slug,
+      isAcceptingOrders: req.restaurant.isAcceptingOrders
     }
   });
 });

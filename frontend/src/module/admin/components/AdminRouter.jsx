@@ -11,14 +11,7 @@ import NewRefundRequests from "../pages/refunds/NewRefundRequests";
 import Cuisine from "../pages/restaurant/Cuisine";
 import OrdersPage from "../pages/orders/OrdersPage";
 import SubscriptionOrders from "../pages/SubscriptionOrders";
-import BulkImport from "../pages/categories/BulkImport";
-import BulkExport from "../pages/categories/BulkExport";
-import SubCategory from "../pages/categories/SubCategory";
 import Category from "../pages/categories/Category";
-import AddonCategory from "../pages/addons/AddonCategory";
-import AddonsList from "../pages/addons/AddonsList";
-import AddonsBulkImport from "../pages/addons/AddonsBulkImport";
-import AddonsBulkExport from "../pages/addons/AddonsBulkExport";
 // Restaurant Management
 import ZoneSetup from "../pages/restaurant/ZoneSetup";
 import AddRestaurant from "../pages/restaurant/AddRestaurant";
@@ -26,12 +19,8 @@ import RestaurantsList from "../pages/restaurant/RestaurantsList";
 import JoiningRequest from "../pages/restaurant/JoiningRequest";
 import RestaurantsBulkImport from "../pages/restaurant/RestaurantsBulkImport";
 import RestaurantsBulkExport from "../pages/restaurant/RestaurantsBulkExport";
-// Food ManagementE
-import AddFood from "../pages/foods/AddFood";
+// Food Management
 import FoodsList from "../pages/foods/FoodsList";
-import FoodReview from "../pages/foods/FoodReview";
-import FoodsBulkImport from "../pages/foods/FoodsBulkImport";
-import FoodsBulkExport from "../pages/foods/FoodsBulkExport";
 // Promotions Management
 import BasicCampaign from "../pages/campaigns/BasicCampaign";
 import FoodCampaign from "../pages/campaigns/FoodCampaign";
@@ -179,21 +168,9 @@ export default function AdminRouter() {
         {/* FOOD MANAGEMENT */}
         {/* Categories */}
         <Route path="categories" element={<Category />} />
-        <Route path="categories/sub-category" element={<SubCategory />} />
-        <Route path="categories/bulk-import" element={<BulkImport />} />
-        <Route path="categories/bulk-export" element={<BulkExport />} />
-        {/* Addons */}
-        <Route path="addons/category" element={<AddonCategory />} />
-        <Route path="addons" element={<AddonsList />} />
-        <Route path="addons/bulk-import" element={<AddonsBulkImport />} />
-        <Route path="addons/bulk-export" element={<AddonsBulkExport />} />
         {/* Foods */}
-        <Route path="foods/add" element={<AddFood />} />
         <Route path="foods" element={<FoodsList />} />
         <Route path="food/list" element={<FoodsList />} />
-        <Route path="foods/review" element={<FoodReview />} />
-        <Route path="foods/bulk-import" element={<FoodsBulkImport />} />
-        <Route path="foods/bulk-export" element={<FoodsBulkExport />} />
 
         {/* PROMOTIONS MANAGEMENT */}
         {/* Campaigns */}

@@ -52,6 +52,11 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
 
+    // If data is FormData, remove Content-Type header to let axios set it with boundary
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
     return config;
   },
   (error) => {
@@ -107,10 +112,23 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
+        // Determine which module's refresh endpoint to use based on current route
+        const currentPath = window.location.pathname;
+        let refreshEndpoint = '/auth/refresh-token'; // default to user auth
+        
+        if (currentPath.startsWith('/admin')) {
+          refreshEndpoint = '/admin/auth/refresh-token';
+        } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+          // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
+          refreshEndpoint = '/restaurant/auth/refresh-token';
+        } else if (currentPath.startsWith('/delivery')) {
+          refreshEndpoint = '/delivery/auth/refresh-token';
+        }
+        
         // Try to refresh the token
         // The refresh token is sent via httpOnly cookie automatically
         const response = await axios.post(
-          `${API_BASE_URL}/auth/refresh-token`,
+          `${API_BASE_URL}${refreshEndpoint}`,
           {},
           {
             withCredentials: true,
@@ -182,30 +200,38 @@ apiClient.interceptors.response.use(
         }
         
         // Refresh failed, clear module-specific token and redirect to login
+        // BUT: Don't redirect if we're on onboarding page - let the component handle the error
         const currentPath = window.location.pathname;
-        if (currentPath.startsWith('/admin')) {
-          localStorage.removeItem('admin_accessToken');
-          localStorage.removeItem('admin_authenticated');
-          localStorage.removeItem('admin_user');
-          window.location.href = '/admin/login';
-        } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
-          // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
-          localStorage.removeItem('restaurant_accessToken');
-          localStorage.removeItem('restaurant_authenticated');
-          localStorage.removeItem('restaurant_user');
-          window.location.href = '/restaurant/login';
-        } else if (currentPath.startsWith('/delivery')) {
-          localStorage.removeItem('delivery_accessToken');
-          localStorage.removeItem('delivery_authenticated');
-          localStorage.removeItem('delivery_user');
-          window.location.href = '/delivery/login';
-        } else {
-          // User module includes /restaurants/* paths
-          localStorage.removeItem('user_accessToken');
-          localStorage.removeItem('user_authenticated');
-          localStorage.removeItem('user');
-          window.location.href = '/user/auth/sign-in';
+        const isOnboardingPage = currentPath.includes('/onboarding');
+        
+        if (!isOnboardingPage) {
+          if (currentPath.startsWith('/admin')) {
+            localStorage.removeItem('admin_accessToken');
+            localStorage.removeItem('admin_authenticated');
+            localStorage.removeItem('admin_user');
+            window.location.href = '/admin/login';
+          } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+            // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
+            localStorage.removeItem('restaurant_accessToken');
+            localStorage.removeItem('restaurant_authenticated');
+            localStorage.removeItem('restaurant_user');
+            window.location.href = '/restaurant/login';
+          } else if (currentPath.startsWith('/delivery')) {
+            localStorage.removeItem('delivery_accessToken');
+            localStorage.removeItem('delivery_authenticated');
+            localStorage.removeItem('delivery_user');
+            window.location.href = '/delivery/login';
+          } else {
+            // User module includes /restaurants/* paths
+            localStorage.removeItem('user_accessToken');
+            localStorage.removeItem('user_authenticated');
+            localStorage.removeItem('user');
+            window.location.href = '/user/auth/sign-in';
+          }
         }
+        
+        // For onboarding page, reject the promise so component can handle it
+        return Promise.reject(refreshError);
         
         return Promise.reject(refreshError);
       }

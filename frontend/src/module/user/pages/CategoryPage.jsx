@@ -9,22 +9,7 @@ import { Input } from "@/components/ui/input"
 
 // Import shared food images - prevents duplication
 import { foodImages } from "@/constants/images"
-
-// Categories for browse section - matching Home.jsx order
-const categories = [
-  { id: 'all', name: "All", image: foodImages[7] }, // Use first food image for "All"
-  { id: 'biryani', name: "Biryani", image: foodImages[0] },
-  { id: 'cake', name: "Cake", image: foodImages[1] },
-  { id: 'chhole-bhature', name: "Chhole Bhature", image: foodImages[2] },
-  { id: 'chicken-tanduri', name: "Chicken Tanduri", image: foodImages[3] },
-  { id: 'donuts', name: "Donuts", image: foodImages[4] },
-  { id: 'dosa', name: "Dosa", image: foodImages[5] },
-  { id: 'french-fries', name: "French Fries", image: foodImages[6] },
-  { id: 'idli', name: "Idli", image: foodImages[7] },
-  { id: 'momos', name: "Momos", image: foodImages[8] },
-  { id: 'samosa', name: "Samosa", image: foodImages[9] },
-  { id: 'starters', name: "Starters", image: foodImages[10] },
-]
+import api from "@/lib/api"
 
 // Filter options
 const filterOptions = [
@@ -231,13 +216,79 @@ export default function CategoryPage() {
   const filterSectionRefs = useRef({})
   const rightContentRef = useRef(null)
   const categoryScrollRef = useRef(null)
+  
+  // State for categories from admin
+  const [categories, setCategories] = useState([])
+  const [loadingCategories, setLoadingCategories] = useState(true)
+
+  // Fetch categories from admin API
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true)
+        const response = await api.get('/categories/public')
+        if (response.data.success && response.data.data.categories) {
+          // Add "All" category at the beginning
+          const allCategory = { 
+            id: 'all', 
+            name: "All", 
+            image: foodImages[7] || foodImages[0],
+            slug: 'all'
+          }
+          const adminCategories = response.data.data.categories.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            image: cat.image || foodImages[0], // Fallback to default image if not provided
+            slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-')
+          }))
+          setCategories([allCategory, ...adminCategories])
+        } else {
+          // Fallback to default categories if API fails
+          const defaultCategories = [
+            { id: 'all', name: "All", image: foodImages[7] },
+            { id: 'biryani', name: "Biryani", image: foodImages[0] },
+            { id: 'cake', name: "Cake", image: foodImages[1] },
+            { id: 'chhole-bhature', name: "Chhole Bhature", image: foodImages[2] },
+          ]
+          setCategories(defaultCategories)
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+        // Fallback to default categories on error
+        const defaultCategories = [
+          { id: 'all', name: "All", image: foodImages[7] },
+          { id: 'biryani', name: "Biryani", image: foodImages[0] },
+          { id: 'cake', name: "Cake", image: foodImages[1] },
+        ]
+        setCategories(defaultCategories)
+      } finally {
+        setLoadingCategories(false)
+      }
+    }
+
+    fetchCategories()
+  }, [])
 
   // Update selected category when URL changes
   useEffect(() => {
-    if (category) {
+    if (category && categories && categories.length > 0) {
+      // Try to match by slug first, then by name
+      const categorySlug = category.toLowerCase()
+      const matchedCategory = categories.find(cat => 
+        cat.slug === categorySlug || 
+        cat.id === categorySlug || 
+        cat.name.toLowerCase().replace(/\s+/g, '-') === categorySlug
+      )
+      if (matchedCategory) {
+        setSelectedCategory(matchedCategory.slug || matchedCategory.id)
+      } else {
+        setSelectedCategory(categorySlug)
+      }
+    } else if (category) {
+      // If categories not loaded yet, just set the slug
       setSelectedCategory(category.toLowerCase())
     }
-  }, [category])
+  }, [category, categories])
 
   const toggleFilter = (filterId) => {
     setActiveFilters(prev => {
@@ -376,13 +427,14 @@ export default function CategoryPage() {
     return filtered
   }, [selectedCategory, activeFilters, searchQuery])
 
-  const handleCategorySelect = (catId) => {
-    setSelectedCategory(catId)
+  const handleCategorySelect = (category) => {
+    const categorySlug = category.slug || category.id
+    setSelectedCategory(categorySlug)
     // Update URL to reflect category change
-    if (catId === 'all') {
+    if (categorySlug === 'all') {
       navigate('/user/category/all')
     } else {
-      navigate(`/user/category/${catId}`)
+      navigate(`/user/category/${categorySlug}`)
     }
   }
 
@@ -423,41 +475,57 @@ export default function CategoryPage() {
               msOverflowStyle: "none",
             }}
           >
-            {categories.map((cat) => {
-              const isSelected = selectedCategory === cat.id
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => handleCategorySelect(cat.id)}
-                  className={`flex flex-col items-center gap-1.5 flex-shrink-0 pb-2 transition-all ${
-                    isSelected ? 'border-b-2 border-green-600' : ''
-                  }`}
-                >
-                  {cat.image ? (
-                    <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 transition-all ${
-                      isSelected ? 'border-green-600 shadow-lg' : 'border-transparent'
+            {loadingCategories ? (
+              <div className="flex items-center justify-center gap-2 py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-green-600" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">Loading categories...</span>
+              </div>
+            ) : (
+              categories && categories.length > 0 ? categories.map((cat) => {
+                const categorySlug = cat.slug || cat.id
+                const isSelected = selectedCategory === categorySlug || selectedCategory === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleCategorySelect(cat)}
+                    className={`flex flex-col items-center gap-1.5 flex-shrink-0 pb-2 transition-all ${
+                      isSelected ? 'border-b-2 border-green-600' : ''
+                    }`}
+                  >
+                    {cat.image ? (
+                      <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 transition-all ${
+                        isSelected ? 'border-green-600 shadow-lg' : 'border-transparent'
+                      }`}>
+                        <img 
+                          src={cat.image} 
+                          alt={cat.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Fallback to default image if category image fails to load
+                            e.target.src = foodImages[0] || 'https://via.placeholder.com/100'
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center border-2 transition-all ${
+                        isSelected ? 'border-green-600 shadow-lg bg-green-50 dark:bg-green-900/20' : 'border-transparent'
+                      }`}>
+                        <span className="text-xl md:text-2xl">🍽️</span>
+                      </div>
+                    )}
+                    <span className={`text-xs md:text-sm font-medium whitespace-nowrap ${
+                      isSelected ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'
                     }`}>
-                      <img 
-                        src={cat.image} 
-                        alt={cat.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center border-2 transition-all ${
-                      isSelected ? 'border-green-600 shadow-lg bg-green-50 dark:bg-green-900/20' : 'border-transparent'
-                    }`}>
-                      <span className="text-xl md:text-2xl">🍽️</span>
-                    </div>
-                  )}
-                  <span className={`text-xs md:text-sm font-medium whitespace-nowrap ${
-                    isSelected ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'
-                  }`}>
-                    {cat.name}
-                  </span>
-                </button>
+                      {cat.name}
+                    </span>
+                  </button>
+                )
+              }) : (
+                <div className="flex items-center justify-center py-4">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">No categories available</span>
+                </div>
               )
-            })}
+            )}
           </div>
         </div>
       </div>

@@ -107,8 +107,6 @@ function TimePickerWheel({
   const minutes = Array.from({ length: 60 }, (_, i) => i)
   const periods = ["am", "pm"]
 
-  const navigate = useNavigate()
-
   useEffect(() => {
     if (isOpen) {
       setSelectedHour(parsedHour)
@@ -591,11 +589,13 @@ function SimpleCalendar({ selectedDate, onDateSelect, isOpen, onClose }) {
 }
 
 export default function Inventory() {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("all-items")
   const [searchQuery, setSearchQuery] = useState("")
   const [filterOpen, setFilterOpen] = useState(false)
   const [selectedFilter, setSelectedFilter] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingInventory, setLoadingInventory] = useState(false)
   const [categories, setCategories] = useState(() => {
     try {
       if (typeof window === "undefined") return mockCategories
@@ -686,7 +686,12 @@ export default function Inventory() {
         }
       } catch (error) {
         console.error('Error fetching inventory:', error)
-        toast.error('Failed to load inventory')
+        // Check if it's a network error (backend not running)
+        if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+          toast.error('Cannot connect to server. Please check if backend is running.')
+        } else {
+          toast.error('Failed to load inventory')
+        }
         setCategories([])
         setExpandedCategories([])
       } finally {
@@ -726,7 +731,14 @@ export default function Inventory() {
           console.log('✅ Inventory saved successfully')
         } catch (error) {
           console.error('Error saving inventory:', error)
-          toast.error('Failed to save inventory changes')
+          // Check if it's a network error (backend not running)
+          if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+            console.warn('Backend server may not be running. Inventory changes will be saved when connection is restored.')
+            // Don't show error toast for network errors during auto-save to avoid spam
+            // The user will see the error when they manually try to save
+          } else {
+            toast.error('Failed to save inventory changes')
+          }
         }
       }, 1000) // Debounce: save 1 second after last change
       
