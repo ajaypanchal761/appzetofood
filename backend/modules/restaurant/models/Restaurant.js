@@ -21,7 +21,6 @@ const restaurantSchema = new mongoose.Schema(
     restaurantId: {
       type: String,
       unique: true,
-      index: true,
     },
     // Authentication fields
     email: {
@@ -29,21 +28,15 @@ const restaurantSchema = new mongoose.Schema(
       required: function() {
         return !this.phone && !this.googleId;
       },
-      unique: true,
-      sparse: true,
       lowercase: true,
       trim: true,
-      index: true,
     },
     phone: {
       type: String,
       required: function() {
         return !this.email && !this.googleId;
       },
-      unique: true,
-      sparse: true,
       trim: true,
-      index: true,
     },
     phoneVerified: {
       type: Boolean,
@@ -55,7 +48,6 @@ const restaurantSchema = new mongoose.Schema(
     },
     googleId: {
       type: String,
-      sparse: true,
     },
     googleEmail: {
       type: String,

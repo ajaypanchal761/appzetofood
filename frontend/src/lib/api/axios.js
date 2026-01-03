@@ -3,6 +3,16 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from './config.js';
 import { getRoleFromToken, clearModuleAuth } from '../utils/auth.js';
 
+// Network error tracking to prevent spam
+const networkErrorState = {
+  lastErrorTime: 0,
+  lastToastTime: 0,
+  errorCount: 0,
+  toastShown: false,
+  COOLDOWN_PERIOD: 30000, // 30 seconds cooldown for console errors
+  TOAST_COOLDOWN_PERIOD: 60000, // 60 seconds cooldown for toast notifications
+};
+
 // Validate API base URL on import
 if (import.meta.env.DEV) {
   const backendUrl = API_BASE_URL.replace('/api', '');
@@ -163,6 +173,16 @@ apiClient.interceptors.request.use(
  */
 apiClient.interceptors.response.use(
   (response) => {
+    // Reset network error state on successful response (backend is back online)
+    if (networkErrorState.errorCount > 0) {
+      networkErrorState.errorCount = 0;
+      networkErrorState.lastErrorTime = 0;
+      networkErrorState.toastShown = false;
+      if (import.meta.env.DEV) {
+        console.log('✅ Backend connection restored');
+      }
+    }
+    
     // If response contains new access token, store it for the current module
     if (response.data?.accessToken) {
       const currentPath = window.location.pathname;
@@ -336,27 +356,50 @@ apiClient.interceptors.response.use(
     // Handle network errors specifically (backend not running)
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
       if (import.meta.env.DEV) {
-        console.error('🌐 Network Error - Backend server may not be running');
-        console.error('💡 API Base URL:', API_BASE_URL);
-        console.error('💡 Backend URL:', API_BASE_URL.replace('/api', ''));
-        console.error('💡 Start backend with: cd appzetofood/backend && npm run dev');
-        console.error('💡 Check backend health: curl http://localhost:5000/health');
+        const now = Date.now();
+        const timeSinceLastError = now - networkErrorState.lastErrorTime;
+        const timeSinceLastToast = now - networkErrorState.lastToastTime;
         
-        // Show helpful error message
-        toast.error(`Backend not connected! Start server: cd appzetofood/backend && npm run dev`, {
-          duration: 10000,
-          style: {
-            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-            color: '#ffffff',
-            border: '1px solid #b45309',
-            borderRadius: '12px',
-            padding: '16px',
-            fontSize: '14px',
-            fontWeight: '500',
-            boxShadow: '0 10px 25px -5px rgba(245, 158, 11, 0.3), 0 8px 10px -6px rgba(245, 158, 11, 0.2)',
-          },
-          className: 'network-error-toast',
-        });
+        // Only log console errors if cooldown period has passed
+        if (timeSinceLastError >= networkErrorState.COOLDOWN_PERIOD) {
+          networkErrorState.errorCount++;
+          networkErrorState.lastErrorTime = now;
+          
+          // Log error details (only once per cooldown period)
+          if (networkErrorState.errorCount === 1) {
+            console.error('🌐 Network Error - Backend server may not be running');
+            console.error('💡 API Base URL:', API_BASE_URL);
+            console.error('💡 Backend URL:', API_BASE_URL.replace('/api', ''));
+            console.error('💡 Start backend with: cd appzetofood/backend && npm run dev');
+            console.error('💡 Check backend health: curl http://localhost:5000/health');
+          } else {
+            // For subsequent errors, show a brief message
+            console.warn(`⚠️ Network Error (${networkErrorState.errorCount}x) - Backend still not connected`);
+          }
+        }
+        
+        // Only show toast if cooldown period has passed
+        if (timeSinceLastToast >= networkErrorState.TOAST_COOLDOWN_PERIOD) {
+          networkErrorState.lastToastTime = now;
+          networkErrorState.toastShown = true;
+          
+          // Show helpful error message (only once per minute)
+          toast.error(`Backend not connected! Start server: cd appzetofood/backend && npm run dev`, {
+            duration: 10000,
+            id: 'network-error-toast', // Use ID to prevent duplicate toasts
+            style: {
+              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              color: '#ffffff',
+              border: '1px solid #b45309',
+              borderRadius: '12px',
+              padding: '16px',
+              fontSize: '14px',
+              fontWeight: '500',
+              boxShadow: '0 10px 25px -5px rgba(245, 158, 11, 0.3), 0 8px 10px -6px rgba(245, 158, 11, 0.2)',
+            },
+            className: 'network-error-toast',
+          });
+        }
       }
       return Promise.reject(error);
     }

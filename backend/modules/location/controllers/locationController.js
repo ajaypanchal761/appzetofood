@@ -53,30 +53,42 @@ export const reverseGeocode = async (req, res) => {
       let lastError = null;
 
       // Try Method 1a: API Key with latlng combined format (user's example format)
+      // This matches the exact format from Ola Maps documentation
       try {
         const requestId = Date.now().toString();
-        response = await axios.get(
-          'https://api.olamaps.io/places/v1/reverse-geocode',
-          {
-            params: { 
-              latlng: `${latNum},${lngNum}`,
-              api_key: apiKey
-            },
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'X-Request-Id': requestId // Unique ID for tracking
-            },
-            timeout: 10000 // 10 seconds timeout
-          }
-        );
+        const url = `https://api.olamaps.io/places/v1/reverse-geocode?latlng=${latNum},${lngNum}&api_key=${apiKey}`;
+        
+        response = await axios.get(url, {
+          headers: {
+            'X-Request-Id': requestId, // Unique ID for tracking
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          timeout: 10000 // 10 seconds timeout
+        });
+        
         logger.info('OLA Maps reverse geocode successful (latlng format)', {
           lat: latNum,
           lng: lngNum,
-          responseKeys: response.data ? Object.keys(response.data) : []
+          responseKeys: response.data ? Object.keys(response.data) : [],
+          hasResults: !!(response.data?.results),
+          resultsLength: response.data?.results?.length || 0
         });
+        
+        // Log first result for debugging
+        if (response.data?.results?.[0]) {
+          logger.info('OLA Maps first result:', {
+            formatted_address: response.data.results[0].formatted_address,
+            hasAddressComponents: !!response.data.results[0].address_components
+          });
+        }
       } catch (err1a) {
         lastError = err1a;
+        logger.warn('OLA Maps Method 1a failed:', {
+          error: err1a.message,
+          status: err1a.response?.status,
+          data: err1a.response?.data
+        });
         response = null;
         
         // Try Method 1b: API Key as query parameter (separate lat/lng)

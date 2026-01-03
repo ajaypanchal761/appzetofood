@@ -2,6 +2,7 @@ import HeroBanner from '../models/HeroBanner.js';
 import LandingPageCategory from '../models/LandingPageCategory.js';
 import LandingPageExploreMore from '../models/LandingPageExploreMore.js';
 import LandingPageSettings from '../models/LandingPageSettings.js';
+import Under250Banner from '../models/Under250Banner.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { uploadToCloudinary } from '../../../shared/utils/cloudinaryService.js';
 import { cloudinary } from '../../../config/cloudinary.js';
@@ -660,6 +661,261 @@ export const updateLandingSettings = async (req, res) => {
   } catch (error) {
     console.error('Error updating landing settings:', error);
     return errorResponse(res, 500, 'Failed to update landing settings');
+  }
+};
+
+// ==================== UNDER 250 BANNERS ====================
+
+/**
+ * Get all active under 250 banners (public endpoint)
+ */
+export const getUnder250Banners = async (req, res) => {
+  try {
+    const banners = await Under250Banner.find({ isActive: true })
+      .sort({ order: 1, createdAt: -1 })
+      .select('imageUrl order')
+      .lean();
+
+    return successResponse(res, 200, 'Under 250 banners retrieved successfully', {
+      banners: banners.map(b => b.imageUrl)
+    });
+  } catch (error) {
+    console.error('Error fetching under 250 banners:', error);
+    return errorResponse(res, 500, 'Failed to fetch under 250 banners');
+  }
+};
+
+/**
+ * Get all under 250 banners (admin endpoint)
+ */
+export const getAllUnder250Banners = async (req, res) => {
+  try {
+    const banners = await Under250Banner.find()
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+
+    return successResponse(res, 200, 'Under 250 banners retrieved successfully', {
+      banners
+    });
+  } catch (error) {
+    console.error('Error fetching under 250 banners:', error);
+    return errorResponse(res, 500, 'Failed to fetch under 250 banners');
+  }
+};
+
+/**
+ * Upload a new under 250 banner
+ */
+export const createUnder250Banner = async (req, res) => {
+  try {
+    if (!req.file) {
+      return errorResponse(res, 400, 'No image file provided');
+    }
+
+    // Upload to Cloudinary
+    const folder = 'appzeto/under-250-banners';
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder,
+      resource_type: 'image'
+    });
+
+    // Get the highest order number
+    const lastBanner = await Under250Banner.findOne()
+      .sort({ order: -1 })
+      .select('order')
+      .lean();
+
+    const newOrder = lastBanner ? lastBanner.order + 1 : 0;
+
+    // Create banner record
+    const banner = new Under250Banner({
+      imageUrl: result.secure_url,
+      cloudinaryPublicId: result.public_id,
+      order: newOrder,
+      isActive: true
+    });
+
+    await banner.save();
+
+    return successResponse(res, 201, 'Under 250 banner uploaded successfully', {
+      banner: {
+        _id: banner._id,
+        imageUrl: banner.imageUrl,
+        order: banner.order,
+        isActive: banner.isActive,
+        createdAt: banner.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error creating under 250 banner:', error);
+    return errorResponse(res, 500, 'Failed to upload under 250 banner');
+  }
+};
+
+/**
+ * Upload multiple under 250 banners (up to 5)
+ */
+export const createMultipleUnder250Banners = async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return errorResponse(res, 400, 'No image files provided');
+    }
+
+    // Validate number of files (max 5)
+    if (req.files.length > 5) {
+      return errorResponse(res, 400, 'Maximum 5 images can be uploaded at once');
+    }
+
+    // Get the highest order number
+    const lastBanner = await Under250Banner.findOne()
+      .sort({ order: -1 })
+      .select('order')
+      .lean();
+
+    let currentOrder = lastBanner ? lastBanner.order + 1 : 0;
+
+    const folder = 'appzeto/under-250-banners';
+    const uploadedBanners = [];
+    const errors = [];
+
+    // Upload all files
+    for (let i = 0; i < req.files.length; i++) {
+      const file = req.files[i];
+      try {
+        // Upload to Cloudinary
+        const result = await uploadToCloudinary(file.buffer, {
+          folder,
+          resource_type: 'image'
+        });
+
+        // Create banner record
+        const banner = new Under250Banner({
+          imageUrl: result.secure_url,
+          cloudinaryPublicId: result.public_id,
+          order: currentOrder++,
+          isActive: true
+        });
+
+        await banner.save();
+        uploadedBanners.push({
+          _id: banner._id,
+          imageUrl: banner.imageUrl,
+          order: banner.order,
+          isActive: banner.isActive,
+          createdAt: banner.createdAt
+        });
+      } catch (error) {
+        console.error(`Error uploading file ${i + 1}:`, error);
+        errors.push(`Failed to upload file ${i + 1}: ${error.message}`);
+      }
+    }
+
+    // If some files failed but others succeeded
+    if (errors.length > 0 && uploadedBanners.length > 0) {
+      return successResponse(res, 201, `Uploaded ${uploadedBanners.length} banner(s) with some errors`, {
+        banners: uploadedBanners,
+        errors
+      });
+    }
+
+    // If all files failed
+    if (uploadedBanners.length === 0) {
+      return errorResponse(res, 500, 'Failed to upload banners. ' + errors.join(', '));
+    }
+
+    // All successful
+    return successResponse(res, 201, `${uploadedBanners.length} under 250 banner(s) uploaded successfully`, {
+      banners: uploadedBanners
+    });
+  } catch (error) {
+    console.error('Error creating multiple under 250 banners:', error);
+    return errorResponse(res, 500, 'Failed to upload under 250 banners');
+  }
+};
+
+/**
+ * Delete an under 250 banner
+ */
+export const deleteUnder250Banner = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const banner = await Under250Banner.findById(id);
+    if (!banner) {
+      return errorResponse(res, 404, 'Under 250 banner not found');
+    }
+
+    // Delete from Cloudinary
+    try {
+      await cloudinary.uploader.destroy(banner.cloudinaryPublicId);
+    } catch (cloudinaryError) {
+      console.error('Error deleting from Cloudinary:', cloudinaryError);
+      // Continue with database deletion even if Cloudinary deletion fails
+    }
+
+    // Delete from database
+    await Under250Banner.findByIdAndDelete(id);
+
+    return successResponse(res, 200, 'Under 250 banner deleted successfully');
+  } catch (error) {
+    console.error('Error deleting under 250 banner:', error);
+    return errorResponse(res, 500, 'Failed to delete under 250 banner');
+  }
+};
+
+/**
+ * Update under 250 banner order
+ */
+export const updateUnder250BannerOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { order } = req.body;
+
+    if (typeof order !== 'number') {
+      return errorResponse(res, 400, 'Order must be a number');
+    }
+
+    const banner = await Under250Banner.findByIdAndUpdate(
+      id,
+      { order, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!banner) {
+      return errorResponse(res, 404, 'Under 250 banner not found');
+    }
+
+    return successResponse(res, 200, 'Banner order updated successfully', {
+      banner
+    });
+  } catch (error) {
+    console.error('Error updating under 250 banner order:', error);
+    return errorResponse(res, 500, 'Failed to update banner order');
+  }
+};
+
+/**
+ * Toggle under 250 banner active status
+ */
+export const toggleUnder250BannerStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const banner = await Under250Banner.findById(id);
+    if (!banner) {
+      return errorResponse(res, 404, 'Under 250 banner not found');
+    }
+
+    banner.isActive = !banner.isActive;
+    banner.updatedAt = new Date();
+    await banner.save();
+
+    return successResponse(res, 200, 'Banner status updated successfully', {
+      banner
+    });
+  } catch (error) {
+    console.error('Error toggling under 250 banner status:', error);
+    return errorResponse(res, 500, 'Failed to update banner status');
   }
 };
 

@@ -106,7 +106,6 @@ export function useLocation() {
       }
       
       // Backend returns: { success: true, data: { results: [{ formatted_address, address_components: { city, state, country, area } }] } }
-      // OR: { success: true, data: { ...direct OLA Maps response... } }
       const backendData = res?.data?.data || {}
       
       // Debug: Check backend data structure
@@ -119,18 +118,33 @@ export function useLocation() {
       })
       
       // Handle different OLA Maps response structures
+      // Backend processes OLA Maps response and returns: { results: [{ formatted_address, address_components: { city, state, area } }] }
       let result = null;
-      if (backendData.results && Array.isArray(backendData.results)) {
+      if (backendData.results && Array.isArray(backendData.results) && backendData.results.length > 0) {
         result = backendData.results[0];
-      } else if (backendData.result && Array.isArray(backendData.result)) {
+        console.log("✅ Using results[0] from backend")
+      } else if (backendData.result && Array.isArray(backendData.result) && backendData.result.length > 0) {
         result = backendData.result[0];
+        console.log("✅ Using result[0] from backend")
       } else if (backendData.results && !Array.isArray(backendData.results)) {
         result = backendData.results;
+        console.log("✅ Using results object from backend")
       } else {
         result = backendData;
+        console.log("⚠️ Using backendData directly (fallback)")
       }
       
-      if (!result) result = {};
+      if (!result) {
+        console.warn("⚠️ No result found in backend data")
+        result = {};
+      }
+      
+      console.log("📦 Parsed result:", {
+        hasFormattedAddress: !!result.formatted_address,
+        hasAddressComponents: !!result.address_components,
+        formattedAddress: result.formatted_address,
+        addressComponents: result.address_components
+      })
       
       // Extract address_components - handle both object and array formats
       let addressComponents = {};
@@ -517,25 +531,33 @@ export function useLocation() {
       return new Promise((resolve, reject) => {
         const isRetry = retryCount > 0
         console.log(`📍 Requesting location${isRetry ? ' (retry with lower accuracy)' : ' (high accuracy)'}...`)
+        console.log(`📍 Force fresh: ${forceFresh ? 'YES' : 'NO'}, maximumAge: ${options.maximumAge || (forceFresh ? 0 : 60000)}`)
         
         // Use cached location if available and not too old (faster response)
+        // If forceFresh is true, don't use cache (maximumAge: 0)
         const cachedOptions = {
           ...options,
-          maximumAge: options.maximumAge || 60000, // Allow 1 minute old cache by default
+          maximumAge: forceFresh ? 0 : (options.maximumAge || 60000), // If forceFresh, get fresh location
         }
         
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
             try {
               const { latitude, longitude, accuracy } = pos.coords
+              const timestamp = pos.timestamp || Date.now()
+              
               console.log(`✅ Got location${isRetry ? ' (lower accuracy)' : ' (high accuracy)'}:`, { 
                 latitude, 
                 longitude, 
-                accuracy: `${accuracy}m` 
+                accuracy: `${accuracy}m`,
+                timestamp: new Date(timestamp).toISOString(),
+                coordinates: `${latitude.toFixed(8)}, ${longitude.toFixed(8)}`
               })
               
               // Get address from OLA Maps API
+              console.log("🔍 Calling reverse geocode with coordinates:", { latitude, longitude })
               const addr = await reverseGeocodeWithOLAMaps(latitude, longitude)
+              console.log("✅ Reverse geocode result:", addr)
 
               const finalLoc = { 
                 ...addr, 
@@ -580,36 +602,68 @@ export function useLocation() {
             // If timeout and we haven't retried yet, try with lower accuracy
             if (err.code === 3 && retryCount === 0 && options.enableHighAccuracy) {
               console.warn("⏱️ High accuracy timeout, retrying with lower accuracy...")
-              // Retry with lower accuracy - faster response
+              // Retry with lower accuracy - faster response (uses network-based location)
               getPositionWithRetry({
                 enableHighAccuracy: false,
-                timeout: 3000,  // 3 seconds for lower accuracy (very fast!)
-                maximumAge: 120000 // Allow 2 minute old cached location for instant response
+                timeout: 5000,  // 5 seconds for lower accuracy (network-based is faster)
+                maximumAge: 300000 // Allow 5 minute old cached location for instant response
               }, 1).then(resolve).catch(reject)
               return
             }
 
-            console.error("❌ Geolocation error:", err.code, err.message)
+            // Don't log timeout errors as errors - they're expected in some cases
+            if (err.code === 3) {
+              console.warn("⏱️ Geolocation timeout (code 3) - using fallback location")
+            } else {
+              console.error("❌ Geolocation error:", err.code, err.message)
+            }
+            // Try multiple fallback strategies
             try {
-              const fallback = dbLocation || (await fetchLocationFromDB())
-              if (fallback) {
-                console.log("✅ Using fallback location from DB")
+              // Strategy 1: Use DB location if available
+              let fallback = dbLocation
+              if (!fallback) {
+                fallback = await fetchLocationFromDB()
               }
-            setLocation(fallback)
-            setError(err.message)
-            setPermissionGranted(false)
-            if (showLoading) setLoading(false)
-            resolve(fallback) // Resolve with fallback instead of rejecting
+              
+              // Strategy 2: Use cached location from localStorage
+              if (!fallback) {
+                const stored = localStorage.getItem("userLocation")
+                if (stored) {
+                  try {
+                    fallback = JSON.parse(stored)
+                    console.log("✅ Using cached location from localStorage")
+                  } catch (parseErr) {
+                    console.warn("⚠️ Failed to parse stored location:", parseErr)
+                  }
+                }
+              }
+              
+              if (fallback) {
+                console.log("✅ Using fallback location:", fallback)
+                setLocation(fallback)
+                // Don't set error for timeout when we have fallback
+                if (err.code !== 3) {
+                  setError(err.message)
+                }
+                setPermissionGranted(true) // Still grant permission if we have location
+                if (showLoading) setLoading(false)
+                resolve(fallback)
+              } else {
+                // No fallback available
+                console.warn("⚠️ No fallback location available")
+                setLocation(null)
+                setError(err.code === 3 ? "Location request timed out. Please try again." : err.message)
+                setPermissionGranted(false)
+                if (showLoading) setLoading(false)
+                resolve(null)
+              }
             } catch (fallbackErr) {
-              console.warn("⚠️ Fallback also failed, using stored location")
-              // If fallback also fails, use stored location or null
-              const stored = localStorage.getItem("userLocation")
-              const storedLocation = stored ? JSON.parse(stored) : null
-            setLocation(storedLocation)
-            setError(err.message)
-            setPermissionGranted(false)
-            if (showLoading) setLoading(false)
-            resolve(storedLocation) // Resolve with stored location or null
+              console.warn("⚠️ Fallback retrieval failed:", fallbackErr)
+              setLocation(null)
+              setError(err.code === 3 ? "Location request timed out. Please try again." : err.message)
+              setPermissionGranted(false)
+              if (showLoading) setLoading(false)
+              resolve(null)
             }
           },
           options
@@ -617,12 +671,13 @@ export function useLocation() {
       })
     }
 
-    // Try with high accuracy first, but allow cached location for faster response
-    // Use very short timeout for instant response (cached location will be used)
+    // Try with high accuracy first
+    // If forceFresh is true, don't use cached location (maximumAge: 0)
+    // Otherwise, allow cached location for faster response
     return getPositionWithRetry({ 
       enableHighAccuracy: true,  // Use GPS for exact location
-      timeout: 5000,              // 5 seconds timeout (very fast - uses cache if available)
-      maximumAge: forceFresh ? 0 : 120000  // Allow 2 minute old cache for instant response
+      timeout: 10000,            // 10 seconds timeout (gives GPS time to get accurate fix)
+      maximumAge: forceFresh ? 0 : 60000  // If forceFresh, get fresh location. Otherwise allow 1 minute cache
     })
   }
 
@@ -840,14 +895,27 @@ export function useLocation() {
   }, [])
 
   const requestLocation = async () => {
-    console.log("📍 User requested location update")
+    console.log("📍 User requested location update - clearing cache and fetching fresh")
     setLoading(true)
     setError(null)
     
     try {
+      // Clear cached location to force fresh fetch
+      localStorage.removeItem("userLocation")
+      console.log("🗑️ Cleared cached location from localStorage")
+      
       // Show loading, so pass showLoading = true
+      // forceFresh = true, updateDB = true, showLoading = true
       const location = await getLocation(true, true, true)
-      console.log("✅ Location requested successfully:", location)
+      console.log("✅ Fresh location requested successfully:", location)
+      console.log("✅ Location details:", {
+        formattedAddress: location?.formattedAddress,
+        city: location?.city,
+        state: location?.state,
+        area: location?.area,
+        coordinates: location?.latitude && location?.longitude ? 
+          `${location.latitude.toFixed(8)}, ${location.longitude.toFixed(8)}` : "N/A"
+      })
       
       // Restart watching for live updates
       startWatchingLocation()

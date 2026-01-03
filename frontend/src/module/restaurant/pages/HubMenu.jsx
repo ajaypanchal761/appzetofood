@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronUp,
   MoreVertical,
-  ThumbsUp,
   Edit,
   Plus,
   Utensils,
@@ -20,7 +19,6 @@ import {
 } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
 // Removed foodManagement - now using backend API directly
-import { Switch } from "@/components/ui/switch"
 import { useNavigate } from "react-router-dom"
 import { restaurantAPI } from "@/lib/api"
 import { toast } from "sonner"
@@ -375,22 +373,6 @@ export default function HubMenu() {
     })
   }
 
-  // Toggle group enable/disable - opens popup
-  const toggleGroupEnabled = (groupId) => {
-    const group = menuData.find(g => g.id === groupId)
-    if (group && group.isEnabled) {
-      // Opening popup to switch off
-      setSwitchingOffTarget({ type: 'group', id: groupId })
-      setIsAvailabilityPopupOpen(true)
-      setAvailabilityReason(null)
-    } else {
-      // Directly turn on (no popup needed)
-      setMenuData(prev => prev.map(g => 
-        g.id === groupId ? { ...g, isEnabled: true } : g
-      ))
-    }
-  }
-
   // Toggle item stock status - opens popup
   const toggleItemStock = (itemId, groupId) => {
     const group = menuData.find(g => g.id === groupId)
@@ -411,15 +393,6 @@ export default function HubMenu() {
     }
   }
 
-  // Toggle item recommendation
-  const toggleItemRecommendation = (itemId, groupId) => {
-    setMenuData(prev => prev.map(g => ({
-      ...g,
-      items: g.items.map(i => 
-        i.id === itemId ? { ...i, isRecommended: !i.isRecommended } : i
-      )
-    })))
-  }
 
   // Handle availability popup confirm
   const handleAvailabilityConfirm = async () => {
@@ -656,14 +629,6 @@ export default function HubMenu() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <style>{`
-        [data-slot="switch"][data-state="checked"] {
-          background-color: #16a34a !important;
-        }
-        [data-slot="switch-thumb"][data-state="checked"] {
-          background-color: #ffffff !important;
-        }
-      `}</style>
       {/* Header */}
       <div className="sticky top-0 z-40 bg-white ">
         <div className="">
@@ -863,20 +828,6 @@ export default function HubMenu() {
 
               {isExpanded && (
                 <div className="p-4 space-y-2">
-                  {/* Group Toggle Bar */}
-                  <div className="flex items-center justify-between pt-2">
-                    <h4 className="text-sm font-bold text-gray-900 uppercase">
-                      {group.name} ({enabledItems})
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={group.isEnabled}
-                        onCheckedChange={() => toggleGroupEnabled(group.id)}
-                        className="data-[state=unchecked]:bg-gray-300 data-[state=checked]:bg-green-600"
-                      />
-                    </div>
-                  </div>
-
                   {/* Items */}
                   <div className="space-y-4">
                     {group.items.map((item) => (
@@ -920,26 +871,7 @@ export default function HubMenu() {
                         </div>
 
                         {/* Action buttons - below image */}
-                        <div className="flex items-center justify-between gap-3 mt-4">
-                          <button
-                            onClick={() => toggleItemRecommendation(item.id, group.id)}
-                            className={`flex items-center gap-1.5 px-3 bg-transparent py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                              item.isRecommended
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-gray-100 text-gray-700"
-                            }`}
-                          >
-                            <ThumbsUp className="w-3.5 h-3.5" />
-                            <span>Recommend</span>
-                          </button>
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={item.isAvailable}
-                              onCheckedChange={() => toggleItemStock(item.id, group.id)}
-                              className="data-[state=unchecked]:bg-gray-300 data-[state=checked]:bg-green-600"
-                            />
-                            <span className="text-sm text-gray-600">In stock</span>
-                          </div>
+                        <div className="flex items-center justify-center gap-3 mt-4">
                           <button 
                             onClick={() => navigate(`/restaurant/hub-menu/item/${item.id}`, { state: { item, groupId: group.id } })}
                             className="flex items-center gap-1.5 bg-transparent text-gray-700 text-sm font-medium"

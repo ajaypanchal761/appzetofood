@@ -29,8 +29,7 @@ const userSchema = new mongoose.Schema({
     select: false // Don't return password by default
   },
   googleId: {
-    type: String,
-    sparse: true
+    type: String
   },
   googleEmail: {
     type: String,
@@ -213,9 +212,7 @@ userSchema.index(
 );
 userSchema.index({ googleId: 1 }, { unique: true, sparse: true });
 userSchema.index({ 'addresses.location': '2dsphere' });
-// Non-unique indexes for individual fields (for queries)
-userSchema.index({ email: 1 }, { sparse: true });
-userSchema.index({ phone: 1 }, { sparse: true });
+// Note: Single-field indexes on email/phone removed - compound indexes {email:1,role:1} and {phone:1,role:1} can serve as prefixes
 userSchema.index({ role: 1 });
 
 // Hash password before saving

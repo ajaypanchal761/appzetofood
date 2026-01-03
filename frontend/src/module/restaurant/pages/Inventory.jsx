@@ -11,7 +11,8 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  ThumbsUp
 } from "lucide-react"
 import RestaurantNavbar from "../components/RestaurantNavbar"
 import BottomNavOrders from "../components/BottomNavOrders"
@@ -647,50 +648,91 @@ export default function Inventory() {
   // Content container ref
   const contentContainerRef = useRef(null)
 
-  // Fetch inventory from API on mount
+  // Fetch menu items from API and convert to inventory format
   useEffect(() => {
-    const fetchInventory = async () => {
+    const fetchMenuData = async () => {
       try {
         setLoadingInventory(true)
-        const response = await restaurantAPI.getInventory()
         
-        if (response.data && response.data.success && response.data.data && response.data.data.inventory) {
-          const inventoryCategories = response.data.data.inventory.categories || []
+        // Fetch menu from API
+        const menuResponse = await restaurantAPI.getMenu()
+        
+        if (menuResponse.data && menuResponse.data.success && menuResponse.data.data && menuResponse.data.data.menu) {
+          const menuSections = menuResponse.data.data.menu.sections || []
           
-          // Normalize inventory categories to ensure proper structure
-          const normalizedCategories = inventoryCategories.map((category, index) => ({
-            id: category.id || `category-${index}`,
-            name: category.name || "Unnamed Category",
-            description: category.description || "",
-            itemCount: category.itemCount ?? (category.items?.length || 0),
-            inStock: category.inStock !== undefined ? category.inStock : true,
-            items: Array.isArray(category.items) ? category.items.map(item => ({
-              id: String(item.id || Date.now() + Math.random()),
-              name: item.name || "Unnamed Item",
-              inStock: item.inStock !== undefined ? item.inStock : true,
-              isVeg: item.isVeg !== undefined ? item.isVeg : true,
-              stockQuantity: item.stockQuantity || "Unlimited",
-              unit: item.unit || "piece",
-              expiryDate: item.expiryDate || null,
-              lastRestocked: item.lastRestocked || null,
-            })) : [],
-            order: category.order !== undefined ? category.order : index,
-          }))
+          // Convert menu sections to inventory categories
+          const convertedCategories = menuSections.map((section, sectionIndex) => {
+            // Collect all items from section and subsections
+            const allItems = []
+            
+            // Add direct items from section
+            if (Array.isArray(section.items)) {
+              section.items.forEach(item => {
+                  allItems.push({
+                  id: String(item.id || Date.now() + Math.random()),
+                  name: item.name || "Unnamed Item",
+                  inStock: item.isAvailable !== undefined ? item.isAvailable : true,
+                  isVeg: item.foodType === "Veg",
+                  isRecommended: item.isRecommended !== undefined ? item.isRecommended : false,
+                  stockQuantity: item.stock || "Unlimited",
+                  unit: item.itemSizeUnit || "piece",
+                  expiryDate: null,
+                  lastRestocked: null,
+                })
+              })
+            }
+            
+            // Add items from subsections
+            if (Array.isArray(section.subsections)) {
+              section.subsections.forEach(subsection => {
+                if (Array.isArray(subsection.items)) {
+                  subsection.items.forEach(item => {
+                  allItems.push({
+                  id: String(item.id || Date.now() + Math.random()),
+                  name: item.name || "Unnamed Item",
+                  inStock: item.isAvailable !== undefined ? item.isAvailable : true,
+                  isVeg: item.foodType === "Veg",
+                  isRecommended: item.isRecommended !== undefined ? item.isRecommended : false,
+                  stockQuantity: item.stock || "Unlimited",
+                  unit: item.itemSizeUnit || "piece",
+                  expiryDate: null,
+                  lastRestocked: null,
+                })
+                  })
+                }
+              })
+            }
+            
+            // Use category's isEnabled from menu API, not calculated from items
+            // Category toggle should be independent of item toggles
+            const categoryInStock = section.isEnabled !== undefined ? section.isEnabled : true
+            const itemCount = allItems.length
+            
+            return {
+              id: section.id || `category-${sectionIndex}`,
+              name: section.name || "Unnamed Category",
+              description: section.description || "",
+              itemCount: itemCount,
+              inStock: categoryInStock,
+              items: allItems,
+              order: section.order !== undefined ? section.order : sectionIndex,
+            }
+          })
           
-          setCategories(normalizedCategories)
-          setExpandedCategories(normalizedCategories.map(c => c.id))
+          setCategories(convertedCategories)
+          setExpandedCategories(convertedCategories.map(c => c.id))
         } else {
-          // Empty inventory - start fresh
+          // Empty menu - start fresh
           setCategories([])
           setExpandedCategories([])
         }
       } catch (error) {
-        console.error('Error fetching inventory:', error)
+        console.error('Error fetching menu data:', error)
         // Check if it's a network error (backend not running)
         if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
           toast.error('Cannot connect to server. Please check if backend is running.')
         } else {
-          toast.error('Failed to load inventory')
+          toast.error('Failed to load menu data')
         }
         setCategories([])
         setExpandedCategories([])
@@ -699,52 +741,12 @@ export default function Inventory() {
       }
     }
     
-    fetchInventory()
+    fetchMenuData()
   }, [])
 
-  // Save inventory to API whenever categories change (debounced)
-  useEffect(() => {
-    if (!loadingInventory && categories.length >= 0) {
-      const timeoutId = setTimeout(async () => {
-        try {
-          // Normalize categories before saving to ensure proper structure
-          const normalizedCategories = categories.map((category, index) => ({
-            id: category.id || `category-${index}`,
-            name: category.name || "Unnamed Category",
-            description: category.description || "",
-            itemCount: category.itemCount ?? (category.items?.length || 0),
-            inStock: category.inStock !== undefined ? category.inStock : true,
-            items: Array.isArray(category.items) ? category.items.map(item => ({
-              id: String(item.id || Date.now() + Math.random()),
-              name: item.name || "Unnamed Item",
-              inStock: item.inStock !== undefined ? item.inStock : true,
-              isVeg: item.isVeg !== undefined ? item.isVeg : true,
-              stockQuantity: item.stockQuantity || "Unlimited",
-              unit: item.unit || "piece",
-              expiryDate: item.expiryDate || null,
-              lastRestocked: item.lastRestocked || null,
-            })) : [],
-            order: category.order !== undefined ? category.order : index,
-          }))
-          
-          await restaurantAPI.updateInventory({ categories: normalizedCategories })
-          console.log('✅ Inventory saved successfully')
-        } catch (error) {
-          console.error('Error saving inventory:', error)
-          // Check if it's a network error (backend not running)
-          if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-            console.warn('Backend server may not be running. Inventory changes will be saved when connection is restored.')
-            // Don't show error toast for network errors during auto-save to avoid spam
-            // The user will see the error when they manually try to save
-          } else {
-            toast.error('Failed to save inventory changes')
-          }
-        }
-      }, 1000) // Debounce: save 1 second after last change
-      
-      return () => clearTimeout(timeoutId)
-    }
-  }, [categories, loadingInventory])
+  // Note: Menu items are now displayed from menu API
+  // Stock status updates should be managed through the menu API, not inventory API
+  // Auto-save disabled since we're displaying menu data, not inventory data
 
   // Handle swipe gestures
   const handleTouchStart = (e) => {
@@ -905,8 +907,74 @@ export default function Inventory() {
     setFilterOpen(false)
   }
 
+  // Update menu API when category/item toggles change
+  const updateMenuAPI = async (categoryId, itemId, isEnabled, isAvailable) => {
+    try {
+      // Fetch current menu
+      const menuResponse = await restaurantAPI.getMenu()
+      if (!menuResponse.data || !menuResponse.data.success || !menuResponse.data.data || !menuResponse.data.data.menu) {
+        console.error('Failed to fetch menu for update')
+        return
+      }
+
+      const menu = menuResponse.data.data.menu
+      const sections = menu.sections || []
+
+      // Update menu sections
+      const updatedSections = sections.map(section => {
+        if (section.id !== categoryId) return section
+
+        // If updating category, set isEnabled
+        if (itemId === null) {
+          return {
+            ...section,
+            isEnabled: isEnabled,
+            // Also update all items in the category
+            items: section.items.map(item => ({
+              ...item,
+              isAvailable: isAvailable
+            })),
+            subsections: section.subsections.map(subsection => ({
+              ...subsection,
+              items: subsection.items.map(item => ({
+                ...item,
+                isAvailable: isAvailable
+              }))
+            }))
+          }
+        } else {
+          // If updating item, update only that item
+          const updatedItems = section.items.map(item =>
+            item.id === String(itemId) ? { ...item, isAvailable: isAvailable } : item
+          )
+          
+          // Update items in subsections too
+          const updatedSubsections = section.subsections.map(subsection => ({
+            ...subsection,
+            items: subsection.items.map(item =>
+              item.id === String(itemId) ? { ...item, isAvailable: isAvailable } : item
+            )
+          }))
+
+          return {
+            ...section,
+            items: updatedItems,
+            subsections: updatedSubsections
+          }
+        }
+      })
+
+      // Save updated menu
+      await restaurantAPI.updateMenu({ sections: updatedSections })
+      console.log('Menu updated successfully')
+    } catch (error) {
+      console.error('Error updating menu:', error)
+      toast.error('Failed to update menu')
+    }
+  }
+
   // Handle toggle click
-  const handleToggleChange = (type, categoryId, itemId, nextChecked) => {
+  const handleToggleChange = async (type, categoryId, itemId, nextChecked) => {
     if (nextChecked) {
       // Turning ON - apply immediately without popup
       setCategories(prev =>
@@ -926,14 +994,21 @@ export default function Inventory() {
           const updatedItems = items.map(item =>
             item.id === itemId ? { ...item, inStock: true } : item
           )
-          const allInStock = updatedItems.length > 0 && updatedItems.every(i => i.inStock)
+          // Don't automatically update category inStock when item is toggled
+          // Category toggle should be independent
           return {
             ...category,
-            inStock: allInStock,
             items: updatedItems,
           }
         })
       )
+
+      // Update menu API
+      if (type === "category") {
+        await updateMenuAPI(categoryId, null, true, true)
+      } else {
+        await updateMenuAPI(categoryId, itemId, undefined, true)
+      }
       return
     }
 
@@ -949,7 +1024,7 @@ export default function Inventory() {
   }
 
   // Handle toggle confirm
-  const handleToggleConfirm = () => {
+  const handleToggleConfirm = async () => {
     if (!toggleTarget) {
       setTogglePopupOpen(false)
       return
@@ -975,14 +1050,21 @@ export default function Inventory() {
         const updatedItems = items.map(item =>
           item.id === itemId ? { ...item, inStock: false } : item
         )
-        const allInStock = updatedItems.length > 0 && updatedItems.every(i => i.inStock)
+        // Don't automatically update category inStock when item is toggled
+        // Category toggle should be independent
         return {
           ...category,
-          inStock: allInStock,
           items: updatedItems,
         }
       })
     )
+
+    // Update menu API
+    if (type === "category") {
+      await updateMenuAPI(categoryId, null, false, false)
+    } else {
+      await updateMenuAPI(categoryId, itemId, undefined, false)
+    }
 
     setTogglePopupOpen(false)
     setToggleTarget(null)
@@ -1024,6 +1106,77 @@ export default function Inventory() {
         ? prev.filter(id => id !== categoryId)
         : [...prev, categoryId]
     )
+  }
+
+  // Update menu API when recommendation toggle changes
+  const updateRecommendationAPI = async (categoryId, itemId, isRecommended) => {
+    try {
+      // Fetch current menu
+      const menuResponse = await restaurantAPI.getMenu()
+      if (!menuResponse.data || !menuResponse.data.success || !menuResponse.data.data || !menuResponse.data.data.menu) {
+        console.error('Failed to fetch menu for update')
+        return
+      }
+
+      const menu = menuResponse.data.data.menu
+      const sections = menu.sections || []
+
+      // Update menu sections
+      const updatedSections = sections.map(section => {
+        if (section.id !== categoryId) return section
+
+        // Update item in direct items
+        const updatedItems = section.items.map(item =>
+          item.id === String(itemId) ? { ...item, isRecommended: isRecommended } : item
+        )
+        
+        // Update item in subsections too
+        const updatedSubsections = section.subsections.map(subsection => ({
+          ...subsection,
+          items: subsection.items.map(item =>
+            item.id === String(itemId) ? { ...item, isRecommended: isRecommended } : item
+          )
+        }))
+
+        return {
+          ...section,
+          items: updatedItems,
+          subsections: updatedSubsections
+        }
+      })
+
+      // Save updated menu
+      await restaurantAPI.updateMenu({ sections: updatedSections })
+      console.log('Menu recommendation updated successfully')
+    } catch (error) {
+      console.error('Error updating menu recommendation:', error)
+      toast.error('Failed to update recommendation')
+    }
+  }
+
+  // Handle item recommendation toggle
+  const handleRecommendToggle = async (categoryId, itemId) => {
+    // Find current recommendation status
+    const category = categories.find(cat => cat.id === categoryId)
+    const item = category?.items.find(i => i.id === itemId)
+    const newRecommendationStatus = !item?.isRecommended
+
+    // Update local state
+    setCategories(prev =>
+      prev.map(category => {
+        if (category.id !== categoryId) return category
+        const updatedItems = category.items.map(item =>
+          item.id === itemId ? { ...item, isRecommended: newRecommendationStatus } : item
+        )
+        return {
+          ...category,
+          items: updatedItems,
+        }
+      })
+    )
+
+    // Update menu API
+    await updateRecommendationAPI(categoryId, itemId, newRecommendationStatus)
   }
 
   const scrollToCategory = (categoryId) => {
@@ -1345,15 +1498,32 @@ export default function Inventory() {
                                   )}
                                 </div>
                               </div>
-                              {/* Item Toggle Switch */}
-                              <div onClick={(e) => e.stopPropagation()}>
-                                <Switch
-                                  checked={item.inStock}
-                                  onCheckedChange={(checked) =>
-                                    handleToggleChange("item", category.id, item.id, checked)
-                                  }
-                                  className="data-[state=checked]:bg-green-600"
-                                />
+                              <div className="flex items-center gap-3">
+                                {/* Recommend Thumb Icon */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRecommendToggle(category.id, item.id)
+                                  }}
+                                  className={`p-1.5 rounded-lg transition-colors ${
+                                    item.isRecommended
+                                      ? "bg-blue-100 text-blue-600"
+                                      : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                                  }`}
+                                  title={item.isRecommended ? "Recommended" : "Click to recommend"}
+                                >
+                                  <ThumbsUp className="w-4 h-4" />
+                                </button>
+                                {/* Item Toggle Switch */}
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Switch
+                                    checked={item.inStock}
+                                    onCheckedChange={(checked) =>
+                                      handleToggleChange("item", category.id, item.id, checked)
+                                    }
+                                    className="data-[state=checked]:bg-green-600"
+                                  />
+                                </div>
                               </div>
                             </div>
                           </div>

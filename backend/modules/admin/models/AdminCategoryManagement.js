@@ -6,7 +6,6 @@ const adminCategoryManagementSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Category name is required'],
       trim: true,
-      index: true,
     },
     image: {
       type: String,

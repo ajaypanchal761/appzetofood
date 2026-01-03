@@ -3828,7 +3828,7 @@ export default function RestaurantDetails() {
                 {isExpanded && sectionIndex === 0 && section.items && section.items.length === 0 && (
                   <div className="text-center py-8">
                     <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">
-                      No dish Yet
+                      No dish recommended
                     </p>
                   </div>
                 )}

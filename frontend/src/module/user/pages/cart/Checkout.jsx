@@ -152,11 +152,6 @@ export default function Checkout() {
                           </div>
                         )
                       })}
-                      <Link to="/user/profile/addresses">
-                        <Button variant="outline" className="w-full">
-                          Manage Addresses
-                        </Button>
-                      </Link>
                     </div>
                   ) : (
                     <div className="text-center py-8">

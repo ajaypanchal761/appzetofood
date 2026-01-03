@@ -47,9 +47,6 @@ import GiftCardCheckout from "../pages/GiftCardCheckout"
 // Profile
 import Profile from "../pages/profile/Profile"
 import EditProfile from "../pages/profile/EditProfile"
-import Addresses from "../pages/profile/Addresses"
-import AddAddress from "../pages/profile/AddAddress"
-import EditAddress from "../pages/profile/EditAddress"
 import Payments from "../pages/profile/Payments"
 import AddPayment from "../pages/profile/AddPayment"
 import EditPayment from "../pages/profile/EditPayment"
@@ -193,30 +190,6 @@ export default function UserRouter() {
         element={
           <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
             <EditProfile />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/profile/addresses" 
-        element={
-          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
-            <Addresses />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/profile/addresses/new" 
-        element={
-          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
-            <AddAddress />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/profile/addresses/:id/edit" 
-        element={
-          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
-            <EditAddress />
           </ProtectedRoute>
         } 
       />

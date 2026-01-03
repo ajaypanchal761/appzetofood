@@ -11,25 +11,9 @@ import { useCart } from "../context/CartContext"
 import PageNavbar from "../components/PageNavbar"
 import { foodImages } from "@/constants/images"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
-import under250Banner from "@/assets/under250banner.png"
 import AddToCartAnimation from "../components/AddToCartAnimation"
 import OptimizedImage from "@/components/OptimizedImage"
-
-
-const categories = [
-  { id: 1, name: "Biryani", image: foodImages[0] },
-  { id: 2, name: "Cake", image: foodImages[1] },
-  { id: 3, name: "Chhole Bhature", image: foodImages[2] },
-  { id: 4, name: "Chicken Tanduri", image: foodImages[3] },
-  { id: 5, name: "Donuts", image: foodImages[4] },
-  { id: 6, name: "Dosa", image: foodImages[5] },
-  { id: 7, name: "French Fries", image: foodImages[6] },
-  { id: 8, name: "Idli", image: foodImages[7] },
-  { id: 9, name: "Momos", image: foodImages[8] },
-  { id: 10, name: "Samosa", image: foodImages[9] },
-  { id: 11, name: "Starters", image: foodImages[10] },
-  { id: 12, name: "Biryani", image: foodImages[0] }, // Repeat first image
-]
+import api from "@/lib/api"
 
 const under250Restaurants = [
   {
@@ -176,6 +160,10 @@ export default function Under250() {
   const [bookmarkedItems, setBookmarkedItems] = useState(new Set())
   const [viewCartButtonBottom, setViewCartButtonBottom] = useState("bottom-20")
   const lastScrollY = useRef(0)
+  const [categories, setCategories] = useState([])
+  const [loadingCategories, setLoadingCategories] = useState(true)
+  const [bannerImage, setBannerImage] = useState(null)
+  const [loadingBanner, setLoadingBanner] = useState(true)
 
   const sortOptions = [
     { id: null, label: 'Relevance' },
@@ -192,6 +180,70 @@ export default function Under250() {
     setShowSortPopup(false)
     // Apply sorting logic here if needed
   }
+
+  // Fetch under 250 banners from API
+  useEffect(() => {
+    const fetchBanners = async () => {
+      try {
+        setLoadingBanner(true)
+        const response = await api.get('/hero-banners/under-250/public')
+        if (response.data.success && response.data.data.banners && response.data.data.banners.length > 0) {
+          // Use the first banner
+          setBannerImage(response.data.data.banners[0])
+        } else {
+          setBannerImage(null)
+        }
+      } catch (error) {
+        console.error('Error fetching under 250 banners:', error)
+        setBannerImage(null)
+      } finally {
+        setLoadingBanner(false)
+      }
+    }
+
+    fetchBanners()
+  }, [])
+
+  // Fetch categories from admin API
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true)
+        const response = await api.get('/categories/public')
+        if (response.data.success && response.data.data.categories) {
+          const adminCategories = response.data.data.categories.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            image: cat.image || foodImages[0], // Fallback to default image if not provided
+            slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-')
+          }))
+          setCategories(adminCategories)
+        } else {
+          // Fallback to default categories if API fails
+          const defaultCategories = [
+            { id: 1, name: "Biryani", image: foodImages[0] },
+            { id: 2, name: "Cake", image: foodImages[1] },
+            { id: 3, name: "Chhole Bhature", image: foodImages[2] },
+            { id: 4, name: "Chicken Tanduri", image: foodImages[3] },
+          ]
+          setCategories(defaultCategories)
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+        // Fallback to default categories on error
+        const defaultCategories = [
+          { id: 1, name: "Biryani", image: foodImages[0] },
+          { id: 2, name: "Cake", image: foodImages[1] },
+          { id: 3, name: "Chhole Bhature", image: foodImages[2] },
+        ]
+        setCategories(defaultCategories)
+      } finally {
+        setLoadingCategories(false)
+      }
+    }
+
+    fetchCategories()
+  }, [])
 
   // Sync quantities from cart on mount
   useEffect(() => {
@@ -341,16 +393,21 @@ export default function Under250() {
       {/* Banner Section with Navbar */}
       <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16">
         {/* Banner Image */}
-        <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
-          <OptimizedImage
-            src={under250Banner}
-            alt="Under 250 Banner"
-            className="w-full h-full"
-            objectFit="cover"
-            priority={true}
-            sizes="100vw"
-          />
-        </div>
+        {bannerImage && (
+          <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
+            <OptimizedImage
+              src={bannerImage}
+              alt="Under 250 Banner"
+              className="w-full h-full"
+              objectFit="cover"
+              priority={true}
+              sizes="100vw"
+            />
+          </div>
+        )}
+        {!bannerImage && !loadingBanner && (
+          <div className="absolute top-0 left-0 right-0 bottom-0 z-0 bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900 dark:to-blue-900" />
+        )}
 
         {/* Navbar */}
         <div className="relative z-20 pt-2 sm:pt-3 lg:pt-4">
@@ -396,9 +453,10 @@ export default function Under250() {
             </div>
             {categories.map((category, index) => {
               const isActive = activeCategory === category.id
+              const categorySlug = category.slug || category.name.toLowerCase().replace(/\s+/g, '-')
               return (
                 <div key={category.id} className="flex-shrink-0">
-                  <Link to={`/user/category/${category.name.toLowerCase()}`}>
+                  <Link to={`/user/category/${categorySlug}`}>
                     <motion.div
                       className="flex flex-col items-center gap-2 w-[62px] sm:w-24 md:w-28"
                       onClick={() => setActiveCategory(category.id)}
