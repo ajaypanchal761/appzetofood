@@ -252,3 +252,220 @@ export const getUserLocation = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Get user addresses
+ * GET /api/user/addresses
+ */
+export const getUserAddresses = asyncHandler(async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select('addresses')
+      .lean();
+
+    if (!user) {
+      return errorResponse(res, 404, 'User not found');
+    }
+
+    // Add _id to each address for frontend compatibility
+    const addresses = (user.addresses || []).map(addr => ({
+      ...addr,
+      id: addr._id ? addr._id.toString() : null
+    }));
+
+    return successResponse(res, 200, 'Addresses retrieved successfully', {
+      addresses
+    });
+  } catch (error) {
+    logger.error(`Error fetching user addresses: ${error.message}`);
+    return errorResponse(res, 500, 'Failed to fetch addresses');
+  }
+});
+
+/**
+ * Add user address
+ * POST /api/user/addresses
+ */
+export const addUserAddress = asyncHandler(async (req, res) => {
+  try {
+    const { label, street, additionalDetails, city, state, zipCode, latitude, longitude, isDefault } = req.body;
+
+    if (!street || !city || !state) {
+      return errorResponse(res, 400, 'Street, city, and state are required');
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return errorResponse(res, 404, 'User not found');
+    }
+
+    // Prepare address object
+    const newAddress = {
+      label: label || 'Other',
+      street,
+      additionalDetails: additionalDetails || '',
+      city,
+      state,
+      zipCode: zipCode || '',
+      isDefault: isDefault === true || (user.addresses || []).length === 0
+    };
+
+    // Add location coordinates if provided
+    if (latitude && longitude) {
+      const latNum = parseFloat(latitude);
+      const lngNum = parseFloat(longitude);
+      if (!isNaN(latNum) && !isNaN(lngNum)) {
+        newAddress.location = {
+          type: 'Point',
+          coordinates: [lngNum, latNum] // [longitude, latitude]
+        };
+      }
+    }
+
+    // If this is set as default, unset other defaults
+    if (newAddress.isDefault) {
+      user.addresses.forEach(addr => {
+        addr.isDefault = false;
+      });
+    }
+
+    // Add address
+    user.addresses.push(newAddress);
+    await user.save();
+
+    // Get the added address with _id
+    const addedAddress = user.addresses[user.addresses.length - 1];
+    const addressResponse = {
+      ...addedAddress.toObject(),
+      id: addedAddress._id.toString()
+    };
+
+    logger.info(`Address added for user: ${user._id}`, {
+      addressId: addressResponse.id
+    });
+
+    return successResponse(res, 201, 'Address added successfully', {
+      address: addressResponse
+    });
+  } catch (error) {
+    logger.error(`Error adding address: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to add address');
+  }
+});
+
+/**
+ * Update user address
+ * PUT /api/user/addresses/:id
+ */
+export const updateUserAddress = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { label, street, additionalDetails, city, state, zipCode, latitude, longitude, isDefault } = req.body;
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return errorResponse(res, 404, 'User not found');
+    }
+
+    const address = user.addresses.id(id);
+    if (!address) {
+      return errorResponse(res, 404, 'Address not found');
+    }
+
+    // Update address fields
+    if (label !== undefined) address.label = label;
+    if (street !== undefined) address.street = street;
+    if (additionalDetails !== undefined) address.additionalDetails = additionalDetails;
+    if (city !== undefined) address.city = city;
+    if (state !== undefined) address.state = state;
+    if (zipCode !== undefined) address.zipCode = zipCode;
+
+    // Update location coordinates if provided
+    if (latitude !== undefined && longitude !== undefined) {
+      const latNum = parseFloat(latitude);
+      const lngNum = parseFloat(longitude);
+      if (!isNaN(latNum) && !isNaN(lngNum)) {
+        address.location = {
+          type: 'Point',
+          coordinates: [lngNum, latNum] // [longitude, latitude]
+        };
+      }
+    }
+
+    // Handle default address
+    if (isDefault === true) {
+      user.addresses.forEach(addr => {
+        addr.isDefault = addr._id.toString() === id;
+      });
+    } else if (isDefault === false && address.isDefault) {
+      // If unsetting default and this was the default, set first other address as default
+      const otherAddress = user.addresses.find(addr => addr._id.toString() !== id);
+      if (otherAddress) {
+        otherAddress.isDefault = true;
+      }
+      address.isDefault = false;
+    }
+
+    await user.save();
+
+    const addressResponse = {
+      ...address.toObject(),
+      id: address._id.toString()
+    };
+
+    logger.info(`Address updated for user: ${user._id}`, {
+      addressId: id
+    });
+
+    return successResponse(res, 200, 'Address updated successfully', {
+      address: addressResponse
+    });
+  } catch (error) {
+    logger.error(`Error updating address: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to update address');
+  }
+});
+
+/**
+ * Delete user address
+ * DELETE /api/user/addresses/:id
+ */
+export const deleteUserAddress = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return errorResponse(res, 404, 'User not found');
+    }
+
+    const address = user.addresses.id(id);
+    if (!address) {
+      return errorResponse(res, 404, 'Address not found');
+    }
+
+    const wasDefault = address.isDefault;
+
+    // Remove address
+    user.addresses.pull(id);
+
+    // If deleted address was default, set first remaining address as default
+    if (wasDefault && user.addresses.length > 0) {
+      user.addresses[0].isDefault = true;
+    }
+
+    await user.save();
+
+    logger.info(`Address deleted for user: ${user._id}`, {
+      addressId: id
+    });
+
+    return successResponse(res, 200, 'Address deleted successfully');
+  } catch (error) {
+    logger.error(`Error deleting address: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to delete address');
+  }
+});
+

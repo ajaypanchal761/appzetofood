@@ -4,7 +4,11 @@ import {
   updateUserProfile,
   uploadProfileImage,
   updateUserLocation,
-  getUserLocation
+  getUserLocation,
+  getUserAddresses,
+  addUserAddress,
+  updateUserAddress,
+  deleteUserAddress
 } from '../controllers/userController.js';
 import { authenticate } from '../../auth/middleware/auth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
@@ -28,6 +32,12 @@ router.post(
 // Location routes
 router.get('/location', getUserLocation);
 router.put('/location', updateUserLocation);
+
+// Address routes
+router.get('/addresses', getUserAddresses);
+router.post('/addresses', addUserAddress);
+router.put('/addresses/:id', updateUserAddress);
+router.delete('/addresses/:id', deleteUserAddress);
 
 export default router;
 

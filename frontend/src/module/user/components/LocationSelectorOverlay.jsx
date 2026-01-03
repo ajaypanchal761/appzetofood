@@ -6,40 +6,23 @@ import { Input } from "@/components/ui/input"
 import { useLocation as useGeoLocation } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
 import { toast } from "sonner"
+import { locationAPI, userAPI } from "@/lib/api"
 
-// Mock nearby locations data - in production this would come from a maps API
-const mockNearbyLocations = [
-  {
-    id: 1,
-    name: "Princess Green View Apartment",
-    address: "Lala Banarasilal Dawar Marg, New Palasia, Indore",
-    distance: "29 m"
-  },
-  {
-    id: 2,
-    name: "Western Business Centre",
-    address: "New Palasia, Indore",
-    distance: "58 m"
-  },
-  {
-    id: 3,
-    name: "Maya Regency",
-    address: "New Palasia, Indore",
-    distance: "72 m"
-  },
-  {
-    id: 4,
-    name: "Hotel Apna Palace",
-    address: "New Palasia, Indore",
-    distance: "120 m"
-  },
-  {
-    id: 5,
-    name: "City Central Mall",
-    address: "MG Road, Indore",
-    distance: "250 m"
-  }
-]
+// Calculate distance between two coordinates using Haversine formula
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3 // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180
+  const φ2 = lat2 * Math.PI / 180
+  const Δφ = (lat2 - lat1) * Math.PI / 180
+  const Δλ = (lon2 - lon1) * Math.PI / 180
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+
+  return R * c // Distance in meters
+}
 
 // Get icon based on address type/label
 const getAddressIcon = (address) => {
@@ -54,14 +37,39 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const navigate = useNavigate()
   const inputRef = useRef(null)
   const [searchValue, setSearchValue] = useState("")
-  const [filteredLocations, setFilteredLocations] = useState(mockNearbyLocations)
+  const [nearbyLocations, setNearbyLocations] = useState([])
+  const [loadingNearby, setLoadingNearby] = useState(false)
+  const [filteredLocations, setFilteredLocations] = useState([])
   const { location, loading, requestLocation } = useGeoLocation()
   const { addresses = [] } = useProfile()
 
   // Current location display
   const currentLocationText = location?.city && location?.state 
-    ? `${location.address || location.city}, ${location.state}`
-    : location?.city || "Detecting location..."
+    ? `${location.address || location.area || location.city}, ${location.state}`
+    : location?.city || location?.area || "Detecting location..."
+
+  // Fetch nearby locations when overlay opens and location is available
+  useEffect(() => {
+    if (isOpen && location?.latitude && location?.longitude) {
+      fetchNearbyLocations(location.latitude, location.longitude)
+    }
+  }, [isOpen, location?.latitude, location?.longitude])
+
+  const fetchNearbyLocations = async (lat, lng) => {
+    try {
+      setLoadingNearby(true)
+      const response = await locationAPI.getNearbyLocations(lat, lng, 500, searchValue)
+      const locations = response?.data?.data?.locations || []
+      setNearbyLocations(locations)
+      setFilteredLocations(locations)
+    } catch (error) {
+      console.error("Error fetching nearby locations:", error)
+      setNearbyLocations([])
+      setFilteredLocations([])
+    } finally {
+      setLoadingNearby(false)
+    }
+  }
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -89,15 +97,15 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
   useEffect(() => {
     if (searchValue.trim() === "") {
-      setFilteredLocations(mockNearbyLocations)
+      setFilteredLocations(nearbyLocations)
     } else {
-      const filtered = mockNearbyLocations.filter((loc) =>
-        loc.name.toLowerCase().includes(searchValue.toLowerCase()) ||
-        loc.address.toLowerCase().includes(searchValue.toLowerCase())
+      const filtered = nearbyLocations.filter((loc) =>
+        loc.name?.toLowerCase().includes(searchValue.toLowerCase()) ||
+        loc.address?.toLowerCase().includes(searchValue.toLowerCase())
       )
       setFilteredLocations(filtered)
     }
-  }, [searchValue])
+  }, [searchValue, nearbyLocations])
 
   const handleUseCurrentLocation = async () => {
     try {
@@ -115,7 +123,25 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       })
 
       // Request location - this will automatically prompt for permission if needed
-      await requestLocation()
+      const locationData = await requestLocation()
+      
+      // Save location to backend
+      if (locationData?.latitude && locationData?.longitude) {
+        try {
+          await userAPI.updateLocation({
+            latitude: locationData.latitude,
+            longitude: locationData.longitude,
+            address: locationData.formattedAddress || locationData.address,
+            city: locationData.city,
+            state: locationData.state,
+            area: locationData.area,
+            formattedAddress: locationData.formattedAddress
+          })
+        } catch (backendError) {
+          console.error("Error saving location to backend:", backendError)
+          // Don't fail the whole operation if backend save fails
+        }
+      }
       
       // Success toast
       toast.success("Location updated successfully!", {
@@ -157,28 +183,102 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     navigate("/user/profile/addresses/new")
   }
 
-  const handleSelectSavedAddress = (address) => {
-    // Update the location in localStorage with this address
-    const locationData = {
-      city: address.city,
-      state: address.state,
-      address: `${address.street}, ${address.city}`,
-      zipCode: address.zipCode
+  const handleSelectSavedAddress = async (address) => {
+    try {
+      // Get coordinates from address location
+      const coordinates = address.location?.coordinates || []
+      const longitude = coordinates[0]
+      const latitude = coordinates[1]
+
+      if (latitude && longitude) {
+        // Update location in backend
+        await userAPI.updateLocation({
+          latitude,
+          longitude,
+          address: `${address.street}, ${address.city}`,
+          city: address.city,
+          state: address.state,
+          area: address.additionalDetails || "",
+          formattedAddress: `${address.street}, ${address.city}, ${address.state}`
+        })
+      }
+
+      // Update the location in localStorage with this address
+      const locationData = {
+        city: address.city,
+        state: address.state,
+        address: `${address.street}, ${address.city}`,
+        area: address.additionalDetails || "",
+        zipCode: address.zipCode,
+        latitude,
+        longitude,
+        formattedAddress: `${address.street}, ${address.city}, ${address.state}`
+      }
+      localStorage.setItem("userLocation", JSON.stringify(locationData))
+      
+      // Close overlay and reload to refresh location state
+      onClose()
+      window.location.reload()
+    } catch (error) {
+      console.error("Error selecting saved address:", error)
+      toast.error("Failed to update location. Please try again.")
     }
-    localStorage.setItem("userLocation", JSON.stringify(locationData))
-    // Trigger a page reload to refresh the location state
-    window.location.reload()
   }
 
-  const handleSelectNearbyLocation = (location) => {
-    // For now, just set a basic location - in production this would use geocoding
-    const locationData = {
-      city: "Indore",
-      state: "Madhya Pradesh",
-      address: location.name
+  const handleSelectNearbyLocation = async (nearbyLocation) => {
+    try {
+      if (nearbyLocation.latitude && nearbyLocation.longitude) {
+        // Update location in backend
+        await userAPI.updateLocation({
+          latitude: nearbyLocation.latitude,
+          longitude: nearbyLocation.longitude,
+          address: nearbyLocation.address,
+          city: location?.city || "",
+          state: location?.state || "",
+          area: nearbyLocation.name,
+          formattedAddress: `${nearbyLocation.name}, ${nearbyLocation.address}`
+        })
+      }
+
+      // Update the location in localStorage
+      const locationData = {
+        city: location?.city || "",
+        state: location?.state || "",
+        address: nearbyLocation.address,
+        area: nearbyLocation.name,
+        latitude: nearbyLocation.latitude,
+        longitude: nearbyLocation.longitude,
+        formattedAddress: `${nearbyLocation.name}, ${nearbyLocation.address}`
+      }
+      localStorage.setItem("userLocation", JSON.stringify(locationData))
+      
+      // Close overlay and reload to refresh location state
+      onClose()
+      window.location.reload()
+    } catch (error) {
+      console.error("Error selecting nearby location:", error)
+      toast.error("Failed to update location. Please try again.")
     }
-    localStorage.setItem("userLocation", JSON.stringify(locationData))
-    window.location.reload()
+  }
+
+  // Calculate distance for saved addresses
+  const getAddressDistance = (address) => {
+    if (!location?.latitude || !location?.longitude) return "0 m"
+    
+    const coordinates = address.location?.coordinates || []
+    const addressLng = coordinates[0]
+    const addressLat = coordinates[1]
+    
+    if (!addressLat || !addressLng) return "0 m"
+    
+    const distance = calculateDistance(
+      location.latitude,
+      location.longitude,
+      addressLat,
+      addressLng
+    )
+    
+    return distance < 1000 ? `${Math.round(distance)} m` : `${(distance / 1000).toFixed(2)} km`
   }
 
   const handleEditAddress = (addressId) => {
@@ -300,7 +400,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                             <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                               <IconComponent className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                             </div>
-                            <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">0 m</span>
+                            <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">{getAddressDistance(address)}</span>
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-gray-900 dark:text-white">
@@ -355,7 +455,12 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               </h2>
             </div>
             <div className="bg-white dark:bg-[#1a1a1a]">
-              {filteredLocations.length > 0 ? (
+              {loadingNearby ? (
+                <div className="px-4 sm:px-6 lg:px-8 py-8 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-orange mx-auto mb-3"></div>
+                  <p className="text-gray-500 dark:text-gray-400">Loading nearby locations...</p>
+                </div>
+              ) : filteredLocations.length > 0 ? (
                 filteredLocations.map((loc, index) => (
                   <div
                     key={loc.id}
@@ -372,7 +477,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                         <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                           <MapPin className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                         </div>
-                        <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">{loc.distance}</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">{loc.distance || "0 m"}</span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900 dark:text-white">{loc.name}</p>
@@ -384,7 +489,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               ) : (
                 <div className="px-4 sm:px-6 lg:px-8 py-8 text-center">
                   <MapPin className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                  <p className="text-gray-500 dark:text-gray-400">No locations found for "{searchValue}"</p>
+                  <p className="text-gray-500 dark:text-gray-400">
+                    {searchValue ? `No locations found for "${searchValue}"` : "No nearby locations found"}
+                  </p>
                 </div>
               )}
             </div>

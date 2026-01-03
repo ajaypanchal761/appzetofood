@@ -121,7 +121,7 @@ export default function App() {
     <Routes>
       <Route path="/user" element={<Navigate to="/" replace />} />
       <Route path="/user/*" element={<UserPathRedirect />} />
-      <Route path="/routes" element={<Home />} />
+      {/* Removed /routes route - Home should be accessed through UserRouter */}
 
       {/* Restaurant Public Routes */}
       <Route path="/restaurant/welcome" element={<AuthRedirect module="restaurant"><RestaurantWelcome /></AuthRedirect>} />

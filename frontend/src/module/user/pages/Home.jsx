@@ -506,7 +506,22 @@ export default function Home() {
   const [isLoadingFilterResults, setIsLoadingFilterResults] = useState(false)
   const categoryScrollRef = useRef(null)
   const gsapAnimationsRef = useRef([])
-  const { addFavorite, removeFavorite, isFavorite, getFavorites } = useProfile()
+  // Safely get profile context - handle case when ProfileProvider is not available
+  let profileContext = null
+  try {
+    profileContext = useProfile()
+  } catch (error) {
+    console.warn("ProfileProvider not available, using fallback:", error.message)
+    // Fallback values when ProfileProvider is not available
+    profileContext = {
+      addFavorite: () => console.warn("ProfileProvider not available"),
+      removeFavorite: () => console.warn("ProfileProvider not available"),
+      isFavorite: () => false,
+      getFavorites: () => []
+    }
+  }
+  
+  const { addFavorite, removeFavorite, isFavorite, getFavorites } = profileContext
   const { addToCart, cart } = useCart()
   const { location, loading, requestLocation } = useLocation()
   const [showToast, setShowToast] = useState(false)
@@ -580,6 +595,23 @@ export default function Home() {
     const fetchRestaurants = async () => {
       try {
         setLoadingRestaurants(true)
+        
+        // First, test backend connection
+        try {
+          const healthCheck = await fetch('http://localhost:5000/health')
+          if (!healthCheck.ok) {
+            throw new Error(`Backend health check failed: ${healthCheck.status}`)
+          }
+          console.log('✅ Backend connection successful')
+        } catch (healthError) {
+          console.error('❌ Backend connection failed:', healthError.message)
+          console.error('💡 Make sure backend server is running on http://localhost:5000')
+          console.error('💡 Start backend with: cd appzetofood/backend && npm run dev')
+          setRestaurantsData([])
+          setLoadingRestaurants(false)
+          return
+        }
+        
         const response = await restaurantAPI.getRestaurants()
         console.log('Restaurants API response:', response.data)
         

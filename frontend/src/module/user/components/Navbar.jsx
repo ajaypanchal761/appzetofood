@@ -19,7 +19,9 @@ export default function Navbar() {
   const { openLocationSelector } = useLocationSelector()
   const cartCount = getCartCount()
 
-  const cityName = location?.city || "Select"
+  // Show area if available, otherwise show city
+  const areaName = location?.area && location?.area !== location?.city ? location.area : null
+  const cityName = areaName || location?.city || "Select"
   const stateName = location?.state || "Location"
 
   const handleLocationClick = () => {

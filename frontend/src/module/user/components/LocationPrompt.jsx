@@ -14,32 +14,42 @@ export default function LocationPrompt() {
     const storedLocation = localStorage.getItem("userLocation")
     const promptDismissed = localStorage.getItem("locationPromptDismissed")
 
-    // Show prompt if no location stored and not dismissed
+    // The useLocation hook will automatically try to get location on app start
+    // We only show the prompt if:
+    // 1. No location is stored (first time user)
+    // 2. Prompt hasn't been dismissed
+    // 3. Location permission was denied (we'll detect this after a delay)
+    
     if (!storedLocation && !promptDismissed) {
-      // Small delay to let page load
+      // Wait a bit to let the hook try to get location automatically
+      // If it fails, we'll show the prompt
       const timer = setTimeout(() => {
-        setShowPrompt(true)
-        // Prevent body scroll when popup is open
-        document.body.style.overflow = "hidden"
-        // CSS animation will handle the fade-in
-        if (cardRef.current) {
-          cardRef.current.style.opacity = '0'
-          cardRef.current.style.transform = 'translateY(20px)'
-          requestAnimationFrame(() => {
-            if (cardRef.current) {
-              cardRef.current.style.opacity = '1'
-              cardRef.current.style.transform = 'translateY(0)'
-            }
-          })
+        // Check again if location was set (hook might have succeeded)
+        const currentLocation = localStorage.getItem("userLocation")
+        if (!currentLocation && !permissionGranted) {
+          setShowPrompt(true)
+          // Prevent body scroll when popup is open
+          document.body.style.overflow = "hidden"
+          // CSS animation will handle the fade-in
+          if (cardRef.current) {
+            cardRef.current.style.opacity = '0'
+            cardRef.current.style.transform = 'translateY(20px)'
+            requestAnimationFrame(() => {
+              if (cardRef.current) {
+                cardRef.current.style.opacity = '1'
+                cardRef.current.style.transform = 'translateY(0)'
+              }
+            })
+          }
         }
-      }, 1000)
+      }, 2000) // Wait 2 seconds for automatic location request to complete
 
       return () => {
         clearTimeout(timer)
         document.body.style.overflow = ""
       }
     }
-  }, [])
+  }, [permissionGranted])
 
   // Close prompt when location is successfully obtained
   useEffect(() => {

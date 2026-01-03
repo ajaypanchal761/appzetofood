@@ -31,29 +31,7 @@ export function ProfileProvider({ children }) {
   
   const [loading, setLoading] = useState(true)
 
-  const [addresses, setAddresses] = useState(() => {
-    const saved = localStorage.getItem("userAddresses")
-    return saved ? JSON.parse(saved) : [
-      {
-        id: "1",
-        street: "123 Main Street",
-        city: "New York",
-        state: "NY",
-        zipCode: "10001",
-        additionalDetails: "Apt 1",
-        isDefault: true,
-      },
-      {
-        id: "2",
-        street: "456 Oak Avenue",
-        city: "Los Angeles",
-        state: "CA",
-        zipCode: "90001",
-        additionalDetails: "",
-        isDefault: false,
-      },
-    ]
-  })
+  const [addresses, setAddresses] = useState([])
 
   const [paymentMethods, setPaymentMethods] = useState(() => {
     const saved = localStorage.getItem("userPaymentMethods")
@@ -103,7 +81,7 @@ export function ProfileProvider({ children }) {
     localStorage.setItem("userFavorites", JSON.stringify(favorites))
   }, [favorites])
 
-  // Fetch user profile from API on mount and when authentication changes
+  // Fetch user profile and addresses from API on mount and when authentication changes
   useEffect(() => {
     const fetchUserProfile = async () => {
       // Check if user is authenticated
@@ -118,7 +96,7 @@ export function ProfileProvider({ children }) {
       try {
         setLoading(true)
         
-        // Use auth/me endpoint directly (user profile endpoint may not exist)
+        // Fetch user profile
         const response = await authAPI.getCurrentUser()
         const userData = response?.data?.data?.user || response?.data?.user || response?.data
         
@@ -128,10 +106,37 @@ export function ProfileProvider({ children }) {
           localStorage.setItem("user_user", JSON.stringify(userData))
           localStorage.setItem("userProfile", JSON.stringify(userData))
         }
+
+        // Fetch addresses
+        try {
+          const addressesResponse = await userAPI.getAddresses()
+          const addressesData = addressesResponse?.data?.data?.addresses || addressesResponse?.data?.addresses || []
+          setAddresses(addressesData)
+          localStorage.setItem("userAddresses", JSON.stringify(addressesData))
+        } catch (addressError) {
+          console.error("Error fetching addresses:", addressError)
+          // Try to load from localStorage as fallback
+          const saved = localStorage.getItem("userAddresses")
+          if (saved) {
+            try {
+              setAddresses(JSON.parse(saved))
+            } catch (e) {
+              console.error("Error parsing saved addresses:", e)
+            }
+          }
+        }
       } catch (error) {
         // Silently handle error - use existing profile from localStorage
         console.error("Error fetching user profile:", error)
-        // Don't show error to user, just use localStorage data
+        // Try to load from localStorage as fallback
+        const saved = localStorage.getItem("userAddresses")
+        if (saved) {
+          try {
+            setAddresses(JSON.parse(saved))
+          } catch (e) {
+            console.error("Error parsing saved addresses:", e)
+          }
+        }
       } finally {
         setLoading(false)
       }
@@ -152,35 +157,56 @@ export function ProfileProvider({ children }) {
   }, [])
 
   // Address functions - memoized with useCallback
-  const addAddress = useCallback((address) => {
-    setAddresses((prev) => {
-      const newAddress = {
-        ...address,
-        id: Date.now().toString(),
-        isDefault: prev.length === 0 ? true : false,
+  const addAddress = useCallback(async (address) => {
+    try {
+      const response = await userAPI.addAddress(address)
+      const newAddress = response?.data?.data?.address || response?.data?.address
+      
+      if (newAddress) {
+        setAddresses((prev) => {
+          const updated = [...prev, newAddress]
+          localStorage.setItem("userAddresses", JSON.stringify(updated))
+          return updated
+        })
+        return newAddress
       }
-      return [...prev, newAddress]
-    })
+    } catch (error) {
+      console.error("Error adding address:", error)
+      throw error
+    }
   }, [])
 
-  const updateAddress = useCallback((id, updatedAddress) => {
-    setAddresses((prev) =>
-      prev.map((addr) => (addr.id === id ? { ...addr, ...updatedAddress } : addr))
-    )
+  const updateAddress = useCallback(async (id, updatedAddress) => {
+    try {
+      const response = await userAPI.updateAddress(id, updatedAddress)
+      const updatedAddr = response?.data?.data?.address || response?.data?.address
+      
+      if (updatedAddr) {
+        setAddresses((prev) => {
+          const updated = prev.map((addr) => (addr.id === id ? { ...updatedAddr, id } : addr))
+          localStorage.setItem("userAddresses", JSON.stringify(updated))
+          return updated
+        })
+        return updatedAddr
+      }
+    } catch (error) {
+      console.error("Error updating address:", error)
+      throw error
+    }
   }, [])
 
-  const deleteAddress = useCallback((id) => {
-    setAddresses((prev) => {
-      const addressToDelete = prev.find((addr) => addr.id === id)
-      const newAddresses = prev.filter((addr) => addr.id !== id)
-      
-      // If deleting default, set first remaining as default
-      if (addressToDelete?.isDefault && newAddresses.length > 0) {
-        newAddresses[0].isDefault = true
-      }
-      
-      return newAddresses
-    })
+  const deleteAddress = useCallback(async (id) => {
+    try {
+      await userAPI.deleteAddress(id)
+      setAddresses((prev) => {
+        const newAddresses = prev.filter((addr) => addr.id !== id)
+        localStorage.setItem("userAddresses", JSON.stringify(newAddresses))
+        return newAddresses
+      })
+    } catch (error) {
+      console.error("Error deleting address:", error)
+      throw error
+    }
   }, [])
 
   const setDefaultAddress = useCallback((id) => {
@@ -334,7 +360,33 @@ export function ProfileProvider({ children }) {
 export function useProfile() {
   const context = useContext(ProfileContext)
   if (!context) {
-    throw new Error("useProfile must be used within a ProfileProvider")
+    // Return fallback values instead of throwing error
+    // This prevents crashes when ProfileProvider is not available
+    console.warn("useProfile called outside ProfileProvider - using fallback values")
+    return {
+      userProfile: null,
+      loading: false,
+      updateUserProfile: () => console.warn("ProfileProvider not available"),
+      addresses: [],
+      paymentMethods: [],
+      favorites: [],
+      addAddress: () => console.warn("ProfileProvider not available"),
+      updateAddress: () => console.warn("ProfileProvider not available"),
+      deleteAddress: () => console.warn("ProfileProvider not available"),
+      setDefaultAddress: () => console.warn("ProfileProvider not available"),
+      getDefaultAddress: () => null,
+      getAddressById: () => null,
+      addPaymentMethod: () => console.warn("ProfileProvider not available"),
+      updatePaymentMethod: () => console.warn("ProfileProvider not available"),
+      deletePaymentMethod: () => console.warn("ProfileProvider not available"),
+      setDefaultPaymentMethod: () => console.warn("ProfileProvider not available"),
+      getDefaultPaymentMethod: () => null,
+      getPaymentMethodById: () => null,
+      addFavorite: () => console.warn("ProfileProvider not available"),
+      removeFavorite: () => console.warn("ProfileProvider not available"),
+      isFavorite: () => false,
+      getFavorites: () => []
+    }
   }
   return context
 }

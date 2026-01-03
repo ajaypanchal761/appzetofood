@@ -4,7 +4,32 @@
  */
 
 // Get API base URL from environment variable or use default
+// IMPORTANT: Backend runs on port 5000, frontend on port 5173
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
+// Validate API base URL
+if (API_BASE_URL.includes('5173')) {
+  console.error('❌ ERROR: API_BASE_URL is pointing to frontend port (5173) instead of backend port (5000)');
+  console.error('💡 Fix: Set VITE_API_BASE_URL=http://localhost:5000/api in .env file');
+  console.error('💡 Or remove VITE_API_BASE_URL to use default: http://localhost:5000/api');
+}
+
+// Log API base URL in development for debugging
+if (import.meta.env.DEV) {
+  console.log('🌐 API Base URL:', API_BASE_URL);
+  console.log('🌐 Backend URL:', API_BASE_URL.replace('/api', ''));
+  console.log('🌐 Frontend URL:', window.location.origin);
+  console.log('🌐 Environment:', import.meta.env.MODE);
+  
+  // Verify backend is accessible
+  fetch(`${API_BASE_URL.replace('/api', '')}/health`)
+    .then(r => r.json())
+    .then(data => console.log('✅ Backend health check:', data))
+    .catch(err => {
+      console.error('❌ Backend not accessible at:', API_BASE_URL.replace('/api', ''));
+      console.error('💡 Start backend: cd appzetofood/backend && npm run dev');
+    });
+}
 
 // API endpoints
 export const API_ENDPOINTS = {
@@ -31,6 +56,7 @@ export const API_ENDPOINTS = {
   // Location endpoints
   LOCATION: {
     REVERSE_GEOCODE: '/location/reverse',
+    NEARBY: '/location/nearby',
   },
   // Restaurant endpoints
   RESTAURANT: {

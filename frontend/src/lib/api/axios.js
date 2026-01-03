@@ -3,6 +3,24 @@ import { toast } from 'sonner';
 import { API_BASE_URL } from './config.js';
 import { getRoleFromToken, clearModuleAuth } from '../utils/auth.js';
 
+// Validate API base URL on import
+if (import.meta.env.DEV) {
+  const backendUrl = API_BASE_URL.replace('/api', '');
+  const frontendUrl = window.location.origin;
+  
+  if (API_BASE_URL.includes('5173') || backendUrl.includes('5173')) {
+    console.error('❌ CRITICAL: API_BASE_URL is pointing to FRONTEND port (5173) instead of BACKEND port (5000)');
+    console.error('💡 Current API_BASE_URL:', API_BASE_URL);
+    console.error('💡 Frontend URL:', frontendUrl);
+    console.error('💡 Backend should be at: http://localhost:5000');
+    console.error('💡 Fix: Check .env file - VITE_API_BASE_URL should be http://localhost:5000/api');
+  } else {
+    console.log('✅ API_BASE_URL correctly points to backend:', API_BASE_URL);
+    console.log('✅ Backend URL:', backendUrl);
+    console.log('✅ Frontend URL:', frontendUrl);
+  }
+}
+
 /**
  * Create axios instance with default configuration
  */
@@ -313,6 +331,80 @@ apiClient.interceptors.response.use(
         
         return Promise.reject(refreshError);
       }
+    }
+
+    // Handle network errors specifically (backend not running)
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      if (import.meta.env.DEV) {
+        console.error('🌐 Network Error - Backend server may not be running');
+        console.error('💡 API Base URL:', API_BASE_URL);
+        console.error('💡 Backend URL:', API_BASE_URL.replace('/api', ''));
+        console.error('💡 Start backend with: cd appzetofood/backend && npm run dev');
+        console.error('💡 Check backend health: curl http://localhost:5000/health');
+        
+        // Show helpful error message
+        toast.error(`Backend not connected! Start server: cd appzetofood/backend && npm run dev`, {
+          duration: 10000,
+          style: {
+            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            color: '#ffffff',
+            border: '1px solid #b45309',
+            borderRadius: '12px',
+            padding: '16px',
+            fontSize: '14px',
+            fontWeight: '500',
+            boxShadow: '0 10px 25px -5px rgba(245, 158, 11, 0.3), 0 8px 10px -6px rgba(245, 158, 11, 0.2)',
+          },
+          className: 'network-error-toast',
+        });
+      }
+      return Promise.reject(error);
+    }
+    
+    // Handle 404 errors (route not found)
+    if (error.response?.status === 404) {
+      if (import.meta.env.DEV) {
+        const url = error.config?.url || 'unknown';
+        const fullUrl = error.config?.baseURL ? `${error.config.baseURL}${url}` : url;
+        console.error('❌ 404 Error - Route not found:', url);
+        console.error('💡 Full URL:', fullUrl);
+        console.error('💡 Check if backend route exists:', error.config?.method?.toUpperCase(), url);
+        console.error('💡 Backend server should be running on: http://localhost:5000');
+        console.error('💡 API Base URL:', API_BASE_URL);
+        console.error('💡 Make sure backend server is running: cd appzetofood/backend && npm run dev');
+        
+        // Show toast for auth routes (important)
+        if (url.includes('/auth/') || url.includes('/send-otp') || url.includes('/verify-otp')) {
+          toast.error('Auth API endpoint not found. Make sure backend is running on port 5000.', {
+            duration: 8000,
+            style: {
+              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              color: '#ffffff',
+              border: '1px solid #b91c1c',
+              borderRadius: '12px',
+              padding: '16px',
+              fontSize: '14px',
+              fontWeight: '500',
+            },
+          });
+        }
+        // Show toast for restaurant routes
+        else if (url.includes('/restaurant/list') || url.includes('/restaurant/')) {
+          toast.error('Restaurant API endpoint not found. Check backend routes.', {
+            duration: 5000,
+            style: {
+              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              color: '#ffffff',
+              border: '1px solid #b91c1c',
+              borderRadius: '12px',
+              padding: '16px',
+              fontSize: '14px',
+              fontWeight: '500',
+            },
+          });
+        }
+      }
+      return Promise.reject(error);
     }
 
     // Show error toast in development mode only

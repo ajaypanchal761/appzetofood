@@ -16,8 +16,17 @@ export default function DesktopNavbar() {
   const [isVisible, setIsVisible] = useState(true)
   const lastScrollY = useRef(0)
 
-  const cityName = userLocation?.city || "Select"
-  const stateName = userLocation?.state || "Location"
+  // Show area if available, otherwise show city
+  // Priority: area > city > "Select"
+  const areaName = userLocation?.area && userLocation?.area.trim() ? userLocation.area.trim() : null
+  const cityName = userLocation?.city || null
+  const stateName = userLocation?.state || null
+  // Main location name: Show area if available, otherwise show city, otherwise "Select"
+  const mainLocationName = areaName || cityName || "Select"
+  // Secondary location: Show only city when area is available (as per design image)
+  const secondaryLocation = areaName 
+    ? (cityName || "")  // Show only city when area is available
+    : (cityName && stateName ? `${cityName}, ${stateName}` : cityName || stateName || "")
 
   const handleLocationClick = () => {
     // Open location selector overlay
@@ -88,28 +97,28 @@ export default function DesktopNavbar() {
               variant="ghost"
               onClick={handleLocationClick}
               disabled={locationLoading}
-              className="h-auto px-3 py-2 lg:px-4 lg:py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg flex-shrink-0"
+              className="h-auto px-3 py-2 lg:px-4 lg:py-2.5 bg-[#87CEEB] hover:bg-[#6BB6D6] transition-colors rounded-lg flex-shrink-0 shadow-sm"
             >
               {locationLoading ? (
-                <span className="text-sm font-bold text-gray-900 dark:text-white">
+                <span className="text-sm font-bold text-white">
                   Loading...
                 </span>
               ) : (
                 <div className="flex flex-col items-start min-w-0">
                   <div className="flex items-center gap-1.5 lg:gap-2">
                     <FaLocationDot 
-                      className="h-5 w-5 lg:h-6 lg:w-6 text-gray-900 dark:text-white flex-shrink-0" 
-                      fill="currentColor" 
+                      className="h-5 w-5 lg:h-6 lg:w-6 text-white flex-shrink-0" 
+                      fill="white" 
                       strokeWidth={2} 
                     />
-                    <span className="text-sm lg:text-base font-bold text-gray-900 dark:text-white truncate max-w-[140px] lg:max-w-[180px]">
-                      {cityName}
+                    <span className="text-sm lg:text-base font-bold text-white whitespace-nowrap">
+                      {mainLocationName}
                     </span>
-                    <ChevronDown className="h-4 w-4 lg:h-5 lg:w-5 text-gray-900 dark:text-white flex-shrink-0" strokeWidth={2.5} />
+                    <ChevronDown className="h-4 w-4 lg:h-5 lg:w-5 text-white flex-shrink-0" strokeWidth={2.5} />
                   </div>
-                  {userLocation?.state && (
-                    <span className="text-xs lg:text-sm font-bold text-gray-600 dark:text-gray-400 truncate max-w-[140px] lg:max-w-[180px] mt-0.5">
-                      {stateName}
+                  {secondaryLocation && (
+                    <span className="text-xs lg:text-sm font-bold text-white mt-0.5 whitespace-nowrap">
+                      {secondaryLocation}
                     </span>
                   )}
                 </div>

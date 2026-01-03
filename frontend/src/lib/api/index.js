@@ -201,6 +201,12 @@ export const locationAPI = {
       params: { lat, lng }
     });
   },
+  // Get nearby locations
+  getNearbyLocations: (lat, lng, radius = 500, query = '') => {
+    return apiClient.get(API_ENDPOINTS.LOCATION.NEARBY, {
+      params: { lat, lng, radius, query }
+    });
+  },
 };
 
 // Export restaurant API helper functions
