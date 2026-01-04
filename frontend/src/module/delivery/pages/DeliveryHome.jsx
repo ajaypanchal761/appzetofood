@@ -1,9 +1,7 @@
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useMemo } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, Polygon } from 'react-leaflet'
-import L from 'leaflet'
 import {
   Lightbulb,
   HelpCircle,
@@ -35,47 +33,20 @@ import { useGigStore } from "../store/gigStore"
 import { useProgressStore } from "../store/progressStore"
 import { formatTimeDisplay, calculateTotalHours } from "../utils/gigUtils"
 import {
-  getDeliveryWalletState,
+  fetchDeliveryWallet,
   calculatePeriodEarnings
 } from "../utils/deliveryWalletState"
 import { formatCurrency } from "../../restaurant/utils/currency"
 import { getAllDeliveryOrders } from "../utils/deliveryOrderStatus"
 import { getUnreadDeliveryNotificationCount } from "../utils/deliveryNotifications"
+import { deliveryAPI } from "@/lib/api"
 import referralBonusBg from "../../../assets/referralbonuscardbg.png"
 import dropLocationBanner from "../../../assets/droplocationbanner.png"
 import alertSound from "../../../assets/audio/alert.mp3"
+import bikeLogo from "../../../assets/bikelogo.png"
 
-// Fix Leaflet default icon issue
-delete (L.Icon.Default.prototype)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
-
-// Custom icons
-const createCustomIcon = (color, icon) => {
-  return L.divIcon({
-    className: 'custom-marker',
-    html: `<div style="position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-      <!-- Outer light blue circle -->
-      <div style="position: absolute; width: 40px; height: 40px; background-color: #4285F4; border-radius: 50%; opacity: 0.3; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>
-      <!-- Inner small blue circle -->
-      <div style="position: absolute; width: 12px; height: 12px; background-color: #4285F4; border-radius: 50%; border: 2px solid white; z-index: 10;"></div>
-    </div>`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
-  })
-}
-
-// Component to update map center
-function MapUpdater({ center }) {
-  const map = useMap()
-  useEffect(() => {
-    map.setView(center, map.getZoom())
-  }, [center, map])
-  return null
-}
+// Ola Maps API Key
+const OLA_MAPS_API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY || "83KVeJLn68xTRzKRdkpD0BWoo0YMoGUXxd4zBmiJ"
 
 // Mock restaurants data
 const mockRestaurants = [
@@ -154,7 +125,14 @@ export default function DeliveryHome() {
   const navigate = useNavigate()
   const location = useLocation()
   const [animationKey, setAnimationKey] = useState(0)
-  const [walletState, setWalletState] = useState(() => getDeliveryWalletState())
+  const [walletState, setWalletState] = useState({
+    totalBalance: 0,
+    cashInHand: 0,
+    totalWithdrawn: 0,
+    totalEarned: 0,
+    transactions: [],
+    joiningBonusClaimed: false
+  })
   const [activeOrder, setActiveOrder] = useState(() => {
     const stored = localStorage.getItem('activeOrder')
     return stored ? JSON.parse(stored) : null
@@ -163,6 +141,22 @@ export default function DeliveryHome() {
   // Default location - Indore, India (based on image)
   const [riderLocation, setRiderLocation] = useState([22.7196, 75.8577]) // Indore coordinates
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false)
+  const [bankDetailsFilled, setBankDetailsFilled] = useState(false)
+  
+  // Ola Maps refs and state
+  const mapContainerRef = useRef(null)
+  const directionsMapContainerRef = useRef(null)
+  const olaMapInstanceRef = useRef(null)
+  const directionsMapInstanceRef = useRef(null)
+  const userLocationMarkerRef = useRef(null) // Blue dot marker for user location
+  const bikeMarkerRef = useRef(null) // Bike marker for delivery partner location
+  const olaMapsSDKInstanceRef = useRef(null) // Store SDK instance for marker creation
+  const watchPositionIdRef = useRef(null) // Store watchPosition ID for cleanup
+  const lastLocationRef = useRef(null) // Store last location for heading calculation
+  const [mapLoading, setMapLoading] = useState(false)
+  const [directionsMapLoading, setDirectionsMapLoading] = useState(false)
+  const [sdkLoaded, setSdkLoaded] = useState(false)
+  const isInitializingMapRef = useRef(false)
 
   // Seeded random number generator for consistent hotspots
   const createSeededRandom = (seed) => {
@@ -515,6 +509,58 @@ export default function DeliveryHome() {
   // Calculate today's gigs count
   const todayGigsCount = bookedGigs.filter(gig => gig.date === todayDateKey).length
 
+  // Calculate weekly earnings from wallet transactions
+  const weeklyEarnings = calculatePeriodEarnings(walletState, 'week') || 0
+
+  // Calculate weekly orders count from transactions
+  const calculateWeeklyOrders = () => {
+    if (!walletState || !walletState.transactions || !Array.isArray(walletState.transactions)) {
+      return 0
+    }
+
+    const now = new Date()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay()) // Start of week (Sunday)
+    startOfWeek.setHours(0, 0, 0, 0)
+
+    return walletState.transactions.filter(t => {
+      // Count payment transactions (completed orders)
+      if (t.type !== 'payment' || t.status !== 'Completed') return false
+      const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+      if (!transactionDate) return false
+      return transactionDate >= startOfWeek && transactionDate <= now
+    }).length
+  }
+
+  const weeklyOrders = calculateWeeklyOrders()
+
+  // Earnings Guarantee - Calculate from real data (no default values)
+  // Current values come from real wallet transactions
+  // If no transactions, show 0 for everything (no defaults)
+  const hasTransactions = walletState?.transactions && walletState.transactions.length > 0
+  const earningsGuaranteeTarget = hasTransactions ? 180 : 0 // Only show target if there's data
+  const earningsGuaranteeOrdersTarget = hasTransactions ? 4 : 0 // Only show target if there's data
+  const earningsGuaranteeCurrentOrders = weeklyOrders
+  const earningsGuaranteeCurrentEarnings = weeklyEarnings
+  const ordersProgress = earningsGuaranteeOrdersTarget > 0 
+    ? Math.min(earningsGuaranteeCurrentOrders / earningsGuaranteeOrdersTarget, 1) 
+    : 0
+  const earningsProgress = earningsGuaranteeTarget > 0 
+    ? Math.min(earningsGuaranteeCurrentEarnings / earningsGuaranteeTarget, 1) 
+    : 0
+
+  // Get week end date for valid till
+  const getWeekEndDate = () => {
+    const now = new Date()
+    const endOfWeek = new Date(now)
+    endOfWeek.setDate(now.getDate() - now.getDay() + 6) // End of week (Saturday)
+    const day = endOfWeek.getDate()
+    const month = endOfWeek.toLocaleString('en-US', { month: 'short' })
+    return `${day} ${month}`
+  }
+
+  const weekEndDate = getWeekEndDate()
+
   // Calculate total hours worked today (prefer store, then calculated; default to 0)
   const calculatedHours = bookedGigs
     .filter(gig => gig.date === todayDateKey)
@@ -556,8 +602,8 @@ export default function DeliveryHome() {
   // Listen for progress data updates from other components
   useEffect(() => {
     const handleProgressUpdate = () => {
-      // Refresh wallet state when other components update progress
-      setWalletState(getDeliveryWalletState())
+      // Force re-render to show updated progress
+      setAnimationKey(prev => prev + 1)
     }
     
     window.addEventListener('progressDataUpdated', handleProgressUpdate)
@@ -572,21 +618,6 @@ export default function DeliveryHome() {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
 
-  // Listen for wallet state updates
-  useEffect(() => {
-    const handleWalletUpdate = () => {
-      setWalletState(getDeliveryWalletState())
-    }
-
-    handleWalletUpdate()
-    window.addEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
-    window.addEventListener('storage', handleWalletUpdate)
-
-    return () => {
-      window.removeEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
-      window.removeEventListener('storage', handleWalletUpdate)
-    }
-  }, [location.pathname])
 
   // Listen for progress data updates
   useEffect(() => {
@@ -965,39 +996,79 @@ export default function DeliveryHome() {
     }
   }, []) // Only run on mount
 
-  // Get rider location when online
+  // Get rider location - always track location (not just when online)
   useEffect(() => {
-    if (isOnline && bookedGigs.length > 0) {
-      // Set default location immediately so map can render
-      setRiderLocation(prev => prev || [28.2849, 76.1209])
+    // Set default location immediately so map can render
+    setRiderLocation(prev => prev || [22.7196, 75.8577])
 
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setRiderLocation([position.coords.latitude, position.coords.longitude])
-          },
-          () => {
-            // Keep default location if geolocation fails
-            setRiderLocation(prev => prev || [28.2849, 76.1209])
+    if (navigator.geolocation) {
+      // Get current position first
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLocation = [position.coords.latitude, position.coords.longitude]
+          const heading = position.coords.heading !== null && position.coords.heading !== undefined 
+            ? position.coords.heading 
+            : null
+          setRiderLocation(newLocation)
+          console.log("📍 Current location obtained:", newLocation, "Heading:", heading)
+          
+          // Update bike marker
+          if (olaMapInstanceRef.current && olaMapsSDKInstanceRef.current) {
+            createOrUpdateBikeMarker(newLocation[0], newLocation[1], heading, olaMapInstanceRef.current, olaMapsSDKInstanceRef.current)
           }
-        )
+        },
+        (error) => {
+          console.warn("⚠️ Error getting current location:", error)
+          // Keep default location if geolocation fails
+          setRiderLocation(prev => prev || [22.7196, 75.8577])
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      )
 
-        // Watch position updates
-        const watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            setRiderLocation([position.coords.latitude, position.coords.longitude])
-          },
-          () => { },
-          { enableHighAccuracy: true, maximumAge: 5000 }
-        )
-
-        return () => navigator.geolocation.clearWatch(watchId)
-      } else {
-        // Default location if geolocation not available
-        setRiderLocation(prev => prev || [28.2849, 76.1209])
+      // Clear any existing watch
+      if (watchPositionIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchPositionIdRef.current)
+        watchPositionIdRef.current = null
       }
+
+      // Watch position updates for live tracking
+      const watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const newLocation = [position.coords.latitude, position.coords.longitude]
+          const heading = position.coords.heading !== null && position.coords.heading !== undefined 
+            ? position.coords.heading 
+            : null
+          setRiderLocation(newLocation)
+          console.log("📍 Location updated:", newLocation, "Heading:", heading)
+          
+          // Update bike marker with heading
+          if (olaMapInstanceRef.current && olaMapsSDKInstanceRef.current) {
+            createOrUpdateBikeMarker(newLocation[0], newLocation[1], heading, olaMapInstanceRef.current, olaMapsSDKInstanceRef.current)
+          }
+        },
+        (error) => {
+          console.warn("⚠️ Error watching location:", error)
+        },
+        { 
+          enableHighAccuracy: true, 
+          maximumAge: 0, // Always use fresh location
+          timeout: 10000
+        }
+      )
+
+      watchPositionIdRef.current = watchId
+
+      return () => {
+        if (watchPositionIdRef.current !== null) {
+          navigator.geolocation.clearWatch(watchPositionIdRef.current)
+          watchPositionIdRef.current = null
+        }
+      }
+    } else {
+      // Default location if geolocation not available
+      setRiderLocation(prev => prev || [22.7196, 75.8577])
     }
-  }, [isOnline, bookedGigs.length])
+  }, []) // Run only on mount to ensure location tracking continues after reload
 
   // Handle new order popup accept button swipe
   const handleNewOrderAcceptTouchStart = (e) => {
@@ -1790,8 +1861,857 @@ export default function DeliveryHome() {
     setShowEmergencyPopup(false)
   }
 
-  // Carousel slides data
-  const carouselSlides = [
+  // Fetch wallet data from API
+  useEffect(() => {
+    const fetchWalletData = async () => {
+      try {
+        const walletData = await fetchDeliveryWallet()
+        setWalletState(walletData)
+      } catch (error) {
+        console.error('Error fetching wallet data:', error)
+        // Keep empty state on error
+        setWalletState({
+          totalBalance: 0,
+          cashInHand: 0,
+          totalWithdrawn: 0,
+          totalEarned: 0,
+          transactions: [],
+          joiningBonusClaimed: false
+        })
+      }
+    }
+
+    fetchWalletData()
+  }, [])
+
+  // Fetch bank details status
+  useEffect(() => {
+    const checkBankDetails = async () => {
+      try {
+        const response = await deliveryAPI.getProfile()
+        if (response?.data?.success && response?.data?.data?.profile) {
+          const profile = response.data.data.profile
+          const bankDetails = profile?.documents?.bankDetails
+          
+          // Check if all required bank details fields are filled
+          const isFilled = !!(
+            bankDetails?.accountHolderName?.trim() &&
+            bankDetails?.accountNumber?.trim() &&
+            bankDetails?.ifscCode?.trim() &&
+            bankDetails?.bankName?.trim()
+          )
+          
+          setBankDetailsFilled(isFilled)
+        }
+      } catch (error) {
+        console.error("Error checking bank details:", error)
+        // Default to showing the banner if we can't check
+        setBankDetailsFilled(false)
+      }
+    }
+
+    checkBankDetails()
+
+    // Listen for profile updates
+    const handleProfileRefresh = () => {
+      checkBankDetails()
+    }
+
+    window.addEventListener('deliveryProfileRefresh', handleProfileRefresh)
+    
+    return () => {
+      window.removeEventListener('deliveryProfileRefresh', handleProfileRefresh)
+    }
+  }, [])
+
+  // Check if Ola Maps SDK is loaded
+  useEffect(() => {
+    const checkSDK = () => {
+      if (typeof window !== 'undefined') {
+        // Check multiple possible SDK locations
+        const checks = [
+          { name: 'window.OlaMaps', value: window.OlaMaps },
+          { name: 'window.OlaMapsWebSDK.OlaMaps', value: window.OlaMapsWebSDK?.OlaMaps },
+          { name: 'window.OlaMapsWebSDK', value: window.OlaMapsWebSDK },
+          { name: 'window.olamaps.OlaMaps', value: window.olamaps?.OlaMaps },
+          { name: 'window.olamaps', value: window.olamaps },
+          { name: 'window.OlaMapsWebSDK (global)', value: window['OlaMapsWebSDK'] },
+        ]
+
+        for (const check of checks) {
+          if (check.value) {
+            console.log(`✅ Ola Maps SDK found at ${check.name}`)
+            setSdkLoaded(true)
+            return true
+          }
+        }
+      }
+      return false
+    }
+
+    // Check immediately
+    if (checkSDK()) {
+      return
+    }
+
+    console.log("⏳ Waiting for Ola Maps SDK to load...")
+    
+    // Wait for SDK to load with longer timeout
+    let attempts = 0
+    const maxAttempts = 100 // 10 seconds max
+    const interval = setInterval(() => {
+      attempts++
+      if (checkSDK()) {
+        clearInterval(interval)
+        console.log(`✅ SDK loaded after ${attempts * 100}ms`)
+      } else if (attempts >= maxAttempts) {
+        clearInterval(interval)
+        console.error("❌ Ola Maps SDK failed to load after 10 seconds")
+        
+        // Log all window properties for debugging
+        const allKeys = Object.keys(window)
+        const relatedKeys = allKeys.filter(k => 
+          k.toLowerCase().includes('ola') || 
+          k.toLowerCase().includes('map') ||
+          k.toLowerCase().includes('sdk')
+        )
+        console.log("🔍 Related window properties:", relatedKeys)
+        
+        // Check if script tag exists
+        const scripts = Array.from(document.querySelectorAll('script'))
+        const olaScript = scripts.find(s => s.src.includes('ola'))
+        console.log("🔍 Ola Maps script tag:", olaScript ? {
+          src: olaScript.src,
+          loaded: olaScript.complete || olaScript.readyState === 'complete'
+        } : 'Not found')
+      }
+    }, 100)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [])
+
+  // Initialize Ola Maps
+  useEffect(() => {
+    if (showHomeSections || !sdkLoaded) return
+
+    const initializeOlaMap = async () => {
+      if (!mapContainerRef.current) {
+        console.error("❌ Map container not available")
+        return
+      }
+
+      // Prevent multiple simultaneous initializations
+      if (isInitializingMapRef.current) {
+        console.log("⏳ Map initialization already in progress")
+        return
+      }
+
+      // Check if container is visible
+      const container = mapContainerRef.current
+      const containerRect = container.getBoundingClientRect()
+      if (containerRect.width === 0 || containerRect.height === 0) {
+        console.warn("⚠️ Map container has zero dimensions, waiting...")
+        // Retry after a short delay
+        setTimeout(() => {
+          if (mapContainerRef.current && !isInitializingMapRef.current) {
+            const retryRect = mapContainerRef.current.getBoundingClientRect()
+            if (retryRect.width > 0 && retryRect.height > 0) {
+              initializeOlaMap()
+            } else {
+              console.error("❌ Map container still has zero dimensions after retry")
+            }
+          }
+        }, 500)
+        return
+      }
+
+      isInitializingMapRef.current = true
+
+      try {
+        setMapLoading(true)
+        
+        // Check SDK availability - try different possible locations
+        let OlaMapsClass = null
+        
+        if (window.OlaMaps) {
+          OlaMapsClass = window.OlaMaps
+          console.log("✅ Using window.OlaMaps")
+        } else if (window.OlaMapsWebSDK && window.OlaMapsWebSDK.OlaMaps) {
+          OlaMapsClass = window.OlaMapsWebSDK.OlaMaps
+          console.log("✅ Using window.OlaMapsWebSDK.OlaMaps")
+        } else if (window.OlaMapsWebSDK) {
+          OlaMapsClass = window.OlaMapsWebSDK
+          console.log("✅ Using window.OlaMapsWebSDK")
+        } else if (window.olamaps && window.olamaps.OlaMaps) {
+          OlaMapsClass = window.olamaps.OlaMaps
+          console.log("✅ Using window.olamaps.OlaMaps")
+        }
+
+        if (!OlaMapsClass) {
+          console.error("❌ Ola Maps SDK class not found even though SDK is loaded")
+          setMapLoading(false)
+          isInitializingMapRef.current = false
+          return
+        }
+
+        const olaMaps = new OlaMapsClass({
+          apiKey: OLA_MAPS_API_KEY,
+        })
+
+        // Store SDK instance for marker creation
+        olaMapsSDKInstanceRef.current = olaMaps
+
+        // Ensure container has proper dimensions
+        if (mapContainerRef.current) {
+          const container = mapContainerRef.current
+          const parent = container.parentElement
+          if (parent) {
+            const parentHeight = parent.offsetHeight || parent.clientHeight
+            const parentWidth = parent.offsetWidth || parent.clientWidth
+            
+            // Set explicit dimensions if not set
+            if (!container.style.height || container.style.height === '0px') {
+              container.style.height = parentHeight > 0 ? `${parentHeight}px` : '400px'
+            }
+            if (!container.style.width || container.style.width === '0px') {
+              container.style.width = parentWidth > 0 ? `${parentWidth}px` : '100%'
+            }
+            
+            console.log("📐 Container dimensions:", {
+              width: container.offsetWidth,
+              height: container.offsetHeight,
+              styleWidth: container.style.width,
+              styleHeight: container.style.height,
+              parentWidth,
+              parentHeight
+            })
+          }
+        }
+
+        // Get initial center from riderLocation (only for initial setup)
+        const initialCenter = riderLocation ? [riderLocation[1], riderLocation[0]] : [75.8577, 22.7196]
+        
+        const mapConfig = {
+          container: mapContainerRef.current,
+          center: initialCenter, // [lng, lat] for Ola Maps
+          zoom: 13,
+          style: "https://api.olamaps.io/tiles/vector/v1/styles/default-light/style.json",
+          transformRequest: (url, resourceType) => {
+            if (url.includes('olamaps.io')) {
+              const separator = url.includes('?') ? '&' : '?'
+              return {
+                url: `${url}${separator}api_key=${OLA_MAPS_API_KEY}`
+              }
+            }
+            return { url }
+          }
+        }
+
+        console.log("🗺️ Initializing Ola Map with center:", initialCenter)
+
+        let myMap = null
+
+        // Try initialization with style URL
+        try {
+          myMap = olaMaps.init(mapConfig)
+          console.log("✅ Ola Map initialized successfully")
+          olaMapInstanceRef.current = myMap
+          
+          // Wait for map to load before proceeding
+          let loadTimeoutId = setTimeout(() => {
+            console.warn("⚠️ Map load timeout after 10 seconds - map may not have loaded properly")
+          }, 10000)
+
+          myMap.on('load', () => {
+            clearTimeout(loadTimeoutId)
+            console.log("✅ Map tiles loaded successfully")
+            setMapLoading(false)
+            isInitializingMapRef.current = false
+            
+            // Resize map after load to ensure proper display
+            setTimeout(() => {
+              if (myMap && typeof myMap.resize === 'function') {
+                myMap.resize()
+                console.log("✅ Map resized after load")
+              }
+              
+              // Add bike marker after map is loaded and resized
+              if (riderLocation && riderLocation.length === 2 && olaMapsSDKInstanceRef.current) {
+                createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, myMap, olaMapsSDKInstanceRef.current)
+              }
+            }, 200)
+          })
+          
+          // Handle map load errors
+          myMap.on('error', (e) => {
+            const error = e.error || {}
+            const errorMsg = error.message || String(error) || ''
+            
+            // If style fails to load, try without style
+            if (errorMsg.includes('style') || errorMsg.includes('404')) {
+              console.warn("⚠️ Style failed to load, trying without style")
+              try {
+                delete mapConfig.style
+                const mapWithoutStyle = olaMaps.init(mapConfig)
+                if (mapWithoutStyle) {
+                  olaMapInstanceRef.current = mapWithoutStyle
+                  myMap = mapWithoutStyle
+                  console.log("✅ Map initialized without style")
+                  setMapLoading(false)
+                  isInitializingMapRef.current = false
+                  
+                  // Add bike marker after map loads (error recovery case)
+                  myMap.on('load', () => {
+                    setTimeout(() => {
+                      if (riderLocation && riderLocation.length === 2 && olaMapsSDKInstanceRef.current) {
+                        createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, myMap, olaMapsSDKInstanceRef.current)
+                      }
+                    }, 200)
+                  })
+                }
+              } catch (noStyleError) {
+                console.error("❌ Map initialization failed completely")
+                setMapLoading(false)
+                isInitializingMapRef.current = false
+              }
+            }
+          })
+        } catch (error) {
+          console.warn("⚠️ Init with style failed, trying without style:", error.message)
+          
+          // Try without style as fallback
+          try {
+            delete mapConfig.style
+            myMap = olaMaps.init(mapConfig)
+            olaMapInstanceRef.current = myMap
+            console.log("✅ Ola Map initialized without style")
+            
+            myMap.on('load', () => {
+              setMapLoading(false)
+              isInitializingMapRef.current = false
+              
+              // Add bike marker after map loads (fallback case)
+              setTimeout(() => {
+                if (riderLocation && riderLocation.length === 2) {
+                  // Use stored SDK instance or create new one
+                  if (olaMapsSDKInstanceRef.current) {
+                    createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, myMap, olaMapsSDKInstanceRef.current)
+                  } else {
+                    // Get SDK instance for marker creation
+                    let OlaMapsClass = null
+                    if (window.OlaMaps) {
+                      OlaMapsClass = window.OlaMaps
+                    } else if (window.OlaMapsWebSDK && window.OlaMapsWebSDK.OlaMaps) {
+                      OlaMapsClass = window.OlaMapsWebSDK.OlaMaps
+                    } else if (window.OlaMapsWebSDK) {
+                      OlaMapsClass = window.OlaMapsWebSDK
+                    } else if (window.olamaps && window.olamaps.OlaMaps) {
+                      OlaMapsClass = window.olamaps.OlaMaps
+                    }
+                    
+                    if (OlaMapsClass) {
+                      const sdkInstance = new OlaMapsClass({ apiKey: OLA_MAPS_API_KEY })
+                      olaMapsSDKInstanceRef.current = sdkInstance
+                      createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, myMap, sdkInstance)
+                    }
+                  }
+                }
+              }, 200)
+            })
+          } catch (noStyleError) {
+            console.error("❌ Both initialization attempts failed")
+            console.error("Error:", noStyleError.message)
+            setMapLoading(false)
+            isInitializingMapRef.current = false
+          }
+        }
+
+      } catch (error) {
+        console.error("❌ Error initializing Ola Map:", error)
+        setMapLoading(false)
+        isInitializingMapRef.current = false
+      }
+    }
+
+    // Wait for container to be available and give it time to render
+    if (!mapContainerRef.current) {
+      const checkContainer = setInterval(() => {
+        if (mapContainerRef.current) {
+          clearInterval(checkContainer)
+          // Small delay to ensure container is fully rendered
+          setTimeout(() => {
+            initializeOlaMap()
+          }, 100)
+        }
+      }, 100)
+      
+      // Cleanup after 5 seconds if container still not available
+      setTimeout(() => clearInterval(checkContainer), 5000)
+      return () => clearInterval(checkContainer)
+    }
+
+    // Initialize if container is available - add small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      initializeOlaMap()
+    }, 100)
+    
+    return () => {
+      clearTimeout(timeoutId)
+      isInitializingMapRef.current = false
+      if (olaMapInstanceRef.current) {
+        // Cleanup map instance if needed
+        olaMapInstanceRef.current = null
+      }
+    }
+  }, [showHomeSections, sdkLoaded, riderLocation])
+
+  // Initialize Directions Map
+  useEffect(() => {
+    if (!directionsMapContainerRef.current || !showDirectionsMap || !selectedRestaurant) return
+
+    const initializeDirectionsMap = async () => {
+      // Wait for SDK to load
+      let retries = 0
+      const maxRetries = 10
+      while (retries < maxRetries) {
+        if (window.OlaMaps || window.OlaMapsWebSDK || window.olamaps) {
+          break
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+        retries++
+      }
+
+      if (!window.OlaMaps && !window.OlaMapsWebSDK && !window.olamaps) {
+        console.error("Ola Maps SDK not available")
+        return
+      }
+
+      try {
+        setDirectionsMapLoading(true)
+        
+        const OlaMapsClass = window.OlaMaps || 
+                           (window.OlaMapsWebSDK && window.OlaMapsWebSDK.OlaMaps) || 
+                           window.OlaMapsWebSDK ||
+                           (window.olamaps && window.olamaps.OlaMaps)
+
+        const olaMaps = new OlaMapsClass({
+          apiKey: OLA_MAPS_API_KEY,
+        })
+
+        // Get initial center from riderLocation (only for initial setup)
+        const initialCenter = riderLocation ? [riderLocation[1], riderLocation[0]] : [75.8577, 22.7196]
+        
+        const mapConfig = {
+          container: directionsMapContainerRef.current,
+          center: initialCenter, // [lng, lat]
+          zoom: 13,
+          style: "https://api.olamaps.io/tiles/vector/v1/styles/default-light/style.json",
+          transformRequest: (url, resourceType) => {
+            if (url.includes('olamaps.io')) {
+              const separator = url.includes('?') ? '&' : '?'
+              return {
+                url: `${url}${separator}api_key=${OLA_MAPS_API_KEY}`
+              }
+            }
+            return { url }
+          }
+        }
+
+        // Ensure container has proper dimensions
+        if (directionsMapContainerRef.current) {
+          const container = directionsMapContainerRef.current
+          if (!container.style.height || container.style.height === '0px') {
+            container.style.height = '100%'
+          }
+          if (!container.style.width || container.style.width === '0px') {
+            container.style.width = '100%'
+          }
+        }
+
+        const myMap = olaMaps.init(mapConfig)
+        directionsMapInstanceRef.current = myMap
+
+        myMap.on('load', () => {
+          console.log("✅ Directions Ola Map loaded successfully")
+          setDirectionsMapLoading(false)
+        })
+
+        myMap.on('error', (e) => {
+          console.warn("Directions map error (non-critical):", e)
+        })
+
+      } catch (error) {
+        console.error("Error initializing Directions Ola Map:", error)
+        setDirectionsMapLoading(false)
+      }
+    }
+
+    initializeDirectionsMap()
+
+    return () => {
+      if (directionsMapInstanceRef.current) {
+        directionsMapInstanceRef.current = null
+      }
+    }
+  }, [showDirectionsMap, selectedRestaurant])
+
+  // Calculate heading from two coordinates (in degrees, 0-360)
+  const calculateHeading = (lat1, lng1, lat2, lng2) => {
+    const dLng = (lng2 - lng1) * Math.PI / 180
+    const lat1Rad = lat1 * Math.PI / 180
+    const lat2Rad = lat2 * Math.PI / 180
+    
+    const y = Math.sin(dLng) * Math.cos(lat2Rad)
+    const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLng)
+    
+    let heading = Math.atan2(y, x) * 180 / Math.PI
+    heading = (heading + 360) % 360 // Normalize to 0-360
+    
+    return heading
+  }
+
+  // Function to create/update bike marker for delivery partner location (Zomato-style)
+  const createOrUpdateBikeMarker = (latitude, longitude, heading = null, mapInstance = null, sdkInstance = null) => {
+    const myMap = mapInstance || olaMapInstanceRef.current
+    if (!myMap) {
+      console.warn("⚠️ Map instance not available for bike marker")
+      return
+    }
+
+    // Calculate heading if not provided
+    let currentHeading = heading
+    if (currentHeading === null || currentHeading === undefined) {
+      if (lastLocationRef.current) {
+        currentHeading = calculateHeading(
+          lastLocationRef.current.latitude,
+          lastLocationRef.current.longitude,
+          latitude,
+          longitude
+        )
+      } else {
+        currentHeading = 0
+      }
+    }
+
+    // Update last location
+    lastLocationRef.current = { latitude, longitude, heading: currentHeading }
+
+    // Get Ola Maps SDK instance - use provided instance or get from window
+    let olaMaps = sdkInstance
+    if (!olaMaps) {
+      let OlaMapsClass = null
+      if (window.OlaMaps) {
+        OlaMapsClass = window.OlaMaps
+      } else if (window.OlaMapsWebSDK && window.OlaMapsWebSDK.OlaMaps) {
+        OlaMapsClass = window.OlaMapsWebSDK.OlaMaps
+      } else if (window.OlaMapsWebSDK) {
+        OlaMapsClass = window.OlaMapsWebSDK
+      } else if (window.olamaps && window.olamaps.OlaMaps) {
+        OlaMapsClass = window.olamaps.OlaMaps
+      }
+
+      if (!OlaMapsClass) {
+        console.warn("⚠️ Ola Maps SDK not available for bike marker")
+        return
+      }
+      
+      olaMaps = new OlaMapsClass({ apiKey: OLA_MAPS_API_KEY })
+    }
+
+    // Bike icon URL (using local asset)
+    const BIKE_ICON_URL = bikeLogo
+
+    // Update existing marker or create new one
+    if (bikeMarkerRef.current && bikeMarkerRef.current.marker) {
+      try {
+        const { marker, element } = bikeMarkerRef.current
+        
+        // Update position
+        if (marker.setLngLat) {
+          marker.setLngLat([longitude, latitude])
+        }
+        
+        // Update rotation (smooth transition)
+        if (element) {
+          element.style.transform = `rotate(${currentHeading}deg)`
+          element.style.transition = 'transform 0.5s ease'
+        }
+
+        // Smooth map movement (optional - only if needed)
+        // myMap.easeTo({
+        //   center: [longitude, latitude],
+        //   duration: 1000
+        // })
+
+        console.log("✅ Updated bike marker position and rotation:", currentHeading)
+      } catch (error) {
+        console.error("❌ Error updating bike marker:", error)
+      }
+    } else {
+      try {
+        // Remove any existing blue dot marker first
+        if (userLocationMarkerRef.current) {
+          try {
+            if (userLocationMarkerRef.current.remove) {
+              userLocationMarkerRef.current.remove()
+            } else if (userLocationMarkerRef.current.removeFrom) {
+              userLocationMarkerRef.current.removeFrom(myMap)
+            }
+            console.log("✅ Removed existing blue dot marker")
+          } catch (removeError) {
+            console.warn("⚠️ Error removing blue dot marker:", removeError)
+          }
+          userLocationMarkerRef.current = null
+        }
+        
+        // Create bike marker element
+        const bikeMarkerEl = document.createElement('div')
+        bikeMarkerEl.className = 'bike-location-marker'
+        bikeMarkerEl.style.cssText = `
+          width: 45px;
+          height: 45px;
+          position: relative;
+          z-index: 1002;
+          display: block;
+          visibility: visible;
+          opacity: 1;
+          cursor: default;
+        `
+        
+        // Create image element
+        const bikeImage = document.createElement('img')
+        bikeImage.src = BIKE_ICON_URL
+        bikeImage.alt = 'Delivery Bike'
+        bikeImage.style.cssText = `
+          width: 100%;
+          height: 100%;
+          transform: rotate(${currentHeading}deg);
+          transition: transform 0.5s ease;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        `
+        bikeMarkerEl.appendChild(bikeImage)
+
+        let newMarker = null
+
+        // Try different marker creation methods
+        if (olaMaps && olaMaps.addMarker) {
+          console.log("🏍️ Creating bike marker using addMarker")
+          newMarker = olaMaps.addMarker({
+            element: bikeMarkerEl,
+            anchor: 'center',
+            draggable: false
+          }).setLngLat([longitude, latitude]).addTo(myMap)
+          console.log("✅ Bike marker created using addMarker:", newMarker)
+        } else if (olaMaps && olaMaps.Marker) {
+          console.log("🏍️ Creating bike marker using Marker class")
+          newMarker = new olaMaps.Marker({
+            element: bikeMarkerEl,
+            anchor: 'center',
+            draggable: false
+          }).setLngLat([longitude, latitude]).addTo(myMap)
+          console.log("✅ Bike marker created using Marker class:", newMarker)
+        } else if (window.maplibregl && window.maplibregl.Marker) {
+          console.log("🏍️ Creating bike marker using maplibregl.Marker")
+          newMarker = new window.maplibregl.Marker({
+            element: bikeMarkerEl,
+            anchor: 'center'
+          }).setLngLat([longitude, latitude]).addTo(myMap)
+          console.log("✅ Bike marker created using maplibregl.Marker")
+        } else {
+          console.error("❌ No marker API found for bike marker")
+        }
+
+        if (newMarker) {
+          bikeMarkerRef.current = { marker: newMarker, element: bikeImage }
+          console.log("✅ Bike marker added successfully")
+          
+          // Verify marker is visible
+          setTimeout(() => {
+            const markerEl = newMarker.getElement?.() || newMarker._element
+            if (markerEl) {
+              markerEl.style.display = 'block'
+              markerEl.style.visibility = 'visible'
+              markerEl.style.opacity = '1'
+              markerEl.style.zIndex = '1002'
+              console.log("✅ Bike marker element verified")
+            }
+          }, 500)
+        }
+      } catch (error) {
+        console.error("❌ Error creating bike marker:", error)
+      }
+    }
+  }
+
+  // Function to create/update blue dot marker for user location (keeping for backward compatibility)
+  const createOrUpdateBlueDotMarker = (latitude, longitude, mapInstance = null, sdkInstance = null) => {
+    const myMap = mapInstance || olaMapInstanceRef.current
+    if (!myMap) {
+      console.warn("⚠️ Map instance not available for blue dot marker")
+      return
+    }
+
+    // Get Ola Maps SDK instance - use provided instance or get from window
+    let olaMaps = sdkInstance
+    if (!olaMaps) {
+      let OlaMapsClass = null
+      if (window.OlaMaps) {
+        OlaMapsClass = window.OlaMaps
+      } else if (window.OlaMapsWebSDK && window.OlaMapsWebSDK.OlaMaps) {
+        OlaMapsClass = window.OlaMapsWebSDK.OlaMaps
+      } else if (window.OlaMapsWebSDK) {
+        OlaMapsClass = window.OlaMapsWebSDK
+      } else if (window.olamaps && window.olamaps.OlaMaps) {
+        OlaMapsClass = window.olamaps.OlaMaps
+      }
+
+      if (!OlaMapsClass) {
+        console.warn("⚠️ Ola Maps SDK not available for blue dot marker")
+        return
+      }
+      
+      olaMaps = new OlaMapsClass({ apiKey: OLA_MAPS_API_KEY })
+    }
+
+    // Create blue dot element
+    let blueDotEl = null
+    if (userLocationMarkerRef.current) {
+      blueDotEl = userLocationMarkerRef.current.getElement?.() || 
+                   userLocationMarkerRef.current._element ||
+                   document.querySelector('.user-location-marker')
+    }
+
+    if (!blueDotEl) {
+      blueDotEl = document.createElement('div')
+      blueDotEl.className = 'user-location-marker'
+      blueDotEl.style.cssText = `
+        width: 20px;
+        height: 20px;
+        background-color: #4285F4;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        position: relative;
+        z-index: 1001;
+        display: block;
+        visibility: visible;
+        opacity: 1;
+        cursor: default;
+      `
+    } else {
+      // Ensure existing element styles are correct
+      blueDotEl.style.display = 'block'
+      blueDotEl.style.visibility = 'visible'
+      blueDotEl.style.opacity = '1'
+      blueDotEl.style.zIndex = '1001'
+    }
+
+    // Update existing marker or create new one
+    if (userLocationMarkerRef.current) {
+      try {
+        if (userLocationMarkerRef.current.setLngLat) {
+          userLocationMarkerRef.current.setLngLat([longitude, latitude])
+          console.log("✅ Updated blue dot marker position")
+        } else if (userLocationMarkerRef.current.setPosition) {
+          userLocationMarkerRef.current.setPosition([longitude, latitude])
+          console.log("✅ Updated blue dot marker position (setPosition)")
+        }
+      } catch (error) {
+        console.error("❌ Error updating blue dot marker:", error)
+      }
+    } else {
+      try {
+        let newMarker = null
+
+        // Try different marker creation methods (same pattern as LocationSelectorOverlay)
+        if (olaMaps && olaMaps.addMarker) {
+          console.log("🔵 Method 1: Using olaMaps.addMarker")
+          newMarker = olaMaps.addMarker({
+            element: blueDotEl,
+            anchor: 'center',
+            draggable: false
+          }).setLngLat([longitude, latitude]).addTo(myMap)
+          console.log("✅ Blue dot created using addMarker:", newMarker)
+        } else if (olaMaps && olaMaps.Marker) {
+          console.log("🔵 Method 2: Using olaMaps.Marker")
+          newMarker = new olaMaps.Marker({
+            element: blueDotEl,
+            anchor: 'center',
+            draggable: false
+          }).setLngLat([longitude, latitude]).addTo(myMap)
+          console.log("✅ Blue dot created using Marker class:", newMarker)
+        } else if (window.maplibregl && window.maplibregl.Marker) {
+          console.log("🔵 Method 3: Using maplibregl.Marker")
+          newMarker = new window.maplibregl.Marker({
+            element: blueDotEl,
+            anchor: 'center'
+          }).setLngLat([longitude, latitude]).addTo(myMap)
+          console.log("✅ Blue dot created using maplibregl.Marker")
+        } else {
+          console.error("❌ No marker API found. Available:", {
+            olaMaps: !!olaMaps,
+            olaMapsAddMarker: !!(olaMaps && olaMaps.addMarker),
+            olaMapsMarker: !!(olaMaps && olaMaps.Marker),
+            maplibregl: !!window.maplibregl,
+            mapInstance: !!myMap
+          })
+        }
+
+        if (newMarker) {
+          userLocationMarkerRef.current = newMarker
+          console.log("✅ Blue dot marker added successfully:", newMarker)
+          
+          // Verify marker is visible
+          setTimeout(() => {
+            const markerEl = newMarker.getElement?.() || newMarker._element
+            if (markerEl) {
+              console.log("✅ Blue dot element found on map:", markerEl)
+              markerEl.style.display = 'block'
+              markerEl.style.visibility = 'visible'
+              markerEl.style.opacity = '1'
+              markerEl.style.zIndex = '1001'
+              
+              // Check inner element
+              const innerEl = markerEl.querySelector('.user-location-marker') || markerEl
+              if (innerEl) {
+                innerEl.style.display = 'block'
+                innerEl.style.visibility = 'visible'
+                innerEl.style.opacity = '1'
+                console.log("✅ Blue dot inner element styles ensured")
+              }
+            } else {
+              console.warn("⚠️ Blue dot element not found in DOM")
+            }
+          }, 500)
+        } else {
+          console.error("❌ Failed to create blue dot marker - all methods failed")
+        }
+      } catch (error) {
+        console.error("❌ Error creating blue dot marker:", error)
+      }
+    }
+  }
+
+  // Update bike marker when rider location changes (map center update removed - bike marker handles position)
+  useEffect(() => {
+    if (olaMapInstanceRef.current && !showHomeSections && !mapLoading && riderLocation && riderLocation.length === 2) {
+      try {
+        // Update bike marker position (heading will be calculated from previous location)
+        if (olaMapsSDKInstanceRef.current) {
+          createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, olaMapInstanceRef.current, olaMapsSDKInstanceRef.current)
+        } else {
+          createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null)
+        }
+      } catch (error) {
+        console.warn("Error updating bike marker:", error)
+      }
+    }
+  }, [riderLocation, showHomeSections, mapLoading])
+
+  // Carousel slides data - filter based on bank details status
+  const carouselSlides = useMemo(() => [
     {
       id: 1,
       title: "Work for 2 days",
@@ -1800,18 +2720,26 @@ export default function DeliveryHome() {
       buttonText: "Know more",
       bgColor: "bg-gray-700"
     },
-    {
+    ...(bankDetailsFilled ? [] : [{
       id: 2,
       title: "Submit bank details",
       subtitle: "PAN & bank details required for payouts",
       icon: "bank",
       buttonText: "Submit",
       bgColor: "bg-yellow-400"
-    }
-  ]
+    }])
+  ], [bankDetailsFilled])
 
   // Auto-rotate carousel
   useEffect(() => {
+    // Reset to first slide if current slide is out of bounds
+    setCurrentCarouselSlide((prev) => {
+      if (prev >= carouselSlides.length) {
+        return 0
+      }
+      return prev
+    })
+    
     carouselAutoRotateRef.current = setInterval(() => {
       setCurrentCarouselSlide((prev) => (prev + 1) % carouselSlides.length)
     }, 3000)
@@ -1820,7 +2748,7 @@ export default function DeliveryHome() {
         clearInterval(carouselAutoRotateRef.current)
       }
     }
-  }, [carouselSlides.length])
+  }, [carouselSlides])
 
   // Reset auto-rotate timer after manual swipe
   const resetCarouselAutoRotate = () => {
@@ -2210,7 +3138,13 @@ export default function DeliveryHome() {
                 </div>
 
                 {/* Button */}
-                <button className={`px-3 py-1.5 rounded-lg font-medium text-xs transition-colors ${slide.bgColor === "bg-gray-700"
+                <button 
+                  onClick={() => {
+                    if (slide.id === 2) {
+                      navigate("/delivery/profile/details")
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-medium text-xs transition-colors ${slide.bgColor === "bg-gray-700"
                     ? "bg-gray-600 text-white hover:bg-gray-500"
                     : "bg-yellow-300 text-black hover:bg-yellow-200"
                   }`}>
@@ -2309,98 +3243,20 @@ export default function DeliveryHome() {
       {!showHomeSections ? (
         /* Map View - Shows map with Hotspot or Select drop mode */
         <div className="relative flex-1" style={{ height: 'calc(100vh - 200px)' }}>
-          <MapContainer
+          {/* Ola Maps Container */}
+          <div
+            ref={mapContainerRef}
             key={`map-${mapViewMode}-${riderLocation[0]}-${riderLocation[1]}`}
-            center={riderLocation}
-            zoom={13}
             style={{ height: '100%', width: '100%', zIndex: 1 }}
             className="z-0"
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
-            <MapUpdater center={riderLocation} />
-
-            {/* Yellow highlight circle around rider location */}
-            <Circle
-              center={riderLocation}
-              radius={400} // 200 meters radius
-              pathOptions={{
-                color: '#FCD34D',
-                fillColor: '#FCD34D',
-                fillOpacity: 0.3,
-                weight: 4
-              }}
-            />
-
-            {/* Nearby Hotspots - Irregular shapes from 3-5 points */}
-            {hotspots.map((hotspot, index) => (
-              <Polygon
-                key={`hotspot-${index}`}
-                positions={hotspot.vertices}
-                pathOptions={{
-                  color: '#FCD34D',
-                  fillColor: '#FCD34D',
-                  fillOpacity: hotspot.opacity,
-                  weight: 3
-                }}
-              />
-            ))}
-
-            {/* Rider Location Marker */}
-            <Marker position={riderLocation} icon={createCustomIcon('#ADD8E6', '🔵')}>
-              <Popup>Your Location</Popup>
-            </Marker>
-
-            {/* Refresh indicator - animated pulsing circles when refreshing location */}
-            {isRefreshingLocation && (
-              <>
-                <Circle
-                  key="circle-outer"
-                  center={riderLocation}
-                  radius={200}
-                  pathOptions={{
-                    color: '#3B82F6',
-                    fillColor: '#3B82F6',
-                    fillOpacity: 0.15,
-                    weight: 2
-                  }}
-                />
-                <Circle
-                  key="circle-middle"
-                  center={riderLocation}
-                  radius={100}
-                  pathOptions={{
-                    color: '#3B82F6',
-                    fillColor: '#3B82F6',
-                    fillOpacity: 0.25,
-                    weight: 2
-                  }}
-                />
-                <Circle
-                  key="circle-inner"
-                  center={riderLocation}
-                  radius={200}
-                  pathOptions={{
-                    color: '#3B82F6',
-                    fillColor: '#3B82F6',
-                    fillOpacity: 0.35,
-                    weight: 2
-                  }}
-                />
-              </>
-            )}
-
-            {/* Show different markers based on map view mode */}
-            {mapViewMode === "hotspot" ? (
-              // Hotspot mode - show hotspot markers (currently none available)
-              null
-            ) : (
-              // Select drop mode - show drop location markers
-              null
-            )}
-          </MapContainer>
+          />
+          
+          {/* Loading indicator */}
+          {mapLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
+              <div className="text-gray-600">Loading map...</div>
+            </div>
+          )}
 
           {/* Map Refresh Overlay - Professional Loading Indicator */}
           {isRefreshingLocation && (
@@ -2478,6 +3334,22 @@ export default function DeliveryHome() {
                   (position) => {
                     const { latitude, longitude } = position.coords
                     setRiderLocation([latitude, longitude])
+                    
+                    // Center map on user location and show bike marker
+                    if (olaMapInstanceRef.current) {
+                      try {
+                        olaMapInstanceRef.current.setCenter([longitude, latitude])
+                        // Create/update bike marker
+                        if (olaMapsSDKInstanceRef.current) {
+                          createOrUpdateBikeMarker(latitude, longitude, null, olaMapInstanceRef.current, olaMapsSDKInstanceRef.current)
+                        } else {
+                          createOrUpdateBikeMarker(latitude, longitude, null)
+                        }
+                      } catch (error) {
+                        console.error('Error centering map:', error)
+                      }
+                    }
+                    
                     // Stop refreshing animation after a short delay
                     setTimeout(() => {
                       setIsRefreshingLocation(false)
@@ -2728,7 +3600,7 @@ export default function DeliveryHome() {
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-white mb-1">Earnings Guarantee</h2>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-white">Valid till 14 Dec</span>
+                      <span className="text-sm text-white">Valid till {weekEndDate}</span>
                       <div className="flex items-center gap-1">
                         <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                         <span className="text-sm text-green-600 font-medium">Live</span>
@@ -2737,8 +3609,8 @@ export default function DeliveryHome() {
                   </div>
                   {/* Summary Box */}
                   <div className="bg-black text-white px-4 py-3 rounded-lg text-center min-w-[80px]">
-                    <div className="text-2xl font-bold">₹180</div>
-                    <div className="text-xs text-white/80 mt-1">4 orders</div>
+                    <div className="text-2xl font-bold">₹{earningsGuaranteeTarget.toFixed(0)}</div>
+                    <div className="text-xs text-white/80 mt-1">{earningsGuaranteeOrdersTarget} orders</div>
                   </div>
                 </div>
               </div>
@@ -2774,12 +3646,12 @@ export default function DeliveryHome() {
                           strokeWidth="8"
                           strokeLinecap="round"
                           initial={{ pathLength: 0 }}
-                          animate={{ pathLength: 0.25 }}
+                          animate={{ pathLength: ordersProgress }}
                           transition={{ delay: 0.6, duration: 1, ease: "easeOut" }}
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-xl font-bold text-gray-900">1 of 4</span>
+                        <span className="text-xl font-bold text-gray-900">{earningsGuaranteeCurrentOrders} of {earningsGuaranteeOrdersTarget}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 mt-3">
@@ -2808,7 +3680,7 @@ export default function DeliveryHome() {
                           stroke="#e5e7eb"
                           strokeWidth="8"
                         />
-                        {/* Progress circle - approximately 42.6% (76.62/180) */}
+                        {/* Progress circle */}
                         <motion.circle
                           cx="60"
                           cy="60"
@@ -2818,12 +3690,12 @@ export default function DeliveryHome() {
                           strokeWidth="8"
                           strokeLinecap="round"
                           initial={{ pathLength: 0 }}
-                          animate={{ pathLength: 0.426 }}
+                          animate={{ pathLength: earningsProgress }}
                           transition={{ delay: 0.7, duration: 1, ease: "easeOut" }}
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-lg font-bold text-gray-900">₹76.62</span>
+                        <span className="text-lg font-bold text-gray-900">₹{earningsGuaranteeCurrentEarnings.toFixed(2)}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 mt-3">
@@ -3441,44 +4313,19 @@ export default function DeliveryHome() {
             transition={{ duration: 0.3 }}
             className="fixed inset-0 z-[120] bg-white"
           >
-            <MapContainer
+            {/* Ola Maps Container for Directions */}
+            <div
+              ref={directionsMapContainerRef}
               key={`directions-map-${riderLocation[0]}-${riderLocation[1]}`}
-              center={riderLocation}
-              zoom={13}
               style={{ height: '100%', width: '100%', zIndex: 1 }}
-              zoomControl={true}
-              scrollWheelZoom={true}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapUpdater center={riderLocation} />
-              
-              {/* Rider location marker */}
-              <Marker
-                position={riderLocation}
-                icon={createCustomIcon('#10b981', '<div style="width: 20px; height: 20px; background: white; border-radius: 50%;"></div>')}
-              >
-                <Popup>Your Location</Popup>
-              </Marker>
-
-              {/* Destination marker */}
-              <Marker
-                position={[selectedRestaurant.lat, selectedRestaurant.lng]}
-                icon={createCustomIcon('#ff8100', '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>')}
-              >
-                <Popup>{selectedRestaurant.name}</Popup>
-              </Marker>
-
-              {/* Route polyline */}
-              {routePolyline.length > 0 && (
-                <Polyline
-                  positions={routePolyline}
-                  pathOptions={{ color: '#10b981', weight: 5, opacity: 0.9 }}
-                />
-              )}
-            </MapContainer>
+            />
+            
+            {/* Loading indicator */}
+            {directionsMapLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
+                <div className="text-gray-600">Loading map...</div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

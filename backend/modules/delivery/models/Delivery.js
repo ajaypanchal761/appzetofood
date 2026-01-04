@@ -224,33 +224,9 @@ const deliverySchema = new mongoose.Schema(
       enum: ['bronze', 'silver', 'gold', 'platinum'],
       default: 'bronze'
     },
-    // Wallet
-    wallet: {
-      balance: {
-        type: Number,
-        default: 0
-      },
-      joiningBonusClaimed: {
-        type: Boolean,
-        default: false
-      },
-      transactions: [{
-        amount: { type: Number, required: true },
-        type: { type: String, enum: ['deposit', 'deduction'], required: true },
-        reason: String,
-        date: { type: Date, default: Date.now }
-      }],
-      deposits: [{
-        amount: Number,
-        date: Date,
-        method: String
-      }],
-      deductions: [{
-        amount: Number,
-        reason: String,
-        date: Date
-      }]
-    },
+    // Note: Wallet functionality has been moved to separate DeliveryWallet model
+    // Use DeliveryWallet.findOne({ deliveryId: this._id }) to access wallet
+    // The embedded wallet schema has been removed in favor of the separate model
     // Refresh token (for JWT)
     refreshToken: {
       type: String,

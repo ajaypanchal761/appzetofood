@@ -495,8 +495,29 @@ export const deliveryAPI = {
   getDashboard: () => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.DASHBOARD);
   },
-  getWalletBalance: () => {
+  
+  // Wallet
+  getWallet: () => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.WALLET);
+  },
+  getWalletBalance: () => {
+    // Backward compatibility - use getWallet instead
+    return apiClient.get(API_ENDPOINTS.DELIVERY.WALLET);
+  },
+  getWalletTransactions: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.WALLET_TRANSACTIONS, { params });
+  },
+  getWalletStats: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.WALLET_STATS, { params });
+  },
+  createWithdrawalRequest: (data) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.WALLET_WITHDRAW, data);
+  },
+  addEarning: (data) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.WALLET_EARNINGS, data);
+  },
+  collectPayment: (data) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.WALLET_COLLECT_PAYMENT, data);
   },
   claimJoiningBonus: () => {
     return apiClient.post(API_ENDPOINTS.DELIVERY.CLAIM_JOINING_BONUS);

@@ -1,90 +1,72 @@
 /**
  * Delivery Wallet State Management Utility
- * Centralized management for delivery earnings, cash in hand, and transactions
+ * Fetches wallet data from API instead of using localStorage/default data
  */
 
-import { usdToInr } from '../../restaurant/utils/currency'
+import { deliveryAPI } from '@/lib/api'
 
-// Default delivery wallet state structure (converted to INR)
-const DEFAULT_DELIVERY_WALLET_STATE = {
-  // Balance values (in INR)
-  totalBalance: usdToInr(2480.80), // Total earnings balance
-  cashInHand: usdToInr(2389.75), // Cash currently in hand
-  totalWithdrawn: usdToInr(2011.00), // Total amount withdrawn
-  
-  // Transactions (in INR)
-  transactions: [
-    {
-      id: 1,
-      amount: usdToInr(68.00),
-      description: "Transferred to Card",
-      status: "Pending",
-      date: "01 Jun 2023",
-      type: "withdrawal"
-    },
-    {
-      id: 2,
-      amount: usdToInr(5000.00),
-      description: "Transferred to Account",
-      status: "Pending",
-      date: "07 Feb 2023",
-      type: "withdrawal"
-    },
-    {
-      id: 3,
-      amount: usdToInr(1200.00),
-      description: "Payment Received",
-      status: "Completed",
-      date: "15 Jan 2023",
-      type: "payment"
-    },
-    {
-      id: 4,
-      amount: usdToInr(500.00),
-      description: "Withdrawal",
-      status: "Completed",
-      date: "10 Jan 2023",
-      type: "withdrawal"
-    }
-  ],
-  
-  // Withdraw requests
-  withdrawRequests: []
+// Empty wallet state structure (no default data)
+const EMPTY_WALLET_STATE = {
+  totalBalance: 0,
+  cashInHand: 0,
+  totalWithdrawn: 0,
+  totalEarned: 0,
+  transactions: [],
+  joiningBonusClaimed: false,
+  joiningBonusAmount: 0
 }
 
-const DELIVERY_WALLET_STORAGE_KEY = 'delivery_wallet_state'
+/**
+ * Fetch wallet data from API
+ * @returns {Promise<Object>} - Wallet state object
+ */
+export const fetchDeliveryWallet = async () => {
+  try {
+    const response = await deliveryAPI.getWallet()
+    if (response?.data?.success && response?.data?.data?.wallet) {
+      const walletData = response.data.data.wallet
+      
+      // Transform API response to match expected format
+      // Backend now returns all transactions in 'transactions' field for weekly calculations
+      return {
+        totalBalance: walletData.totalBalance || 0,
+        cashInHand: walletData.cashInHand || 0,
+        totalWithdrawn: walletData.totalWithdrawn || 0,
+        totalEarned: walletData.totalEarned || 0,
+        pocketBalance: walletData.pocketBalance || (walletData.totalBalance - walletData.cashInHand),
+        pendingWithdrawals: walletData.pendingWithdrawals || 0,
+        joiningBonusClaimed: walletData.joiningBonusClaimed || false,
+        joiningBonusAmount: walletData.joiningBonusAmount || 0,
+        // Use 'transactions' field (all transactions) for weekly calculations, fallback to recentTransactions for backward compatibility
+        transactions: walletData.transactions || walletData.recentTransactions || [],
+        totalTransactions: walletData.totalTransactions || 0
+      }
+    }
+    return EMPTY_WALLET_STATE
+  } catch (error) {
+    console.error('Error fetching wallet data:', error)
+    return EMPTY_WALLET_STATE
+  }
+}
 
 /**
- * Get delivery wallet state from localStorage
+ * Get delivery wallet state (deprecated - use fetchDeliveryWallet instead)
+ * Kept for backward compatibility but returns empty state
  * @returns {Object} - Wallet state object
  */
 export const getDeliveryWalletState = () => {
-  try {
-    const saved = localStorage.getItem(DELIVERY_WALLET_STORAGE_KEY)
-    if (saved) {
-      return JSON.parse(saved)
-    }
-    // Initialize with default state
-    setDeliveryWalletState(DEFAULT_DELIVERY_WALLET_STATE)
-    return DEFAULT_DELIVERY_WALLET_STATE
-  } catch (error) {
-    console.error('Error reading delivery wallet state from localStorage:', error)
-    return DEFAULT_DELIVERY_WALLET_STATE
-  }
+  // Return empty state - should use fetchDeliveryWallet() instead
+  console.warn('getDeliveryWalletState is deprecated. Use fetchDeliveryWallet() instead.')
+  return EMPTY_WALLET_STATE
 }
 
 /**
- * Save delivery wallet state to localStorage
+ * Save delivery wallet state (deprecated - data is managed by backend)
  * @param {Object} state - Wallet state object
  */
 export const setDeliveryWalletState = (state) => {
-  try {
-    localStorage.setItem(DELIVERY_WALLET_STORAGE_KEY, JSON.stringify(state))
-    // Dispatch custom event for other components
-    window.dispatchEvent(new CustomEvent('deliveryWalletStateUpdated'))
-  } catch (error) {
-    console.error('Error saving delivery wallet state to localStorage:', error)
-  }
+  // No-op - data is managed by backend
+  console.warn('setDeliveryWalletState is deprecated. Wallet data is managed by backend.')
 }
 
 /**
@@ -93,27 +75,37 @@ export const setDeliveryWalletState = (state) => {
  * @returns {Object} - Calculated balances
  */
 export const calculateDeliveryBalances = (state) => {
+  if (!state || !state.transactions) {
+    return {
+      totalBalance: state?.totalBalance || 0,
+      cashInHand: state?.cashInHand || 0,
+      totalWithdrawn: state?.totalWithdrawn || 0,
+      pendingWithdrawals: state?.pendingWithdrawals || 0,
+      totalEarnings: state?.totalEarned || 0
+    }
+  }
+
   // Calculate total withdrawn from completed withdrawal transactions
   const totalWithdrawnFromTransactions = state.transactions
     .filter(t => t.type === 'withdrawal' && t.status === 'Completed')
-    .reduce((sum, t) => sum + t.amount, 0)
+    .reduce((sum, t) => sum + (t.amount || 0), 0)
   
   // Calculate pending withdrawals
   const pendingWithdrawals = state.transactions
     .filter(t => t.type === 'withdrawal' && t.status === 'Pending')
-    .reduce((sum, t) => sum + t.amount, 0)
+    .reduce((sum, t) => sum + (t.amount || 0), 0)
   
   // Calculate total earnings from payment transactions
   const totalEarningsFromTransactions = state.transactions
     .filter(t => t.type === 'payment' && t.status === 'Completed')
-    .reduce((sum, t) => sum + t.amount, 0)
+    .reduce((sum, t) => sum + (t.amount || 0), 0)
   
   return {
-    totalBalance: state.totalBalance,
-    cashInHand: state.cashInHand,
-    totalWithdrawn: totalWithdrawnFromTransactions || state.totalWithdrawn,
-    pendingWithdrawals: pendingWithdrawals,
-    totalEarnings: totalEarningsFromTransactions || state.totalBalance
+    totalBalance: state.totalBalance || 0,
+    cashInHand: state.cashInHand || 0,
+    totalWithdrawn: totalWithdrawnFromTransactions || state.totalWithdrawn || 0,
+    pendingWithdrawals: pendingWithdrawals || state.pendingWithdrawals || 0,
+    totalEarnings: totalEarningsFromTransactions || state.totalEarned || state.totalBalance || 0
   }
 }
 
@@ -124,6 +116,10 @@ export const calculateDeliveryBalances = (state) => {
  * @returns {number} - Earnings for the period
  */
 export const calculatePeriodEarnings = (state, period) => {
+  if (!state || !state.transactions || !Array.isArray(state.transactions)) {
+    return 0
+  }
+
   const now = new Date()
   let startDate = new Date()
   
@@ -145,161 +141,164 @@ export const calculatePeriodEarnings = (state, period) => {
   
   return state.transactions
     .filter(t => {
-      if (t.type !== 'payment' || t.status !== 'Completed') return false
+      if (t.type !== 'payment' && t.type !== 'bonus') return false
+      if (t.status !== 'Completed') return false
       
-      const transactionDate = new Date(t.date)
+      const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+      if (!transactionDate) return false
+      
       return transactionDate >= startDate && transactionDate <= now
     })
-    .reduce((sum, t) => sum + t.amount, 0)
+    .reduce((sum, t) => sum + (t.amount || 0), 0)
 }
 
 /**
- * Add a transaction
+ * Fetch wallet transactions from API
+ * @param {Object} params - Query params (type, status, page, limit)
+ * @returns {Promise<Array>} - Array of transactions
+ */
+export const fetchWalletTransactions = async (params = {}) => {
+  try {
+    const response = await deliveryAPI.getWalletTransactions(params)
+    if (response?.data?.success && response?.data?.data?.transactions) {
+      return response.data.data.transactions
+    }
+    return []
+  } catch (error) {
+    console.error('Error fetching wallet transactions:', error)
+    return []
+  }
+}
+
+/**
+ * Create withdrawal request
+ * @param {number} amount - Withdrawal amount
+ * @param {string} paymentMethod - Payment method (bank_transfer, upi, card)
+ * @param {Object} details - Additional details (bankDetails, upiId, etc.)
+ * @returns {Promise<Object>} - Created transaction
+ */
+export const createWithdrawalRequest = async (amount, paymentMethod, details = {}) => {
+  try {
+    const response = await deliveryAPI.createWithdrawalRequest({
+      amount,
+      paymentMethod,
+      ...details
+    })
+    if (response?.data?.success) {
+      return response.data.data
+    }
+    throw new Error(response?.data?.message || 'Failed to create withdrawal request')
+  } catch (error) {
+    console.error('Error creating withdrawal request:', error)
+    throw error
+  }
+}
+
+/**
+ * Collect payment (mark COD payment as collected)
+ * @param {string} orderId - Order ID
+ * @param {number} amount - Payment amount (optional)
+ * @returns {Promise<Object>} - Updated transaction
+ */
+export const collectPayment = async (orderId, amount = null) => {
+  try {
+    const response = await deliveryAPI.collectPayment({
+      orderId,
+      amount
+    })
+    if (response?.data?.success) {
+      return response.data.data
+    }
+    throw new Error(response?.data?.message || 'Failed to collect payment')
+  } catch (error) {
+    console.error('Error collecting payment:', error)
+    throw error
+  }
+}
+
+/**
+ * Get transactions by type (deprecated - use fetchWalletTransactions instead)
+ * @param {string} type - Transaction type (withdrawal, payment, all)
+ * @returns {Array} - Filtered transactions
+ */
+export const getDeliveryTransactionsByType = (type = 'all') => {
+  console.warn('getDeliveryTransactionsByType is deprecated. Use fetchWalletTransactions() instead.')
+  return []
+}
+
+/**
+ * Get transactions by status (deprecated - use fetchWalletTransactions instead)
+ * @param {string} status - Transaction status (Pending, Completed, Failed)
+ * @returns {Array} - Filtered transactions
+ */
+export const getDeliveryTransactionsByStatus = (status) => {
+  console.warn('getDeliveryTransactionsByStatus is deprecated. Use fetchWalletTransactions() instead.')
+  return []
+}
+
+/**
+ * Get order payment amount from wallet transactions (deprecated - use API)
+ * @param {string|number} orderId - Order ID
+ * @returns {number|null} - Payment amount if found, null otherwise
+ */
+export const getDeliveryOrderPaymentAmount = (orderId) => {
+  console.warn('getDeliveryOrderPaymentAmount is deprecated. Use API to fetch transactions instead.')
+  return null
+}
+
+/**
+ * Get payment status for an order (deprecated - use API)
+ * @param {string|number} orderId - Order ID
+ * @returns {string} - Payment status ("Paid" or "Unpaid")
+ */
+export const getDeliveryOrderPaymentStatus = (orderId) => {
+  console.warn('getDeliveryOrderPaymentStatus is deprecated. Use API to fetch transactions instead.')
+  return "Unpaid"
+}
+
+/**
+ * Check if payment is collected for an order (deprecated - use API)
+ * @param {string|number} orderId - Order ID
+ * @returns {boolean} - Whether payment is collected
+ */
+export const isPaymentCollected = (orderId) => {
+  console.warn('isPaymentCollected is deprecated. Use API to fetch transactions instead.')
+  return false
+}
+
+/**
+ * Add delivery transaction (deprecated - use API instead)
  * @param {Object} transaction - Transaction object
  */
 export const addDeliveryTransaction = (transaction) => {
-  const state = getDeliveryWalletState()
-  const newTransaction = {
-    id: Date.now(),
-    ...transaction,
-    date: transaction.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-  }
-  
-  state.transactions.unshift(newTransaction)
-  
-  // Update balances based on transaction
-  if (transaction.type === 'payment' && transaction.status === 'Completed') {
-    state.totalBalance += transaction.amount
-    // If payment is collected, add to cash in hand
-    if (transaction.paymentCollected) {
-      state.cashInHand += transaction.amount
-    }
-  } else if (transaction.type === 'withdrawal' && transaction.status === 'Completed') {
-    state.totalBalance -= transaction.amount
-    state.cashInHand -= transaction.amount
-  }
-  
-  setDeliveryWalletState(state)
-  return newTransaction
+  console.warn('addDeliveryTransaction is deprecated. Use API endpoints instead.')
+  return null
 }
 
 /**
- * Create a withdraw request
+ * Create a withdraw request (deprecated - use createWithdrawalRequest instead)
  * @param {number} amount - Withdrawal amount
  * @param {string} paymentMethod - Payment method
  * @returns {Object} - Created transaction
  */
 export const createDeliveryWithdrawRequest = (amount, paymentMethod) => {
-  const transaction = {
-    amount: parseFloat(amount),
-    description: `Withdrawal via ${paymentMethod}`,
-    status: "Pending",
-    type: "withdrawal",
-    paymentMethod: paymentMethod
-  }
-  
-  return addDeliveryTransaction(transaction)
+  console.warn('createDeliveryWithdrawRequest is deprecated. Use createWithdrawalRequest() instead.')
+  return createWithdrawalRequest(amount, paymentMethod)
 }
 
 /**
- * Add delivery earnings from completed order
+ * Add delivery earnings from completed order (deprecated - use API instead)
  * @param {number} amount - Delivery earnings amount
  * @param {string} orderId - Order ID
  * @param {string} description - Payment description
  * @param {boolean} paymentCollected - Whether payment is collected (for COD)
  */
 export const addDeliveryEarnings = (amount, orderId, description, paymentCollected = false) => {
-  const transaction = {
-    amount: parseFloat(amount),
-    description: description || `Delivery earnings for Order #${orderId}`,
-    status: "Completed",
-    type: "payment",
-    orderId: orderId,
-    paymentCollected: paymentCollected
-  }
-  
-  return addDeliveryTransaction(transaction)
+  console.warn('addDeliveryEarnings is deprecated. Use deliveryAPI.addEarning() instead.')
+  return deliveryAPI.addEarning({
+    amount,
+    orderId,
+    description,
+    paymentCollected
+  })
 }
-
-/**
- * Update cash in hand when payment is collected
- * @param {number} amount - Payment amount collected
- * @param {string} orderId - Order ID
- */
-export const collectPayment = (amount, orderId) => {
-  const state = getDeliveryWalletState()
-  state.cashInHand += parseFloat(amount)
-  
-  // Update transaction if exists
-  const transaction = state.transactions.find(
-    t => t.type === 'payment' && t.orderId === String(orderId)
-  )
-  if (transaction) {
-    transaction.paymentCollected = true
-  }
-  
-  setDeliveryWalletState(state)
-}
-
-/**
- * Get transactions by type
- * @param {string} type - Transaction type (withdrawal, payment, all)
- * @returns {Array} - Filtered transactions
- */
-export const getDeliveryTransactionsByType = (type = 'all') => {
-  const state = getDeliveryWalletState()
-  if (type === 'all') {
-    return state.transactions
-  }
-  return state.transactions.filter(t => t.type === type)
-}
-
-/**
- * Get transactions by status
- * @param {string} status - Transaction status (Pending, Completed, Failed)
- * @returns {Array} - Filtered transactions
- */
-export const getDeliveryTransactionsByStatus = (status) => {
-  const state = getDeliveryWalletState()
-  return state.transactions.filter(t => t.status === status)
-}
-
-/**
- * Get order payment amount from wallet transactions
- * @param {string|number} orderId - Order ID
- * @returns {number|null} - Payment amount if found, null otherwise
- */
-export const getDeliveryOrderPaymentAmount = (orderId) => {
-  const state = getDeliveryWalletState()
-  const paymentTransaction = state.transactions.find(
-    t => t.type === 'payment' && t.orderId === String(orderId)
-  )
-  return paymentTransaction ? paymentTransaction.amount : null
-}
-
-/**
- * Get payment status for an order
- * @param {string|number} orderId - Order ID
- * @returns {string} - Payment status ("Paid" or "Unpaid")
- */
-export const getDeliveryOrderPaymentStatus = (orderId) => {
-  const state = getDeliveryWalletState()
-  const paymentTransaction = state.transactions.find(
-    t => t.type === 'payment' && t.orderId === String(orderId) && t.status === 'Completed'
-  )
-  return paymentTransaction ? "Paid" : "Unpaid"
-}
-
-/**
- * Check if payment is collected for an order
- * @param {string|number} orderId - Order ID
- * @returns {boolean} - Whether payment is collected
- */
-export const isPaymentCollected = (orderId) => {
-  const state = getDeliveryWalletState()
-  const paymentTransaction = state.transactions.find(
-    t => t.type === 'payment' && t.orderId === String(orderId)
-  )
-  return paymentTransaction ? paymentTransaction.paymentCollected || false : false
-}
-

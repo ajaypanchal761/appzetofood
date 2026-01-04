@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import Delivery from '../models/Delivery.js';
+import DeliveryWallet from '../models/DeliveryWallet.js';
 import Order from '../../order/models/Order.js';
 import winston from 'winston';
 
@@ -60,15 +61,28 @@ export const getDashboard = asyncHandler(async (req, res) => {
     const joiningBonusAmount = 100;
     const joiningBonusUnlockThreshold = 1; // Complete 1 order to unlock
     const joiningBonusUnlocked = completedOrders >= joiningBonusUnlockThreshold;
-    const joiningBonusClaimed = delivery.wallet?.joiningBonusClaimed || false;
+    
+    // Get wallet data (using new DeliveryWallet model)
+    let wallet = null;
+    try {
+      wallet = await DeliveryWallet.findOne({ deliveryId: delivery._id });
+    } catch (error) {
+      logger.warn(`Error fetching wallet for dashboard:`, error);
+    }
+    
+    const joiningBonusClaimed = wallet?.joiningBonusClaimed || false;
     const joiningBonusValidTill = new Date('2025-12-10'); // Valid till 10 December 2025
 
-    // Calculate wallet balance
-    const walletBalance = delivery.wallet?.balance || 0;
-    const totalEarned = delivery.earnings?.totalEarned || 0;
-    const currentBalance = delivery.earnings?.currentBalance || 0;
-    const pendingPayout = delivery.earnings?.pendingPayout || 0;
-    const tips = delivery.earnings?.tips || 0;
+    // Calculate wallet balance (using new DeliveryWallet model)
+    const walletBalance = wallet?.totalBalance || 0;
+    const totalEarned = wallet?.totalEarned || delivery.earnings?.totalEarned || 0;
+    const currentBalance = wallet?.totalBalance || delivery.earnings?.currentBalance || 0;
+    const pendingPayout = wallet?.transactions
+      ?.filter(t => t.type === 'withdrawal' && t.status === 'Pending')
+      .reduce((sum, t) => sum + t.amount, 0) || delivery.earnings?.pendingPayout || 0;
+    const tips = wallet?.transactions
+      ?.filter(t => t.type === 'payment' && t.description?.toLowerCase().includes('tip'))
+      .reduce((sum, t) => sum + t.amount, 0) || delivery.earnings?.tips || 0;
 
     // Calculate weekly earnings (last 7 days)
     const sevenDaysAgo = new Date();
@@ -193,21 +207,47 @@ export const getDashboard = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get Wallet Balance
+ * Get Wallet Balance (DEPRECATED - Use /api/delivery/wallet instead)
  * Returns detailed wallet information
+ * This endpoint is kept for backward compatibility
  */
 export const getWalletBalance = asyncHandler(async (req, res) => {
   try {
     const delivery = req.delivery;
 
+    // Use new DeliveryWallet model
+    let wallet = await DeliveryWallet.findOne({ deliveryId: delivery._id });
+
+    if (!wallet) {
+      // Create wallet if doesn't exist
+      wallet = await DeliveryWallet.create({
+        deliveryId: delivery._id,
+        totalBalance: 0,
+        cashInHand: 0,
+        totalWithdrawn: 0,
+        totalEarned: 0
+      });
+    }
+
     const walletData = {
-      balance: delivery.wallet?.balance || 0,
-      totalEarned: delivery.earnings?.totalEarned || 0,
-      currentBalance: delivery.earnings?.currentBalance || 0,
-      pendingPayout: delivery.earnings?.pendingPayout || 0,
-      tips: delivery.earnings?.tips || 0,
-      transactions: delivery.wallet?.transactions || [],
-      joiningBonusClaimed: delivery.wallet?.joiningBonusClaimed || false,
+      balance: wallet.totalBalance || 0,
+      totalEarned: wallet.totalEarned || 0,
+      currentBalance: wallet.totalBalance || 0,
+      pendingPayout: wallet.transactions
+        .filter(t => t.type === 'withdrawal' && t.status === 'Pending')
+        .reduce((sum, t) => sum + t.amount, 0),
+      tips: wallet.transactions
+        .filter(t => t.type === 'payment' && t.description?.toLowerCase().includes('tip'))
+        .reduce((sum, t) => sum + t.amount, 0),
+      transactions: wallet.transactions.slice(0, 10).map(t => ({
+        id: t._id,
+        amount: t.amount,
+        type: t.type,
+        status: t.status,
+        description: t.description,
+        date: t.createdAt
+      })),
+      joiningBonusClaimed: wallet.joiningBonusClaimed || false,
     };
 
     return successResponse(res, 200, 'Wallet balance retrieved successfully', walletData);
@@ -218,15 +258,19 @@ export const getWalletBalance = asyncHandler(async (req, res) => {
 });
 
 /**
- * Claim Joining Bonus
+ * Claim Joining Bonus (DEPRECATED - Use /api/delivery/wallet/claim-joining-bonus instead)
  * Claims the ₹100 joining bonus after completing first order
+ * This endpoint is kept for backward compatibility and uses the new DeliveryWallet model
  */
 export const claimJoiningBonus = asyncHandler(async (req, res) => {
   try {
     const delivery = req.delivery;
 
+    // Use new DeliveryWallet model
+    let wallet = await DeliveryWallet.findOrCreateByDeliveryId(delivery._id);
+
     // Check if already claimed
-    if (delivery.wallet?.joiningBonusClaimed) {
+    if (wallet.joiningBonusClaimed) {
       return errorResponse(res, 400, 'Joining bonus already claimed');
     }
 
@@ -251,48 +295,40 @@ export const claimJoiningBonus = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, 'Joining bonus has expired');
     }
 
-    // Add bonus to wallet
+    // Add bonus amount
     const bonusAmount = 100;
-    const currentBalance = delivery.wallet?.balance || 0;
-    const newBalance = currentBalance + bonusAmount;
+
+    // Add bonus transaction
+    const transaction = wallet.addTransaction({
+      amount: bonusAmount,
+      type: 'bonus',
+      status: 'Completed',
+      description: 'Joining bonus - Complete first order reward'
+    });
 
     // Update wallet
-    delivery.wallet = {
-      balance: newBalance,
-      joiningBonusClaimed: true,
-      transactions: [
-        ...(delivery.wallet?.transactions || []),
-        {
-          amount: bonusAmount,
-          type: 'deposit',
-          reason: 'Joining bonus',
-          date: new Date(),
-        }
-      ]
-    };
-
-    // Update earnings
-    delivery.earnings = {
-      ...delivery.earnings,
-      totalEarned: (delivery.earnings?.totalEarned || 0) + bonusAmount,
-      currentBalance: (delivery.earnings?.currentBalance || 0) + bonusAmount,
-    };
-
-    await delivery.save();
+    wallet.joiningBonusClaimed = true;
+    wallet.joiningBonusAmount = bonusAmount;
+    await wallet.save();
 
     logger.info(`Joining bonus claimed for delivery: ${delivery._id}`, {
       deliveryId: delivery.deliveryId,
       bonusAmount,
-      newBalance,
+      transactionId: transaction._id
     });
 
     return successResponse(res, 200, 'Joining bonus claimed successfully', {
       bonusAmount,
-      newBalance,
       wallet: {
-        balance: newBalance,
-        totalEarned: delivery.earnings?.totalEarned,
-        currentBalance: delivery.earnings?.currentBalance,
+        totalBalance: wallet.totalBalance,
+        totalEarned: wallet.totalEarned,
+        joiningBonusClaimed: wallet.joiningBonusClaimed
+      },
+      transaction: {
+        id: transaction._id,
+        amount: transaction.amount,
+        type: transaction.type,
+        status: transaction.status
       }
     });
   } catch (error) {

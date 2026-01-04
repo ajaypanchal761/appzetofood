@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
 import Lenis from "lenis"
 import { useNavigate, useLocation } from "react-router-dom"
 import { motion } from "framer-motion"
@@ -22,7 +22,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
-  getDeliveryWalletState,
+  fetchDeliveryWallet,
   calculateDeliveryBalances,
   calculatePeriodEarnings
 } from "../utils/deliveryWalletState"
@@ -30,6 +30,7 @@ import { formatCurrency } from "../../restaurant/utils/currency"
 import { useGigStore } from "../store/gigStore"
 import { useProgressStore } from "../store/progressStore"
 import { getAllDeliveryOrders } from "../utils/deliveryOrderStatus"
+import { deliveryAPI } from "@/lib/api"
 import FeedNavbar from "../components/FeedNavbar"
 import AvailableCashLimit from "../components/AvailableCashLimit"
 import BottomPopup from "../components/BottomPopup"
@@ -39,7 +40,15 @@ export default function PocketPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [animationKey, setAnimationKey] = useState(0)
-  const [walletState, setWalletState] = useState(() => getDeliveryWalletState())
+  const [walletState, setWalletState] = useState({
+    totalBalance: 0,
+    cashInHand: 0,
+    totalWithdrawn: 0,
+    totalEarned: 0,
+    transactions: [],
+    joiningBonusClaimed: false
+  })
+  const [walletLoading, setWalletLoading] = useState(true)
 
   const [currentCarouselSlide, setCurrentCarouselSlide] = useState(0)
   const carouselRef = useRef(null)
@@ -49,6 +58,9 @@ export default function PocketPage() {
 
   const [showCashLimitPopup, setShowCashLimitPopup] = useState(false)
   const [showDepositPopup, setShowDepositPopup] = useState(false)
+  const [bankDetailsFilled, setBankDetailsFilled] = useState(false)
+  const [dashboardData, setDashboardData] = useState(null)
+  const [dashboardLoading, setDashboardLoading] = useState(true)
 
   const {
     isOnline,
@@ -59,8 +71,48 @@ export default function PocketPage() {
 
   const { getDateData, hasDateData } = useProgressStore()
 
-  
-  const carouselSlides = [
+  // Fetch bank details status
+  useEffect(() => {
+    const checkBankDetails = async () => {
+      try {
+        const response = await deliveryAPI.getProfile()
+        if (response?.data?.success && response?.data?.data?.profile) {
+          const profile = response.data.data.profile
+          const bankDetails = profile?.documents?.bankDetails
+          
+          // Check if all required bank details fields are filled
+          const isFilled = !!(
+            bankDetails?.accountHolderName?.trim() &&
+            bankDetails?.accountNumber?.trim() &&
+            bankDetails?.ifscCode?.trim() &&
+            bankDetails?.bankName?.trim()
+          )
+          
+          setBankDetailsFilled(isFilled)
+        }
+      } catch (error) {
+        console.error("Error checking bank details:", error)
+        // Default to showing the banner if we can't check
+        setBankDetailsFilled(false)
+      }
+    }
+
+    checkBankDetails()
+
+    // Listen for profile updates
+    const handleProfileRefresh = () => {
+      checkBankDetails()
+    }
+
+    window.addEventListener('deliveryProfileRefresh', handleProfileRefresh)
+    
+    return () => {
+      window.removeEventListener('deliveryProfileRefresh', handleProfileRefresh)
+    }
+  }, [])
+
+  // Carousel slides data - filter based on bank details status
+  const carouselSlides = useMemo(() => [
     {
       id: 1,
       title: "Work for 2 days",
@@ -69,56 +121,77 @@ export default function PocketPage() {
       buttonText: "Know more",
       bgColor: "bg-gray-700"
     },
-    {
+    ...(bankDetailsFilled ? [] : [{
       id: 2,
       title: "Submit bank details",
       subtitle: "PAN & bank details required for payouts",
       icon: "bank",
       buttonText: "Submit",
       bgColor: "bg-yellow-400"
-    }
-  ]
+    }])
+  ], [bankDetailsFilled])
 
   // Calculate balances
   const balances = calculateDeliveryBalances(walletState)
 
-  // Calculate weekly earnings (17 Nov - 23 Nov)
-  const weeklyEarnings = calculatePeriodEarnings(walletState, 'week')
+  // Calculate weekly earnings from wallet transactions
+  const weeklyEarnings = calculatePeriodEarnings(walletState, 'week') || 0
 
-  // Calculate weekly trips/orders count
-  const calculateWeeklyTrips = () => {
+  // Calculate weekly orders count from transactions
+  const calculateWeeklyOrders = () => {
+    if (!walletState || !walletState.transactions || !Array.isArray(walletState.transactions)) {
+      return 0
+    }
+
     const now = new Date()
     const startOfWeek = new Date(now)
     startOfWeek.setDate(now.getDate() - now.getDay()) // Start of week (Sunday)
     startOfWeek.setHours(0, 0, 0, 0)
-    
-    const allOrders = getAllDeliveryOrders()
-    return allOrders.filter(order => {
-      const orderId = order.orderId || order.id
-      const orderDateKey = `delivery_order_date_${orderId}`
-      const orderDateStr = localStorage.getItem(orderDateKey)
-      if (!orderDateStr) return false
-      const orderDate = new Date(orderDateStr)
-      orderDate.setHours(0, 0, 0, 0)
-      return orderDate >= startOfWeek && orderDate <= now
+
+    return walletState.transactions.filter(t => {
+      // Count payment transactions (completed orders)
+      if (t.type !== 'payment' || t.status !== 'Completed') return false
+      const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+      if (!transactionDate) return false
+      return transactionDate >= startOfWeek && transactionDate <= now
     }).length
   }
 
-  const weeklyTrips = calculateWeeklyTrips()
+  const weeklyOrders = calculateWeeklyOrders()
 
-  // Earnings Guarantee data - using same values as DeliveryHome
-  const earningsGuaranteeTarget = 180
-  const earningsGuaranteeOrdersTarget = 4
-  const earningsGuaranteeCurrentOrders = 1 // 1 of 4
-  const earningsGuaranteeCurrentEarnings = 76.62 // ₹76.62
-  const ordersProgress = 0.25 // 1/4 = 25%
-  const earningsProgress = 0.426 // 76.62/180 ≈ 42.6%
+  // Earnings Guarantee - Calculate from real data (no default values)
+  // Current values come from real wallet transactions
+  // If no transactions, show 0 for everything (no defaults)
+  const hasTransactions = walletState?.transactions && walletState.transactions.length > 0
+  const earningsGuaranteeTarget = hasTransactions ? 180 : 0 // Only show target if there's data
+  const earningsGuaranteeOrdersTarget = hasTransactions ? 4 : 0 // Only show target if there's data
+  const earningsGuaranteeCurrentOrders = weeklyOrders
+  const earningsGuaranteeCurrentEarnings = weeklyEarnings
+  const ordersProgress = earningsGuaranteeOrdersTarget > 0 
+    ? Math.min(earningsGuaranteeCurrentOrders / earningsGuaranteeOrdersTarget, 1) 
+    : 0
+  const earningsProgress = earningsGuaranteeTarget > 0 
+    ? Math.min(earningsGuaranteeCurrentEarnings / earningsGuaranteeTarget, 1) 
+    : 0
+
+  // Get week end date for valid till
+  const getWeekEndDate = () => {
+    const now = new Date()
+    const endOfWeek = new Date(now)
+    endOfWeek.setDate(now.getDate() - now.getDay() + 6) // End of week (Saturday)
+    const day = endOfWeek.getDate()
+    const month = endOfWeek.toLocaleString('en-US', { month: 'short' })
+    return `${day} ${month}`
+  }
+
+  const weekEndDate = getWeekEndDate()
 
   // Pocket balance and cash limit - using balances from walletState
   // Pocket balance = total balance minus cash in hand
   // If negative, it means the delivery person owes money (cash taken exceeds earnings)
   // If cashInHand > totalBalance, pocket balance is negative
   const pocketBalance = (balances.totalBalance || 0) - (balances.cashInHand || 0)
+  // Available cash limit = cash in hand (real data from wallet)
   const availableCashLimit = balances.cashInHand || 0
   const depositAmount = pocketBalance < 0 ? Math.abs(pocketBalance) : 0
 
@@ -140,10 +213,11 @@ export default function PocketPage() {
     return walletState.transactions
       ?.filter(t => {
         if (t.type !== 'withdrawal' || t.status !== 'Completed') return false
-        const transactionDate = new Date(t.date)
+        const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+        if (!transactionDate) return false
         return transactionDate >= lastWeekStart && transactionDate <= lastWeekEnd
       })
-      .reduce((sum, t) => sum + (t.amount || 0), 0) || 10
+      .reduce((sum, t) => sum + (t.amount || 0), 0) || 0
   }
 
   const payoutAmount = calculatePayoutAmount()
@@ -167,24 +241,30 @@ export default function PocketPage() {
 
   const payoutPeriod = getPayoutPeriod()
 
-  // Listen for wallet state updates
+  // Fetch wallet data from API
   useEffect(() => {
-    const handleWalletUpdate = () => {
-      setWalletState(getDeliveryWalletState())
+    const fetchWalletData = async () => {
+      try {
+        setWalletLoading(true)
+        const walletData = await fetchDeliveryWallet()
+        setWalletState(walletData)
+      } catch (error) {
+        console.error('Error fetching wallet data:', error)
+        // Keep empty state on error
+        setWalletState({
+          totalBalance: 0,
+          cashInHand: 0,
+          totalWithdrawn: 0,
+          totalEarned: 0,
+          transactions: [],
+          joiningBonusClaimed: false
+        })
+      } finally {
+        setWalletLoading(false)
+      }
     }
 
-    // Check on mount
-    handleWalletUpdate()
-
-    // Listen for custom event (for same tab updates)
-    window.addEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
-    // Listen for storage event (for cross-tab updates)
-    window.addEventListener('storage', handleWalletUpdate)
-
-    return () => {
-      window.removeEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
-      window.removeEventListener('storage', handleWalletUpdate)
-    }
+    fetchWalletData()
   }, [location.pathname])
 
   useEffect(() => {
@@ -235,6 +315,14 @@ export default function PocketPage() {
 
   // Auto-rotate carousel
   useEffect(() => {
+    // Reset to first slide if current slide is out of bounds
+    setCurrentCarouselSlide((prev) => {
+      if (prev >= carouselSlides.length) {
+        return 0
+      }
+      return prev
+    })
+    
     carouselAutoRotateRef.current = setInterval(() => {
       setCurrentCarouselSlide((prev) => (prev + 1) % carouselSlides.length)
     }, 3000)
@@ -243,7 +331,7 @@ export default function PocketPage() {
         clearInterval(carouselAutoRotateRef.current)
       }
     }
-  }, [carouselSlides.length])
+  }, [carouselSlides])
 
   // Reset auto-rotate timer after manual swipe
   const resetCarouselAutoRotate = () => {
@@ -366,19 +454,6 @@ export default function PocketPage() {
     return `${formatDate(startOfWeek)} - ${formatDate(endOfWeek)}`
   }
 
-  // Get end of current week for validity date
-  const getWeekEndDate = () => {
-    const now = new Date()
-    const dayOfWeek = now.getDay()
-    const startOfWeek = new Date(now)
-    startOfWeek.setDate(now.getDate() - dayOfWeek)
-    const endOfWeek = new Date(startOfWeek)
-    endOfWeek.setDate(startOfWeek.getDate() + 6)
-
-    const day = endOfWeek.getDate()
-    const month = endOfWeek.toLocaleString('en-US', { month: 'short' })
-    return `${day} ${month}`
-  }
 
   return (
     <div className="min-h-screen bg-[#f6e9dc]  overflow-x-hidden">
@@ -441,7 +516,13 @@ export default function PocketPage() {
                 </div>
 
                 {/* Button */}
-                <button className={`px-3 py-1.5 rounded-lg font-medium text-xs transition-colors ${slide.bgColor === "bg-gray-700"
+                <button 
+                  onClick={() => {
+                    if (slide.id === 2) {
+                      navigate("/delivery/profile/details")
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-medium text-xs transition-colors ${slide.bgColor === "bg-gray-700"
                     ? "bg-gray-600 text-white hover:bg-gray-500"
                     : "bg-yellow-300 text-black hover:bg-yellow-200"
                   }`}>
@@ -501,7 +582,7 @@ export default function PocketPage() {
               <div className="flex-1">
                 <h2 className="text-lg font-bold text-white mb-1">Earnings Guarantee</h2>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-white">Valid till {getWeekEndDate()}</span>
+                  <span className="text-sm text-white">Valid till {weekEndDate}</span>
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <span className="text-sm text-green-600 font-medium">Live</span>
@@ -510,7 +591,7 @@ export default function PocketPage() {
               </div>
               {/* Summary Box */}
               <div className="bg-black text-white px-4 py-3 rounded-lg text-center min-w-[80px]">
-                <div className="text-2xl font-bold">₹{earningsGuaranteeTarget}</div>
+                <div className="text-2xl font-bold">₹{earningsGuaranteeTarget.toFixed(0)}</div>
                 <div className="text-xs text-white/80 mt-1">{earningsGuaranteeOrdersTarget} orders</div>
               </div>
             </div>
@@ -634,7 +715,7 @@ export default function PocketPage() {
               <div onClick={()=> setShowCashLimitPopup(true)} className="flex items-center justify-between">
                 <span className="text-black text-sm">Available cash limit</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-black text-sm font-medium">₹ 750</span>
+                  <span className="text-black text-sm font-medium">₹{availableCashLimit.toFixed(2)}</span>
                   <ArrowRight className="w-4 h-4 text-gray-600" />
                 </div>
               </div>
