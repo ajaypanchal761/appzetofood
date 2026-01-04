@@ -14,137 +14,7 @@ import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
 import AddToCartAnimation from "../components/AddToCartAnimation"
 import OptimizedImage from "@/components/OptimizedImage"
 import api from "@/lib/api"
-
-const under250Restaurants = [
-  {
-    id: 1,
-    name: "Cafe Mocha",
-    rating: 4.4,
-    deliveryTime: "12-15 mins",
-    distance: "0.4 km",
-    cuisine: "Cafe • Continental",
-    price: "₹120 for two",
-    image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&h=600&fit=crop",
-    menuItems: [
-      {
-        id: 1,
-        name: "Butter Khichdi",
-        price: 224.16,
-        image: "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: true,
-      },
-      {
-        id: 2,
-        name: "Pav Bhaji",
-        price: 200.16,
-        image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: true,
-      },
-      {
-        id: 3,
-        name: "Masala Dosa",
-        price: 180.50,
-        image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: false,
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: "Street Food Corner",
-    rating: 4.2,
-    deliveryTime: "10-12 mins",
-    distance: "0.6 km",
-    cuisine: "Street Food • Indian",
-    price: "₹80 for two",
-    image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&h=600&fit=crop",
-    menuItems: [
-      {
-        id: 4,
-        name: "Samosa Chaat",
-        price: 120.00,
-        image: "https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: true,
-      },
-      {
-        id: 5,
-        name: "Aloo Tikki",
-        price: 95.50,
-        image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: false,
-      },
-      {
-        id: 6,
-        name: "Chole Bhature",
-        price: 150.00,
-        image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: true,
-      },
-    ],
-  },
-  {
-    id: 3,
-    name: "Quick Bites",
-    rating: 4.3,
-    deliveryTime: "15-18 mins",
-    distance: "1.2 km",
-    cuisine: "Fast Food • Snacks",
-    price: "₹150 for two",
-    image: "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&h=600&fit=crop",
-    menuItems: [
-      {
-        id: 7,
-        name: "French Fries",
-        price: 99.00,
-        image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: true,
-      },
-      {
-        id: 8,
-        name: "Burger",
-        price: 180.00,
-        image: "https://images.unsplash.com/photo-1550547660-d9450f859349?w=400&h=400&fit=crop",
-        isVeg: false,
-        bestPrice: false,
-      },
-    ],
-  },
-  {
-    id: 4,
-    name: "Local Delights",
-    rating: 4.1,
-    deliveryTime: "18-20 mins",
-    distance: "1.5 km",
-    cuisine: "North Indian • Vegetarian",
-    price: "₹200 for two",
-    image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800&h=600&fit=crop",
-    menuItems: [
-      {
-        id: 9,
-        name: "Dal Makhani",
-        price: 220.00,
-        image: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: true,
-      },
-      {
-        id: 10,
-        name: "Paneer Butter Masala",
-        price: 240.00,
-        image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=400&fit=crop",
-        isVeg: true,
-        bestPrice: true,
-      },
-    ],
-  },
-]
+import { restaurantAPI } from "@/lib/api"
 
 export default function Under250() {
   const { location } = useLocation()
@@ -164,6 +34,8 @@ export default function Under250() {
   const [loadingCategories, setLoadingCategories] = useState(true)
   const [bannerImage, setBannerImage] = useState(null)
   const [loadingBanner, setLoadingBanner] = useState(true)
+  const [under250Restaurants, setUnder250Restaurants] = useState([])
+  const [loadingRestaurants, setLoadingRestaurants] = useState(true)
 
   const sortOptions = [
     { id: null, label: 'Relevance' },
@@ -178,8 +50,83 @@ export default function Under250() {
 
   const handleApply = () => {
     setShowSortPopup(false)
-    // Apply sorting logic here if needed
   }
+
+  // Helper function to parse delivery time (e.g., "12-15 mins" -> 12 or average)
+  const parseDeliveryTime = (deliveryTime) => {
+    if (!deliveryTime) return 999 // Default high value for sorting
+    const match = deliveryTime.match(/(\d+)/)
+    if (match) {
+      return parseInt(match[1])
+    }
+    // Try to find range (e.g., "12-15 mins")
+    const rangeMatch = deliveryTime.match(/(\d+)\s*-\s*(\d+)/)
+    if (rangeMatch) {
+      return (parseInt(rangeMatch[1]) + parseInt(rangeMatch[2])) / 2 // Average
+    }
+    return 999
+  }
+
+  // Helper function to parse distance (e.g., "0.4 km" -> 0.4)
+  const parseDistance = (distance) => {
+    if (!distance) return 999 // Default high value for sorting
+    const match = distance.match(/(\d+\.?\d*)/)
+    if (match) {
+      return parseFloat(match[1])
+    }
+    return 999
+  }
+
+  // Sort and filter restaurants based on selected sort and filters
+  const sortedAndFilteredRestaurants = useMemo(() => {
+    let filtered = [...under250Restaurants]
+
+    // Apply "Under 30 mins" filter
+    if (under30MinsFilter) {
+      filtered = filtered.filter(restaurant => {
+        const deliveryTime = parseDeliveryTime(restaurant.deliveryTime)
+        return deliveryTime <= 30
+      })
+    }
+
+    // Apply sorting
+    if (selectedSort === 'rating-high') {
+      filtered.sort((a, b) => {
+        const ratingA = a.rating || 0
+        const ratingB = b.rating || 0
+        if (ratingB !== ratingA) {
+          return ratingB - ratingA
+        }
+        // Secondary sort by number of dishes
+        return (b.menuItems?.length || 0) - (a.menuItems?.length || 0)
+      })
+    } else if (selectedSort === 'delivery-time-low') {
+      filtered.sort((a, b) => {
+        const timeA = parseDeliveryTime(a.deliveryTime)
+        const timeB = parseDeliveryTime(b.deliveryTime)
+        if (timeA !== timeB) {
+          return timeA - timeB
+        }
+        // Secondary sort by rating
+        return (b.rating || 0) - (a.rating || 0)
+      })
+    } else if (selectedSort === 'distance-low') {
+      filtered.sort((a, b) => {
+        const distA = parseDistance(a.distance)
+        const distB = parseDistance(b.distance)
+        if (distA !== distB) {
+          return distA - distB
+        }
+        // Secondary sort by rating
+        return (b.rating || 0) - (a.rating || 0)
+      })
+    } else {
+      // Default: Relevance (keep original order from backend - already sorted by rating)
+      // No additional sorting needed
+    }
+
+    return filtered
+  }, [under250Restaurants, selectedSort, under30MinsFilter])
 
   // Fetch under 250 banners from API
   useEffect(() => {
@@ -202,6 +149,28 @@ export default function Under250() {
     }
 
     fetchBanners()
+  }, [])
+
+  // Fetch restaurants with dishes under ₹250 from backend
+  useEffect(() => {
+    const fetchRestaurantsUnder250 = async () => {
+      try {
+        setLoadingRestaurants(true)
+        const response = await restaurantAPI.getRestaurantsUnder250()
+        if (response.data.success && response.data.data.restaurants) {
+          setUnder250Restaurants(response.data.data.restaurants)
+        } else {
+          setUnder250Restaurants([])
+        }
+      } catch (error) {
+        console.error('Error fetching restaurants under 250:', error)
+        setUnder250Restaurants([])
+      } finally {
+        setLoadingRestaurants(false)
+      }
+    }
+
+    fetchRestaurantsUnder250()
   }, [])
 
   // Fetch categories from admin API
@@ -515,8 +484,21 @@ export default function Under250() {
 
 
         {/* Restaurant Menu Sections */}
-        {under250Restaurants.map((restaurant) => {
-          const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+        {loadingRestaurants ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="text-gray-500 dark:text-gray-400">Loading restaurants...</div>
+          </div>
+        ) : sortedAndFilteredRestaurants.length === 0 ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="text-gray-500 dark:text-gray-400">
+              {under250Restaurants.length === 0 
+                ? "No restaurants with dishes under ₹250 found."
+                : "No restaurants match the selected filters."}
+            </div>
+          </div>
+        ) : (
+          sortedAndFilteredRestaurants.map((restaurant) => {
+          const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
           return (
             <section key={restaurant.id} className="pt-4 sm:pt-6 md:pt-8 lg:pt-10">
               {/* Restaurant Header */}
@@ -537,7 +519,9 @@ export default function Under250() {
                     </div>
                     <span className="text-xs md:text-sm lg:text-base font-bold">{restaurant.rating}</span>
                   </div>
-                  <span className="text-xs md:text-sm lg:text-base text-gray-400 dark:text-gray-500 mt-0.5">By 24K+</span>
+                  <span className="text-xs md:text-sm lg:text-base text-gray-400 dark:text-gray-500 mt-0.5">
+                    {restaurant.totalRatings > 0 ? `By ${restaurant.totalRatings >= 1000 ? `${(restaurant.totalRatings / 1000).toFixed(1)}K+` : `${restaurant.totalRatings}+`}` : ''}
+                  </span>
                 </div>
               </div>
 
@@ -655,7 +639,7 @@ export default function Under250() {
                   </div>
 
                   {/* View Full Menu Button */}
-                  <Link className="flex justify-center mt-2 md:mt-3 lg:mt-4" to={`/user/restaurants/${restaurantSlug}`}>
+                  <Link className="flex justify-center mt-2 md:mt-3 lg:mt-4" to={`/user/restaurants/${restaurantSlug}?under250=true`}>
                     <Button
                       variant="outline"
                       className="w-min align-center text-center rounded-lg md:rounded-xl mx-auto bg-gray-50 dark:bg-[#1a1a1a] hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white text-gray-700 border-gray-200 dark:border-gray-800 h-9 md:h-10 lg:h-11 px-4 md:px-6 lg:px-8 text-sm md:text-base lg:text-lg"
@@ -667,7 +651,7 @@ export default function Under250() {
               )}
             </section>
           )
-        })}
+        }))}
       </div>
 
       {/* Sort Popup - Bottom Sheet */}

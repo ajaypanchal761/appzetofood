@@ -104,10 +104,11 @@ import AdminLogin from "@/module/admin/pages/auth/AdminLogin"
 import AdminSignup from "@/module/admin/pages/auth/AdminSignup"
 import AdminForgotPassword from "@/module/admin/pages/auth/AdminForgotPassword"
 import DeliveryRouter from "@/module/delivery/components/DeliveryRouter"
-import DeliveryLogin from "@/module/delivery/pages/auth/Login"
 import DeliverySignIn from "@/module/delivery/pages/auth/SignIn"
 import DeliverySignup from "@/module/delivery/pages/auth/Signup"
 import DeliveryOTP from "@/module/delivery/pages/auth/OTP"
+import DeliverySignupStep1 from "@/module/delivery/pages/auth/SignupStep1"
+import DeliverySignupStep2 from "@/module/delivery/pages/auth/SignupStep2"
 import DeliveryWelcome from "@/module/delivery/pages/auth/Welcome"
 
 function UserPathRedirect() {
@@ -788,17 +789,34 @@ export default function App() {
       />
 
       {/* Delivery Public Routes */}
-      <Route path="/delivery/login" element={<AuthRedirect module="delivery"><DeliveryLogin /></AuthRedirect>} />
-      <Route path="/delivery/sign-in" element={<AuthRedirect module="delivery"><DeliverySignIn /></AuthRedirect>} />
-      <Route path="/delivery/signup" element={<AuthRedirect module="delivery"><DeliverySignup /></AuthRedirect>} />
-      <Route path="/delivery/otp" element={<AuthRedirect module="delivery"><DeliveryOTP /></AuthRedirect>} />
+      <Route path="/delivery/sign-in" element={<DeliverySignIn />} />
+      <Route path="/delivery/signup" element={<DeliverySignup />} />
+      <Route path="/delivery/otp" element={<DeliveryOTP />} />
       <Route path="/delivery/welcome" element={<AuthRedirect module="delivery"><DeliveryWelcome /></AuthRedirect>} />
+      
+      {/* Delivery Signup Routes (Protected - require authentication) */}
+      <Route 
+        path="/delivery/signup/details" 
+        element={
+          <ProtectedRoute requiredRole="delivery" loginPath="/delivery/sign-in">
+            <DeliverySignupStep1 />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/delivery/signup/documents" 
+        element={
+          <ProtectedRoute requiredRole="delivery" loginPath="/delivery/sign-in">
+            <DeliverySignupStep2 />
+          </ProtectedRoute>
+        } 
+      />
 
       {/* Delivery Protected Routes */}
       <Route 
         path="/delivery/*" 
         element={
-          <ProtectedRoute requiredRole="delivery" loginPath="/delivery/login">
+          <ProtectedRoute requiredRole="delivery" loginPath="/delivery/sign-in">
             <DeliveryRouter />
           </ProtectedRoute>
         } 

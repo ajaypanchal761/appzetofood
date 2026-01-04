@@ -26,7 +26,7 @@ export default function ProtectedRoute({ children, requiredRole, loginPath }) {
     const roleLoginPaths = {
       'admin': '/admin/login',
       'restaurant': '/restaurant/login',
-      'delivery': '/delivery/login',
+      'delivery': '/delivery/sign-in',
       'user': '/user/auth/sign-in'
     };
     

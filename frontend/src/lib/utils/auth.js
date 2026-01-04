@@ -175,19 +175,55 @@ export function setAuthData(module, token, user) {
       throw new Error('localStorage is not available');
     }
 
+    // Validate inputs
+    if (!module || !token) {
+      throw new Error(`Invalid parameters: module=${module}, token=${!!token}`);
+    }
+
+    console.log(`[setAuthData] Storing auth for module: ${module}`, {
+      hasToken: !!token,
+      tokenLength: token?.length,
+      hasUser: !!user
+    });
+
     // Store module-specific token (don't clear other modules)
-    localStorage.setItem(`${module}_accessToken`, token);
-    localStorage.setItem(`${module}_authenticated`, 'true');
+    const tokenKey = `${module}_accessToken`;
+    const authKey = `${module}_authenticated`;
+    const userKey = `${module}_user`;
+
+    localStorage.setItem(tokenKey, token);
+    localStorage.setItem(authKey, 'true');
     
     if (user) {
-      localStorage.setItem(`${module}_user`, JSON.stringify(user));
+      try {
+        localStorage.setItem(userKey, JSON.stringify(user));
+      } catch (userError) {
+        console.warn('Failed to store user data, but token was stored:', userError);
+        // Don't throw - token storage is more important
+      }
     }
 
     // Verify the token was stored correctly
-    const storedToken = localStorage.getItem(`${module}_accessToken`);
+    const storedToken = localStorage.getItem(tokenKey);
+    const storedAuth = localStorage.getItem(authKey);
+    
     if (storedToken !== token) {
+      console.error(`[setAuthData] Token mismatch:`, {
+        expected: token?.substring(0, 20) + '...',
+        stored: storedToken?.substring(0, 20) + '...'
+      });
       throw new Error(`Token storage verification failed for module: ${module}`);
     }
+
+    if (storedAuth !== 'true') {
+      console.error(`[setAuthData] Auth flag mismatch:`, {
+        expected: 'true',
+        stored: storedAuth
+      });
+      throw new Error(`Authentication flag storage failed for module: ${module}`);
+    }
+
+    console.log(`[setAuthData] Successfully stored auth data for ${module}`);
   } catch (error) {
     // If quota exceeded, try to clear some space
     if (error.name === 'QuotaExceededError' || error.code === 22) {
@@ -202,12 +238,18 @@ export function setAuthData(module, token, user) {
         if (user) {
           localStorage.setItem(`${module}_user`, JSON.stringify(user));
         }
+        
+        // Verify again after retry
+        const storedToken = localStorage.getItem(`${module}_accessToken`);
+        if (storedToken !== token) {
+          throw new Error('Token storage failed even after clearing space');
+        }
       } catch (retryError) {
         console.error('Failed to store auth data after clearing space:', retryError);
         throw new Error('Unable to store authentication data. Please clear browser storage and try again.');
       }
     } else {
-      console.error('Error storing auth data:', error);
+      console.error('[setAuthData] Error storing auth data:', error);
       throw error;
     }
   }

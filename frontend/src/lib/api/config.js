@@ -89,11 +89,27 @@ export const API_ENDPOINTS = {
     WALLET: '/restaurant/wallet',
     ANALYTICS: '/restaurant/analytics',
     LIST: '/restaurant/list',
+    UNDER_250: '/restaurant/under-250',
     BY_ID: '/restaurant/:id',
     BY_OWNER: '/restaurant/owner/me',
   },
   // Delivery endpoints
   DELIVERY: {
+    AUTH: {
+      SEND_OTP: '/delivery/auth/send-otp',
+      VERIFY_OTP: '/delivery/auth/verify-otp',
+      REFRESH_TOKEN: '/delivery/auth/refresh-token',
+      LOGOUT: '/delivery/auth/logout',
+      ME: '/delivery/auth/me',
+    },
+    SIGNUP: {
+      DETAILS: '/delivery/signup/details',
+      DOCUMENTS: '/delivery/signup/documents',
+    },
+    DASHBOARD: '/delivery/dashboard',
+    WALLET: '/delivery/wallet',
+    CLAIM_JOINING_BONUS: '/delivery/wallet/claim-joining-bonus',
+    ORDER_STATS: '/delivery/orders/stats',
     PROFILE: '/delivery/profile',
     ORDERS: '/delivery/orders',
     EARNINGS: '/delivery/earnings',

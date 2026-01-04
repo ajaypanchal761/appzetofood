@@ -1,4 +1,7 @@
 import { useNavigate, useLocation } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { User } from "lucide-react"
+import { deliveryAPI } from "@/lib/api"
 
 // Heroicons Outline
 import {
@@ -17,6 +20,8 @@ import {
 export default function BottomNavigation() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [profileImage, setProfileImage] = useState(null)
+  const [imageError, setImageError] = useState(false)
 
   const isActive = (path) => {
     if (path === "/delivery") return location.pathname === "/delivery"
@@ -35,6 +40,38 @@ export default function BottomNavigation() {
       {label}
     </span>
   )
+
+  // Fetch profile image
+  useEffect(() => {
+    const fetchProfileImage = async () => {
+      try {
+        const response = await deliveryAPI.getProfile()
+        if (response?.data?.success && response?.data?.data?.profile) {
+          const profile = response.data.data.profile
+          // Use profileImage.url first, fallback to documents.photo
+          const imageUrl = profile.profileImage?.url || profile.documents?.photo
+          if (imageUrl) {
+            setProfileImage(imageUrl)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching profile image for navigation:", error)
+      }
+    }
+
+    fetchProfileImage()
+
+    // Listen for profile refresh events
+    const handleProfileRefresh = () => {
+      fetchProfileImage()
+    }
+
+    window.addEventListener('deliveryProfileRefresh', handleProfileRefresh)
+    
+    return () => {
+      window.removeEventListener('deliveryProfileRefresh', handleProfileRefresh)
+    }
+  }, [])
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
@@ -72,13 +109,24 @@ export default function BottomNavigation() {
           onClick={() => navigate("/delivery/profile")}
           className="flex flex-col items-center gap-1 p-2"
         >
-          <img
-              src="https://i.pravatar.cc/80?img=12"
+          {profileImage && !imageError ? (
+            <img
+              src={profileImage}
               alt="Profile"
-            className={`w-7 h-7 rounded-full border-2 ${
+              className={`w-7 h-7 rounded-full border-2 object-cover ${
+                isActive("/delivery/profile") ? "border-black" : "border-gray-300"
+              }`}
+              onError={() => {
+                setImageError(true)
+              }}
+            />
+          ) : (
+            <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center bg-gray-200 ${
               isActive("/delivery/profile") ? "border-black" : "border-gray-300"
-            }`}
-          />
+            }`}>
+              <User className="w-4 h-4 text-gray-500" />
+            </div>
+          )}
           {TabLabel(isActive("/delivery/profile"), "Profile")}
         </button>
       </div>

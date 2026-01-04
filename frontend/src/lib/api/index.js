@@ -382,6 +382,11 @@ export const restaurantAPI = {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.LIST, { params });
   },
 
+  // Get restaurants with dishes under ₹250
+  getRestaurantsUnder250: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.UNDER_250);
+  },
+
   // Get restaurant by ID or slug
   getRestaurantById: (id) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.BY_ID.replace(':id', id));
@@ -464,6 +469,42 @@ export const restaurantAPI = {
 
 // Export delivery API helper functions
 export const deliveryAPI = {
+  // Delivery Authentication
+  sendOTP: (phone, purpose = 'login') => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.AUTH.SEND_OTP, { phone, purpose });
+  },
+  verifyOTP: (phone, otp, purpose = 'login', name = null) => {
+    const payload = { phone, otp, purpose };
+    // Only include name if it's provided and is a string
+    if (name && typeof name === 'string' && name.trim()) {
+      payload.name = name.trim();
+    }
+    return apiClient.post(API_ENDPOINTS.DELIVERY.AUTH.VERIFY_OTP, payload);
+  },
+  refreshToken: () => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.AUTH.REFRESH_TOKEN);
+  },
+  logout: () => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.AUTH.LOGOUT);
+  },
+  getCurrentDelivery: () => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.AUTH.ME);
+  },
+
+  // Dashboard
+  getDashboard: () => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.DASHBOARD);
+  },
+  getWalletBalance: () => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.WALLET);
+  },
+  claimJoiningBonus: () => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.CLAIM_JOINING_BONUS);
+  },
+  getOrderStats: (period = 'all') => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.ORDER_STATS, { params: { period } });
+  },
+
   // Get delivery profile
   getProfile: () => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.PROFILE);
@@ -490,6 +531,14 @@ export const deliveryAPI = {
       latitude,
       longitude,
     });
+  },
+
+  // Signup
+  submitSignupDetails: (data) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.SIGNUP.DETAILS, data);
+  },
+  submitSignupDocuments: (data) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.SIGNUP.DOCUMENTS, data);
   },
 };
 

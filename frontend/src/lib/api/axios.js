@@ -336,7 +336,7 @@ apiClient.interceptors.response.use(
             localStorage.removeItem('delivery_accessToken');
             localStorage.removeItem('delivery_authenticated');
             localStorage.removeItem('delivery_user');
-            window.location.href = '/delivery/login';
+            window.location.href = '/delivery/sign-in';
           } else {
             // User module includes /restaurants/* paths
             localStorage.removeItem('user_accessToken');

@@ -22,6 +22,9 @@ import {
   LogOut
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
+import { deliveryAPI } from "@/lib/api"
+import { toast } from "sonner"
+import { clearModuleAuth } from "@/lib/utils/auth"
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -30,6 +33,8 @@ export default function ProfilePage() {
   const profileRef = useRef(null)
   const navButtonsRef = useRef(null)
   const sectionsRef = useRef(null)
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     // Initialize Lenis for smooth scrolling
@@ -96,10 +101,50 @@ export default function ProfilePage() {
     }
   }, [location.pathname, animationKey])
 
+  // Fetch profile data
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        setLoading(true)
+        const response = await deliveryAPI.getProfile()
+        if (response?.data?.success && response?.data?.data?.profile) {
+          const profileData = response.data.data.profile
+          setProfile(profileData)
+          // Debug: Log profile image data
+          console.log("Profile image data:", {
+            profileImage: profileData.profileImage,
+            documentsPhoto: profileData.documents?.photo,
+            hasProfileImage: !!profileData.profileImage?.url,
+            hasDocumentsPhoto: !!profileData.documents?.photo
+          })
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error)
+        toast.error("Failed to load profile data")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProfile()
+  }, [])
+
   // Listen for refresh events from bottom navigation
   useEffect(() => {
     const handleProfileRefresh = () => {
       setAnimationKey(prev => prev + 1)
+      // Refetch profile data
+      const fetchProfile = async () => {
+        try {
+          const response = await deliveryAPI.getProfile()
+          if (response?.data?.success && response?.data?.data?.profile) {
+            setProfile(response.data.data.profile)
+          }
+        } catch (error) {
+          console.error("Error fetching profile:", error)
+        }
+      }
+      fetchProfile()
     }
 
     window.addEventListener('deliveryProfileRefresh', handleProfileRefresh)
@@ -109,24 +154,51 @@ export default function ProfilePage() {
     }
   }, [])
 
-  const handleLogout = () => {
-    if (window.confirm("Are you sure you want to logout?")) {
-      // Clear authentication state
-      localStorage.removeItem("delivery_authenticated")
-      localStorage.removeItem("delivery_user")
-      
-      // Clear gig store data
-      localStorage.removeItem("delivery_gig_storage")
-      
-      // Clear delivery module storage
-      localStorage.removeItem("delivery_module_storage")
-      
-      // Dispatch custom event for same-tab updates
-      window.dispatchEvent(new Event('deliveryAuthChanged'))
-      
-      // Redirect to login
-      navigate("/delivery/login", { replace: true })
+  const handleLogout = async () => {
+    if (!window.confirm("Are you sure you want to logout?")) {
+      return
     }
+
+    try {
+      // Call logout API to clear refresh token on server
+      await deliveryAPI.logout()
+    } catch (error) {
+      console.error("Logout API error (continuing with local cleanup):", error)
+      // Continue with local cleanup even if API call fails
+    }
+
+    // Use utility function to clear module auth
+    clearModuleAuth("delivery")
+    
+    // Clear all delivery-related data
+    localStorage.removeItem("delivery_gig_storage")
+    localStorage.removeItem("delivery_module_storage")
+    localStorage.removeItem("app:isOnline")
+    
+    // Clear sessionStorage
+    sessionStorage.removeItem("deliveryAuthData")
+    
+    // Clear any other delivery-related data
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith("delivery_")) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+    
+    // Dispatch custom events for same-tab updates
+    window.dispatchEvent(new Event('deliveryAuthChanged'))
+    window.dispatchEvent(new Event('onlineStatusChanged'))
+    
+    toast.success("Logged out successfully")
+    
+    // Small delay to ensure cleanup completes
+    setTimeout(() => {
+      // Redirect to sign-in
+      navigate("/delivery/sign-in", { replace: true })
+    }, 100)
   }
 
   return (
@@ -150,17 +222,49 @@ export default function ProfilePage() {
             >
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <h2 className="text-2xl md:text-3xl font-bold">Manish Kumar Yadav</h2>
+                  <h2 className="text-2xl md:text-3xl font-bold">
+                    {loading ? "Loading..." : profile?.name || "Delivery Partner"}
+                  </h2>
                   <ChevronRight className="w-5 h-5" />
                 </div>
-                <p className="text-gray-600 text-sm md:text-base mb-3">FE2411651</p>
+                <p className="text-gray-600 text-sm md:text-base mb-3">
+                  {profile?.deliveryId || "N/A"}
+                </p>
               </div>
               <div className="relative shrink-0 ml-4">
-                <img 
-                  src="https://i.pravatar.cc/240?img=12"
-                  alt="Profile"
-                  className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover"
-                />
+                {profile?.profileImage?.url ? (
+                  <img 
+                    src={profile.profileImage.url}
+                    alt="Profile"
+                    className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2 border-gray-200"
+                    onError={(e) => {
+                      // Fallback to documents.photo if profileImage fails to load
+                      if (profile?.documents?.photo) {
+                        e.target.src = profile.documents.photo
+                      } else {
+                        // Show default icon if both fail
+                        e.target.style.display = 'none'
+                        e.target.nextElementSibling?.classList.remove('hidden')
+                      }
+                    }}
+                  />
+                ) : profile?.documents?.photo ? (
+                  <img 
+                    src={profile.documents.photo}
+                    alt="Profile"
+                    className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2 border-gray-200"
+                    onError={(e) => {
+                      // Show default icon if image fails to load
+                      e.target.style.display = 'none'
+                      e.target.nextElementSibling?.classList.remove('hidden')
+                    }}
+                  />
+                ) : null}
+                {(!profile?.profileImage?.url && !profile?.documents?.photo) && (
+                  <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-300 flex items-center justify-center border-2 border-gray-200">
+                    <User className="w-10 h-10 md:w-12 md:h-12 text-gray-500" />
+                  </div>
+                )}
                 <div className="absolute bottom-0 right-0 bg-white rounded-full p-2 border-2 border-white">
                   <Briefcase className="w-4 h-4" />
                 </div>
@@ -204,21 +308,6 @@ export default function ProfilePage() {
 
         {/* Sections */}
         <div ref={sectionsRef} className="space-y-4">
-          {/* Your fleet coach */}
-          <Card className="py-0 bg-white border-0 shadow-none">
-            <CardContent className="p-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-medium mb-1">Your fleet coach</h3>
-                <p className="text-gray-600 text-sm">Pavan Sharma</p>
-              </div>
-              <img 
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=60&h=60&fit=crop&crop=face"
-                alt="Fleet Coach"
-                className="w-12 h-12 rounded-full object-cover"
-              />
-            </CardContent>
-          </Card>
-
           {/* Referral bonus */}
           <Card 
             onClick={() => navigate("/delivery/refer-and-earn")}

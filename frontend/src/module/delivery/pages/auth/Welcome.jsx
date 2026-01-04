@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { CheckCircle2, Play, Pause, IndianRupee } from "lucide-react"
 import BottomPopup from "../../components/BottomPopup"
-import { isModuleAuthenticated } from "@/lib/utils/auth"
 
 export default function DeliveryWelcome() {
   const navigate = useNavigate()
@@ -147,19 +146,13 @@ export default function DeliveryWelcome() {
           </div>
 
           {/* Start Earning Button */}
-          <button
-            onClick={() => {
-              // Verify authentication before navigating
-              if (!isModuleAuthenticated("delivery")) {
-                // User not authenticated, redirect to login
-                navigate("/delivery/login", { replace: true })
-                return
-              }
-              
-              navigate("/delivery")
-            }}
-            className="w-full bg-[#00B761] hover:bg-[#00A055] text-white font-bold py-4 rounded-lg mt-4 flex items-center justify-center gap-2 transition-colors"
-          >
+           <button
+             onClick={() => {
+               // Navigate directly to delivery home page (map with hotspots)
+               navigate("/delivery", { replace: true })
+             }}
+             className="w-full bg-[#00B761] hover:bg-[#00A055] text-white font-bold py-4 rounded-lg mt-4 flex items-center justify-center gap-2 transition-colors"
+           >
             <span>Start earning</span>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

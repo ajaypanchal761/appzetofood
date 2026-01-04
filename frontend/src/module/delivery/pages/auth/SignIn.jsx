@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { authAPI } from "@/lib/api"
+import { deliveryAPI } from "@/lib/api"
 
 // Common country codes
 const countryCodes = [
@@ -86,7 +86,7 @@ export default function DeliverySignIn() {
       setIsSending(true)
 
       // Call backend to send OTP for delivery login
-      await authAPI.sendOTP(fullPhone, "login")
+      await deliveryAPI.sendOTP(fullPhone, "login")
 
       // Store auth data in sessionStorage for OTP page
       const authData = {
@@ -100,12 +100,13 @@ export default function DeliverySignIn() {
       // Navigate to OTP page
       navigate("/delivery/otp")
     } catch (err) {
+      console.error("Send OTP Error:", err)
       const message =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
+        err?.message ||
         "Failed to send OTP. Please try again."
       setError(message)
-    } finally {
       setIsSending(false)
     }
   }
@@ -134,7 +135,7 @@ export default function DeliverySignIn() {
       <div className="relative flex items-center justify-center py-4 px-4">
         
         <button
-          onClick={() => navigate("/delivery/login")}
+          onClick={() => navigate("/delivery/sign-in")}
           className="absolute left-4 top-1/2 -translate-y-1/2"
           aria-label="Go back"
         >
@@ -204,6 +205,8 @@ export default function DeliverySignIn() {
                 placeholder="Enter mobile number"
                 value={formData.phone}
                 onChange={handlePhoneChange}
+                autoComplete="off"
+                autoFocus={false}
                 className={`flex-1 h-12 px-4 text-gray-900 placeholder-gray-400 focus:outline-none text-base border rounded-lg min-w-0 ${
                   error ? "border-red-500" : "border-gray-300"
                 }`}

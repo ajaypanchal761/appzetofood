@@ -4,9 +4,8 @@ import { ArrowLeft, Loader2 } from "lucide-react"
 import AnimatedPage from "../../../user/components/AnimatedPage"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { authAPI } from "@/lib/api"
-import { getDefaultOTP, isTestPhoneNumber } from "@/lib/utils/otpUtils"
-import { setAuthData } from "@/lib/utils/auth"
+import { deliveryAPI } from "@/lib/api"
+import { setAuthData as storeAuthData } from "@/lib/utils/auth"
 
 export default function DeliveryOTP() {
   const navigate = useNavigate()
@@ -23,11 +22,28 @@ export default function DeliveryOTP() {
   const inputRefs = useRef([])
 
   useEffect(() => {
-    // Redirect to home if already authenticated (skip OTP if already logged in)
-    const isAuthenticated = localStorage.getItem("delivery_authenticated") === "true"
-    if (isAuthenticated) {
-      navigate("/delivery", { replace: true })
-      return
+    // Check if user is already fully authenticated (has token and it's valid)
+    // Only redirect if token exists and is valid - don't redirect during OTP flow
+    const token = localStorage.getItem("delivery_accessToken")
+    const authenticated = localStorage.getItem("delivery_authenticated") === "true"
+    
+    // Only redirect if both token and authenticated flag exist (user is fully logged in)
+    if (token && authenticated) {
+      // Check if token is not expired
+      try {
+        const parts = token.split('.')
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+          const now = Math.floor(Date.now() / 1000)
+          // If token is valid and not expired, redirect to home
+          if (payload.exp && payload.exp > now) {
+            navigate("/delivery", { replace: true })
+            return
+          }
+        }
+      } catch (e) {
+        // Token parsing failed, continue with OTP flow
+      }
     }
 
     // Get auth data from sessionStorage (delivery module key)
@@ -40,13 +56,8 @@ export default function DeliveryOTP() {
     const data = JSON.parse(stored)
     setAuthData(data)
 
-    // Auto-fill OTP for test phone numbers
-    if (data.phone && isTestPhoneNumber(data.phone)) {
-      const defaultOtp = getDefaultOTP(data.phone)
-      if (defaultOtp) {
-        setOtp(defaultOtp.split(""))
-      }
-    }
+    // OTP field should be empty - delivery boy needs to enter it manually
+    // No auto-fill for delivery OTP
 
     // Start resend timer (60 seconds)
     setResendTimer(60)
@@ -65,11 +76,14 @@ export default function DeliveryOTP() {
   }, [])
 
   useEffect(() => {
-    // Focus first input on mount
-    if (inputRefs.current[0]) {
-      inputRefs.current[0].focus()
+    // Don't auto-focus - let user manually enter OTP
+    // Focus first input only if all fields are empty (small delay to ensure inputs are rendered)
+    if (inputRefs.current[0] && otp.every(digit => digit === "")) {
+      setTimeout(() => {
+        inputRefs.current[0]?.focus()
+      }, 100)
     }
-  }, [])
+  }, [otp])
 
   const handleChange = (index, value) => {
     // Only allow digits
@@ -171,21 +185,44 @@ export default function DeliveryOTP() {
         return
       }
 
-      // First attempt: verify OTP for login with delivery role
-      const response = await authAPI.verifyOTP(phone, code, "login", null, null, "delivery")
+      // First attempt: verify OTP for login
+      const response = await deliveryAPI.verifyOTP(phone, code, "login")
       const data = response?.data?.data || {}
 
-      // If backend tells us this is a new user, ask for name
-      if (data.needsName) {
-        setShowNameInput(true)
-        setVerifiedOtp(code)
-        setOtp(["", "", "", "", "", ""])
-        setSuccess(false)
+      // Check if user needs to complete signup
+      if (data.needsSignup) {
+        // Store tokens for authenticated signup flow
+        const accessToken = data.accessToken
+        const user = data.user
+
+        if (!accessToken || !user) {
+          throw new Error("Invalid response from server")
+        }
+
+        // Store auth data using utility function
+        try {
+          console.log("Storing auth data for signup flow:", { hasToken: !!accessToken, hasUser: !!user })
+          storeAuthData("delivery", accessToken, user)
+          console.log("Auth data stored successfully for signup")
+        } catch (storageError) {
+          console.error("Failed to store authentication data:", storageError)
+          setError("Failed to save authentication. Please try again or clear your browser storage.")
+          setIsLoading(false)
+          return
+        }
+
+        // Dispatch custom event
+        window.dispatchEvent(new Event("deliveryAuthChanged"))
+
+        // Redirect to signup step 1 after token is stored
+        setTimeout(() => {
+          navigate("/delivery/signup/details", { replace: true })
+        }, 200)
         setIsLoading(false)
         return
       }
 
-      // Otherwise, OTP verified and user logged in
+      // Otherwise, OTP verified and user logged in (existing user with complete profile)
       const accessToken = data.accessToken
       const user = data.user
 
@@ -199,7 +236,9 @@ export default function DeliveryOTP() {
       // Store auth data using utility function to ensure proper role handling
       // The setAuthData function includes error handling and verification
       try {
-        setAuthData("delivery", accessToken, user)
+        console.log("Storing auth data for delivery:", { hasToken: !!accessToken, hasUser: !!user })
+        storeAuthData("delivery", accessToken, user)
+        console.log("Auth data stored successfully")
       } catch (storageError) {
         console.error("Failed to store authentication data:", storageError)
         setError("Failed to save authentication. Please try again or clear your browser storage.")
@@ -211,19 +250,43 @@ export default function DeliveryOTP() {
       window.dispatchEvent(new Event("deliveryAuthChanged"))
 
       setSuccess(true)
+      setIsLoading(false)
 
-      // Redirect to welcome page after short delay to ensure token is stored
-      setTimeout(() => {
-        navigate("/delivery/welcome")
-      }, 100)
+      // Verify token is stored and then navigate
+      let retryCount = 0
+      const maxRetries = 10
+      const verifyAndNavigate = () => {
+        const storedToken = localStorage.getItem("delivery_accessToken")
+        const storedAuth = localStorage.getItem("delivery_authenticated")
+        
+        console.log("Verifying token storage:", { hasToken: !!storedToken, authenticated: storedAuth, retryCount })
+        
+        if (storedToken && storedAuth === "true") {
+          // Token is stored, navigate to delivery home
+          console.log("Token verified, navigating to /delivery")
+          navigate("/delivery", { replace: true })
+        } else if (retryCount < maxRetries) {
+          // Token not stored yet, retry after short delay
+          retryCount++
+          setTimeout(verifyAndNavigate, 100)
+        } else {
+          // Max retries reached, show error
+          console.error("Token storage verification failed after max retries")
+          setError("Failed to save authentication. Please try again.")
+          setIsLoading(false)
+        }
+      }
+
+      // Start verification after a small delay
+      setTimeout(verifyAndNavigate, 200)
     } catch (err) {
+      console.error("OTP Verification Error:", err)
       const message =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message ||
         "Failed to verify OTP. Please try again."
       setError(message)
-    } finally {
       setIsLoading(false)
     }
   }
@@ -252,7 +315,7 @@ export default function DeliveryOTP() {
       }
 
       // Second call with name to auto-register and login
-      const response = await authAPI.verifyOTP(phone, verifiedOtp, "login", trimmedName, null, "delivery")
+      const response = await deliveryAPI.verifyOTP(phone, verifiedOtp, "login", trimmedName)
       const data = response?.data?.data || {}
 
       const accessToken = data.accessToken
@@ -268,7 +331,9 @@ export default function DeliveryOTP() {
       // Store auth data using utility function to ensure proper role handling
       // The setAuthData function includes error handling and verification
       try {
-        setAuthData("delivery", accessToken, user)
+        console.log("Storing auth data for delivery (with name):", { hasToken: !!accessToken, hasUser: !!user })
+        storeAuthData("delivery", accessToken, user)
+        console.log("Auth data stored successfully")
       } catch (storageError) {
         console.error("Failed to store authentication data:", storageError)
         setError("Failed to save authentication. Please try again or clear your browser storage.")
@@ -280,12 +345,37 @@ export default function DeliveryOTP() {
       window.dispatchEvent(new Event("deliveryAuthChanged"))
 
       setSuccess(true)
+      setIsLoading(false)
 
-      // Redirect to welcome page after short delay to ensure token is stored
-      setTimeout(() => {
-        navigate("/delivery/welcome")
-      }, 100)
+      // Verify token is stored and then navigate
+      let retryCount = 0
+      const maxRetries = 10
+      const verifyAndNavigate = () => {
+        const storedToken = localStorage.getItem("delivery_accessToken")
+        const storedAuth = localStorage.getItem("delivery_authenticated")
+        
+        console.log("Verifying token storage (with name):", { hasToken: !!storedToken, authenticated: storedAuth, retryCount })
+        
+        if (storedToken && storedAuth === "true") {
+          // Token is stored, navigate to delivery home
+          console.log("Token verified, navigating to /delivery")
+          navigate("/delivery", { replace: true })
+        } else if (retryCount < maxRetries) {
+          // Token not stored yet, retry after short delay
+          retryCount++
+          setTimeout(verifyAndNavigate, 100)
+        } else {
+          // Max retries reached, show error
+          console.error("Token storage verification failed after max retries")
+          setError("Failed to save authentication. Please try again.")
+          setIsLoading(false)
+        }
+      }
+
+      // Start verification after a small delay
+      setTimeout(verifyAndNavigate, 200)
     } catch (err) {
+      console.error("Name Submission Error:", err)
       const message =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
@@ -311,7 +401,7 @@ export default function DeliveryOTP() {
       }
 
       // Call backend to resend OTP
-      await authAPI.sendOTP(phone, "login")
+      await deliveryAPI.sendOTP(phone, "login")
     } catch (err) {
       const message =
         err?.response?.data?.message ||
@@ -417,6 +507,8 @@ export default function DeliveryOTP() {
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={index === 0 ? handlePaste : undefined}
                     disabled={isLoading}
+                    autoComplete="off"
+                    autoFocus={false}
                     className="w-12 h-12 text-center text-lg font-semibold p-0 border border-black rounded-md focus-visible:ring-0 focus-visible:border-black bg-white"
                   />
                 ))}

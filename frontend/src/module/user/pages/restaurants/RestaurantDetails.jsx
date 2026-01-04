@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { restaurantAPI } from "@/lib/api"
 import { Loader2 } from "lucide-react"
 import { 
@@ -2961,6 +2961,8 @@ const restaurantsData = {
 export default function RestaurantDetails() {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState(0)
@@ -3364,11 +3366,34 @@ export default function RestaurantDetails() {
     setShowItemDetail(true)
   }
 
+  // Helper function to calculate final price after discount
+  const getFinalPrice = (item) => {
+    // If discount exists, calculate from originalPrice, otherwise use price directly
+    if (item.originalPrice && item.discountAmount && item.discountAmount > 0) {
+      // Calculate discounted price from originalPrice
+      let discountedPrice = item.originalPrice;
+      if (item.discountType === 'Percent') {
+        discountedPrice = item.originalPrice - (item.originalPrice * item.discountAmount / 100);
+      } else if (item.discountType === 'Fixed') {
+        discountedPrice = item.originalPrice - item.discountAmount;
+      }
+      return Math.max(0, discountedPrice);
+    }
+    // Otherwise, use price as the final price
+    return Math.max(0, item.price || 0);
+  };
+
   // Filter menu items based on active filters
   const filterMenuItems = (items) => {
     if (!items) return items
 
     return items.filter((item) => {
+      // Under 250 filter (when coming from Under 250 page)
+      if (showOnlyUnder250) {
+        const finalPrice = getFinalPrice(item);
+        if (finalPrice > 250) return false;
+      }
+
       // Search filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim()
@@ -3403,11 +3428,55 @@ export default function RestaurantDetails() {
 
     const sorted = [...items]
     if (filters.sortBy === "low-to-high") {
-      return sorted.sort((a, b) => a.price - b.price)
+      return sorted.sort((a, b) => getFinalPrice(a) - getFinalPrice(b))
     } else if (filters.sortBy === "high-to-low") {
-      return sorted.sort((a, b) => b.price - a.price)
+      return sorted.sort((a, b) => getFinalPrice(b) - getFinalPrice(a))
     }
     return sorted
+  }
+
+  // Helper function to check if a section has any items under ₹250
+  const sectionHasItemsUnder250 = (section) => {
+    if (!showOnlyUnder250) return true; // If not filtering, show all sections
+
+    // Check direct items
+    if (section.items && section.items.length > 0) {
+      const hasUnder250Items = section.items.some(item => {
+        if (item.isAvailable === false) return false;
+        const finalPrice = getFinalPrice(item);
+        return finalPrice <= 250;
+      });
+      if (hasUnder250Items) return true;
+    }
+
+    // Check subsection items
+    if (section.subsections && section.subsections.length > 0) {
+      for (const subsection of section.subsections) {
+        if (subsection.items && subsection.items.length > 0) {
+          const hasUnder250Items = subsection.items.some(item => {
+            if (item.isAvailable === false) return false;
+            const finalPrice = getFinalPrice(item);
+            return finalPrice <= 250;
+          });
+          if (hasUnder250Items) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  // Filter sections to only show those with items under ₹250
+  // Returns array of { section, originalIndex } to preserve original index for expanded sections
+  const getFilteredSections = () => {
+    if (!restaurant?.menuSections) return [];
+    if (!showOnlyUnder250) {
+      return restaurant.menuSections.map((section, index) => ({ section, originalIndex: index }));
+    }
+    
+    return restaurant.menuSections
+      .map((section, index) => ({ section, originalIndex: index }))
+      .filter(({ section }) => sectionHasItemsUnder250(section));
   }
 
   // Highlight offers/texts for the blue offer line
@@ -3739,19 +3808,19 @@ export default function RestaurantDetails() {
         {/* Menu Items Section */}
         {restaurant?.menuSections && Array.isArray(restaurant.menuSections) && restaurant.menuSections.length > 0 && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 sm:py-8 md:py-10 lg:py-12 space-y-6 md:space-y-8 lg:space-y-10">
-            {restaurant.menuSections.map((section, sectionIndex) => {
+            {getFilteredSections().map(({ section, originalIndex }, sectionIndex) => {
               // Handle section name - check for valid non-empty string
               let sectionTitle = "Unnamed Section"
-              if (sectionIndex === 0) {
+              if (originalIndex === 0) {
                 sectionTitle = "Recommended for you"
               } else if (section?.name && typeof section.name === 'string' && section.name.trim()) {
                 sectionTitle = section.name.trim()
               } else if (section?.title && typeof section.title === 'string' && section.title.trim()) {
                 sectionTitle = section.title.trim()
               }
-              const sectionId = `menu-section-${sectionIndex}`
+              const sectionId = `menu-section-${originalIndex}`
               
-              const isExpanded = expandedSections.has(sectionIndex)
+              const isExpanded = expandedSections.has(originalIndex)
               
               return (
               <div key={sectionIndex} id={sectionId} className="space-y-4 scroll-mt-20">
@@ -3766,10 +3835,10 @@ export default function RestaurantDetails() {
                         e.stopPropagation()
                         setExpandedSections(prev => {
                           const newSet = new Set(prev)
-                          if (newSet.has(sectionIndex)) {
-                            newSet.delete(sectionIndex)
+                          if (newSet.has(originalIndex)) {
+                            newSet.delete(originalIndex)
                           } else {
-                            newSet.add(sectionIndex)
+                            newSet.add(originalIndex)
                           }
                           return newSet
                         })
@@ -3805,10 +3874,10 @@ export default function RestaurantDetails() {
                         e.stopPropagation()
                         setExpandedSections(prev => {
                           const newSet = new Set(prev)
-                          if (newSet.has(sectionIndex)) {
-                            newSet.delete(sectionIndex)
+                          if (newSet.has(originalIndex)) {
+                            newSet.delete(originalIndex)
                           } else {
-                            newSet.add(sectionIndex)
+                            newSet.add(originalIndex)
                           }
                           return newSet
                         })
@@ -3825,7 +3894,7 @@ export default function RestaurantDetails() {
                 )}
 
                 {/* Direct Items */}
-                {isExpanded && sectionIndex === 0 && section.items && section.items.length === 0 && (
+                {isExpanded && originalIndex === 0 && section.items && section.items.length === 0 && (
                   <div className="text-center py-8">
                     <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base">
                       No dish recommended
@@ -3973,8 +4042,17 @@ export default function RestaurantDetails() {
                 {/* Subsections */}
                 {isExpanded && section.subsections && section.subsections.length > 0 && (
                   <div className="space-y-4">
-                    {section.subsections.map((subsection, subIndex) => {
-                      const subsectionKey = `${sectionIndex}-${subIndex}`
+                    {section.subsections.filter(subsection => {
+                      // Filter subsections to only show those with items under ₹250
+                      if (!showOnlyUnder250) return true;
+                      if (!subsection.items || subsection.items.length === 0) return false;
+                      return subsection.items.some(item => {
+                        if (item.isAvailable === false) return false;
+                        const finalPrice = getFinalPrice(item);
+                        return finalPrice <= 250;
+                      });
+                    }).map((subsection, subIndex) => {
+                      const subsectionKey = `${originalIndex}-${subIndex}`
                       const isSubsectionExpanded = expandedSections.has(subsectionKey)
                       
                       return (

@@ -2,8 +2,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { HelpCircle, ArrowRight, Phone, Ambulance, AlertTriangle, Shield, ShieldCheck } from "lucide-react";
+import { HelpCircle, ArrowRight, Phone, Ambulance, AlertTriangle, Shield, ShieldCheck, User } from "lucide-react";
 import { toast } from "sonner";
+import { deliveryAPI } from "@/lib/api";
 
 const LS_KEY = "app:isOnline";
 const TOAST_ID_KEY = "feedNavbar-onlineStatus";
@@ -169,6 +170,41 @@ export default function FeedNavbar({ className = "" }) {
 
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
   const [showHelpPopup, setShowHelpPopup] = useState(false);
+  const [profileImage, setProfileImage] = useState(null);
+  const [imageError, setImageError] = useState(false);
+
+  // Fetch profile image
+  useEffect(() => {
+    const fetchProfileImage = async () => {
+      try {
+        const response = await deliveryAPI.getProfile();
+        if (response?.data?.success && response?.data?.data?.profile) {
+          const profile = response.data.data.profile;
+          // Use profileImage.url first, fallback to documents.photo
+          const imageUrl = profile.profileImage?.url || profile.documents?.photo;
+          if (imageUrl) {
+            setProfileImage(imageUrl);
+            setImageError(false);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching profile image for navbar:", error);
+      }
+    };
+
+    fetchProfileImage();
+
+    // Listen for profile refresh events
+    const handleProfileRefresh = () => {
+      fetchProfileImage();
+    };
+
+    window.addEventListener('deliveryProfileRefresh', handleProfileRefresh);
+    
+    return () => {
+      window.removeEventListener('deliveryProfileRefresh', handleProfileRefresh);
+    };
+  }, []);
 
   return (
     <>
@@ -227,15 +263,19 @@ export default function FeedNavbar({ className = "" }) {
         </button>
 
         {/* Profile */}
-          <button onClick={handleProfileClick} className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-gray-300" title="Profile">
-          <img
-            src="https://i.pravatar.cc/80?img=12"
-            alt="Profile"
-            className="w-full h-full object-cover"
-            onError={(e) => {
-                e.currentTarget.src = "https://ui-avatars.com/api/?name=User&background=ff8100&color=fff&size=40";
-            }}
-          />
+        <button onClick={handleProfileClick} className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-gray-300 flex items-center justify-center bg-gray-200" title="Profile">
+          {profileImage && !imageError ? (
+            <img
+              src={profileImage}
+              alt="Profile"
+              className="w-full h-full object-cover"
+              onError={() => {
+                setImageError(true);
+              }}
+            />
+          ) : (
+            <User className="w-5 h-5 text-gray-500" />
+          )}
         </button>
       </div>
     </div>

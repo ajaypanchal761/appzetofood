@@ -1,4 +1,5 @@
 import Restaurant from '../models/Restaurant.js';
+import Menu from '../models/Menu.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../../../shared/utils/cloudinaryService.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
@@ -512,4 +513,143 @@ export const deleteRestaurantAccount = asyncHandler(async (req, res) => {
     return errorResponse(res, 500, 'Failed to delete restaurant account');
   }
 });
+
+// Get restaurants with dishes under ₹250
+export const getRestaurantsWithDishesUnder250 = async (req, res) => {
+  try {
+    const MAX_PRICE = 250;
+    
+    // Helper function to calculate final price after discount
+    const getFinalPrice = (item) => {
+      // price is typically the current/discounted price
+      // If discount exists, calculate from originalPrice, otherwise use price directly
+      if (item.originalPrice && item.discountAmount && item.discountAmount > 0) {
+        // Calculate discounted price from originalPrice
+        let discountedPrice = item.originalPrice;
+        if (item.discountType === 'Percent') {
+          discountedPrice = item.originalPrice - (item.originalPrice * item.discountAmount / 100);
+        } else if (item.discountType === 'Fixed') {
+          discountedPrice = item.originalPrice - item.discountAmount;
+        }
+        return Math.max(0, discountedPrice);
+      }
+      // Otherwise, use price as the final price
+      return Math.max(0, item.price || 0);
+    };
+
+    // Helper function to filter items under ₹250
+    const filterItemsUnder250 = (items) => {
+      return items.filter(item => {
+        if (item.isAvailable === false) return false;
+        const finalPrice = getFinalPrice(item);
+        return finalPrice <= MAX_PRICE;
+      });
+    };
+
+    // Helper function to process a single restaurant
+    const processRestaurant = async (restaurant) => {
+      try {
+        // Get menu for this restaurant
+        const menu = await Menu.findOne({ 
+          restaurant: restaurant._id,
+          isActive: true 
+        }).lean();
+
+        if (!menu || !menu.sections || menu.sections.length === 0) {
+          return null; // Skip restaurants without menus
+        }
+
+        // Collect all dishes under ₹250 from all sections
+        const dishesUnder250 = [];
+
+        menu.sections.forEach(section => {
+          if (section.isEnabled === false) return;
+
+          // Filter direct items in section
+          const sectionItems = filterItemsUnder250(section.items || []);
+          dishesUnder250.push(...sectionItems.map(item => ({
+            ...item,
+            sectionName: section.name
+          })));
+
+          // Filter items in subsections
+          (section.subsections || []).forEach(subsection => {
+            const subsectionItems = filterItemsUnder250(subsection.items || []);
+            dishesUnder250.push(...subsectionItems.map(item => ({
+              ...item,
+              sectionName: section.name,
+              subsectionName: subsection.name
+            })));
+          });
+        });
+
+        // Only include restaurant if it has at least one dish under ₹250
+        if (dishesUnder250.length > 0) {
+          return {
+            id: restaurant._id.toString(),
+            restaurantId: restaurant.restaurantId,
+            name: restaurant.name,
+            slug: restaurant.slug,
+            rating: restaurant.rating || 0,
+            totalRatings: restaurant.totalRatings || 0,
+            deliveryTime: restaurant.estimatedDeliveryTime || "25-30 mins",
+            distance: restaurant.distance || "1.2 km",
+            cuisine: restaurant.cuisines && restaurant.cuisines.length > 0 
+              ? restaurant.cuisines.join(' • ') 
+              : "Multi-cuisine",
+            price: restaurant.priceRange || "$$",
+            image: restaurant.profileImage?.url || restaurant.menuImages?.[0]?.url || "",
+            menuItems: dishesUnder250.map(item => ({
+              id: item.id,
+              name: item.name,
+              price: getFinalPrice(item),
+              originalPrice: item.originalPrice || item.price,
+              image: item.image || (item.images && item.images.length > 0 ? item.images[0] : ""),
+              isVeg: item.foodType === 'Veg',
+              bestPrice: item.discountAmount > 0 || (item.originalPrice && item.originalPrice > getFinalPrice(item)),
+              description: item.description || "",
+              category: item.category || item.sectionName || "",
+            }))
+          };
+        }
+        return null;
+      } catch (error) {
+        console.error(`Error processing restaurant ${restaurant._id}:`, error);
+        return null;
+      }
+    };
+
+    // Get all active restaurants
+    const restaurants = await Restaurant.find({ isActive: true })
+      .select('-owner -createdAt -updatedAt')
+      .lean()
+      .limit(100); // Limit to first 100 restaurants for performance
+
+    // Process restaurants in parallel (batch processing for better performance)
+    const batchSize = 10; // Process 10 restaurants at a time
+    const restaurantsWithDishes = [];
+
+    for (let i = 0; i < restaurants.length; i += batchSize) {
+      const batch = restaurants.slice(i, i + batchSize);
+      const results = await Promise.all(batch.map(processRestaurant));
+      restaurantsWithDishes.push(...results.filter(r => r !== null));
+    }
+
+    // Sort by rating (highest first) or by number of dishes
+    restaurantsWithDishes.sort((a, b) => {
+      if (b.rating !== a.rating) {
+        return b.rating - a.rating;
+      }
+      return b.menuItems.length - a.menuItems.length;
+    });
+
+    return successResponse(res, 200, 'Restaurants with dishes under ₹250 retrieved successfully', {
+      restaurants: restaurantsWithDishes,
+      total: restaurantsWithDishes.length,
+    });
+  } catch (error) {
+    console.error('Error fetching restaurants with dishes under ₹250:', error);
+    return errorResponse(res, 500, 'Failed to fetch restaurants with dishes under ₹250');
+  }
+};
 

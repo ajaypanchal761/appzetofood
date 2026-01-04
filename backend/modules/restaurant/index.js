@@ -4,7 +4,7 @@ import { authenticate } from './middleware/restaurantAuth.js';
 import { uploadMiddleware } from '../../shared/utils/cloudinaryService.js';
 import restaurantAuthRoutes from './routes/restaurantAuthRoutes.js';
 import { getOnboarding, upsertOnboarding, createRestaurantFromOnboardingManual } from './controllers/restaurantOnboardingController.js';
-import { getRestaurants, getRestaurantById, getRestaurantByOwner, updateRestaurantProfile, uploadProfileImage, uploadMenuImage, deleteRestaurantAccount, updateDeliveryStatus } from './controllers/restaurantController.js';
+import { getRestaurants, getRestaurantById, getRestaurantByOwner, updateRestaurantProfile, uploadProfileImage, uploadMenuImage, deleteRestaurantAccount, updateDeliveryStatus, getRestaurantsWithDishesUnder250 } from './controllers/restaurantController.js';
 import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection } from './controllers/menuController.js';
 import { scheduleItemAvailability, cancelScheduledAvailability, getItemSchedule } from './controllers/menuScheduleController.js';
 import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
@@ -50,6 +50,7 @@ router.delete('/staff/:id', authenticate, deleteStaff);
 
 // Restaurant routes (public - for user module)
 router.get('/list', getRestaurants);
+router.get('/under-250', getRestaurantsWithDishesUnder250);
 // Menu and inventory routes must come before /:id to avoid route conflicts
 router.get('/:id/menu', getMenuByRestaurantId);
 router.get('/:id/inventory', getInventoryByRestaurantId);

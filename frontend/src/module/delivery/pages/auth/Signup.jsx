@@ -322,7 +322,7 @@ export default function DeliverySignup() {
             <span className="text-gray-600">Already have an account? </span>
             <button
               type="button"
-              onClick={() => navigate("/delivery/login")}
+              onClick={() => navigate("/delivery/sign-in")}
               className="text-primary-orange hover:underline font-medium"
             >
               Login
