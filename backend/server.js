@@ -192,6 +192,127 @@ app.use(errorHandler);
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
+  // Delivery boy sends location update
+  socket.on('update-location', (data) => {
+    try {
+      // Validate data
+      if (!data.orderId || typeof data.lat !== 'number' || typeof data.lng !== 'number') {
+        console.error('Invalid location update data:', data);
+        return;
+      }
+
+      // Broadcast location to customer tracking this order (only to specific room)
+      // Format: { orderId, lat, lng, heading }
+      const locationData = {
+        orderId: data.orderId,
+        lat: data.lat,
+        lng: data.lng,
+        heading: data.heading || 0,
+        timestamp: Date.now()
+      };
+      
+      // Send to specific order room
+      io.to(`order:${data.orderId}`).emit(`location-receive-${data.orderId}`, locationData);
+      
+      console.log(`📍 Location broadcasted to order room ${data.orderId}:`, {
+        lat: locationData.lat,
+        lng: locationData.lng,
+        heading: locationData.heading
+      });
+
+      console.log(`📍 Location update for order ${data.orderId}:`, {
+        lat: data.lat,
+        lng: data.lng,
+        heading: data.heading
+      });
+    } catch (error) {
+      console.error('Error handling location update:', error);
+    }
+  });
+
+  // Customer joins order tracking room
+  socket.on('join-order-tracking', async (orderId) => {
+    if (orderId) {
+      socket.join(`order:${orderId}`);
+      console.log(`Customer joined order tracking: ${orderId}`);
+      
+      // Send current location immediately when customer joins
+      try {
+        // Dynamic import to avoid circular dependencies
+        const { default: Order } = await import('./modules/order/models/Order.js');
+        
+        const order = await Order.findById(orderId)
+          .populate({
+            path: 'deliveryPartnerId',
+            select: 'availability',
+            populate: {
+              path: 'availability.currentLocation'
+            }
+          })
+          .lean();
+        
+        if (order?.deliveryPartnerId?.availability?.currentLocation) {
+          const coords = order.deliveryPartnerId.availability.currentLocation.coordinates;
+          const locationData = {
+            orderId,
+            lat: coords[1],
+            lng: coords[0],
+            heading: 0,
+            timestamp: Date.now()
+          };
+          
+          // Send current location immediately
+          socket.emit(`current-location-${orderId}`, locationData);
+          console.log(`📍 Sent current location to customer for order ${orderId}`);
+        }
+      } catch (error) {
+        console.error('Error sending current location:', error.message);
+      }
+    }
+  });
+
+  // Handle request for current location
+  socket.on('request-current-location', async (orderId) => {
+    if (!orderId) return;
+    
+    try {
+      // Dynamic import to avoid circular dependencies
+      const { default: Order } = await import('./modules/order/models/Order.js');
+      
+      const order = await Order.findById(orderId)
+        .populate({
+          path: 'deliveryPartnerId',
+          select: 'availability'
+        })
+        .lean();
+      
+      if (order?.deliveryPartnerId?.availability?.currentLocation) {
+        const coords = order.deliveryPartnerId.availability.currentLocation.coordinates;
+        const locationData = {
+          orderId,
+          lat: coords[1],
+          lng: coords[0],
+          heading: 0,
+          timestamp: Date.now()
+        };
+        
+        // Send current location immediately
+        socket.emit(`current-location-${orderId}`, locationData);
+        console.log(`📍 Sent requested location for order ${orderId}`);
+      }
+    } catch (error) {
+      console.error('Error fetching current location:', error.message);
+    }
+  });
+
+  // Delivery boy joins delivery room
+  socket.on('join-delivery', (deliveryId) => {
+    if (deliveryId) {
+      socket.join(`delivery:${deliveryId}`);
+      console.log(`Delivery boy joined: ${deliveryId}`);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });

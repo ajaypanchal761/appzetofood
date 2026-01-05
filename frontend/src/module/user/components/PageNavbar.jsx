@@ -67,33 +67,511 @@ export default function PageNavbar({
   }
 
   // Get display location parts
-  // Priority: formattedAddress > address > area/city
+  // Priority: formattedAddress (complete) > address > area/city
   // IMPORTANT: Sub location ALWAYS uses city and state from location object, never from address parts
   const locationDisplay = (() => {
     let mainLocation = ""
     let subLocation = ""
     
-    // Get main location from address (first 2 parts only)
-    if (location?.formattedAddress) {
+    // Debug: Log the entire location object
+    console.log("🔍 PageNavbar - Full Location Object:", {
+      location,
+      address: location?.address,
+      formattedAddress: location?.formattedAddress,
+      area: location?.area,
+      city: location?.city,
+      state: location?.state
+    })
+    
+    // Get main location - prioritize area name over coordinates
+    // Check if address/formattedAddress contains coordinates pattern (e.g., "22.7282, 75.8843")
+    const isCoordinates = (str) => {
+      if (!str) return false
+      // Pattern: number.number, number.number (latitude, longitude)
+      const coordPattern = /^-?\d+\.\d+,\s*-?\d+\.\d+$/
+      return coordPattern.test(str.trim())
+    }
+    
+    // Priority 0: Use mainTitle (ZOMATO-STYLE) - Exact building/cafe name
+    // This is the most accurate - directly from Google Maps components
+    // If mainTitle is available, show it with area if area is different
+    if (location?.mainTitle && location.mainTitle.trim() !== "" && location.mainTitle !== "Location Found") {
+      mainLocation = location.mainTitle;
+      // If area is available and different from mainTitle, append it
+      if (location?.area && location.area.trim() !== "" && 
+          location.area.toLowerCase() !== location.mainTitle.toLowerCase() &&
+          location.area.toLowerCase() !== location?.city?.toLowerCase()) {
+        mainLocation = `${location.mainTitle}, ${location.area}`;
+      }
+      console.log("✅✅✅ ZOMATO-STYLE: Using mainTitle for display:", mainLocation);
+    }
+    
+    // Priority 1: Use formattedAddress if it contains complete detailed address (has multiple parts)
+    // Format: "Mama Loca Cafe, 501 Princess Center, 5th Floor, New Palasia, Indore, Madhya Pradesh 452001"
+    if (!mainLocation && location?.formattedAddress && !isCoordinates(location.formattedAddress) && location.formattedAddress !== "Select location") {
+      const formattedParts = location.formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
+      
+      // Check if formattedAddress has complete address (4+ parts means it has POI, building, area, city, state)
+      if (formattedParts.length >= 4) {
+        console.log("🔍 Using formattedAddress (complete address detected):", location.formattedAddress)
+        
+        // Extract locality parts (everything before city)
+        // Find city index
+        let cityIndex = -1
+        if (location?.city) {
+          cityIndex = formattedParts.findIndex(part => 
+            part.toLowerCase() === location.city.toLowerCase() ||
+            part.toLowerCase().includes(location.city.toLowerCase())
+          )
+        }
+        
+        // If city not found, look for state (city is usually before state)
+        if (cityIndex === -1 && location?.state) {
+          const stateIndex = formattedParts.findIndex(part => 
+            part.toLowerCase().includes("madhya") ||
+            part.toLowerCase().includes("pradesh") ||
+            part.toLowerCase().includes(location.state.toLowerCase())
+          )
+          if (stateIndex > 0) {
+            cityIndex = stateIndex - 1
+          }
+        }
+        
+        // Extract locality parts (POI, building, floor, area) - everything before city
+        if (cityIndex > 0) {
+          const localityParts = formattedParts.slice(0, cityIndex)
+          if (localityParts.length > 0) {
+            mainLocation = localityParts.join(', ')
+            console.log("✅✅✅ Extracted locality from complete formattedAddress:", mainLocation)
+          }
+        } else {
+          // If city not found, take first 3-4 parts (usually POI, building, floor, area)
+          const localityParts = formattedParts.slice(0, Math.min(4, formattedParts.length - 2))
+          if (localityParts.length > 0) {
+            mainLocation = localityParts.join(', ')
+            console.log("✅✅✅ Using first parts from formattedAddress:", mainLocation)
+          }
+        }
+      }
+    }
+    
+    // Priority 2: Use address field (it has the extracted locality from Google Maps)
+    // This is more reliable as it's already processed by useLocation hook
+    // Address field contains: "Mama Loca Cafe, 501 Princess Center, 5th Floor, New Palasia"
+    if (!mainLocation && location?.address && !isCoordinates(location.address) && location.address !== "Select location") {
+      console.log("🔍 Processing address field (Priority 2):", location.address)
+      
+      // Check if address already contains locality (not just city)
+      const addressParts = location.address.split(',').map(p => p.trim()).filter(p => p.length > 0)
+      const cityInAddress = addressParts.some(part => 
+        part.toLowerCase() === location?.city?.toLowerCase() ||
+        part.toLowerCase() === "indore" ||
+        part.toLowerCase() === "bhopal"
+      )
+      
+      // If address doesn't contain city name, it's likely the locality
+      if (!cityInAddress && addressParts.length > 0) {
+        mainLocation = location.address
+        console.log("✅ Using address field as locality:", mainLocation)
+      } else {
+        // Address contains city, extract locality parts before city
+        const filteredParts = addressParts.filter(part => {
+          if (/^\d{6}$/.test(part)) return false
+          if (part.toLowerCase() === "india" || part.length > 25) return false
+          return true
+        })
+        
+        let cityIndex = filteredParts.findIndex(part => 
+          part.toLowerCase() === location?.city?.toLowerCase() ||
+          part.toLowerCase() === "indore" ||
+          part.toLowerCase() === "bhopal"
+        )
+        
+        if (cityIndex > 0) {
+          mainLocation = filteredParts.slice(0, cityIndex).join(', ')
+          console.log("✅ Extracted locality from address field:", mainLocation)
+        } else if (filteredParts.length >= 3) {
+          mainLocation = filteredParts.slice(0, 3).join(', ')
+          console.log("✅ Using first 3 parts from address:", mainLocation)
+        }
+      }
+    }
+    
+    // Priority 2: Use formattedAddress to extract exact locality (e.g., "Princess center, 5th Floor, New Palasia")
+    if (!mainLocation && location?.formattedAddress && !isCoordinates(location.formattedAddress)) {
+      console.log("🔍 Processing formattedAddress (Priority 2):", location.formattedAddress)
       const parts = location.formattedAddress.split(',').map(part => part.trim()).filter(part => part.length > 0)
-      if (parts.length >= 2) {
-        mainLocation = parts.slice(0, 2).join(', ')
-      } else if (parts.length >= 1) {
-        mainLocation = parts[0]
+      console.log("📋 Address parts:", parts)
+      
+      // Remove pincode and country from parts (they're usually at the end)
+      const filteredParts = parts.filter(part => {
+        // Skip 6-digit pincode (standalone or with state)
+        if (/^\d{6}$/.test(part)) return false
+        // Skip parts that are just pincode (e.g., "Madhya Pradesh 452001" - we'll handle this)
+        if (/^\d{6}$/.test(part.split(' ').pop())) {
+          // Remove pincode from part (e.g., "Madhya Pradesh 452001" -> "Madhya Pradesh")
+          return part.replace(/\s+\d{6}$/, '').trim()
+        }
+        // Skip "India" or country names
+        if (part.toLowerCase() === "india" || part.length > 25) return false
+        return true
+      })
+      console.log("📋 Filtered parts (without pincode/country):", filteredParts)
+      
+      // Extract locality parts (building, floor, area) - usually first 3 parts before city
+      // Format: "Princess center, 5th Floor, New Palasia, Indore, Madhya Pradesh 452001"
+      // We want: "Princess center, 5th Floor, New Palasia"
+      
+      // Find city index - check multiple ways
+      let cityIndex = -1
+      
+      // Method 1: Check exact match with location.city
+      if (location?.city) {
+        cityIndex = filteredParts.findIndex(part => 
+          part.toLowerCase() === location.city.toLowerCase()
+        )
+        console.log(`📍 City index (exact match with "${location.city}"):`, cityIndex)
       }
-    } else if (location?.address) {
+      
+      // Method 2: Check common city names (case-insensitive)
+      if (cityIndex === -1) {
+        const commonCities = ["Indore", "indore", "Bhopal", "bhopal", "Mumbai", "mumbai", "Delhi", "delhi"]
+        cityIndex = filteredParts.findIndex(part => 
+          commonCities.some(city => part.toLowerCase() === city.toLowerCase())
+        )
+        console.log("📍 City index (common cities):", cityIndex)
+      }
+      
+      // Method 3: Check if part contains state name (usually comes after city)
+      if (cityIndex === -1 && location?.state) {
+        const stateIndex = filteredParts.findIndex(part => 
+          part.toLowerCase().includes(location.state.toLowerCase()) ||
+          part.toLowerCase().includes("madhya") ||
+          part.toLowerCase().includes("pradesh")
+        )
+        if (stateIndex > 0) {
+          // City is usually one position before state
+          cityIndex = stateIndex - 1
+          console.log("📍 City index (before state):", cityIndex)
+        }
+      }
+      
+      // Method 4: Check for "Madhya Pradesh" or other state names
+      if (cityIndex === -1) {
+        const stateIndex = filteredParts.findIndex(part => 
+          part.toLowerCase().includes("madhya") || 
+          part.toLowerCase().includes("pradesh") ||
+          part.toLowerCase().includes("maharashtra") ||
+          part.toLowerCase().includes("gujarat")
+        )
+        if (stateIndex > 0) {
+          cityIndex = stateIndex - 1
+          console.log("📍 City index (before state name):", cityIndex)
+        }
+      }
+      
+      if (cityIndex > 0) {
+        // Take all parts before city (building, floor, area)
+        const localityParts = filteredParts.slice(0, cityIndex)
+        if (localityParts.length > 0) {
+          mainLocation = localityParts.join(', ')
+          console.log("✅✅✅ Using exact locality from formattedAddress:", mainLocation)
+        } else {
+          console.warn("⚠️ No locality parts found before city")
+        }
+      } else {
+        // City not found, try to find state and take parts before it
+        const stateIndex = filteredParts.findIndex(part => 
+          part.toLowerCase().includes("madhya") || 
+          part.toLowerCase().includes("pradesh") ||
+          (location?.state && part.toLowerCase().includes(location.state.toLowerCase()))
+        )
+        
+        if (stateIndex > 0) {
+          // Take first 3 parts before state (usually building, floor, area)
+          const localityParts = filteredParts.slice(0, Math.min(3, stateIndex))
+          if (localityParts.length > 0) {
+            mainLocation = localityParts.join(', ')
+            console.log("✅✅✅ Using parts before state from formattedAddress:", mainLocation)
+          }
+        }
+        
+        // If still no mainLocation, use first 3 parts as fallback
+        if (!mainLocation && filteredParts.length >= 3) {
+          mainLocation = filteredParts.slice(0, 3).join(', ')
+          console.log("✅✅✅ Using first 3 parts from formattedAddress (fallback):", mainLocation)
+        } else if (!mainLocation && filteredParts.length >= 2) {
+          mainLocation = filteredParts.slice(0, 2).join(', ')
+          console.log("✅ Using first 2 parts from formattedAddress (fallback):", mainLocation)
+        } else if (!mainLocation && filteredParts.length >= 1) {
+          const firstPart = filteredParts[0]
+          if (!isCoordinates(firstPart) && firstPart.length > 2) {
+            mainLocation = firstPart
+            console.log("✅ Using first part from formattedAddress (fallback):", mainLocation)
+          }
+        }
+      }
+      
+      if (!mainLocation) {
+        console.warn("⚠️⚠️⚠️ Could not extract locality from formattedAddress")
+      } else {
+        console.log("🎯🎯🎯 Final mainLocation extracted:", mainLocation)
+      }
+    }
+    // Priority 2: Use address field if formattedAddress not available or didn't work
+    if (!mainLocation && location?.address && !isCoordinates(location.address)) {
+      console.log("🔍 Processing address field:", location.address)
       const parts = location.address.split(',').map(part => part.trim()).filter(part => part.length > 0)
-      if (parts.length >= 2) {
-        mainLocation = parts.slice(0, 2).join(', ')
-      } else if (parts.length >= 1) {
-        mainLocation = parts[0]
+      console.log("📋 Address parts:", parts)
+      
+      // Remove pincode and country
+      const filteredParts = parts.filter(part => {
+        if (/^\d{6}$/.test(part)) return false
+        if (part.toLowerCase() === "india" || part.length > 25) return false
+        return true
+      })
+      console.log("📋 Filtered parts:", filteredParts)
+      
+      // Find city index - same logic as formattedAddress
+      let cityIndex = -1
+      
+      if (location?.city) {
+        cityIndex = filteredParts.findIndex(part => 
+          part.toLowerCase() === location.city.toLowerCase()
+        )
       }
-    } else if (location?.area) {
-      mainLocation = location.area
-    } else if (location?.city) {
+      
+      if (cityIndex === -1) {
+        const commonCities = ["Indore", "indore", "Bhopal", "bhopal"]
+        cityIndex = filteredParts.findIndex(part => 
+          commonCities.some(city => part.toLowerCase().includes(city.toLowerCase()))
+        )
+      }
+      
+      if (cityIndex === -1 && location?.state) {
+        const stateIndex = filteredParts.findIndex(part => 
+          part.toLowerCase().includes(location.state.toLowerCase())
+        )
+        if (stateIndex > 0) {
+          cityIndex = stateIndex - 1
+        }
+      }
+      
+      if (cityIndex > 0) {
+        const localityParts = filteredParts.slice(0, cityIndex)
+        if (localityParts.length > 0) {
+          mainLocation = localityParts.join(', ')
+          console.log("✅ Using exact locality from address:", mainLocation)
+        }
+      } else if (filteredParts.length >= 3) {
+        mainLocation = filteredParts.slice(0, 3).join(', ')
+        console.log("✅ Using first 3 parts from address:", mainLocation)
+      } else if (filteredParts.length >= 2) {
+        mainLocation = filteredParts.slice(0, 2).join(', ')
+        console.log("✅ Using first 2 parts from address:", mainLocation)
+      } else if (filteredParts.length >= 1) {
+        const firstPart = filteredParts[0]
+        if (!isCoordinates(firstPart) && firstPart.length > 2) {
+          mainLocation = firstPart
+          console.log("✅ Using first part from address:", mainLocation)
+        }
+      }
+    }
+    // Priority 3: Try to extract from formattedAddress or address again with simpler logic
+    if (!mainLocation) {
+      // Try to get first 3 parts from any available address field
+      const addressToUse = location?.formattedAddress || location?.address || ""
+      if (addressToUse && !isCoordinates(addressToUse)) {
+        const parts = addressToUse.split(',').map(part => part.trim()).filter(part => part.length > 0)
+        const filteredParts = parts.filter(part => {
+          if (/^\d{6}$/.test(part)) return false // Skip pincode
+          if (part.toLowerCase() === "india" || part.length > 25) return false // Skip country
+          return true
+        })
+        
+        // If we have 3+ parts, take first 3 (usually building, floor, area)
+        if (filteredParts.length >= 3) {
+          mainLocation = filteredParts.slice(0, 3).join(', ')
+          console.log("✅ Using first 3 parts as fallback:", mainLocation)
+        } else if (filteredParts.length >= 2) {
+          mainLocation = filteredParts.slice(0, 2).join(', ')
+          console.log("✅ Using first 2 parts as fallback:", mainLocation)
+        } else if (filteredParts.length >= 1) {
+          const firstPart = filteredParts[0]
+          if (!isCoordinates(firstPart) && firstPart.length > 2) {
+            mainLocation = firstPart
+            console.log("✅ Using first part as fallback:", mainLocation)
+          }
+        }
+      }
+    }
+    
+    // Priority 4: Force extract from formattedAddress if still no mainLocation
+    // This is a last resort to get locality before falling back to city
+    if (!mainLocation && location?.formattedAddress && !isCoordinates(location.formattedAddress)) {
+      console.log("🔄🔄🔄 FORCE EXTRACTING from formattedAddress (last resort):", location.formattedAddress)
+      const parts = location.formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
+      const filteredParts = parts.filter(part => {
+        if (/^\d{6}$/.test(part)) return false
+        if (part.toLowerCase() === "india" || part.length > 25) return false
+        return true
+      })
+      
+      // Force take first 3 parts (building, floor, area) - ignore city detection
+      if (filteredParts.length >= 3) {
+        // Check if 3rd part is city, if yes take first 2
+        const thirdPart = filteredParts[2].toLowerCase()
+        if (thirdPart === "indore" || thirdPart === location?.city?.toLowerCase()) {
+          mainLocation = filteredParts.slice(0, 2).join(', ')
+          console.log("✅✅✅ FORCE: Using first 2 parts (3rd is city):", mainLocation)
+        } else {
+          mainLocation = filteredParts.slice(0, 3).join(', ')
+          console.log("✅✅✅ FORCE: Using first 3 parts:", mainLocation)
+        }
+      } else if (filteredParts.length >= 2) {
+        mainLocation = filteredParts.slice(0, 2).join(', ')
+        console.log("✅✅✅ FORCE: Using first 2 parts:", mainLocation)
+      } else if (filteredParts.length >= 1) {
+        const firstPart = filteredParts[0]
+        if (!isCoordinates(firstPart) && firstPart.length > 2 && firstPart.toLowerCase() !== location?.city?.toLowerCase()) {
+          mainLocation = firstPart
+          console.log("✅✅✅ FORCE: Using first part:", mainLocation)
+        }
+      }
+    }
+    
+    // Priority 5: Use area name if address extraction failed (fallback)
+    // Show area + city format if both available, otherwise just area
+    if (!mainLocation && location?.area && location.area.trim() !== "" && !isCoordinates(location.area)) {
+      // If we have both area and city, show "Area, City" format
+      if (location?.city && location.city.trim() !== "" && location.city !== "Unknown City" && 
+          location.area.toLowerCase() !== location.city.toLowerCase()) {
+        mainLocation = `${location.area}, ${location.city}`
+        console.log("✅ Using area + city:", mainLocation)
+      } else {
+        mainLocation = location.area
+        console.log("✅ Using area name:", mainLocation)
+      }
+    }
+    // Priority 6: Use city ONLY if nothing else worked (last resort)
+    else if (!mainLocation && location?.city && location.city.trim() !== "" && location.city !== "Unknown City") {
       mainLocation = location.city
-    } else {
+      console.log("⚠️⚠️⚠️ FALLBACK: Using city (no locality found):", mainLocation)
+    } 
+    // Final fallback: Show "Select location" instead of coordinates
+    else if (!mainLocation) {
       mainLocation = "Select location"
+      console.log("⚠️ No valid location found, showing placeholder")
+    }
+    
+    // If mainLocation is still coordinates, replace with area or city
+    if (isCoordinates(mainLocation)) {
+      if (location?.area && location.area.trim() !== "") {
+        mainLocation = location.area
+      } else if (location?.city && location.city.trim() !== "" && location.city !== "Unknown City") {
+        mainLocation = location.city
+      } else {
+        mainLocation = "Select location"
+      }
+      console.log("⚠️ Replaced coordinates with:", mainLocation)
+    }
+    
+    // Final check: If mainLocation is just city name, try one more time to extract from formattedAddress
+    if (mainLocation && (mainLocation.toLowerCase() === location?.city?.toLowerCase() || mainLocation === "Indore")) {
+      console.log("🔄🔄🔄 MainLocation is city, trying to extract locality one more time...")
+      
+      // First priority: Check if area is available in location object
+      if (location?.area && location.area.trim() !== "" && 
+          location.area.toLowerCase() !== location?.city?.toLowerCase() &&
+          !isCoordinates(location.area)) {
+        mainLocation = `${location.area}, ${location.city}`
+        console.log("✅✅✅ Using area from location object:", mainLocation)
+      } else if (location?.formattedAddress && !isCoordinates(location.formattedAddress)) {
+        // Second priority: Extract area from formattedAddress (before city)
+        const parts = location.formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
+        console.log("🔍 Extracting area from formattedAddress parts:", parts)
+        
+        // Find city index
+        let cityIndex = -1
+        if (location?.city) {
+          cityIndex = parts.findIndex(part => 
+            part.toLowerCase() === location.city.toLowerCase() ||
+            part.toLowerCase().includes(location.city.toLowerCase())
+          )
+        }
+        
+        // If city found, take parts before city as area
+        if (cityIndex > 0) {
+          const areaParts = parts.slice(0, cityIndex)
+          if (areaParts.length > 0) {
+            // Take the last part before city as area (usually sublocality like "New Palasia")
+            const extractedArea = areaParts[areaParts.length - 1]
+            if (extractedArea && extractedArea.toLowerCase() !== location.city.toLowerCase() &&
+                !extractedArea.match(/^\d+/) && extractedArea.length > 2 &&
+                !extractedArea.toLowerCase().includes("madhya") && 
+                !extractedArea.toLowerCase().includes("pradesh")) {
+              mainLocation = `${extractedArea}, ${location.city}`
+              console.log("✅✅✅ Extracted area from formattedAddress (before city):", mainLocation)
+            } else if (areaParts.length >= 2) {
+              // Take last 2 parts before city
+              const lastTwoParts = areaParts.slice(-2)
+              if (lastTwoParts.every(p => p.toLowerCase() !== location.city.toLowerCase())) {
+                mainLocation = lastTwoParts.join(', ')
+                console.log("✅✅✅ Extracted area (2 parts) from formattedAddress:", mainLocation)
+              }
+            }
+          }
+        } else {
+          // City not found, filter out city/state and take first parts
+          const filteredParts = parts.filter(part => {
+            if (/^\d{6}$/.test(part)) return false
+            if (part.toLowerCase() === "india" || part.length > 25) return false
+            if (part.toLowerCase() === "indore" || part.toLowerCase() === location?.city?.toLowerCase()) return false
+            if (part.toLowerCase().includes("madhya") || part.toLowerCase().includes("pradesh")) return false
+            return true
+          })
+          
+          if (filteredParts.length >= 1) {
+            const extractedArea = filteredParts[0]
+            if (extractedArea && extractedArea.toLowerCase() !== location.city.toLowerCase() &&
+                extractedArea.length > 2 && !extractedArea.match(/^\d+/)) {
+              mainLocation = `${extractedArea}, ${location.city}`
+              console.log("✅✅✅ Extracted area (first part) from formattedAddress:", mainLocation)
+            }
+          }
+        }
+      }
+    }
+    
+    // Final check: If mainLocation is still just city, try to add area if available
+    if (mainLocation && mainLocation.toLowerCase() === location?.city?.toLowerCase()) {
+      // First try location.area field
+      if (location?.area && location.area.trim() !== "" && 
+          location.area.toLowerCase() !== location.city.toLowerCase() &&
+          !isCoordinates(location.area)) {
+        mainLocation = `${location.area}, ${location.city}`
+        console.log("✅✅✅ Added area to city display:", mainLocation)
+      } 
+      // If area field is empty, try to extract from formattedAddress one more time
+      else if (location?.formattedAddress && !isCoordinates(location.formattedAddress)) {
+        const parts = location.formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
+        // Look for parts that might be sublocality (usually 2nd or 3rd part before city)
+        if (parts.length >= 3) {
+          // Try second-to-last part before city/state
+          for (let i = parts.length - 3; i >= 0; i--) {
+            const part = parts[i]
+            if (part && part.toLowerCase() !== location.city.toLowerCase() &&
+                !part.match(/^\d+/) && part.length > 2 &&
+                !part.toLowerCase().includes("madhya") && 
+                !part.toLowerCase().includes("pradesh") &&
+                part.toLowerCase() !== "india") {
+              mainLocation = `${part}, ${location.city}`
+              console.log("✅✅✅ Last resort: Extracted area from formattedAddress:", mainLocation)
+              break
+            }
+          }
+        }
+      }
     }
     
     // Sub location: ALWAYS use city and state from location object ONLY (never from address parts)

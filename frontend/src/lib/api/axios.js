@@ -367,11 +367,7 @@ apiClient.interceptors.response.use(
           
           // Log error details (only once per cooldown period)
           if (networkErrorState.errorCount === 1) {
-            console.error('🌐 Network Error - Backend server may not be running');
-            console.error('💡 API Base URL:', API_BASE_URL);
-            console.error('💡 Backend URL:', API_BASE_URL.replace('/api', ''));
-            console.error('💡 Start backend with: cd appzetofood/backend && npm run dev');
-            console.error('💡 Check backend health: curl http://localhost:5000/health');
+            // Network error logging removed - errors handled via toast notifications
           } else {
             // For subsequent errors, show a brief message
             console.warn(`⚠️ Network Error (${networkErrorState.errorCount}x) - Backend still not connected`);
@@ -409,12 +405,7 @@ apiClient.interceptors.response.use(
       if (import.meta.env.DEV) {
         const url = error.config?.url || 'unknown';
         const fullUrl = error.config?.baseURL ? `${error.config.baseURL}${url}` : url;
-        console.error('❌ 404 Error - Route not found:', url);
-        console.error('💡 Full URL:', fullUrl);
-        console.error('💡 Check if backend route exists:', error.config?.method?.toUpperCase(), url);
-        console.error('💡 Backend server should be running on: http://localhost:5000');
-        console.error('💡 API Base URL:', API_BASE_URL);
-        console.error('💡 Make sure backend server is running: cd appzetofood/backend && npm run dev');
+        // 404 error logging removed - errors handled via toast notifications
         
         // Show toast for auth routes (important)
         if (url.includes('/auth/') || url.includes('/send-otp') || url.includes('/verify-otp')) {

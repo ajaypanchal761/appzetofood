@@ -5,6 +5,16 @@ import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.jsx'
 
+// Load Google Maps API dynamically from environment variable
+const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+if (googleMapsApiKey && !window.google) {
+  const script = document.createElement('script')
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry,directions`
+  script.async = true
+  script.defer = true
+  document.head.appendChild(script)
+}
+
 // Apply theme on app initialization
 const savedTheme = localStorage.getItem('appTheme') || 'light'
 if (savedTheme === 'dark') {
@@ -13,7 +23,7 @@ if (savedTheme === 'dark') {
   document.documentElement.classList.remove('dark')
 }
 
-// Suppress browser extension errors and non-critical Ola Maps SDK errors
+// Suppress browser extension errors
 const originalError = console.error
 console.error = (...args) => {
   const errorStr = args.join(' ')
@@ -29,19 +39,6 @@ console.error = (...args) => {
     return // Suppress browser extension errors
   }
   
-  // Suppress non-critical Ola Maps SDK errors
-  if (
-    errorStr.includes('AbortError') ||
-    errorStr.includes('user aborted') ||
-    errorStr.includes('sprite@2x.json') ||
-    errorStr.includes('sprite@') ||
-    errorStr.includes('3d_model') ||
-    errorStr.includes('Source layer') && errorStr.includes('does not exist') ||
-    (errorStr.includes('AJAXError') && (errorStr.includes('sprite') || errorStr.includes('olamaps.io'))) ||
-    (errorStr.includes('olamaps-web-sdk') && (errorStr.includes('AbortError') || errorStr.includes('AJAXError')))
-  ) {
-    return // Silently ignore non-critical Ola Maps SDK errors
-  }
   
   // Suppress geolocation timeout errors (non-critical, will retry)
   if (
@@ -56,7 +53,12 @@ console.error = (...args) => {
   if (
     errorStr.includes('🌐 Network Error') ||
     errorStr.includes('Network Error - Backend server may not be running') ||
-    (errorStr.includes('ERR_NETWORK') && errorStr.includes('AxiosError'))
+    (errorStr.includes('ERR_NETWORK') && errorStr.includes('AxiosError')) ||
+    errorStr.includes('💡 API Base URL:') ||
+    errorStr.includes('💡 Backend URL:') ||
+    errorStr.includes('💡 Start backend with:') ||
+    errorStr.includes('💡 Check backend health:') ||
+    errorStr.includes('💡 Make sure backend server is running:')
   ) {
     // Only show first occurrence, subsequent ones are suppressed
     // The axios interceptor already handles throttling
@@ -66,26 +68,11 @@ console.error = (...args) => {
   originalError.apply(console, args)
 }
 
-// Handle unhandled promise rejections from Ola Maps SDK
+// Handle unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason || event
   const errorMsg = error?.message || String(error) || ''
   const errorName = error?.name || ''
-  const errorStack = error?.stack || ''
-  
-  // Suppress non-critical errors from Ola Maps SDK
-  if (
-    errorName === 'AbortError' ||
-    errorMsg.includes('AbortError') ||
-    errorMsg.includes('user aborted') ||
-    errorMsg.includes('3d_model') ||
-    (errorMsg.includes('Source layer') && errorMsg.includes('does not exist')) ||
-    (errorMsg.includes('AJAXError') && (errorMsg.includes('sprite') || errorMsg.includes('olamaps.io'))) ||
-    errorStack.includes('olamaps-web-sdk')
-  ) {
-    event.preventDefault() // Prevent error from showing in console
-    return
-  }
   
   // Suppress geolocation timeout errors
   if (

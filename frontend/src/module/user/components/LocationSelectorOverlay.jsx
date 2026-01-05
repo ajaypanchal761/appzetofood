@@ -9,94 +9,11 @@ import { useLocation as useGeoLocation } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
 import { toast } from "sonner"
 import { locationAPI, userAPI } from "@/lib/api"
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { Loader } from '@googlemaps/js-api-loader'
 
-// Fix Leaflet default icon issue
-delete (L.Icon.Default.prototype)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
+// Google Maps implementation - Leaflet components removed
 
-// Create custom green pin icon for draggable address selection marker
-const createGreenPinIcon = () => {
-  return L.divIcon({
-    className: 'custom-green-pin',
-    html: `<div style="
-      width: 40px;
-      height: 40px;
-      background-color: #00b14f;
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
-      border: 3px solid white;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      position: relative;
-    ">
-      <div style="
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%) rotate(45deg);
-        width: 12px;
-        height: 12px;
-        background: white;
-        border-radius: 50%;
-      "></div>
-    </div>`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 40],
-  })
-}
-
-// Component to update map center
-function MapUpdater({ center }) {
-  const map = useMap()
-  useEffect(() => {
-    map.setView(center, map.getZoom())
-  }, [center, map])
-  return null
-}
-
-// Draggable green pin marker for address selection (Leaflet)
-function CenterMarker({ position, onMoveEnd }) {
-  const markerRef = useRef(null)
-  const map = useMap()
-  const [isDragging, setIsDragging] = useState(false)
-
-  useEffect(() => {
-    if (markerRef.current && !isDragging) {
-      markerRef.current.setLatLng(position)
-    }
-  }, [position, isDragging])
-
-  const handleDragEnd = (e) => {
-    const newPosition = e.target.getLatLng()
-    setIsDragging(false)
-    if (onMoveEnd) {
-      onMoveEnd([newPosition.lat, newPosition.lng])
-    }
-  }
-
-  const handleDragStart = () => {
-    setIsDragging(true)
-  }
-
-  return (
-    <Marker
-      position={position}
-      icon={createGreenPinIcon()}
-      ref={markerRef}
-      draggable={true}
-      eventHandlers={{
-        dragend: handleDragEnd,
-        dragstart: handleDragStart
-      }}
-    />
-  )
-}
+// Google Maps implementation - removed Leaflet components
 
 // Calculate distance between two coordinates using Haversine formula
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -143,24 +60,99 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const [loadingAddress, setLoadingAddress] = useState(false)
   const [mapLoading, setMapLoading] = useState(false)
   const mapContainerRef = useRef(null)
-  const olaMapRef = useRef(null)
-  const olaMarkerRef = useRef(null)
-  const userLocationMarkerRef = useRef(null) // User location marker (blue dot) ke liye ref
-  const watchPositionIdRef = useRef(null) // watchPosition ID for cleanup
+  const googleMapRef = useRef(null) // Google Maps instance
+  const greenMarkerRef = useRef(null) // Green marker for address selection
+  const blueDotCircleRef = useRef(null) // Blue dot for user location
   const [currentAddress, setCurrentAddress] = useState("")
-  const [sdkLoaded, setSdkLoaded] = useState(false)
-  const [useLeafletFallback, setUseLeafletFallback] = useState(false)
-  const abortControllerRef = useRef(null)
-  const isInitializingRef = useRef(false)
+  const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   const reverseGeocodeTimeoutRef = useRef(null) // Debounce timeout for reverse geocoding
   const lastReverseGeocodeCoordsRef = useRef(null) // Track last coordinates to avoid duplicate calls
-  const lastUserLocationRef = useRef(null) // Track last user location to prevent unnecessary updates
-  const locationUpdateTimeoutRef = useRef(null) // Throttle location updates
 
-  // Current location display
-  const currentLocationText = location?.city && location?.state 
-    ? `${location.address || location.area || location.city}, ${location.state}`
-    : location?.city || location?.area || "Detecting location..."
+  // Debug: Log API key status (only first few characters for security)
+  useEffect(() => {
+    if (GOOGLE_MAPS_API_KEY) {
+      console.log("✅ Google Maps API Key loaded:", GOOGLE_MAPS_API_KEY.substring(0, 10) + "...")
+    } else {
+      console.error("❌ Google Maps API Key NOT found! Check .env file and restart dev server.")
+    }
+  }, [])
+
+  // Current location display - Show complete formatted address (SAVED ADDRESSES FORMAT)
+  // Format should match saved addresses: "B2/4, Gandhi Park Colony, Anand Nagar, Indore, Madhya Pradesh, 452001"
+  // Show ALL parts of formattedAddress (like saved addresses show all parts)
+  const currentLocationText = (() => {
+    // Priority 1: Use formattedAddress (complete detailed address) - SAVED ADDRESSES FORMAT
+    // Show full address with all parts (street, area, city, state, pincode) - just like saved addresses
+    if (location?.formattedAddress && 
+        location.formattedAddress !== "Select location" &&
+        !location.formattedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/)) {
+      // Remove "India" from the end if present (saved addresses don't show country)
+      let fullAddress = location.formattedAddress
+      if (fullAddress.endsWith(', India')) {
+        fullAddress = fullAddress.replace(', India', '').trim()
+      }
+      
+      // Show complete address - ALL parts (like saved addresses format)
+      // Saved addresses format: "additionalDetails, street, city, state, zipCode"
+      // Current location format: "POI, Building, Floor, Area, City, State, Pincode"
+      return fullAddress
+    }
+    
+    // Priority 2: Build address from components (SAVED ADDRESSES FORMAT)
+    // Format: "street/area, city, state, pincode" (matching saved addresses)
+    if (location?.address || location?.area || location?.street) {
+      const addressParts = []
+      
+      // Add street/address/area (like saved addresses' additionalDetails + street)
+      if (location.address && location.address !== "Select location") {
+        addressParts.push(location.address)
+      } else if (location.area) {
+        addressParts.push(location.area)
+      } else if (location.street) {
+        addressParts.push(location.street)
+      }
+      
+      // Add city
+      if (location.city) {
+        addressParts.push(location.city)
+      }
+      
+      // Add state
+      if (location.state) {
+        addressParts.push(location.state)
+      }
+      
+      // Add pincode (like saved addresses show zipCode)
+      if (location.postalCode) {
+        addressParts.push(location.postalCode)
+      }
+      
+      if (addressParts.length > 0) {
+        return addressParts.join(', ')
+      }
+    }
+    
+    // Priority 3: Use area + city + state + pincode
+    if (location?.area && location?.city && location?.state) {
+      const parts = [location.area, location.city, location.state]
+      if (location.postalCode) {
+        parts.push(location.postalCode)
+      }
+      return parts.join(', ')
+    }
+    
+    // Priority 4: Fallback to city + state + pincode
+    if (location?.city && location?.state) {
+      const parts = [location.city, location.state]
+      if (location.postalCode) {
+        parts.push(location.postalCode)
+      }
+      return parts.join(', ')
+    }
+    
+    // Final fallback
+    return location?.city || location?.area || "Detecting location..."
+  })()
 
   // Global error suppression for Ola Maps SDK errors (runs on component mount)
   useEffect(() => {
@@ -221,8 +213,156 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   useEffect(() => {
     if (location?.latitude && location?.longitude) {
       setMapPosition([location.latitude, location.longitude])
+      // Update map center if Google Maps is initialized
+      if (googleMapRef.current) {
+        googleMapRef.current.setCenter({
+          lat: location.latitude,
+          lng: location.longitude
+        })
+        // Update green marker position
+        if (greenMarkerRef.current) {
+          greenMarkerRef.current.setPosition({
+            lat: location.latitude,
+            lng: location.longitude
+          })
+        }
+      }
     }
   }, [location?.latitude, location?.longitude])
+
+  // Initialize Google Maps with Loader (ZOMATO-STYLE)
+  useEffect(() => {
+    if (!showAddressForm || !mapContainerRef.current || !GOOGLE_MAPS_API_KEY) {
+      return
+    }
+
+    let isMounted = true
+    setMapLoading(true)
+
+    const initializeGoogleMap = async () => {
+      try {
+        const loader = new Loader({
+          apiKey: GOOGLE_MAPS_API_KEY,
+          version: "weekly",
+          libraries: ["places", "geocoding"]
+        })
+
+        const google = await loader.load()
+        
+        if (!isMounted || !mapContainerRef.current) return
+
+        // Initial location (Indore center or current location)
+        const initialLocation = location?.latitude && location?.longitude
+          ? { lat: location.latitude, lng: location.longitude }
+          : { lat: 22.7196, lng: 75.8577 }
+
+        // Create map
+        const map = new google.maps.Map(mapContainerRef.current, {
+          center: initialLocation,
+          zoom: 15,
+          disableDefaultUI: true, // Zomato-style clean look
+          zoomControl: true,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false
+        })
+
+        googleMapRef.current = map
+
+        // Create Green Marker (draggable for address selection)
+        const greenMarker = new google.maps.Marker({
+          position: initialLocation,
+          map: map,
+          icon: {
+            url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+            scaledSize: new google.maps.Size(40, 40),
+            anchor: new google.maps.Point(20, 40)
+          },
+          draggable: true,
+          title: "Drag to select location"
+        })
+
+        greenMarkerRef.current = greenMarker
+
+        // Handle marker drag - update address
+        google.maps.event.addListener(greenMarker, 'dragend', function() {
+          const newPos = greenMarker.getPosition()
+          const newLat = newPos.lat()
+          const newLng = newPos.lng()
+          setMapPosition([newLat, newLng])
+          handleMapMoveEnd(newLat, newLng)
+        })
+
+        // Get user's current location and show Blue Dot
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              if (!isMounted) return
+              
+              const userPos = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              }
+
+              // Create Blue Dot (Circle) for user location
+              const blueDot = new google.maps.Circle({
+                strokeColor: "#4285F4",
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: "#4285F4",
+                fillOpacity: 0.35,
+                map: map,
+                center: userPos,
+                radius: 10 // Small blue dot
+              })
+
+              blueDotCircleRef.current = blueDot
+
+              // Center map on user location
+              map.setCenter(userPos)
+              greenMarker.setPosition(userPos)
+              setMapPosition([userPos.lat, userPos.lng])
+              
+              // Fetch address for user location
+              handleMapMoveEnd(userPos.lat, userPos.lng)
+            },
+            (error) => {
+              console.warn("Geolocation error:", error)
+              // Still fetch address for initial location
+              handleMapMoveEnd(initialLocation.lat, initialLocation.lng)
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 15000,
+              maximumAge: 0
+            }
+          )
+        } else {
+          // Fetch address for initial location if geolocation not available
+          handleMapMoveEnd(initialLocation.lat, initialLocation.lng)
+        }
+
+        setMapLoading(false)
+      } catch (error) {
+        console.error("Error initializing Google Maps:", error)
+        setMapLoading(false)
+        toast.error("Failed to load map. Please refresh the page.")
+      }
+    }
+
+    initializeGoogleMap()
+
+    return () => {
+      isMounted = false
+      // Cleanup markers
+      if (greenMarkerRef.current) {
+        greenMarkerRef.current.setMap(null)
+      }
+      if (blueDotCircleRef.current) {
+        blueDotCircleRef.current.setMap(null)
+      }
+    }
+  }, [showAddressForm, GOOGLE_MAPS_API_KEY, location?.latitude, location?.longitude])
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -265,26 +405,69 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
       // Request location - this will automatically prompt for permission if needed
       // Clear any cached location first to ensure fresh coordinates
-      console.log("🔄 Requesting fresh location (clearing cache)...")
+      console.log("🔄 Requesting fresh location (clearing cache and forcing fresh GPS)...")
+      
+      // Force fresh location with high accuracy GPS
+      // This ensures we get exact landmark like "Mama Loca Cafe" instead of just city
       const locationData = await requestLocation()
+      
       console.log("✅ Fresh location received:", {
         formattedAddress: locationData?.formattedAddress,
+        address: locationData?.address,
+        city: locationData?.city,
+        state: locationData?.state,
+        area: locationData?.area,
         coordinates: locationData?.latitude && locationData?.longitude ? 
-          `${locationData.latitude.toFixed(8)}, ${locationData.longitude.toFixed(8)}` : "N/A"
+          `${locationData.latitude.toFixed(8)}, ${locationData.longitude.toFixed(8)}` : "N/A",
+        hasCompleteAddress: locationData?.formattedAddress && 
+          locationData.formattedAddress.split(',').length >= 4
       })
       
-      // Save location to backend
+      // Verify we got complete address
+      if (!locationData?.formattedAddress || 
+          locationData.formattedAddress === "Select location" ||
+          locationData.formattedAddress.split(',').length < 4) {
+        console.warn("⚠️ Location received but address is incomplete. Retrying with force refresh...")
+        // Retry once more with explicit force refresh
+        const retryLocation = await requestLocation()
+        if (retryLocation?.formattedAddress && retryLocation.formattedAddress.split(',').length >= 4) {
+          Object.assign(locationData, retryLocation)
+          console.log("✅ Retry successful - got complete address:", retryLocation.formattedAddress)
+        } else {
+          console.warn("⚠️ Retry also returned incomplete address. This might be due to:")
+          console.warn("   1. GPS coordinates not accurate (network-based location)");
+          console.warn("   2. Location is on a road/street without specific building");
+          console.warn("   3. Try on mobile device for better GPS accuracy");
+        }
+      }
+      
+      // CRITICAL: Ensure location state is updated in the hook
+      // The requestLocation function already updates the state, but we verify here
+      console.log("✅✅✅ Final location data to be saved:", {
+        formattedAddress: locationData?.formattedAddress,
+        address: locationData?.address,
+        mainTitle: locationData?.mainTitle,
+        hasCompleteAddress: locationData?.formattedAddress && 
+          locationData.formattedAddress.split(',').length >= 4
+      })
+      
+      // Save location to backend with ALL fields
       if (locationData?.latitude && locationData?.longitude) {
         try {
           await userAPI.updateLocation({
             latitude: locationData.latitude,
             longitude: locationData.longitude,
-            address: locationData.formattedAddress || locationData.address,
-            city: locationData.city,
-            state: locationData.state,
-            area: locationData.area,
-            formattedAddress: locationData.formattedAddress
+            address: locationData.address || locationData.formattedAddress || "",
+            city: locationData.city || "",
+            state: locationData.state || "",
+            area: locationData.area || "",
+            formattedAddress: locationData.formattedAddress || locationData.address || "",
+            accuracy: locationData.accuracy,
+            postalCode: locationData.postalCode,
+            street: locationData.street,
+            streetNumber: locationData.streetNumber
           })
+          console.log("✅ Location saved to backend successfully")
         } catch (backendError) {
           // Only log non-network errors (network errors are handled by axios interceptor)
           if (backendError.code !== 'ERR_NETWORK' && backendError.message !== 'Network Error') {
@@ -294,14 +477,17 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         }
       }
       
-      // Success toast
-      toast.success("Location updated successfully!", {
+      // Success toast with address preview
+      const addressPreview = locationData?.formattedAddress || locationData?.address || "Location updated"
+      toast.success(`Location updated: ${addressPreview.split(',').slice(0, 2).join(', ')}`, {
         id: "location-request",
-        duration: 2000,
+        duration: 3000,
       })
       
-      // Close the location selector after successful location fetch
+      // Wait a moment for state to update, then close
+      setTimeout(() => {
       onClose()
+      }, 500)
     } catch (error) {
       // Handle permission denied or other errors
       if (error.code === 1 || error.message?.includes("denied") || error.message?.includes("permission")) {
@@ -351,860 +537,40 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     })
   }
 
-  // Check if Ola Maps SDK is loaded
+  // Google Maps loading is handled by the Loader in the initialization useEffect above
+
+  // OLD OLA MAPS INITIALIZATION - REMOVED (Replaced with Google Maps Loader above)
+  // All old Ola Maps/Leaflet code has been removed and replaced with Google Maps Loader implementation
+  
+  // Removed old useEffect that initialized Ola Maps - now using Google Maps Loader above
+  // All old Ola Maps initialization code has been removed
+
+  // Resize Google Map when container dimensions change
   useEffect(() => {
-    const checkSDK = () => {
-      if (typeof window !== 'undefined') {
-        // Check multiple possible SDK locations (more comprehensive check)
-        const checks = [
-          { name: 'window.OlaMaps', value: window.OlaMaps },
-          { name: 'window.OlaMapsWebSDK.OlaMaps', value: window.OlaMapsWebSDK?.OlaMaps },
-          { name: 'window.OlaMapsWebSDK', value: window.OlaMapsWebSDK },
-          { name: 'window.olamaps.OlaMaps', value: window.olamaps?.OlaMaps },
-          { name: 'window.olamaps', value: window.olamaps },
-          // Check for global exports
-          { name: 'window.OlaMapsWebSDK (global)', value: window['OlaMapsWebSDK'] },
-        ]
-
-        for (const check of checks) {
-          if (check.value) {
-            console.log(`✅ Ola Maps SDK found at ${check.name}`)
-            setSdkLoaded(true)
-            return true
-          }
-        }
-
-        // Debug: Log all window properties that might be related
-        const relatedKeys = Object.keys(window).filter(k => 
-          k.toLowerCase().includes('ola') || 
-          k.toLowerCase().includes('map') ||
-          k.toLowerCase().includes('sdk')
-        )
-        if (relatedKeys.length > 0) {
-          console.log("🔍 Found related window properties:", relatedKeys)
-        }
-      }
-      return false
-    }
-
-    // Check immediately
-    if (checkSDK()) {
-      return
-    }
-
-    console.log("⏳ Waiting for Ola Maps SDK to load...")
-    
-    // Wait for SDK to load with longer timeout
-    let attempts = 0
-    const maxAttempts = 100 // 10 seconds max (increased from 5)
-    const interval = setInterval(() => {
-      attempts++
-      if (checkSDK()) {
-        clearInterval(interval)
-        console.log(`✅ SDK loaded after ${attempts * 100}ms`)
-      } else if (attempts >= maxAttempts) {
-        clearInterval(interval)
-        console.error("❌ Ola Maps SDK failed to load after 10 seconds")
-        
-        // Log all window properties for debugging
-        const allKeys = Object.keys(window)
-        const relatedKeys = allKeys.filter(k => 
-          k.toLowerCase().includes('ola') || 
-          k.toLowerCase().includes('map') ||
-          k.toLowerCase().includes('sdk')
-        )
-        console.log("🔍 Related window properties:", relatedKeys)
-        console.log("🔍 All window keys (first 50):", allKeys.slice(0, 50))
-        
-        // Check if script tag exists
-        const scripts = Array.from(document.querySelectorAll('script'))
-        const olaScript = scripts.find(s => s.src.includes('ola'))
-        console.log("🔍 Ola Maps script tag:", olaScript ? {
-          src: olaScript.src,
-          loaded: olaScript.complete || olaScript.readyState === 'complete'
-        } : 'Not found')
-        
-        // Don't show error toast, just use Leaflet fallback
-        console.log("🔄 Will use Leaflet fallback")
-        setUseLeafletFallback(true)
-      }
-    }, 100)
-
-    return () => {
-      clearInterval(interval)
-    }
-  }, [])
-
-  // Initialize Ola Maps when address form is shown
-  useEffect(() => {
-    // If SDK didn't load, use Leaflet fallback immediately
-    if (!showAddressForm || !mapContainerRef.current) {
-      return
-    }
-    
-    // If SDK not loaded and not already using fallback, wait a bit more
-    if (!sdkLoaded && !useLeafletFallback) {
-      // Give SDK more time to load (already handled in SDK check useEffect)
-      return
-    }
-    
-    // If using Leaflet fallback, skip Ola Maps initialization
-    if (useLeafletFallback) {
-      setMapLoading(false)
-      return
-    }
-
-    // Prevent multiple simultaneous initializations
-    if (isInitializingRef.current) {
-      console.log("⚠️ Map initialization already in progress, skipping...")
-      return
-    }
-
-    // Add global error handler for unhandled promise rejections from Ola Maps
-    const unhandledRejectionHandler = (event) => {
-      const error = event.reason || event
-      const errorMsg = error?.message || String(error) || ''
-      const errorName = error?.name || ''
-      
-      // Suppress non-critical errors from Ola Maps SDK
-      if (errorName === 'AbortError' || 
-          errorMsg.includes('AbortError') || 
-          errorMsg.includes('user aborted') ||
-          (errorMsg.includes('AJAXError') && errorMsg.includes('sprite'))) {
-        event.preventDefault() // Prevent error from showing in console
-        return
-      }
-    }
-    
-    // Small delay to ensure container is rendered
-    const timer = setTimeout(() => {
-      if (!mapContainerRef.current) return
-
-      // Create AbortController for this initialization
-      abortControllerRef.current = new AbortController()
-      isInitializingRef.current = true
-
-      // Add error handler
-      window.addEventListener('unhandledrejection', unhandledRejectionHandler)
-
-      const initializeOlaMap = async () => {
-        // Suppress console errors for non-critical Ola Maps SDK errors
-        // Note: This is in addition to the global handler, for extra safety during initialization
-        const originalConsoleError = console.error
-        const errorSuppressor = (...args) => {
-          const errorStr = args.join(' ')
-          // Suppress AbortError and sprite file errors
-          if (errorStr.includes('AbortError') || 
-              errorStr.includes('user aborted') ||
-              errorStr.includes('sprite@2x.json') ||
-              errorStr.includes('sprite@') ||
-              (errorStr.includes('AJAXError') && (errorStr.includes('sprite') || errorStr.includes('olamaps.io'))) ||
-              (errorStr.includes('olamaps-web-sdk') && (errorStr.includes('AbortError') || errorStr.includes('AJAXError')))) {
-            // Silently ignore these non-critical errors
-            return
-          }
-          // Log other errors normally
-          originalConsoleError.apply(console, args)
-        }
-        
-        // Temporarily replace console.error (will be restored after initialization)
-        console.error = errorSuppressor
-        
-        try {
-          setMapLoading(true)
-          
-          // Check if initialization was aborted
-          if (abortControllerRef.current?.signal.aborted) {
-            console.log("⚠️ Map initialization aborted before start")
-            // Restore console.error
-            console.error = originalConsoleError
-            return
-          }
-          
-          const API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY || "83KVeJLn68xTRzKRdkpD0BWoo0YMoGUXxd4zBmiJ"
-          
-          // Check SDK availability - try different possible locations
-          let OlaMapsClass = null
-          
-          if (window.OlaMaps) {
-            OlaMapsClass = window.OlaMaps
-            console.log("Using window.OlaMaps")
-          } else if (window.OlaMapsWebSDK && window.OlaMapsWebSDK.OlaMaps) {
-            OlaMapsClass = window.OlaMapsWebSDK.OlaMaps
-            console.log("Using window.OlaMapsWebSDK.OlaMaps")
-          } else if (window.OlaMapsWebSDK) {
-            OlaMapsClass = window.OlaMapsWebSDK
-            console.log("Using window.OlaMapsWebSDK")
-          } else if (window.olamaps && window.olamaps.OlaMaps) {
-            OlaMapsClass = window.olamaps.OlaMaps
-            console.log("Using window.olamaps.OlaMaps")
-          }
-
-          if (!OlaMapsClass) {
-            console.error("❌ Ola Maps SDK not found. Available:", {
-              OlaMaps: !!window.OlaMaps,
-              OlaMapsWebSDK: !!window.OlaMapsWebSDK,
-              olamaps: !!window.olamaps,
-              allKeys: Object.keys(window).filter(k => k.toLowerCase().includes('ola') || k.toLowerCase().includes('map'))
-            })
-            throw new Error("Ola Maps SDK not available")
-          }
-
-          console.log("🗺️ Initializing Ola Map with API Key and center:", [mapPosition[1], mapPosition[0]])
-
-          const olaMaps = new OlaMapsClass({
-            apiKey: API_KEY,
-          })
-
-          // Initialize map with proper style URL
-          const mapConfig = {
-            container: mapContainerRef.current,
-            center: [mapPosition[1], mapPosition[0]], // [lng, lat] for Ola Maps
-            zoom: 15,
-            style: "https://api.olamaps.io/tiles/vector/v1/styles/default-light/style.json",
-            // Add transformRequest to include API key in all requests
-            transformRequest: (url, resourceType) => {
-              if (url.includes('olamaps.io')) {
-                const separator = url.includes('?') ? '&' : '?'
-                return {
-                  url: `${url}${separator}api_key=${API_KEY}`
-                }
-              }
-              return { url }
-            }
-          }
-
-          console.log("🗺️ Initializing Ola Map with style URL")
-          console.log("Container:", mapContainerRef.current)
-          
-          // Ensure container has proper dimensions
-          if (mapContainerRef.current) {
-            const container = mapContainerRef.current
-            const parent = container.parentElement
-            if (parent) {
-              const parentHeight = parent.offsetHeight || parent.clientHeight
-              const parentWidth = parent.offsetWidth || parent.clientWidth
-              
-              // Set explicit dimensions if not set
-              if (!container.style.height || container.style.height === '0px') {
-                container.style.height = parentHeight > 0 ? `${parentHeight}px` : '400px'
-              }
-              if (!container.style.width || container.style.width === '0px') {
-                container.style.width = parentWidth > 0 ? `${parentWidth}px` : '100%'
-              }
-            }
-          }
-          
-          console.log("Container dimensions:", {
-            width: mapContainerRef.current?.offsetWidth,
-            height: mapContainerRef.current?.offsetHeight,
-            styleWidth: mapContainerRef.current?.style.width,
-            styleHeight: mapContainerRef.current?.style.height
-          })
-
-          let myMap = null
-
-          // Try initialization with style URL
-          try {
-            myMap = olaMaps.init(mapConfig)
-            console.log("✅ Ola Map initialized successfully")
-            
-            // Wait for map to load before proceeding
-            myMap.on('load', () => {
-              console.log("✅ Map tiles loaded successfully")
-              // Resize map after load to ensure proper display
-              setTimeout(() => {
-                if (myMap && typeof myMap.resize === 'function') {
-                  myMap.resize()
-                  console.log("✅ Map resized after load")
-                }
-              }, 100)
-            })
-            
-            // Handle map load errors
-            myMap.on('error', (e) => {
-              const error = e.error || {}
-              const errorMsg = error.message || String(error) || ''
-              
-              // If style fails to load, try without style
-              if (errorMsg.includes('style') || errorMsg.includes('404')) {
-                console.warn("⚠️ Style failed to load, trying without style")
-                try {
-                  delete mapConfig.style
-                  const mapWithoutStyle = olaMaps.init(mapConfig)
-                  if (mapWithoutStyle) {
-                    myMap = mapWithoutStyle
-                    console.log("✅ Map initialized without style")
-                  }
-                } catch (noStyleError) {
-                  console.error("❌ Map initialization failed completely")
-                  console.log("🔄 Using Leaflet fallback")
-                  setUseLeafletFallback(true)
-                  setMapLoading(false)
-                }
-              }
-            })
-          } catch (error) {
-            console.warn("⚠️ Init with style failed, trying without style:", error.message)
-            
-            // Try without style as fallback
-            try {
-              delete mapConfig.style
-              myMap = olaMaps.init(mapConfig)
-              console.log("✅ Ola Map initialized without style")
-            } catch (noStyleError) {
-              console.error("❌ Both initialization attempts failed")
-              console.error("Error:", noStyleError.message)
-              console.log("🔄 Using Leaflet fallback")
-              // Fallback to Leaflet if both attempts fail
-              setUseLeafletFallback(true)
-              setMapLoading(false)
-              // Restore console.error
-              console.error = originalConsoleError
-              return
-            }
-          }
-
-          // Add comprehensive error handler
-          if (myMap) {
-            myMap.on('error', (e) => {
-              const error = e.error || {}
-              const errorMsg = error.message || String(error) || ''
-              const errorName = error.name || ''
-              const errorUrl = error.url || ''
-              
-              // Suppress AbortError - it's not critical, just means request was cancelled
-              if (errorName === 'AbortError' || 
-                  errorMsg.includes('AbortError') || 
-                  errorMsg.includes('aborted') || 
-                  errorMsg.includes('user aborted')) {
-                // Silently ignore - this is expected when component unmounts or map is reinitialized
-                return
-              }
-              
-              // Suppress AJAXError for sprite files - these are non-critical
-              if (errorName === 'AJAXError' || errorMsg.includes('AJAXError')) {
-                // Check if it's a sprite file error (non-critical)
-                if (errorUrl && (errorUrl.includes('sprite') || errorUrl.includes('font'))) {
-                  // Silently ignore sprite/font loading errors - map will work without them
-                  return
-                }
-                // For other AJAX errors, log but don't break
-                console.warn("⚠️ AJAX error (non-critical):", errorUrl || errorMsg)
-                return
-              }
-              
-              // Suppress 3d_model errors (non-critical)
-              if (errorMsg.includes('3d_model') || 
-                  errorMsg.includes('3D') ||
-                  (errorMsg.includes('Source layer') && errorMsg.includes('does not exist'))) {
-                // Silently ignore
-                return
-              }
-              
-              // Suppress network errors that are non-critical
-              if (errorMsg.includes('Failed to fetch') || 
-                  errorMsg.includes('NetworkError') ||
-                  errorMsg.includes('network')) {
-                // Only log if it's not a sprite/font file
-                if (!errorUrl || (!errorUrl.includes('sprite') && !errorUrl.includes('font'))) {
-                  console.warn("⚠️ Network error (may be non-critical):", errorUrl || errorMsg)
-                }
-                return
-              }
-              
-              // Handle 404 style errors - fallback to Leaflet only if critical
-              if (errorMsg.includes('404') && errorUrl && errorUrl.includes('style.json')) {
-                console.error("❌ Style URL error (404):", errorUrl)
-                console.log("🔄 Falling back to Leaflet due to style 404")
-                
-                // Clean up Ola Map
-                try {
-                  if (myMap && typeof myMap.remove === 'function') {
-                    myMap.remove()
-                  }
-                  olaMapRef.current = null
-                  olaMarkerRef.current = null
-                } catch (cleanupError) {
-                  console.warn("Cleanup error:", cleanupError)
-                }
-                
-                // Switch to Leaflet fallback
-                setUseLeafletFallback(true)
-                setMapLoading(false)
-                isInitializingRef.current = false
-                return
-              }
-              
-              // Log only truly critical errors
-              if (!errorMsg.includes('sprite') && 
-                  !errorMsg.includes('font') && 
-                  !errorMsg.includes('aborted')) {
-                console.error("❌ Map error:", error)
-              }
-            })
-          }
-
-          console.log("✅ Map initialized:", myMap)
-
-          // Resize map to ensure proper display
-          const resizeMap = () => {
-            try {
-              if (myMap && typeof myMap.resize === 'function') {
-                myMap.resize()
-                console.log("✅ Map resized")
-              }
-            } catch (resizeError) {
-              console.warn("⚠️ Error resizing map:", resizeError)
-            }
-          }
-
-          // Start tracking user's live location when map loads
-          const startLocationTracking = () => {
-            console.log("🗺️ Starting location tracking...")
-            if (myMap && olaMaps) {
-              trackUserLocation(myMap, olaMaps)
-            } else {
-              console.warn("⚠️ Map or SDK not ready for location tracking")
-            }
-          }
-
-          // Handle map load event
-          const handleMapLoad = () => {
-            console.log("🗺️ Map loaded event fired - tiles should be visible now")
-            // Resize map after load to fix display issues
-            setTimeout(() => {
-              resizeMap()
-              startLocationTracking()
-            }, 200)
-          }
-
-          // Set up load event handler
-          myMap.on('load', handleMapLoad)
-          
-          // Also check if map is already loaded (some SDKs load synchronously)
-          setTimeout(() => {
-            try {
-              if (myMap && myMap.isStyleLoaded && myMap.isStyleLoaded()) {
-                console.log("🗺️ Map style already loaded")
-                handleMapLoad()
-              }
-            } catch (e) {
-              // Ignore - will wait for load event
-            }
-          }, 100)
-
-          // Resize map immediately and after delays to ensure proper display
-          setTimeout(() => {
-            resizeMap()
-          }, 100)
-          
-          setTimeout(() => {
-            resizeMap()
-          }, 500)
-
-          // Also try to start tracking immediately (in case load event already fired)
-          // Use a small delay to ensure map is ready
-          setTimeout(() => {
-            if (myMap && !userLocationMarkerRef.current) {
-              console.log("🗺️ Starting location tracking via timeout fallback")
-              resizeMap()
-              startLocationTracking()
-            }
-          }, 1500)
-
-          // Create draggable green pin marker for address selection
-          // Wait for map to be fully ready before creating marker
-          const createGreenPinMarker = () => {
-            // Create custom green pin element
-            const greenPinElement = document.createElement('div')
-            greenPinElement.className = 'draggable-green-pin'
-            greenPinElement.style.cssText = `
-              width: 40px;
-              height: 40px;
-              background-color: #00b14f;
-              border-radius: 50% 50% 50% 0;
-              transform: rotate(-45deg);
-              border: 3px solid white;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-              position: relative;
-              cursor: move;
-              z-index: 1000;
-              display: block;
-              visibility: visible;
-              opacity: 1;
-            `
-            // Add white dot in center
-            const whiteDot = document.createElement('div')
-            whiteDot.style.cssText = `
-              position: absolute;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%) rotate(45deg);
-              width: 12px;
-              height: 12px;
-              background: white;
-              border-radius: 50%;
-            `
-            greenPinElement.appendChild(whiteDot)
-            
-            // Try different marker creation methods with custom element
-            let myMarker = null
-            try {
-              if (olaMaps.addMarker) {
-                myMarker = olaMaps.addMarker({
-                  element: greenPinElement,
-                  anchor: 'bottom',
-                  draggable: true // Make it draggable
-                }).setLngLat([mapPosition[1], mapPosition[0]]).addTo(myMap)
-                console.log("✅ Green pin created using addMarker")
-              } else if (olaMaps.Marker) {
-                myMarker = new olaMaps.Marker({
-                  element: greenPinElement,
-                  anchor: 'bottom',
-                  draggable: true // Make it draggable
-                }).setLngLat([mapPosition[1], mapPosition[0]]).addTo(myMap)
-                console.log("✅ Green pin created using Marker class")
-              } else if (window.maplibregl && window.maplibregl.Marker) {
-                myMarker = new window.maplibregl.Marker({
-                  element: greenPinElement,
-                  anchor: 'bottom',
-                  draggable: true
-                }).setLngLat([mapPosition[1], mapPosition[0]]).addTo(myMap)
-                console.log("✅ Green pin created using maplibregl.Marker")
-              } else {
-                console.warn("⚠️ Marker creation method not found")
-                console.warn("Available:", {
-                  addMarker: !!olaMaps.addMarker,
-                  Marker: !!olaMaps.Marker,
-                  maplibregl: !!window.maplibregl
-                })
-              }
-              
-              if (myMarker) {
-                console.log("✅ Draggable green pin marker added successfully:", myMarker)
-                // Verify marker is on map and make it visible
-                setTimeout(() => {
-                  const markerElement = myMarker.getElement?.() || myMarker._element
-                  if (markerElement) {
-                    console.log("✅ Green pin element found on map")
-                    // Ensure element is visible
-                    markerElement.style.display = 'block'
-                    markerElement.style.visibility = 'visible'
-                    markerElement.style.opacity = '1'
-                    markerElement.style.zIndex = '1000'
-                    console.log("✅ Green pin visibility ensured")
-                  } else {
-                    console.warn("⚠️ Green pin element not found in DOM")
-                  }
-                }, 300)
-              }
-            } catch (markerError) {
-              console.error("❌ Could not create green pin marker:", markerError)
-              console.error("Error details:", markerError)
-            }
-            
-            return myMarker
-          }
-          
-          // Create green pin marker after map loads
-          let myMarker = null
-          let markerDragged = false
-          
-          // Create green pin marker with delay to ensure map is ready
-          const setupGreenPin = () => {
-            myMarker = createGreenPinMarker()
-            
-            if (myMarker) {
-              // Store marker reference
-              olaMarkerRef.current = myMarker
-              
-              // Handle marker drag events
-              myMarker.on('dragend', () => {
-                try {
-                  markerDragged = true
-                  const lngLat = myMarker.getLngLat()
-                  const lat = lngLat.lat || lngLat[1]
-                  const lng = lngLat.lng || lngLat[0]
-                  console.log("📍 Green pin dragged to:", { lat, lng })
-                  setMapPosition([lat, lng])
-                  handleMapMoveEnd(lat, lng)
-                  
-                  // CRITICAL: Ensure blue dot marker stays visible after green pin drag
-                  if (userLocationMarkerRef.current) {
-                    try {
-                      const blueDotEl = userLocationMarkerRef.current.getElement?.() || userLocationMarkerRef.current._element
-                      if (blueDotEl) {
-                        blueDotEl.style.display = 'block'
-                        blueDotEl.style.visibility = 'visible'
-                        blueDotEl.style.opacity = '1'
-                        blueDotEl.style.zIndex = '1001'
-                        console.log("🔵 Blue dot visibility ensured after green pin drag")
-                      }
-                    } catch (blueDotErr) {
-                      console.warn("⚠️ Could not ensure blue dot visibility:", blueDotErr)
-                    }
-                  }
-                } catch (error) {
-                  console.warn("Error handling marker drag:", error)
-                }
-              })
-              
-              myMarker.on('dragstart', () => {
-                markerDragged = true
-                console.log("📍 User started dragging green pin")
-                
-                // CRITICAL: Ensure blue dot marker stays visible when green pin drag starts
-                if (userLocationMarkerRef.current) {
-                  try {
-                    const blueDotEl = userLocationMarkerRef.current.getElement?.() || userLocationMarkerRef.current._element
-                    if (blueDotEl) {
-                      blueDotEl.style.display = 'block'
-                      blueDotEl.style.visibility = 'visible'
-                      blueDotEl.style.opacity = '1'
-                      blueDotEl.style.zIndex = '1001'
-                      console.log("🔵 Blue dot visibility ensured when green pin drag starts")
-                    }
-                  } catch (blueDotErr) {
-                    console.warn("⚠️ Could not ensure blue dot visibility:", blueDotErr)
-                  }
-                }
-              })
-              
-              console.log("✅ Green pin marker setup complete")
-            } else {
-              console.warn("⚠️ Green pin marker creation failed, will retry")
-              // Retry after delay
-              setTimeout(() => {
-                const retryMarker = createGreenPinMarker()
-                if (retryMarker) {
-                  myMarker = retryMarker
-                  olaMarkerRef.current = retryMarker
-                  console.log("✅ Green pin marker created on retry")
-                }
-              }, 1000)
-            }
-          }
-          
-          // Create green pin after map is ready
-          setTimeout(() => {
-            setupGreenPin()
-          }, 500)
-
-          // Update marker position when map moves (only if marker hasn't been dragged)
-          myMap.on('move', () => {
-            try {
-              // Use olaMarkerRef to access marker
-              const currentMarker = olaMarkerRef.current || myMarker
-              // Only update marker position if it hasn't been dragged by user
-              if (!markerDragged && currentMarker && currentMarker.setLngLat) {
-                const center = myMap.getCenter()
-                if (Array.isArray(center)) {
-                  currentMarker.setLngLat(center)
-                  setMapPosition([center[1], center[0]]) // [lat, lng]
-                } else if (center.lat && center.lng) {
-                  currentMarker.setLngLat([center.lng, center.lat])
-                  setMapPosition([center.lat, center.lng])
-                }
-              }
-              
-              // CRITICAL: Ensure blue dot marker stays visible during map move
-              if (userLocationMarkerRef.current) {
-                try {
-                  const blueDotEl = userLocationMarkerRef.current.getElement?.() || userLocationMarkerRef.current._element
-                  if (blueDotEl) {
-                    blueDotEl.style.display = 'block'
-                    blueDotEl.style.visibility = 'visible'
-                    blueDotEl.style.opacity = '1'
-                    blueDotEl.style.zIndex = '1001'
-                  }
-                } catch (blueDotErr) {
-                  // Silently ignore - this is just a safety check
-                }
-              }
-            } catch (error) {
-              console.warn("Error updating marker position:", error)
-            }
-          })
-
-          // Fetch address when map movement ends (only if marker wasn't dragged)
-          myMap.on('moveend', () => {
-            try {
-              // CRITICAL: Ensure blue dot marker stays visible after map move ends
-              if (userLocationMarkerRef.current) {
-                try {
-                  const blueDotEl = userLocationMarkerRef.current.getElement?.() || userLocationMarkerRef.current._element
-                  if (blueDotEl) {
-                    blueDotEl.style.display = 'block'
-                    blueDotEl.style.visibility = 'visible'
-                    blueDotEl.style.opacity = '1'
-                    blueDotEl.style.zIndex = '1001'
-                    console.log("🔵 Blue dot visibility ensured after map moveend")
-                  }
-                } catch (blueDotErr) {
-                  console.warn("⚠️ Could not ensure blue dot visibility:", blueDotErr)
-                }
-              }
-              
-              // If marker was dragged, don't update from map center
-              if (markerDragged) {
-                return
-              }
-              
-              const center = myMap.getCenter()
-              // Handle different center formats
-              let lat, lng
-              if (Array.isArray(center)) {
-                lng = center[0]
-                lat = center[1]
-              } else if (center.lat && center.lng) {
-                lat = center.lat
-                lng = center.lng
-              } else {
-                console.warn("Unknown center format:", center)
-                return
-              }
-              handleMapMoveEnd(lat, lng)
-            } catch (error) {
-              console.error("Error in moveend handler:", error)
-            }
-          })
-
-          // Initial address fetch
-          handleMapMoveEnd(mapPosition[0], mapPosition[1])
-
-          olaMapRef.current = myMap
-          // myMarker will be set in setTimeout, so we'll update ref there
-          setMapLoading(false)
-          isInitializingRef.current = false
-          
-          // Restore original console.error after successful initialization
-          console.error = originalConsoleError
-        } catch (error) {
-          // Restore original console.error on error
-          console.error = originalConsoleError
-          
-          // Check if error is due to abort
-          if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-            console.warn("⚠️ Map initialization aborted (non-critical):", error.message)
-            setMapLoading(false)
-            isInitializingRef.current = false
-            return
-          }
-          
-          // Suppress AbortError and sprite-related errors
-          if (error.message?.includes('AbortError') || 
-              error.message?.includes('sprite') ||
-              (error.message?.includes('AJAXError') && error.message?.includes('sprite'))) {
-            console.warn("⚠️ Non-critical initialization error (suppressed):", error.message)
-            setMapLoading(false)
-            isInitializingRef.current = false
-            return
-          }
-          
-          console.error("Error initializing Ola Maps:", error)
-          setMapLoading(false)
-          isInitializingRef.current = false
-          
-          // Only show error if it's not an abort
-          if (error.name !== 'AbortError') {
-            toast.error("Failed to load map. Please refresh the page.")
-          }
-        }
-      }
-
-      initializeOlaMap()
-    }, 100)
-
-    // Cleanup
-    return () => {
-      clearTimeout(timer)
-      
-      // Remove unhandled rejection handler
-      window.removeEventListener('unhandledrejection', unhandledRejectionHandler)
-      
-      // Abort any ongoing initialization
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-        abortControllerRef.current = null
-      }
-      
-      isInitializingRef.current = false
-      
-      if (olaMapRef.current) {
-        try {
-          olaMapRef.current.remove()
-        } catch (e) {
-          // Ignore errors during cleanup
-          console.warn("Cleanup warning (ignored):", e.message)
-        }
-        olaMapRef.current = null
-      }
-      if (olaMarkerRef.current) {
-        try {
-          olaMarkerRef.current.remove()
-        } catch (e) {
-          // Ignore errors during cleanup
-          console.warn("Cleanup warning (ignored):", e.message)
-        }
-        olaMarkerRef.current = null
-      }
-      
-      // Cleanup user location marker (blue dot)
-      if (userLocationMarkerRef.current) {
-        try {
-          userLocationMarkerRef.current.remove()
-        } catch (e) {
-          console.warn("Cleanup warning (ignored):", e.message)
-        }
-        userLocationMarkerRef.current = null
-      }
-      
-      // Clear watchPosition
-      if (watchPositionIdRef.current !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchPositionIdRef.current)
-        watchPositionIdRef.current = null
-      }
-      
-      // Clear location update timeout
-      if (locationUpdateTimeoutRef.current) {
-        clearTimeout(locationUpdateTimeoutRef.current)
-        locationUpdateTimeoutRef.current = null
-      }
-      
-      // Reset last location
-      lastUserLocationRef.current = null
-    }
-  }, [showAddressForm, sdkLoaded, mapPosition])
-
-  // Resize map when container dimensions change
-  useEffect(() => {
-    if (olaMapRef.current && showAddressForm && !useLeafletFallback) {
+    if (googleMapRef.current && showAddressForm) {
       const resizeMap = () => {
         try {
-          if (olaMapRef.current && typeof olaMapRef.current.resize === 'function') {
-            olaMapRef.current.resize()
-            console.log("✅ Map resized (container change)")
+          if (googleMapRef.current && typeof window.google !== 'undefined' && window.google.maps) {
+            window.google.maps.event.trigger(googleMapRef.current, 'resize');
+            console.log("✅ Google Map resized (container change)");
           }
         } catch (error) {
-          console.warn("⚠️ Error resizing map:", error)
+          console.warn("⚠️ Error resizing map:", error);
         }
-      }
+      };
 
-      // Resize after a short delay to ensure container is rendered
       const timer = setTimeout(() => {
-        resizeMap()
-      }, 300)
+        resizeMap();
+      }, 300);
 
-      // Also resize on window resize
-      window.addEventListener('resize', resizeMap)
+      window.addEventListener('resize', resizeMap);
 
       return () => {
-        clearTimeout(timer)
-        window.removeEventListener('resize', resizeMap)
+        clearTimeout(timer);
+        window.removeEventListener('resize', resizeMap);
       }
     }
-  }, [showAddressForm, useLeafletFallback])
+  }, [showAddressForm])
 
   // Track user's live location with blue dot indicator
   const trackUserLocation = (mapInstance, sdkInstance) => {
@@ -1891,56 +1257,25 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       console.log("📍 Location timestamp:", locationData.timestamp || new Date().toISOString())
       setMapPosition([lat, lng])
       
-      if (useLeafletFallback) {
-        // Leaflet fallback - position will update via MapUpdater
-        // Wait a bit for map to update
-        setTimeout(async () => {
-          await handleMapMoveEnd(lat, lng)
-          toast.success("Location updated!", { id: "current-location" })
-        }, 300)
-      } else if (olaMapRef.current) {
+      // Update Google Maps to new location
+      if (googleMapRef.current && window.google && window.google.maps) {
         try {
-          console.log("🗺️ Updating Ola Map to:", [lng, lat])
+          console.log("🗺️ Updating Google Map to:", { lat, lng })
           
-          // Fly to current location - try different methods
-          if (typeof olaMapRef.current.flyTo === 'function') {
-            olaMapRef.current.flyTo({
-              center: [lng, lat], // Ola Maps uses [lng, lat]
-              zoom: 17,
-              duration: 1000
-            })
-            console.log("✅ Used flyTo method")
-          } else if (typeof olaMapRef.current.setCenter === 'function') {
-            olaMapRef.current.setCenter([lng, lat])
-            if (typeof olaMapRef.current.setZoom === 'function') {
-              olaMapRef.current.setZoom(17)
-            }
-            console.log("✅ Used setCenter method")
-          } else if (typeof olaMapRef.current.jumpTo === 'function') {
-            olaMapRef.current.jumpTo({
-              center: [lng, lat],
-              zoom: 17
-            })
-            console.log("✅ Used jumpTo method")
-          } else if (typeof olaMapRef.current.easeTo === 'function') {
-            olaMapRef.current.easeTo({
-              center: [lng, lat],
-              zoom: 17
-            })
-            console.log("✅ Used easeTo method")
-          } else {
-            console.warn("⚠️ No valid map movement method found")
+          // Pan to current location
+          googleMapRef.current.panTo({ lat, lng })
+          googleMapRef.current.setZoom(17)
+          
+          // Update green marker position
+          if (greenMarkerRef.current) {
+            greenMarkerRef.current.setPosition({ lat, lng })
+            console.log("✅ Updated green marker position")
           }
           
-          // Update marker if it exists
-          if (olaMarkerRef.current) {
-            if (typeof olaMarkerRef.current.setLngLat === 'function') {
-              olaMarkerRef.current.setLngLat([lng, lat])
-              console.log("✅ Updated marker position")
-            } else if (typeof olaMarkerRef.current.setPosition === 'function') {
-              olaMarkerRef.current.setPosition([lng, lat])
-              console.log("✅ Updated marker position (setPosition)")
-            }
+          // Update blue dot position
+          if (blueDotCircleRef.current) {
+            blueDotCircleRef.current.setCenter({ lat, lng })
+            console.log("✅ Updated blue dot position")
           }
           
           // Wait for map to finish moving, then fetch address
@@ -1974,29 +1309,27 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               console.log("📍 Using cached location due to timeout:", cachedLocation)
               setMapPosition([cachedLocation.latitude, cachedLocation.longitude])
               
-              if (useLeafletFallback) {
-                setTimeout(async () => {
-                  await handleMapMoveEnd(cachedLocation.latitude, cachedLocation.longitude)
-                  toast.success("Using cached location", { id: "current-location" })
-                }, 300)
-              } else if (olaMapRef.current) {
+              // Update Google Maps with cached location
+              if (googleMapRef.current && window.google && window.google.maps) {
                 try {
-                  if (typeof olaMapRef.current.flyTo === 'function') {
-                    olaMapRef.current.flyTo({
-                      center: [cachedLocation.longitude, cachedLocation.latitude],
-                      zoom: 17
-                    })
-                  } else if (typeof olaMapRef.current.setCenter === 'function') {
-                    olaMapRef.current.setCenter([cachedLocation.longitude, cachedLocation.latitude])
+                  googleMapRef.current.panTo({ lat: cachedLocation.latitude, lng: cachedLocation.longitude });
+                  googleMapRef.current.setZoom(17);
+                  
+                  // Update markers
+                  if (greenMarkerRef.current) {
+                    greenMarkerRef.current.setPosition({ lat: cachedLocation.latitude, lng: cachedLocation.longitude });
+                  }
+                  if (blueDotCircleRef.current) {
+                    blueDotCircleRef.current.setCenter({ lat: cachedLocation.latitude, lng: cachedLocation.longitude });
                   }
                   
                   setTimeout(async () => {
-                    await handleMapMoveEnd(cachedLocation.latitude, cachedLocation.longitude)
-                    toast.success("Using cached location", { id: "current-location" })
-                  }, 500)
+                    await handleMapMoveEnd(cachedLocation.latitude, cachedLocation.longitude);
+                    toast.success("Using cached location", { id: "current-location" });
+                  }, 500);
                 } catch (mapErr) {
-                  console.error("Error updating map with cached location:", mapErr)
-                  toast.warning("Location request timed out. Please try again.", { id: "current-location" })
+                  console.error("Error updating map with cached location:", mapErr);
+                  toast.warning("Location request timed out. Please try again.", { id: "current-location" });
                 }
               } else {
                 setTimeout(async () => {
@@ -2240,33 +1573,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           </div>
         </div>
 
-        {/* Map Section */}
+        {/* Map Section - Google Maps */}
         <div className="flex-1 relative" style={{ height: '40vh', minHeight: '300px' }}>
-          {/* Use Leaflet as fallback if Ola Maps fails */}
-          {useLeafletFallback ? (
-            <MapContainer
-              center={mapPosition}
-              zoom={15}
-              style={{ height: '100%', width: '100%', zIndex: 1 }}
-              zoomControl={true}
-              scrollWheelZoom={true}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapUpdater center={mapPosition} />
-              <CenterMarker 
-                position={mapPosition} 
-                onMoveEnd={(newPos) => {
-                  setMapPosition(newPos)
-                  handleMapMoveEnd(newPos[0], newPos[1])
-                }}
-              />
-            </MapContainer>
-          ) : (
-            <>
-              {/* Ola Maps Container */}
+          {/* Google Maps Container */}
               <div 
                 ref={mapContainerRef} 
                 className="w-full h-full bg-gray-200 dark:bg-gray-800"
@@ -2291,17 +1600,15 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                 </div>
               )}
 
-              {/* SDK Not Loaded Error */}
-              {!sdkLoaded && !mapLoading && (
+          {/* API Key Missing Error */}
+          {!GOOGLE_MAPS_API_KEY && !mapLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-900 z-20">
                   <div className="text-center p-4">
                     <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Map is loading...</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Please wait a moment</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Google Maps API key not found</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Please set VITE_GOOGLE_MAPS_API_KEY in .env file</p>
                   </div>
                 </div>
-              )}
-            </>
           )}
 
           {/* Use Current Location Button */}

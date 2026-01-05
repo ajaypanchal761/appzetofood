@@ -168,13 +168,29 @@ export const uploadProfileImage = asyncHandler(async (req, res) => {
 });
 
 /**
- * Update user current location
+ * Update user current location (Live Location Tracking)
  * PUT /api/user/location
+ * 
+ * This endpoint handles both regular location updates and live location tracking.
+ * It stores complete address information including POI, building, floor, area, city, state, pincode.
  */
 export const updateUserLocation = asyncHandler(async (req, res) => {
   try {
-    const { latitude, longitude, address, city, state, area, formattedAddress } = req.body;
+    const { 
+      latitude, 
+      longitude, 
+      address, 
+      city, 
+      state, 
+      area, 
+      formattedAddress,
+      accuracy,
+      postalCode,
+      street,
+      streetNumber
+    } = req.body;
 
+    // Validate required fields
     if (!latitude || !longitude) {
       return errorResponse(res, 400, 'Latitude and longitude are required');
     }
@@ -182,8 +198,17 @@ export const updateUserLocation = asyncHandler(async (req, res) => {
     const latNum = parseFloat(latitude);
     const lngNum = parseFloat(longitude);
 
+    // Validate coordinates
     if (isNaN(latNum) || isNaN(lngNum)) {
       return errorResponse(res, 400, 'Invalid latitude or longitude');
+    }
+
+    // Validate coordinate ranges
+    if (latNum < -90 || latNum > 90) {
+      return errorResponse(res, 400, 'Latitude must be between -90 and 90');
+    }
+    if (lngNum < -180 || lngNum > 180) {
+      return errorResponse(res, 400, 'Longitude must be between -180 and 180');
     }
 
     const user = await User.findById(req.user._id);
@@ -192,8 +217,8 @@ export const updateUserLocation = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, 'User not found');
     }
 
-    // Update current location
-    user.currentLocation = {
+    // Build complete location object with all available data
+    const locationUpdate = {
       latitude: latNum,
       longitude: lngNum,
       address: address || user.currentLocation?.address || '',
@@ -208,20 +233,42 @@ export const updateUserLocation = asyncHandler(async (req, res) => {
       }
     };
 
+    // Add optional fields if provided
+    if (accuracy !== undefined && accuracy !== null) {
+      locationUpdate.accuracy = parseFloat(accuracy);
+    }
+    if (postalCode) {
+      locationUpdate.postalCode = postalCode;
+    }
+    if (street) {
+      locationUpdate.street = street;
+    }
+    if (streetNumber) {
+      locationUpdate.streetNumber = streetNumber;
+    }
+
+    // Update current location
+    user.currentLocation = locationUpdate;
+
+    // Save to database
     await user.save();
 
-    logger.info(`User location updated: ${user._id}`, {
+    logger.info(`User live location updated: ${user._id}`, {
       latitude: latNum,
       longitude: lngNum,
-      city: user.currentLocation.city
+      city: user.currentLocation.city,
+      area: user.currentLocation.area,
+      formattedAddress: user.currentLocation.formattedAddress,
+      accuracy: user.currentLocation.accuracy,
+      timestamp: user.currentLocation.lastUpdated
     });
 
     const userResponse = user.toObject();
     delete userResponse.password;
 
     return successResponse(res, 200, 'Location updated successfully', {
-      user: userResponse,
-      location: user.currentLocation
+      location: user.currentLocation,
+      message: 'Live location stored in database'
     });
   } catch (error) {
     logger.error(`Error updating user location: ${error.message}`, { error: error.stack });

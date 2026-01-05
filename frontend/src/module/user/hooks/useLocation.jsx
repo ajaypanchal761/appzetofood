@@ -10,7 +10,7 @@ export function useLocation() {
   const watchIdRef = useRef(null)
   const updateTimerRef = useRef(null)
 
-  /* ===================== DB UPDATE ===================== */
+  /* ===================== DB UPDATE (LIVE LOCATION TRACKING) ===================== */
   const updateLocationInDB = async (locationData) => {
     try {
       // Check if user is authenticated before trying to update DB
@@ -21,20 +21,46 @@ export function useLocation() {
         return
       }
 
-      await userAPI.updateLocation({
+      // Prepare complete location data for database storage
+      const locationPayload = {
         latitude: locationData.latitude,
         longitude: locationData.longitude,
         address: locationData.address || "",
         city: locationData.city || "",
         state: locationData.state || "",
         area: locationData.area || "",
-        formattedAddress:
-          locationData.formattedAddress || locationData.address || "",
+        formattedAddress: locationData.formattedAddress || locationData.address || "",
+      }
+
+      // Add optional fields if available
+      if (locationData.accuracy !== undefined && locationData.accuracy !== null) {
+        locationPayload.accuracy = locationData.accuracy
+      }
+      if (locationData.postalCode) {
+        locationPayload.postalCode = locationData.postalCode
+      }
+      if (locationData.street) {
+        locationPayload.street = locationData.street
+      }
+      if (locationData.streetNumber) {
+        locationPayload.streetNumber = locationData.streetNumber
+      }
+
+      console.log("💾 Updating live location in database:", {
+        coordinates: `${locationPayload.latitude}, ${locationPayload.longitude}`,
+        formattedAddress: locationPayload.formattedAddress,
+        city: locationPayload.city,
+        area: locationPayload.area,
+        accuracy: locationPayload.accuracy
       })
+
+      await userAPI.updateLocation(locationPayload)
+      
+      console.log("✅ Live location successfully stored in database")
     } catch (err) {
       // Only log non-network and non-auth errors
       if (err.code !== "ERR_NETWORK" && err.response?.status !== 404 && err.response?.status !== 401) {
-        console.error("DB location update error:", err)
+        console.error("❌ DB location update error:", err)
       } else if (err.response?.status === 404 || err.response?.status === 401) {
         // 404 or 401 means user not authenticated or route doesn't exist
         // Silently skip - this is expected for non-authenticated users
@@ -79,7 +105,577 @@ export function useLocation() {
     }
   }
 
-  /* ===================== OLA MAPS REVERSE GEOCODE ===================== */
+  /* ===================== GOOGLE MAPS REVERSE GEOCODE ===================== */
+  const reverseGeocodeWithGoogleMaps = async (latitude, longitude) => {
+    try {
+      const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+      
+      if (!GOOGLE_MAPS_API_KEY) {
+        console.warn("⚠️ Google Maps API key not found, using fallback");
+        console.warn("⚠️ Please set VITE_GOOGLE_MAPS_API_KEY in .env file");
+        return reverseGeocodeDirect(latitude, longitude);
+      }
+
+      console.log("🔍 Fetching address from Google Maps for:", latitude, longitude);
+      console.log("🔍 Using Google Maps API Key:", GOOGLE_MAPS_API_KEY.substring(0, 10) + "...");
+      console.log("🔍 Coordinates precision:", { 
+        lat: latitude.toFixed(8), 
+        lng: longitude.toFixed(8) 
+      });
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Google Maps API timeout")), 15000)
+      );
+      
+      // ZOMATO-STYLE: Use Geocoding API with proper parameters
+      // language=en for English, region=in for India (helps with better results)
+      // result_type parameter can help get more specific results
+      const apiPromise = fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=street_address|premise|point_of_interest|establishment`
+      ).then(res => res.json());
+      
+      const data = await Promise.race([apiPromise, timeoutPromise]);
+      
+      // Check if response is valid
+      if (!data) {
+        console.error("❌ Google Maps API returned null/undefined response");
+        throw new Error("Google Maps API returned null response");
+      }
+      
+      // Log full response for debugging
+      console.log("📦📦📦 Google Maps API Full Response:", {
+        status: data.status,
+        error_message: data.error_message,
+        results_count: data.results?.length || 0,
+        has_results: !!data.results && data.results.length > 0
+      });
+      
+      // Check for API errors
+      if (data.status === "REQUEST_DENIED") {
+        console.error("❌❌❌ Google Maps API REQUEST_DENIED!");
+        console.error("❌ Error message:", data.error_message);
+        console.error("❌ Possible reasons:");
+        console.error("   1. API key is invalid or missing");
+        console.error("   2. Geocoding API is not enabled in Google Cloud Console");
+        console.error("   3. Billing is not enabled");
+        console.error("   4. API key restrictions are blocking the request");
+        throw new Error(`Google Maps API REQUEST_DENIED: ${data.error_message || "Check API key and billing"}`);
+      }
+      
+      if (data.status === "OVER_QUERY_LIMIT") {
+        console.error("❌❌❌ Google Maps API OVER_QUERY_LIMIT!");
+        console.error("❌ You have exceeded your quota. Check billing in Google Cloud Console");
+        throw new Error("Google Maps API quota exceeded. Check billing.");
+      }
+      
+      if (data.status === "ZERO_RESULTS") {
+        console.warn("⚠️⚠️⚠️ Google Maps API ZERO_RESULTS!");
+        console.warn("⚠️ No results found for these coordinates:", latitude, longitude);
+        console.warn("⚠️ This might mean the coordinates are invalid or in an unmapped area");
+        throw new Error("No address found for these coordinates");
+      }
+      
+      if (data.status !== "OK" || !data.results || data.results.length === 0) {
+        console.error("❌ Google Maps Geocoding Error:", {
+          status: data.status,
+          error_message: data.error_message,
+          results_count: data.results?.length || 0
+        });
+        throw new Error(`Invalid response from Google Maps API: ${data.status} - ${data.error_message || "No results"}`);
+      }
+      
+      // ZOMATO-STYLE: Find the MOST PRECISE result with POI/premise
+      // Sometimes results[0] might not have POI, so check multiple results
+      let exactResult = null;
+      let bestResultIndex = 0;
+      
+      // Priority: Find result with point_of_interest or premise
+      for (let i = 0; i < Math.min(5, data.results.length); i++) {
+        const result = data.results[i];
+        const hasPOI = result.address_components?.some(c => c.types.includes("point_of_interest"));
+        const hasPremise = result.address_components?.some(c => c.types.includes("premise"));
+        
+        if (hasPOI || hasPremise) {
+          exactResult = result;
+          bestResultIndex = i;
+          console.log(`✅✅✅ Found result with POI/premise at index ${i}`);
+          break;
+        }
+      }
+      
+      // If no POI/premise found, use results[0] (most precise by default)
+      if (!exactResult) {
+        exactResult = data.results[0];
+        console.log("⚠️ No POI/premise found in any result, using results[0]");
+        console.log("⚠️ This might mean:");
+        console.log("   1. Location is on a road/street without specific building");
+        console.log("   2. GPS coordinates are not accurate (network-based location)");
+        console.log("   3. Try on mobile device for better GPS accuracy");
+      }
+      
+      const addressComponents = exactResult.address_components || [];
+      const formattedAddress = exactResult.formatted_address || "";
+      
+      // Log detailed information about the selected result
+      console.log(`📦 Using results[${bestResultIndex}] (Most Precise - Zomato Style):`, {
+        index: bestResultIndex,
+        formattedAddress,
+        formattedAddressParts: formattedAddress.split(',').length,
+        hasPOI: addressComponents.some(c => c.types.includes("point_of_interest")),
+        hasPremise: addressComponents.some(c => c.types.includes("premise")),
+        hasSublocality: addressComponents.some(c => c.types.includes("sublocality_level_1")),
+        allComponents: addressComponents.map(c => ({
+          name: c.long_name,
+          types: c.types
+        }))
+      });
+      
+      // If formattedAddress is incomplete (only 2 parts = city, state), log warning
+      const addressPartsCount = formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0).length;
+      if (addressPartsCount <= 2 && !addressComponents.some(c => c.types.includes("point_of_interest") || c.types.includes("premise"))) {
+        console.warn("⚠️⚠️⚠️ Incomplete address detected - only city/state level");
+        console.warn("⚠️ Address parts count:", addressPartsCount);
+        console.warn("⚠️ This usually means:");
+        console.warn("   1. GPS coordinates are not accurate (network-based location instead of GPS)");
+        console.warn("   2. Location is on a road/street without specific building");
+        console.warn("   3. Solution: Use mobile device for better GPS accuracy (enableHighAccuracy: true)");
+      }
+      
+      // Log ALL results to see what Google is returning
+      console.log("📦 Google Maps API Response - All Results:", {
+        totalResults: data.results.length,
+        results: data.results.map((r, i) => ({
+          index: i,
+          formatted_address: r.formatted_address,
+          types: r.types,
+          hasPOI: r.address_components?.some(c => c.types.includes("point_of_interest")),
+          hasPremise: r.address_components?.some(c => c.types.includes("premise")),
+          hasSublocality: r.address_components?.some(c => c.types.includes("sublocality_level_1"))
+        }))
+      });
+      
+      console.log("📦 Using results[0] (Most Precise - Zomato Style):", {
+        status: data.status,
+        formattedAddress,
+        addressComponentsCount: addressComponents.length,
+        hasPremise: addressComponents.some(c => c.types.includes("premise")),
+        hasPOI: addressComponents.some(c => c.types.includes("point_of_interest")),
+        hasSublocality: addressComponents.some(c => c.types.includes("sublocality_level_1")),
+        allComponentTypes: addressComponents.map(c => ({
+          name: c.long_name,
+          types: c.types
+        }))
+      });
+      
+      // Extract address components with priority order (Zomato style - EXACT LOCATION)
+      let city = "";
+      let state = "";
+      let area = "";
+      let street = "";
+      let streetNumber = "";
+      let premise = ""; // Building name (e.g., "Princess Center")
+      let pointOfInterest = ""; // Shop/Cafe name (e.g., "Mama Loca Cafe")
+      let sublocalityLevel1 = ""; // Area name (e.g., "New Palasia")
+      let sublocalityLevel2 = ""; // Sub-area name
+      let postalCode = ""; // Pincode (e.g., "452001")
+      let floor = ""; // Floor number (e.g., "5th Floor")
+      
+      // 1. EXACT LOCATION EXTRACTION - Extract ALL components for complete address
+      // Google Maps formatted_address format: "Mama Loca Cafe, 501 Princess Center, 5th Floor, New Palasia, Indore, Madhya Pradesh 452001, India"
+      
+      // Extract all address components systematically
+      for (const component of addressComponents) {
+        const types = component.types || [];
+        const longName = component.long_name || "";
+        const shortName = component.short_name || "";
+        
+        // Point of Interest (POI) - Cafe/Shop name (e.g., "Mama Loca Cafe")
+        if (types.includes("point_of_interest") && !pointOfInterest) {
+          pointOfInterest = longName;
+          console.log("✅ Found POI:", pointOfInterest);
+        }
+        
+        // Premise - Building name (e.g., "Princess Center", "501 Princess Center")
+        if (types.includes("premise") && !premise) {
+          premise = longName;
+          console.log("✅ Found premise:", premise);
+        }
+        
+        // Subpremise - Floor/Unit (e.g., "5th Floor", "G-2")
+        if (types.includes("subpremise")) {
+          floor = longName;
+          console.log("✅ Found floor/subpremise:", floor);
+        }
+        
+        // Street number (e.g., "501")
+        if (types.includes("street_number") && !streetNumber) {
+          streetNumber = longName;
+          console.log("✅ Found street number:", streetNumber);
+        }
+        
+        // Route/Street name
+        if (types.includes("route") && !street) {
+          street = longName;
+          console.log("✅ Found route:", street);
+        }
+        
+        // Sublocality Level 1 - Area name (e.g., "New Palasia")
+        if (types.includes("sublocality_level_1") && !sublocalityLevel1) {
+          sublocalityLevel1 = longName;
+          console.log("✅ Found sublocality_level_1:", sublocalityLevel1);
+        }
+        
+        // Sublocality Level 2 - Sub-area name
+        if (types.includes("sublocality_level_2") && !sublocalityLevel2) {
+          sublocalityLevel2 = longName;
+          console.log("✅ Found sublocality_level_2:", sublocalityLevel2);
+        }
+        
+        // City (locality)
+        if (types.includes("locality") && !city) {
+          city = longName;
+          console.log("✅ Found city:", city);
+        } else if (types.includes("administrative_area_level_2") && !city) {
+          city = longName;
+          console.log("✅ Found city from admin_area_level_2:", city);
+        }
+        
+        // State
+        if (types.includes("administrative_area_level_1") && !state) {
+          state = longName;
+          console.log("✅ Found state:", state);
+        }
+        
+        // Postal Code (Pincode)
+        if (types.includes("postal_code") && !postalCode) {
+          postalCode = longName;
+          console.log("✅ Found postal code:", postalCode);
+        }
+      }
+      
+      // ZOMATO-STYLE: Extract exact building/cafe name (Mama Loca Cafe, Princess Center)
+      // This is the EXACT Zomato approach - find building name from components
+      // Priority: point_of_interest > premise > sublocality_level_1
+      let mainTitle = "";
+      const building = addressComponents.find(c => 
+        c.types.includes("point_of_interest") || 
+        c.types.includes("premise") ||
+        c.types.includes("sublocality_level_1")
+      );
+      
+      if (building) {
+        mainTitle = building.long_name;
+        console.log("✅✅✅ ZOMATO-STYLE: Found exact building/cafe name:", mainTitle);
+      } else {
+        mainTitle = "Location Found";
+        console.warn("⚠️ No building/cafe name found in address components");
+      }
+      
+      // Use mainTitle as mainLocation (Zomato-style)
+      let mainLocation = mainTitle;
+      
+      // Set area from main location (Zomato priority order)
+      if (mainLocation && mainLocation !== "Location Found") {
+        area = mainLocation;
+        console.log("✅✅✅ ZOMATO-STYLE: Using mainTitle as area:", area);
+      } else if (pointOfInterest) {
+        area = pointOfInterest;
+        mainLocation = pointOfInterest;
+      } else if (premise) {
+        area = premise;
+        mainLocation = premise;
+      } else if (sublocalityLevel1) {
+        area = sublocalityLevel1;
+        mainLocation = sublocalityLevel1;
+      } else {
+        // Fallback: Use city if nothing else found
+        area = city || "Location Found";
+        mainLocation = city || "Location Found";
+      }
+      
+      // 3. Build COMPLETE detailed address from extracted components
+      // Format: "Mama Loca Cafe, 501 Princess Center, 5th Floor, New Palasia, Indore, Madhya Pradesh 452001"
+      // Order: POI > Street Number + Premise > Floor > Sublocality > City > State + Pincode
+      
+      let completeAddressParts = [];
+      
+      // Add Point of Interest (Cafe/Shop name) - e.g., "Mama Loca Cafe"
+      if (pointOfInterest && pointOfInterest.trim() !== "") {
+        completeAddressParts.push(pointOfInterest);
+      }
+      
+      // Add Street Number + Premise (Building) - e.g., "501 Princess Center"
+      if (streetNumber && premise) {
+        completeAddressParts.push(`${streetNumber} ${premise}`);
+      } else if (premise && premise.trim() !== "") {
+        completeAddressParts.push(premise);
+      } else if (streetNumber && streetNumber.trim() !== "") {
+        completeAddressParts.push(streetNumber);
+      }
+      
+      // Add Floor/Subpremise - e.g., "5th Floor"
+      if (floor && floor.trim() !== "") {
+        completeAddressParts.push(floor);
+      }
+      
+      // Add Sublocality Level 1 (Area) - e.g., "New Palasia"
+      if (sublocalityLevel1 && sublocalityLevel1.trim() !== "") {
+        completeAddressParts.push(sublocalityLevel1);
+      }
+      
+      // Add City - e.g., "Indore"
+      if (city && city.trim() !== "") {
+        completeAddressParts.push(city);
+      }
+      
+      // Add State + Pincode - e.g., "Madhya Pradesh 452001"
+      if (state && state.trim() !== "") {
+        if (postalCode && postalCode.trim() !== "") {
+          completeAddressParts.push(`${state} ${postalCode}`);
+        } else {
+          completeAddressParts.push(state);
+        }
+      } else if (postalCode && postalCode.trim() !== "") {
+        completeAddressParts.push(postalCode);
+      }
+      
+      // Build complete formatted address
+      // CRITICAL: Check if Google's formatted_address has complete details
+      const formattedParts = formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0);
+      const hasCompleteFormattedAddress = formattedParts.length >= 4;
+      
+      let completeFormattedAddress = formattedAddress; // Default to Google's formatted_address
+      
+      // If Google's formatted_address is complete (4+ parts), use it directly
+      // Otherwise, try to build from components
+      if (hasCompleteFormattedAddress) {
+        completeFormattedAddress = formattedAddress;
+        console.log("✅✅✅ Using Google's formatted_address directly (complete - 4+ parts):", completeFormattedAddress);
+      } else if (completeAddressParts.length > 0 && (pointOfInterest || premise)) {
+        // Build from components if we have POI/premise
+        completeFormattedAddress = completeAddressParts.join(', ');
+        console.log("✅ Using built address from components:", completeFormattedAddress);
+      } else {
+        // Google's formatted_address is incomplete - log warning
+        console.warn("⚠️⚠️⚠️ Google's formatted_address is incomplete (only 2-3 parts):", formattedAddress);
+        console.warn("⚠️ This usually means:");
+        console.warn("   1. GPS coordinates are not accurate (network-based location)");
+        console.warn("   2. Location is in a generic area without specific POI/premise");
+        console.warn("   3. Try on mobile device for better GPS accuracy");
+        completeFormattedAddress = formattedAddress; // Use what we have
+      }
+      
+      // Build display address (for navbar) - ZOMATO-STYLE: Show exact landmark first
+      // Format: "Mama Loca Cafe, 501 Princess Center, 5th Floor, New Palasia"
+      let displayAddressParts = [];
+      
+      // Priority 1: Use mainTitle/mainLocation (building/cafe name) - ZOMATO-STYLE
+      // This is the exact Zomato approach - show "Mama Loca Cafe" as the main title
+      if (mainLocation && mainLocation.trim() !== "" && mainLocation !== "Location Found") {
+        displayAddressParts.push(mainLocation);
+        console.log("✅✅✅ ZOMATO-STYLE: Using mainTitle/mainLocation for display:", mainLocation);
+      } else if (pointOfInterest && pointOfInterest.trim() !== "") {
+        // Fallback to pointOfInterest if mainLocation not set
+        displayAddressParts.push(pointOfInterest);
+        console.log("✅ Using pointOfInterest for display:", pointOfInterest);
+      } else if (premise && premise.trim() !== "") {
+        // Fallback to premise
+        displayAddressParts.push(premise);
+        console.log("✅ Using premise for display:", premise);
+      }
+      
+      // Add building details if not already included in mainLocation
+      if (premise && premise.trim() !== "" && premise !== mainLocation && premise !== pointOfInterest) {
+        if (streetNumber && streetNumber.trim() !== "") {
+          displayAddressParts.push(`${streetNumber} ${premise}`);
+        } else {
+          displayAddressParts.push(premise);
+        }
+      } else if (streetNumber && streetNumber.trim() !== "" && !mainLocation) {
+        displayAddressParts.push(streetNumber);
+      }
+      
+      // Add floor if available
+      if (floor && floor.trim() !== "") {
+        displayAddressParts.push(floor);
+      }
+      
+      // Add sublocality if not already included
+      if (sublocalityLevel1 && sublocalityLevel1.trim() !== "" && sublocalityLevel1 !== mainLocation) {
+        displayAddressParts.push(sublocalityLevel1);
+      }
+      
+      // If we couldn't build from components, extract from formatted_address (ZOMATO-STYLE)
+      // formatted_address from results[0] usually has: "Mama Loca Cafe, 501 Princess Center, 5th Floor, New Palasia, Indore, Madhya Pradesh 452001"
+      if (displayAddressParts.length === 0 && formattedAddress) {
+        console.log("🔍 Extracting from formatted_address (fallback):", formattedAddress);
+        const parts = formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0);
+        
+        // Remove pincode, country, and city/state parts
+        const filteredParts = parts.filter(part => {
+          if (/^\d{6}$/.test(part)) return false; // Skip standalone pincode
+          if (/\s+\d{6}$/.test(part)) {
+            return part.replace(/\s+\d{6}$/, '').trim(); // Remove pincode from state
+          }
+          if (part.toLowerCase() === "india" || part.length > 25) return false;
+          if (city && part.toLowerCase() === city.toLowerCase()) return false;
+          if (state && part.toLowerCase().includes(state.toLowerCase())) return false;
+          return true;
+        });
+        
+        console.log("📋 Filtered parts from formatted_address:", filteredParts);
+        
+        // Find city index
+        let cityIndex = -1;
+        if (city) {
+          cityIndex = filteredParts.findIndex(part => part.toLowerCase() === city.toLowerCase());
+        }
+        if (cityIndex === -1) {
+          const commonCities = ["Indore", "indore", "Bhopal", "bhopal", "Mumbai", "mumbai", "Delhi", "delhi"];
+          cityIndex = filteredParts.findIndex(part => 
+            commonCities.some(c => part.toLowerCase() === c.toLowerCase())
+          );
+        }
+        
+        // Extract locality parts (everything before city) - this includes POI, building, floor, area
+        if (cityIndex > 0) {
+          displayAddressParts = filteredParts.slice(0, cityIndex);
+          console.log("✅✅✅ Extracted locality from formatted_address (before city):", displayAddressParts);
+        } else if (filteredParts.length >= 4) {
+          // If city not found, take first 4 parts (usually POI, building, floor, area)
+          displayAddressParts = filteredParts.slice(0, 4);
+          console.log("✅ Using first 4 parts from formatted_address:", displayAddressParts);
+        } else if (filteredParts.length >= 3) {
+          displayAddressParts = filteredParts.slice(0, 3);
+          console.log("✅ Using first 3 parts from formatted_address:", displayAddressParts);
+        } else if (filteredParts.length >= 2) {
+          displayAddressParts = filteredParts.slice(0, 2);
+          console.log("✅ Using first 2 parts from formatted_address:", displayAddressParts);
+        } else if (filteredParts.length >= 1) {
+          displayAddressParts = [filteredParts[0]];
+          console.log("✅ Using first part from formatted_address:", displayAddressParts);
+        }
+      }
+      
+      // Final display address - prioritize extracted parts, fallback to area/mainLocation
+      const displayAddress = displayAddressParts.length > 0 
+        ? displayAddressParts.join(', ')
+        : (mainLocation || area || city || "Select location");
+      
+      console.log("🎯🎯🎯 FINAL Display Address:", displayAddress);
+      
+      // Set area for backward compatibility
+      if (!area) {
+        if (sublocalityLevel1) {
+          area = sublocalityLevel1;
+        } else if (premise) {
+          area = premise;
+        } else if (pointOfInterest) {
+          area = pointOfInterest;
+        } else if (city) {
+          area = city;
+        } else {
+          area = "Location Found";
+        }
+      }
+      
+      console.log("✅✅✅ Google Maps Reverse Geocode - Complete Address:", {
+        mainTitle, // ZOMATO-STYLE: Building/Cafe name
+        mainLocation, // ZOMATO-STYLE: Main location for display
+        pointOfInterest,
+        premise,
+        streetNumber,
+        floor,
+        sublocalityLevel1,
+        city,
+        state,
+        postalCode,
+        completeFormattedAddress,
+        displayAddress,
+        area,
+        formattedAddressFromGoogle: formattedAddress // Original from Google
+      });
+      
+      // Final validation: Ensure mainTitle/mainLocation is used properly
+      if (mainTitle && mainTitle !== "Location Found") {
+        console.log("✅✅✅ ZOMATO-STYLE SUCCESS: Exact building/cafe name extracted:", mainTitle);
+      } else {
+        console.warn("⚠️⚠️⚠️ ZOMATO-STYLE WARNING: Could not extract exact building/cafe name");
+        console.warn("⚠️ This might be due to:");
+        console.warn("   1. Location is not at a specific building/cafe (e.g., on a road)");
+        console.warn("   2. Google Maps doesn't have POI/premise data for this location");
+        console.warn("   3. GPS accuracy is low (try on mobile device)");
+      }
+      
+      // Return location object with ZOMATO-STYLE exact location
+      const locationResult = {
+        city: city || "Unknown City",
+        state: state || "",
+        area: area || city || "Location Found",
+        address: displayAddress, // Locality parts for navbar display (e.g., "Mama Loca Cafe, 501 Princess Center")
+        formattedAddress: completeFormattedAddress, // Complete detailed address (e.g., "Mama Loca Cafe, 501 Princess Center, 5th Floor, New Palasia, Indore, Madhya Pradesh 452001")
+        street: street || "",
+        streetNumber: streetNumber || "",
+        postalCode: postalCode || "",
+        // ZOMATO-STYLE: Add mainTitle for exact building/cafe name
+        mainTitle: mainTitle !== "Location Found" ? mainTitle : null,
+        pointOfInterest: pointOfInterest || null,
+        premise: premise || null
+      };
+      
+      console.log("✅✅✅ FINAL Location Result (ZOMATO-STYLE):", {
+        mainTitle: locationResult.mainTitle,
+        address: locationResult.address,
+        formattedAddress: locationResult.formattedAddress,
+        area: locationResult.area,
+        city: locationResult.city,
+        state: locationResult.state,
+        hasCompleteAddress: locationResult.formattedAddress && 
+          locationResult.formattedAddress.split(',').length >= 4
+      });
+      
+      return locationResult;
+    } catch (error) {
+      console.error("❌❌❌ Google Maps Reverse Geocode Error:", error);
+      console.error("❌ Error details:", {
+        message: error.message,
+        stack: error.stack,
+        coordinates: { latitude, longitude }
+      });
+      
+      // If it's an API key or billing error, don't fallback - show error
+      if (error.message.includes("REQUEST_DENIED") || error.message.includes("OVER_QUERY_LIMIT")) {
+        console.error("❌❌❌ CRITICAL: Google Maps API configuration issue!");
+        console.error("❌ Please check:");
+        console.error("   1. API key is correct in .env file");
+        console.error("   2. Geocoding API is enabled in Google Cloud Console");
+        console.error("   3. Billing is enabled and linked");
+        console.error("   4. API key restrictions allow this request");
+        
+        // Return error location instead of fallback
+        return {
+          city: "API Error",
+          state: "",
+          area: "",
+          address: "Google Maps API configuration issue",
+          formattedAddress: "Please check API key and billing",
+          street: "",
+          streetNumber: "",
+          postalCode: "",
+          mainTitle: null,
+          pointOfInterest: null,
+          premise: null
+        };
+      }
+      
+      // For other errors, try fallback
+      console.warn("⚠️ Trying fallback reverse geocoding...");
+      return reverseGeocodeDirect(latitude, longitude);
+    }
+  };
+  
+  /* ===================== OLA MAPS REVERSE GEOCODE (DEPRECATED - KEPT FOR FALLBACK) ===================== */
   const reverseGeocodeWithOLAMaps = async (latitude, longitude) => {
     try {
       console.log("🔍 Fetching address from OLA Maps for:", latitude, longitude)
@@ -454,10 +1050,10 @@ export function useLocation() {
       // If no valid data, throw to trigger fallback
       throw new Error("No valid address data from OLA Maps")
     } catch (err) {
-      console.warn("⚠️ OLA Maps failed, trying direct geocoding:", err.message)
+      console.warn("⚠️ Google Maps failed, trying direct geocoding:", err.message)
       // Fallback to direct reverse geocoding (no Google Maps dependency)
       try {
-        return await reverseGeocodeDirect(latitude, longitude)
+        return await reverseGeocodeWithGoogleMaps(latitude, longitude)
       } catch (fallbackErr) {
         // If all fail, return minimal location data
         console.error("❌ All reverse geocoding failed:", fallbackErr)
@@ -484,20 +1080,22 @@ export function useLocation() {
       const loc = res?.data?.data?.location
       if (loc?.latitude && loc?.longitude) {
         try {
-          const addr = await reverseGeocodeWithOLAMaps(
+          const addr = await reverseGeocodeWithGoogleMaps(
             loc.latitude,
             loc.longitude
           )
           return { ...addr, latitude: loc.latitude, longitude: loc.longitude }
         } catch (geocodeErr) {
-          // If reverse geocoding fails, return location with coordinates only
+          // If reverse geocoding fails, return location without coordinates in address
           console.error("Reverse geocoding failed in fetchLocationFromDB:", geocodeErr)
           return {
             latitude: loc.latitude,
             longitude: loc.longitude,
             city: "Current Location",
-            address: `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`,
-            formattedAddress: `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`,
+            area: "",
+            state: "",
+            address: "Select location", // Don't show coordinates
+            formattedAddress: "Select location", // Don't show coordinates
           }
         }
       }
@@ -554,16 +1152,34 @@ export function useLocation() {
                 coordinates: `${latitude.toFixed(8)}, ${longitude.toFixed(8)}`
               })
               
-              // Get address from OLA Maps API
+              // Get address from Google Maps API
               console.log("🔍 Calling reverse geocode with coordinates:", { latitude, longitude })
-              const addr = await reverseGeocodeWithOLAMaps(latitude, longitude)
+              const addr = await reverseGeocodeWithGoogleMaps(latitude, longitude)
               console.log("✅ Reverse geocode result:", addr)
 
+              // Ensure we don't use coordinates as address if we have area/city
+              // Keep the complete formattedAddress from Google Maps (it has all details)
+              const completeFormattedAddress = addr.formattedAddress || "";
+              let displayAddress = addr.address || "";
+              
+              // If address contains coordinates pattern, use area/city instead
+              const isCoordinatesPattern = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(displayAddress.trim());
+              if (isCoordinatesPattern) {
+                if (addr.area && addr.area.trim() !== "") {
+                  displayAddress = addr.area;
+                } else if (addr.city && addr.city.trim() !== "" && addr.city !== "Unknown City") {
+                  displayAddress = addr.city;
+                }
+              }
+
+              // Build location object with ALL fields from reverse geocoding
               const finalLoc = { 
-                ...addr, 
+                ...addr, // This includes: city, state, area, street, streetNumber, postalCode, formattedAddress
                 latitude, 
                 longitude,
-                accuracy: accuracy || null
+                accuracy: accuracy || null,
+                address: displayAddress, // Locality parts for navbar display
+                formattedAddress: completeFormattedAddress || addr.formattedAddress || displayAddress // Complete detailed address
               }
               
             console.log("💾 Saving location:", finalLoc)
@@ -581,14 +1197,16 @@ export function useLocation() {
               resolve(finalLoc)
             } catch (err) {
               console.error("❌ Error processing location:", err)
-              // If reverse geocoding fails, still use the coordinates
+              // If reverse geocoding fails, don't use coordinates - use placeholder
               const { latitude, longitude } = pos.coords
               const fallbackLoc = {
                 latitude,
                 longitude,
                 city: "Current Location",
-                address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-                formattedAddress: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+                area: "",
+                state: "",
+                address: "Select location", // Don't show coordinates
+                formattedAddress: "Select location", // Don't show coordinates
               }
             localStorage.setItem("userLocation", JSON.stringify(fallbackLoc))
             setLocation(fallbackLoc)
@@ -649,13 +1267,18 @@ export function useLocation() {
                 if (showLoading) setLoading(false)
                 resolve(fallback)
               } else {
-                // No fallback available
-                console.warn("⚠️ No fallback location available")
-                setLocation(null)
+                // No fallback available - set a default location so UI doesn't hang
+                console.warn("⚠️ No fallback location available, setting default")
+                const defaultLocation = {
+                  city: "Select location",
+                  address: "Select location",
+                  formattedAddress: "Select location"
+                }
+                setLocation(defaultLocation)
                 setError(err.code === 3 ? "Location request timed out. Please try again." : err.message)
                 setPermissionGranted(false)
                 if (showLoading) setLoading(false)
-                resolve(null)
+                resolve(defaultLocation) // Always resolve with something
               }
             } catch (fallbackErr) {
               console.warn("⚠️ Fallback retrieval failed:", fallbackErr)
@@ -709,17 +1332,17 @@ export function useLocation() {
             // Reset retry count on success
             retryCount = 0
             
-            // Get address from OLA Maps API with error handling
+            // Get address from Google Maps API with error handling
             let addr
             try {
-              addr = await reverseGeocodeWithOLAMaps(latitude, longitude)
+                addr = await reverseGeocodeWithGoogleMaps(latitude, longitude)
               console.log("✅ Reverse geocoding successful:", { 
                 city: addr.city, 
                 area: addr.area, 
                 formattedAddress: addr.formattedAddress 
               })
             } catch (geocodeErr) {
-              console.error("❌ OLA Maps reverse geocoding failed:", geocodeErr.message)
+              console.error("❌ Google Maps reverse geocoding failed:", geocodeErr.message)
               // Try fallback geocoding
               try {
                 console.log("🔄 Trying fallback geocoding...")
@@ -730,23 +1353,84 @@ export function useLocation() {
                 })
               } catch (fallbackErr) {
                 console.error("❌ Fallback geocoding also failed:", fallbackErr.message)
-                // Use coordinates only as last resort
+                // Don't use coordinates - use placeholder instead
                 addr = {
                   city: "Current Location",
                   state: "",
                   country: "",
                   area: "",
-                  address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-                  formattedAddress: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+                  address: "Select location", // Don't show coordinates
+                  formattedAddress: "Select location", // Don't show coordinates
                 }
               }
             }
             
+            // CRITICAL: Ensure formattedAddress is NEVER coordinates
+            // Check if reverse geocoding returned proper address or just coordinates
+            let completeFormattedAddress = addr.formattedAddress || "";
+            let displayAddress = addr.address || "";
+            
+            // Check if formattedAddress is coordinates pattern
+            const isFormattedAddressCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(completeFormattedAddress.trim());
+            const isDisplayAddressCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(displayAddress.trim());
+            
+            // If formattedAddress is coordinates, it means reverse geocoding failed
+            // Build proper address from components or use fallback
+            if (isFormattedAddressCoordinates || !completeFormattedAddress || completeFormattedAddress === "Select location") {
+              console.warn("⚠️⚠️⚠️ Reverse geocoding returned coordinates or empty address!")
+              console.warn("⚠️ Attempting to build address from components:", {
+                city: addr.city,
+                state: addr.state,
+                area: addr.area,
+                street: addr.street,
+                streetNumber: addr.streetNumber
+              })
+              
+              // Build address from components
+              const addressParts = [];
+              if (addr.area && addr.area.trim() !== "") {
+                addressParts.push(addr.area);
+              }
+              if (addr.city && addr.city.trim() !== "") {
+                addressParts.push(addr.city);
+              }
+              if (addr.state && addr.state.trim() !== "") {
+                addressParts.push(addr.state);
+              }
+              
+              if (addressParts.length > 0) {
+                completeFormattedAddress = addressParts.join(', ');
+                displayAddress = addr.area || addr.city || "Select location";
+                console.log("✅ Built address from components:", completeFormattedAddress);
+              } else {
+                // Final fallback - don't use coordinates
+                completeFormattedAddress = addr.city || "Select location";
+                displayAddress = addr.city || "Select location";
+                console.warn("⚠️ Using fallback address:", completeFormattedAddress);
+              }
+            }
+            
+            // Also check displayAddress
+            if (isDisplayAddressCoordinates) {
+              displayAddress = addr.area || addr.city || "Select location";
+            }
+            
+            // Build location object with ALL fields from reverse geocoding
+            // NEVER include coordinates in formattedAddress or address
             const loc = { 
-              ...addr, 
+              ...addr, // This includes: city, state, area, street, streetNumber, postalCode
               latitude, 
               longitude,
-              accuracy: accuracy || null
+              accuracy: accuracy || null,
+              address: displayAddress, // Locality parts for navbar display (NEVER coordinates)
+              formattedAddress: completeFormattedAddress // Complete detailed address (NEVER coordinates)
+            }
+            
+            // Final validation - ensure formattedAddress is never coordinates
+            if (loc.formattedAddress && /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(loc.formattedAddress.trim())) {
+              console.error("❌❌❌ CRITICAL: formattedAddress is still coordinates! Replacing with city/area")
+              loc.formattedAddress = loc.area || loc.city || "Select location";
+              loc.address = loc.area || loc.city || "Select location";
             }
 
             console.log("💾 Updating live location:", loc)
@@ -764,15 +1448,18 @@ export function useLocation() {
             }, 5000)
           } catch (err) {
             console.error("❌ Error processing live location update:", err)
-            // If reverse geocoding fails, still use the coordinates
+            // If reverse geocoding fails, DON'T use coordinates - use placeholder
             const { latitude, longitude } = pos.coords
             const fallbackLoc = {
               latitude,
               longitude,
               city: "Current Location",
-              address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
-              formattedAddress: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+              area: "",
+              state: "",
+              address: "Select location", // NEVER use coordinates
+              formattedAddress: "Select location", // NEVER use coordinates
             }
+            console.warn("⚠️ Using fallback location (reverse geocoding failed):", fallbackLoc)
             localStorage.setItem("userLocation", JSON.stringify(fallbackLoc))
             setLocation(fallbackLoc)
             setPermissionGranted(true)
@@ -785,11 +1472,12 @@ export function useLocation() {
             console.warn("⚠️ Watch position error (non-timeout):", err.code, err.message)
           }
           
-          // If timeout and we haven't exceeded max retries, retry with lower accuracy
+          // If timeout and we haven't exceeded max retries, retry with HIGH ACCURACY GPS
+          // CRITICAL: Keep using GPS (not network-based) for accurate location
+          // Network-based location won't give exact landmarks like "Mama Loca Cafe"
           if (err.code === 3 && retryCount < maxRetries) {
             retryCount++
-            // Silently retry - don't log timeout errors for background watch
-            // console.warn(`⏱️ Watch timeout, retrying with lower accuracy (attempt ${retryCount}/${maxRetries})...`)
+            console.log(`⏱️ GPS timeout, retrying with high accuracy GPS (attempt ${retryCount}/${maxRetries})...`)
             
             // Clear current watch
             if (watchIdRef.current) {
@@ -797,14 +1485,15 @@ export function useLocation() {
               watchIdRef.current = null
             }
             
-            // Retry with lower accuracy after a short delay (fallback if GPS fails)
+            // Retry with HIGH ACCURACY GPS (don't use network-based location)
+            // Network-based location is less accurate and won't give exact landmarks
             setTimeout(() => {
               startWatch({
-                enableHighAccuracy: false,  // Lower accuracy for retry (network-based)
-                timeout: 5000,               // 5 seconds timeout
-                maximumAge: 60000            // Allow 1 minute old cached location as fallback
+                enableHighAccuracy: true,   // Keep using GPS (not network-based)
+                timeout: 20000,              // 20 seconds timeout (give GPS more time)
+                maximumAge: 0                // Always get fresh GPS location
               })
-            }, 2000) // Slightly longer delay before retry
+            }, 3000) // 3 second delay before retry
             return
           }
 
@@ -823,13 +1512,18 @@ export function useLocation() {
       )
     }
 
-    // Start with high accuracy for live location tracking
-    // This ensures we get accurate GPS updates for real-time area detection
+    // Start with HIGH ACCURACY GPS for live location tracking
+    // CRITICAL: enableHighAccuracy: true forces GPS (not network-based) for accurate location
+    // Network-based location won't give exact landmarks like "Mama Loca Cafe"
     startWatch({ 
-      enableHighAccuracy: true,   // Use GPS for accurate live location tracking
-      timeout: 10000,             // 10 seconds timeout (allows GPS to get accurate fix)
-      maximumAge: 0               // Always get fresh location (no cache for live tracking)
+      enableHighAccuracy: true,   // CRITICAL: Use GPS (not network-based) for accurate location
+      timeout: 15000,             // 15 seconds timeout (gives GPS more time to get accurate fix)
+      maximumAge: 0               // Always get fresh GPS location (no cache for live tracking)
     })
+    
+    console.log("✅✅✅ GPS High Accuracy enabled for live location tracking")
+    console.log("✅ GPS will provide accurate coordinates for reverse geocoding")
+    console.log("✅ Network-based location disabled (less accurate)")
   }
 
   const stopWatchingLocation = () => {
@@ -844,49 +1538,134 @@ export function useLocation() {
   useEffect(() => {
     // Load stored location first for IMMEDIATE display (no loading state)
     const stored = localStorage.getItem("userLocation")
+    let shouldForceRefresh = false
+    let hasInitialLocation = false
+    
     if (stored) {
       try {
         const parsedLocation = JSON.parse(stored)
-        setLocation(parsedLocation)
-        setPermissionGranted(true)
-        setLoading(false) // Set loading to false immediately
-        console.log("📂 Loaded stored location instantly:", parsedLocation)
+        
+        // Show cached location immediately (even if incomplete) - better UX
+        // We'll refresh in background but user sees something right away
+        if (parsedLocation && (parsedLocation.latitude || parsedLocation.city)) {
+          setLocation(parsedLocation)
+          setPermissionGranted(true)
+          setLoading(false) // Set loading to false immediately
+          hasInitialLocation = true
+          console.log("📂 Loaded stored location instantly:", parsedLocation)
+          
+          // Check if we should refresh in background for better address
+          const hasCompleteAddress = parsedLocation?.formattedAddress && 
+            parsedLocation.formattedAddress !== "Select location" &&
+            !parsedLocation.formattedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/) &&
+            parsedLocation.formattedAddress.split(',').length >= 4
+          
+          if (!hasCompleteAddress) {
+            console.log("⚠️ Cached location incomplete, will refresh in background")
+            shouldForceRefresh = true
+          }
+        } else {
+          shouldForceRefresh = true
+        }
       } catch (err) {
         console.error("Failed to parse stored location:", err)
-        setLoading(false)
+        shouldForceRefresh = true
       }
-    } else {
-      // If no stored location, try DB first (faster than GPS)
+    }
+    
+    // If no cached location, try DB
+    if (!hasInitialLocation) {
       fetchLocationFromDB()
         .then((dbLoc) => {
-          if (dbLoc) {
+          if (dbLoc && (dbLoc.latitude || dbLoc.city)) {
             setLocation(dbLoc)
             setPermissionGranted(true)
             setLoading(false)
+            hasInitialLocation = true
             console.log("📂 Loaded location from DB:", dbLoc)
+            
+            // Check if we should refresh for better address
+            const hasCompleteAddress = dbLoc?.formattedAddress && 
+              dbLoc.formattedAddress !== "Select location" &&
+              !dbLoc.formattedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/) &&
+              dbLoc.formattedAddress.split(',').length >= 4
+            
+            if (!hasCompleteAddress) {
+              shouldForceRefresh = true
+            }
           } else {
+            // No location found - set loading to false and show fallback
             setLoading(false)
+            shouldForceRefresh = true
           }
         })
         .catch(() => {
           setLoading(false)
+          shouldForceRefresh = true
         })
     }
 
+    // Always ensure loading is false after initial check
+    // Safety timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("⚠️ Loading timeout - setting loading to false")
+        setLoading(false)
+        // Set fallback location if nothing found
+        if (!location) {
+          setLocation({
+            city: "Select location",
+            address: "Select location",
+            formattedAddress: "Select location"
+          })
+        }
+      }
+    }, 3000) // 3 second safety timeout
+    
+    if (!hasInitialLocation) {
+      // Set a fallback location if nothing found
+      setTimeout(() => {
+        if (!location) {
+          setLocation({
+            city: "Select location",
+            address: "Select location",
+            formattedAddress: "Select location"
+          })
+          setLoading(false)
+        }
+      }, 100)
+    }
+    
     // Request fresh location in BACKGROUND (non-blocking)
     // This updates the location silently without showing loading
-    console.log("🚀 Fetching fresh location in background...")
-    getLocation(true, true)
+    console.log("🚀 Fetching fresh location in background...", shouldForceRefresh ? "(FORCE REFRESH)" : "")
+    getLocation(true, shouldForceRefresh) // forceFresh = true if cached location is incomplete
       .then((location) => {
-        console.log("✅ Fresh location fetched:", location)
-        // Start watching for live updates
-        startWatchingLocation()
+        if (location) {
+          console.log("✅ Fresh location fetched:", location)
+          console.log("✅ Location details:", {
+            formattedAddress: location?.formattedAddress,
+            address: location?.address,
+            city: location?.city,
+            state: location?.state,
+            area: location?.area
+          })
+          // Start watching for live updates
+          startWatchingLocation()
+        }
       })
       .catch((err) => {
         console.warn("⚠️ Background location fetch failed (using cached):", err.message)
         // Still start watching in case permission is granted later
         startWatchingLocation()
       })
+    
+    // Cleanup timeout and watcher
+    return () => {
+      clearTimeout(loadingTimeout)
+      console.log("🧹 Cleaning up location watcher")
+      stopWatchingLocation()
+    }
 
     return () => {
       console.log("🧹 Cleaning up location watcher")
@@ -895,7 +1674,7 @@ export function useLocation() {
   }, [])
 
   const requestLocation = async () => {
-    console.log("📍 User requested location update - clearing cache and fetching fresh")
+    console.log("📍📍📍 User requested location update - clearing cache and fetching fresh")
     setLoading(true)
     setError(null)
     
@@ -906,16 +1685,41 @@ export function useLocation() {
       
       // Show loading, so pass showLoading = true
       // forceFresh = true, updateDB = true, showLoading = true
+      // This ensures we get fresh GPS coordinates and reverse geocode with Google Maps
       const location = await getLocation(true, true, true)
-      console.log("✅ Fresh location requested successfully:", location)
-      console.log("✅ Location details:", {
+      
+      console.log("✅✅✅ Fresh location requested successfully:", location)
+      console.log("✅✅✅ Complete Location details:", {
         formattedAddress: location?.formattedAddress,
+        address: location?.address,
         city: location?.city,
         state: location?.state,
         area: location?.area,
+        pointOfInterest: location?.pointOfInterest,
+        premise: location?.premise,
         coordinates: location?.latitude && location?.longitude ? 
-          `${location.latitude.toFixed(8)}, ${location.longitude.toFixed(8)}` : "N/A"
+          `${location.latitude.toFixed(8)}, ${location.longitude.toFixed(8)}` : "N/A",
+        hasCompleteAddress: location?.formattedAddress && 
+          location.formattedAddress !== "Select location" &&
+          !location.formattedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/) &&
+          location.formattedAddress.split(',').length >= 4
       })
+      
+      // Verify we got complete address (POI, building, floor, area, city, state, pincode)
+      if (!location?.formattedAddress || 
+          location.formattedAddress === "Select location" ||
+          location.formattedAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/) ||
+          location.formattedAddress.split(',').length < 4) {
+        console.warn("⚠️⚠️⚠️ Location received but address is incomplete!")
+        console.warn("⚠️ Address parts count:", location?.formattedAddress?.split(',').length || 0)
+        console.warn("⚠️ This might be due to:")
+        console.warn("   1. Google Maps API not enabled or billing not set up")
+        console.warn("   2. Location permission not granted")
+        console.warn("   3. GPS accuracy too low (try on mobile device)")
+      } else {
+        console.log("✅✅✅ SUCCESS: Complete detailed address received!")
+        console.log("✅ Full address:", location.formattedAddress)
+      }
       
       // Restart watching for live updates
       startWatchingLocation()

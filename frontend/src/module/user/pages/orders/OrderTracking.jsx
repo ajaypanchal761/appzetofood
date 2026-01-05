@@ -23,6 +23,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useOrders } from "../../context/OrdersContext"
 import { useProfile } from "../../context/ProfileContext"
+import DeliveryTrackingMap from "../../components/DeliveryTrackingMap"
 
 // Animated checkmark component
 const AnimatedCheckmark = ({ delay = 0 }) => (
@@ -59,119 +60,67 @@ const AnimatedCheckmark = ({ delay = 0 }) => (
   </motion.svg>
 )
 
-// Map placeholder component with animated route
-const DeliveryMap = ({ isVisible }) => (
-  <motion.div 
-    className="relative h-64 bg-gradient-to-b from-gray-100 to-gray-200 overflow-hidden"
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    transition={{ duration: 0.5 }}
-  >
-    {/* Stylized map background */}
-    <div className="absolute inset-0" style={{
-      backgroundImage: `
-        linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)
-      `,
-      backgroundSize: '40px 40px'
-    }} />
-    
-    {/* Roads */}
-    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 256">
-      {/* Main roads */}
-      <path d="M0 128 L400 128" stroke="#e5e7eb" strokeWidth="12" fill="none" />
-      <path d="M200 0 L200 256" stroke="#e5e7eb" strokeWidth="8" fill="none" />
-      <path d="M0 64 L400 200" stroke="#e5e7eb" strokeWidth="6" fill="none" />
-      
-      {/* Animated delivery route */}
-      <motion.path 
-        d="M60 70 Q 120 90, 160 120 T 280 160 T 340 200"
-        stroke="#166534"
-        strokeWidth="3"
-        strokeDasharray="8 4"
-        fill="none"
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 2, delay: 0.5, ease: "easeInOut" }}
+// Real Delivery Map Component
+const DeliveryMap = ({ orderId, order, isVisible }) => {
+  // Get coordinates from order or use defaults (Indore)
+  const getRestaurantCoords = () => {
+    if (order?.restaurantLocation?.coordinates) {
+      return {
+        lat: order.restaurantLocation.coordinates[1],
+        lng: order.restaurantLocation.coordinates[0]
+      };
+    }
+    // Default Indore coordinates
+    return { lat: 22.7196, lng: 75.8577 };
+  };
+
+  const getCustomerCoords = () => {
+    if (order?.deliveryAddress?.coordinates) {
+      return {
+        lat: order.deliveryAddress.coordinates[1],
+        lng: order.deliveryAddress.coordinates[0]
+      };
+    }
+    // Default Indore coordinates
+    return { lat: 22.7196, lng: 75.8577 };
+  };
+
+  const restaurantCoords = getRestaurantCoords();
+  const customerCoords = getCustomerCoords();
+
+  // Delivery boy data
+  const deliveryBoyData = order?.deliveryPartner ? {
+    name: order.deliveryPartner.name || 'Delivery Partner',
+    avatar: order.deliveryPartner.avatar || null
+  } : null;
+
+  if (!isVisible || !orderId) {
+    return (
+      <motion.div 
+        className="relative h-64 bg-gradient-to-b from-gray-100 to-gray-200"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
       />
-    </svg>
+    );
+  }
 
-    {/* Restaurant marker */}
+  return (
     <motion.div 
-      className="absolute flex items-center justify-center"
-      style={{ left: '50px', top: '50px' }}
-      initial={{ scale: 0, y: -20 }}
-      animate={{ scale: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.3, type: "spring" }}
+      className="relative h-64 w-full"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
     >
-      <div className="w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center border-2 border-green-700">
-        <HomeIcon className="w-5 h-5 text-green-700" />
-      </div>
+      <DeliveryTrackingMap
+        orderId={orderId}
+        restaurantCoords={restaurantCoords}
+        customerCoords={customerCoords}
+        deliveryBoyData={deliveryBoyData}
+      />
     </motion.div>
-
-    {/* Delivery location marker */}
-    <motion.div 
-      className="absolute flex flex-col items-center"
-      style={{ right: '50px', bottom: '40px' }}
-      initial={{ scale: 0, y: -20 }}
-      animate={{ scale: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.6, type: "spring" }}
-    >
-      <div className="w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center border-2 border-green-700">
-        <MapPin className="w-5 h-5 text-green-700" />
-      </div>
-    </motion.div>
-
-    {/* Delivery partner marker (animated along route) */}
-    <motion.div
-      className="absolute z-10"
-      initial={{ left: '60px', top: '70px' }}
-      animate={{ 
-        left: ['60px', '160px', '280px', '330px'],
-        top: ['70px', '120px', '160px', '190px']
-      }}
-      transition={{ 
-        duration: 8, 
-        repeat: Infinity,
-        ease: "linear"
-      }}
-    >
-      <div className="w-8 h-8 bg-green-700 rounded-full shadow-lg flex items-center justify-center">
-        <span className="text-white text-xs">🛵</span>
-      </div>
-    </motion.div>
-
-    {/* Expand button */}
-    <motion.button 
-      className="absolute top-3 right-3 w-8 h-8 bg-white rounded-lg shadow flex items-center justify-center"
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <polyline points="15 3 21 3 21 9" />
-        <polyline points="9 21 3 21 3 15" />
-        <line x1="21" y1="3" x2="14" y2="10" />
-        <line x1="3" y1="21" x2="10" y2="14" />
-      </svg>
-    </motion.button>
-
-    {/* Current location button */}
-    <motion.button 
-      className="absolute bottom-3 right-3 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center"
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
-    >
-      <div className="w-6 h-6 rounded-full border-2 border-green-600 flex items-center justify-center">
-        <div className="w-2 h-2 rounded-full bg-green-600" />
-      </div>
-    </motion.button>
-
-    {/* Google attribution */}
-    <div className="absolute bottom-3 left-3 text-xs text-gray-500 font-medium">
-      Google
-    </div>
-  </motion.div>
-)
+  );
+}
 
 // Promotional banner carousel
 const PromoCarousel = () => {
@@ -539,7 +488,11 @@ export default function OrderTracking() {
       </motion.div>
 
       {/* Map Section */}
-      <DeliveryMap isVisible={!showConfirmation} />
+      <DeliveryMap 
+        orderId={orderId} 
+        order={order}
+        isVisible={!showConfirmation && orderStatus !== 'placed'} 
+      />
 
       {/* Scrollable Content */}
       <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 space-y-4 md:space-y-6 pb-24 md:pb-32">

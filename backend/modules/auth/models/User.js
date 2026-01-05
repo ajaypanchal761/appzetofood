@@ -169,8 +169,21 @@ const userSchema = new mongoose.Schema({
     formattedAddress: {
       type: String
     },
+    accuracy: {
+      type: Number // GPS accuracy in meters
+    },
+    postalCode: {
+      type: String // Pincode
+    },
+    street: {
+      type: String
+    },
+    streetNumber: {
+      type: String
+    },
     lastUpdated: {
-      type: Date
+      type: Date,
+      default: Date.now
     },
     location: {
       type: {
@@ -179,7 +192,7 @@ const userSchema = new mongoose.Schema({
         default: 'Point'
       },
       coordinates: {
-        type: [Number], // [longitude, latitude]
+        type: [Number], // [longitude, latitude] for GeoJSON
         default: [0, 0]
       }
     }
@@ -212,6 +225,7 @@ userSchema.index(
 );
 userSchema.index({ googleId: 1 }, { unique: true, sparse: true });
 userSchema.index({ 'addresses.location': '2dsphere' });
+userSchema.index({ 'currentLocation.location': '2dsphere' }); // GeoJSON index for current location queries
 // Note: Single-field indexes on email/phone removed - compound indexes {email:1,role:1} and {phone:1,role:1} can serve as prefixes
 userSchema.index({ role: 1 });
 

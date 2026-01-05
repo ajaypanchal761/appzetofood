@@ -604,9 +604,7 @@ export default function Home() {
           }
           console.log('✅ Backend connection successful')
         } catch (healthError) {
-          console.error('❌ Backend connection failed:', healthError.message)
-          console.error('💡 Make sure backend server is running on http://localhost:5000')
-          console.error('💡 Start backend with: cd appzetofood/backend && npm run dev')
+          // Backend connection error - handled silently, toast notifications shown via axios interceptor
           setRestaurantsData([])
           setLoadingRestaurants(false)
           return
