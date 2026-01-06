@@ -9,7 +9,7 @@ import App from './App.jsx'
 const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 if (googleMapsApiKey && !window.google) {
   const script = document.createElement('script')
-  script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry,directions`
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry`
   script.async = true
   script.defer = true
   document.head.appendChild(script)
@@ -58,10 +58,21 @@ console.error = (...args) => {
     errorStr.includes('💡 Backend URL:') ||
     errorStr.includes('💡 Start backend with:') ||
     errorStr.includes('💡 Check backend health:') ||
-    errorStr.includes('💡 Make sure backend server is running:')
+    errorStr.includes('💡 Make sure backend server is running:') ||
+    errorStr.includes('❌ Backend not accessible at:') ||
+    errorStr.includes('💡 Start backend:')
   ) {
     // Only show first occurrence, subsequent ones are suppressed
     // The axios interceptor already handles throttling
+    return
+  }
+  
+  // Suppress OTP verification errors (handled by UI error messages)
+  if (
+    errorStr.includes('OTP Verification Error:') ||
+    (errorStr.includes('AxiosError') && errorStr.includes('Request failed with status code 403') && errorStr.includes('verify-otp'))
+  ) {
+    // OTP errors are already displayed to users via UI error messages
     return
   }
   

@@ -354,22 +354,117 @@ export function useLocation() {
         }
       }
       
-      // ZOMATO-STYLE: Extract exact building/cafe name (Mama Loca Cafe, Princess Center)
-      // This is the EXACT Zomato approach - find building name from components
-      // Priority: point_of_interest > premise > sublocality_level_1
-      let mainTitle = "";
-      const building = addressComponents.find(c => 
-        c.types.includes("point_of_interest") || 
-        c.types.includes("premise") ||
-        c.types.includes("sublocality_level_1")
-      );
+      // ===================== GOOGLE PLACES API - GET DETAILED PLACE INFORMATION =====================
+      // Use Places API to get comprehensive details (name, phone, website, rating, etc.)
+      let placeDetails = null;
+      let placeId = null;
+      let placeName = "";
+      let placePhone = "";
+      let placeWebsite = "";
+      let placeRating = null;
+      let placeOpeningHours = null;
+      let placePhotos = [];
       
-      if (building) {
-        mainTitle = building.long_name;
-        console.log("✅✅✅ ZOMATO-STYLE: Found exact building/cafe name:", mainTitle);
+      try {
+        // Step 1: Use Nearby Search to find the closest place
+        console.log("🔍 Using Google Places Nearby Search for detailed information...");
+        const nearbySearchUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=50&key=${GOOGLE_MAPS_API_KEY}&language=en`;
+        const nearbyResponse = await fetch(nearbySearchUrl).then(res => res.json());
+        
+        if (nearbyResponse.status === "OK" && nearbyResponse.results && nearbyResponse.results.length > 0) {
+          // Find the closest place (first result is usually the closest)
+          const closestPlace = nearbyResponse.results[0];
+          placeId = closestPlace.place_id;
+          placeName = closestPlace.name || "";
+          
+          console.log("✅ Found nearby place:", {
+            name: placeName,
+            placeId: placeId,
+            types: closestPlace.types,
+            vicinity: closestPlace.vicinity
+          });
+          
+          // Step 2: Get detailed place information using Place Details API
+          if (placeId) {
+            console.log("🔍 Fetching detailed place information...");
+            const placeDetailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,formatted_phone_number,website,rating,opening_hours,photos,address_components,geometry,types&key=${GOOGLE_MAPS_API_KEY}&language=en`;
+            const detailsResponse = await fetch(placeDetailsUrl).then(res => res.json());
+            
+            if (detailsResponse.status === "OK" && detailsResponse.result) {
+              placeDetails = detailsResponse.result;
+              placeName = placeDetails.name || placeName;
+              placePhone = placeDetails.formatted_phone_number || "";
+              placeWebsite = placeDetails.website || "";
+              placeRating = placeDetails.rating || null;
+              placeOpeningHours = placeDetails.opening_hours || null;
+              
+              // Get photo references (first 3 photos)
+              if (placeDetails.photos && placeDetails.photos.length > 0) {
+                placePhotos = placeDetails.photos.slice(0, 3).map(photo => ({
+                  reference: photo.photo_reference,
+                  width: photo.width,
+                  height: photo.height,
+                  url: `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo.photo_reference}&key=${GOOGLE_MAPS_API_KEY}`
+                }));
+              }
+              
+              console.log("✅✅✅ Google Places API - Complete Details:", {
+                name: placeName,
+                phone: placePhone,
+                website: placeWebsite,
+                rating: placeRating,
+                hasOpeningHours: !!placeOpeningHours,
+                photosCount: placePhotos.length,
+                address: placeDetails.formatted_address
+              });
+              
+              // If Places API has better address components, use them
+              if (placeDetails.address_components && placeDetails.address_components.length > addressComponents.length) {
+                console.log("✅ Using address components from Places API (more detailed)");
+                // Merge Places API address components with geocoding results
+                const placesComponents = placeDetails.address_components;
+                // Update missing components from Places API
+                for (const comp of placesComponents) {
+                  const types = comp.types || [];
+                  if (types.includes("point_of_interest") && !pointOfInterest) {
+                    pointOfInterest = comp.long_name;
+                  }
+                  if (types.includes("premise") && !premise) {
+                    premise = comp.long_name;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (placesError) {
+        console.warn("⚠️ Google Places API error (non-critical):", placesError.message);
+        // Continue with geocoding results even if Places API fails
+      }
+      
+      // ZOMATO-STYLE: Extract exact building/cafe name (Mama Loca Cafe, Princess Center)
+      // Priority: Places API name > point_of_interest > premise > sublocality_level_1
+      let mainTitle = "";
+      
+      // First priority: Use name from Places API (most accurate)
+      if (placeName && placeName.trim() !== "") {
+        mainTitle = placeName;
+        console.log("✅✅✅ ZOMATO-STYLE: Using Places API name:", mainTitle);
       } else {
-        mainTitle = "Location Found";
-        console.warn("⚠️ No building/cafe name found in address components");
+        // Fallback to geocoding components
+        const building = addressComponents.find(c => 
+          c.types.includes("point_of_interest") || 
+          c.types.includes("premise") ||
+          c.types.includes("sublocality_level_1")
+        );
+        
+        if (building) {
+          mainTitle = building.long_name;
+          console.log("✅✅✅ ZOMATO-STYLE: Found exact building/cafe name from geocoding:", mainTitle);
+        } else {
+          mainTitle = "Location Found";
+          console.warn("⚠️ No building/cafe name found in address components");
+        }
       }
       
       // Use mainTitle as mainLocation (Zomato-style)
@@ -580,9 +675,10 @@ export function useLocation() {
         }
       }
       
-      console.log("✅✅✅ Google Maps Reverse Geocode - Complete Address:", {
+      console.log("✅✅✅ Google Maps Reverse Geocode + Places API - Complete Address:", {
         mainTitle, // ZOMATO-STYLE: Building/Cafe name
         mainLocation, // ZOMATO-STYLE: Main location for display
+        placeName: placeName || "Not found", // From Places API
         pointOfInterest,
         premise,
         streetNumber,
@@ -594,7 +690,13 @@ export function useLocation() {
         completeFormattedAddress,
         displayAddress,
         area,
-        formattedAddressFromGoogle: formattedAddress // Original from Google
+        formattedAddressFromGoogle: formattedAddress, // Original from Google
+        // Places API Details
+        hasPlaceDetails: !!placeDetails,
+        phone: placePhone || "Not available",
+        website: placeWebsite || "Not available",
+        rating: placeRating || "Not rated",
+        photosCount: placePhotos.length
       });
       
       // Final validation: Ensure mainTitle/mainLocation is used properly
@@ -608,7 +710,7 @@ export function useLocation() {
         console.warn("   3. GPS accuracy is low (try on mobile device)");
       }
       
-      // Return location object with ZOMATO-STYLE exact location
+      // Return location object with ZOMATO-STYLE exact location + Google Places API details
       const locationResult = {
         city: city || "Unknown City",
         state: state || "",
@@ -621,16 +723,36 @@ export function useLocation() {
         // ZOMATO-STYLE: Add mainTitle for exact building/cafe name
         mainTitle: mainTitle !== "Location Found" ? mainTitle : null,
         pointOfInterest: pointOfInterest || null,
-        premise: premise || null
+        premise: premise || null,
+        // Google Places API - Complete Details
+        placeId: placeId || null,
+        placeName: placeName || null,
+        phone: placePhone || null,
+        website: placeWebsite || null,
+        rating: placeRating || null,
+        openingHours: placeOpeningHours ? {
+          openNow: placeOpeningHours.open_now,
+          weekdayText: placeOpeningHours.weekday_text || []
+        } : null,
+        photos: placePhotos.length > 0 ? placePhotos : null,
+        // Additional metadata
+        hasPlaceDetails: !!placeDetails,
+        placeTypes: placeDetails?.types || []
       };
       
-      console.log("✅✅✅ FINAL Location Result (ZOMATO-STYLE):", {
+      console.log("✅✅✅ FINAL Location Result (ZOMATO-STYLE + Google Places API):", {
         mainTitle: locationResult.mainTitle,
+        placeName: locationResult.placeName,
         address: locationResult.address,
         formattedAddress: locationResult.formattedAddress,
         area: locationResult.area,
         city: locationResult.city,
         state: locationResult.state,
+        phone: locationResult.phone,
+        website: locationResult.website,
+        rating: locationResult.rating,
+        photosCount: locationResult.photos?.length || 0,
+        hasPlaceDetails: locationResult.hasPlaceDetails,
         hasCompleteAddress: locationResult.formattedAddress && 
           locationResult.formattedAddress.split(',').length >= 4
       });
@@ -665,7 +787,16 @@ export function useLocation() {
           postalCode: "",
           mainTitle: null,
           pointOfInterest: null,
-          premise: null
+          premise: null,
+          placeId: null,
+          placeName: null,
+          phone: null,
+          website: null,
+          rating: null,
+          openingHours: null,
+          photos: null,
+          hasPlaceDetails: false,
+          placeTypes: []
         };
       }
       
@@ -1608,33 +1739,30 @@ export function useLocation() {
     // Always ensure loading is false after initial check
     // Safety timeout to prevent infinite loading
     const loadingTimeout = setTimeout(() => {
-      if (loading) {
-        console.warn("⚠️ Loading timeout - setting loading to false")
-        setLoading(false)
-        // Set fallback location if nothing found
-        if (!location) {
-          setLocation({
-            city: "Select location",
-            address: "Select location",
-            formattedAddress: "Select location"
+      setLoading((currentLoading) => {
+        if (currentLoading) {
+          console.warn("⚠️ Loading timeout - setting loading to false")
+          // Only set fallback if we still don't have a location
+          setLocation((currentLocation) => {
+            if (!currentLocation || 
+                (currentLocation.formattedAddress === "Select location" && 
+                 !currentLocation.latitude && !currentLocation.city)) {
+              return {
+                city: "Select location",
+                address: "Select location",
+                formattedAddress: "Select location"
+              }
+            }
+            return currentLocation
           })
         }
-      }
-    }, 3000) // 3 second safety timeout
+        return false
+      })
+    }, 5000) // 5 second safety timeout (increased to allow background fetch to complete)
     
-    if (!hasInitialLocation) {
-      // Set a fallback location if nothing found
-      setTimeout(() => {
-        if (!location) {
-          setLocation({
-            city: "Select location",
-            address: "Select location",
-            formattedAddress: "Select location"
-          })
-          setLoading(false)
-        }
-      }, 100)
-    }
+    // Don't set fallback immediately - wait for background fetch to complete
+    // The background fetch will set the location, or we'll use the cached/DB location
+    // Only set fallback if we have no location after all attempts
     
     // Request fresh location in BACKGROUND (non-blocking)
     // This updates the location silently without showing loading
@@ -1650,6 +1778,9 @@ export function useLocation() {
             state: location?.state,
             area: location?.area
           })
+          // CRITICAL: Update state with fresh location so PageNavbar displays it
+          setLocation(location)
+          setPermissionGranted(true)
           // Start watching for live updates
           startWatchingLocation()
         }

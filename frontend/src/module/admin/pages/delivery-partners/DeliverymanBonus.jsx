@@ -1,18 +1,22 @@
-import { useState, useMemo } from "react"
-import { Search, Wallet, Settings, Folder, Download, ChevronDown, FileText, FileSpreadsheet, Code, Check, Columns } from "lucide-react"
-import { deliverymanBonusDummy } from "../../data/deliverymanBonusDummy"
+import { useState, useMemo, useEffect } from "react"
+import { Search, Wallet, Settings, Folder, Download, ChevronDown, FileText, FileSpreadsheet, Code, Check, Columns, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { exportBonusToCSV, exportBonusToExcel, exportBonusToPDF, exportBonusToJSON } from "../../components/deliveryman/deliverymanExportUtils"
+import { adminAPI } from "@/lib/api"
 
 export default function DeliverymanBonus() {
   const [formData, setFormData] = useState({
-    deliveryman: "",
+    deliveryPartnerId: "",
     amount: "",
     reference: "",
   })
   const [searchQuery, setSearchQuery] = useState("")
-  const [transactions, setTransactions] = useState(deliverymanBonusDummy)
+  const [transactions, setTransactions] = useState([])
+  const [deliveryPartners, setDeliveryPartners] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState("")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [formErrors, setFormErrors] = useState({})
@@ -25,6 +29,54 @@ export default function DeliverymanBonus() {
     createdAt: true,
   })
 
+  // Fetch delivery partners on mount
+  useEffect(() => {
+    const fetchDeliveryPartners = async () => {
+      try {
+        const response = await adminAPI.getDeliveryPartners({ status: 'approved', limit: 1000 })
+        if (response.data?.data?.deliveryPartners) {
+          setDeliveryPartners(response.data.data.deliveryPartners)
+        }
+      } catch (error) {
+        console.error("Error fetching delivery partners:", error)
+      }
+    }
+
+    fetchDeliveryPartners()
+  }, [])
+
+  // Fetch transactions on mount
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      setLoading(true)
+      setError("")
+      try {
+        const response = await adminAPI.getDeliveryPartnerBonusTransactions({ limit: 1000 })
+        if (response.data?.data?.transactions) {
+          // Format transactions for display
+          const formatted = response.data.data.transactions.map((t, index) => ({
+            ...t,
+            createdAt: new Date(t.createdAt).toLocaleString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          }))
+          setTransactions(formatted)
+        }
+      } catch (error) {
+        console.error("Error fetching bonus transactions:", error)
+        setError("Failed to load transactions. Please refresh the page.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTransactions()
+  }, [])
+
   const filteredTransactions = useMemo(() => {
     if (!searchQuery.trim()) {
       return transactions
@@ -33,7 +85,8 @@ export default function DeliverymanBonus() {
     const query = searchQuery.toLowerCase().trim()
     return transactions.filter(transaction =>
       transaction.deliveryman?.toLowerCase().includes(query) ||
-      transaction.transactionId?.toLowerCase().includes(query)
+      transaction.transactionId?.toLowerCase().includes(query) ||
+      transaction.reference?.toLowerCase().includes(query)
     )
   }, [transactions, searchQuery])
 
@@ -46,38 +99,119 @@ export default function DeliverymanBonus() {
 
   const validateForm = () => {
     const errors = {}
-    if (!formData.deliveryman.trim()) errors.deliveryman = "Deliveryman is required"
-    if (!formData.amount || parseFloat(formData.amount) <= 0) errors.amount = "Valid amount is required"
+    if (!formData.deliveryPartnerId || !formData.deliveryPartnerId.trim()) {
+      errors.deliveryPartnerId = "Deliveryman is required"
+    }
+    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      errors.amount = "Valid amount is required"
+    }
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!validateForm()) return
     
-    const newSl = transactions.length > 0 ? Math.max(...transactions.map(t => t.sl)) + 1 : 1
-    const newTransaction = {
-      sl: newSl,
-      transactionId: `TXN-${Date.now()}`,
-      deliveryman: formData.deliveryman,
-      bonus: `$${parseFloat(formData.amount).toFixed(2)}`,
-      reference: formData.reference || "N/A",
-      createdAt: new Date().toLocaleString(),
-    }
+    setSubmitting(true)
+    setError("")
     
-    setTransactions([newTransaction, ...transactions])
-    setFormData({ deliveryman: "", amount: "", reference: "" })
-    setShowSuccessDialog(true)
+    // Log request details
+    console.log("Submitting bonus with data:", {
+      deliveryPartnerId: formData.deliveryPartnerId,
+      amount: formData.amount,
+      reference: formData.reference
+    })
+    
+    try {
+      const response = await adminAPI.addDeliveryPartnerBonus(
+        formData.deliveryPartnerId,
+        formData.amount,
+        formData.reference
+      )
+      
+      console.log("Bonus response:", response)
+      console.log("Response data:", response.data)
+      console.log("Response status:", response.status)
+      
+      if (response?.data?.success || response?.data?.data) {
+        // Refresh transactions
+        const transactionsResponse = await adminAPI.getDeliveryPartnerBonusTransactions({ limit: 1000 })
+        if (transactionsResponse?.data?.data?.transactions) {
+          const formatted = transactionsResponse.data.data.transactions.map((t, index) => ({
+            ...t,
+            createdAt: new Date(t.createdAt).toLocaleString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          }))
+          setTransactions(formatted)
+        }
+        
+        setFormData({ deliveryPartnerId: "", amount: "", reference: "" })
+        setShowSuccessDialog(true)
+      } else {
+        setError("Unexpected response format. Please check console for details.")
+      }
+    } catch (error) {
+      console.error("=== ERROR ADDING BONUS ===")
+      console.error("Error object:", error)
+      console.error("Error name:", error.name)
+      console.error("Error message:", error.message)
+      console.error("Error code:", error.code)
+      console.error("Error response:", error.response)
+      console.error("Error response status:", error.response?.status)
+      console.error("Error response data:", error.response?.data)
+      console.error("Error request URL:", error.config?.url)
+      console.error("Error request method:", error.config?.method)
+      console.error("Error request data:", error.config?.data)
+      console.error("==========================")
+      
+      // Extract error message
+      let errorMessage = "Failed to add bonus. Please try again."
+      
+      if (error.response) {
+        // Server responded with error status
+        if (error.response.data?.message) {
+          errorMessage = error.response.data.message
+        } else if (error.response.data?.error) {
+          errorMessage = error.response.data.error
+        } else if (error.response.status === 401) {
+          errorMessage = "Unauthorized. Please log in again."
+        } else if (error.response.status === 403) {
+          errorMessage = "Forbidden. You don't have permission to perform this action."
+        } else if (error.response.status === 404) {
+          errorMessage = "Endpoint not found. Please check if backend server is running."
+        } else if (error.response.status === 500) {
+          errorMessage = "Server error. Please try again later."
+        } else {
+          errorMessage = `Error ${error.response.status}: ${error.message}`
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = "No response from server. Please check if backend server is running on port 5000."
+      } else {
+        // Error setting up the request
+        errorMessage = error.message || "Failed to add bonus. Please try again."
+      }
+      
+      setError(errorMessage)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleReset = () => {
     setFormData({
-      deliveryman: "",
+      deliveryPartnerId: "",
       amount: "",
       reference: "",
     })
     setFormErrors({})
+    setError("")
   }
 
   const handleExport = (format) => {
@@ -141,17 +275,21 @@ export default function DeliverymanBonus() {
                   DeliveryMan <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={formData.deliveryman}
-                  onChange={(e) => handleInputChange("deliveryman", e.target.value)}
+                  value={formData.deliveryPartnerId}
+                  onChange={(e) => handleInputChange("deliveryPartnerId", e.target.value)}
                   className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
-                    formErrors.deliveryman ? "border-red-500" : "border-slate-300"
+                    formErrors.deliveryPartnerId ? "border-red-500" : "border-slate-300"
                   }`}
+                  disabled={submitting}
                 >
                   <option value="">Select Delivery Man</option>
-                  <option value="Jhon Doe">Jhon Doe</option>
-                  <option value="Jane Doe">Jane Doe</option>
+                  {deliveryPartners.map((partner) => (
+                    <option key={partner._id} value={partner._id}>
+                      {partner.name} ({partner.deliveryId})
+                    </option>
+                  ))}
                 </select>
-                {formErrors.deliveryman && <p className="text-xs text-red-500 mt-1">{formErrors.deliveryman}</p>}
+                {formErrors.deliveryPartnerId && <p className="text-xs text-red-500 mt-1">{formErrors.deliveryPartnerId}</p>}
               </div>
 
               <div>
@@ -167,6 +305,7 @@ export default function DeliverymanBonus() {
                   className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
                     formErrors.amount ? "border-red-500" : "border-slate-300"
                   }`}
+                  disabled={submitting}
                 />
                 {formErrors.amount && <p className="text-xs text-red-500 mt-1">{formErrors.amount}</p>}
               </div>
@@ -181,23 +320,32 @@ export default function DeliverymanBonus() {
                   placeholder="Enter reference"
                   rows={4}
                   className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
+                  disabled={submitting}
                 />
               </div>
+              {error && (
+                <div className="md:col-span-2">
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-4 mt-6">
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-6 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all"
+                className="px-6 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={submitting}
               >
                 Reset
               </button>
               <button
                 type="submit"
-                className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md"
+                className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                disabled={submitting}
               >
-                Submit
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {submitting ? "Submitting..." : "Submit"}
               </button>
             </div>
           </form>
@@ -257,7 +405,12 @@ export default function DeliverymanBonus() {
           </div>
 
           {/* Table */}
-          {filteredTransactions.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+              <p className="text-sm text-slate-600">Loading transactions...</p>
+            </div>
+          ) : filteredTransactions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-32 h-32 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mb-6 shadow-inner relative">
                 <div className="w-20 h-20 bg-white rounded-xl flex items-center justify-center shadow-md">
@@ -297,7 +450,7 @@ export default function DeliverymanBonus() {
                         <span className="text-sm text-slate-700">{transaction.deliveryman}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-700">{transaction.bonus}</span>
+                        <span className="text-sm font-medium text-slate-900">{transaction.bonus}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm text-slate-700">{transaction.reference}</span>

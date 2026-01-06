@@ -107,15 +107,26 @@ export default function FeedNavbar({ className = "" }) {
 
   const handleProfileClick = () => navigate("/delivery/profile");
 
-  const handleToggle = (e) => {
+  const handleToggle = async (e) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
 
-    setIsOnline((prev) => {
-      const next = !prev;
-      showSingleToast(next);
-      return next;
-    });
+    const next = !isOnline;
+    
+    // Update state immediately for better UX
+    setIsOnline(next);
+    showSingleToast(next);
+
+    // Update backend
+    try {
+      await deliveryAPI.updateOnlineStatus(next);
+      console.log('✅ Online status updated in backend:', next);
+    } catch (error) {
+      console.error('❌ Error updating online status in backend:', error);
+      // Revert state if backend update fails
+      setIsOnline(!next);
+      toast.error('Failed to update status. Please try again.');
+    }
   };
 
   // Help options with proper navigation paths

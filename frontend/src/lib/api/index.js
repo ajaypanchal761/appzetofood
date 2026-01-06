@@ -541,16 +541,32 @@ export const deliveryAPI = {
     return apiClient.get(API_ENDPOINTS.DELIVERY.ORDERS, { params });
   },
 
+  // Get trip history
+  getTripHistory: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.TRIP_HISTORY, { params });
+  },
+
   // Get earnings
   getEarnings: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.EARNINGS, { params });
   },
 
   // Update location
-  updateLocation: (latitude, longitude) => {
-    return apiClient.post(API_ENDPOINTS.DELIVERY.LOCATION, {
+  updateLocation: (latitude, longitude, isOnline = null) => {
+    const payload = {
       latitude,
       longitude,
+    };
+    if (typeof isOnline === 'boolean') {
+      payload.isOnline = isOnline;
+    }
+    return apiClient.post(API_ENDPOINTS.DELIVERY.LOCATION, payload);
+  },
+
+  // Update online status
+  updateOnlineStatus: (isOnline) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.LOCATION, {
+      isOnline,
     });
   },
 
@@ -560,6 +576,11 @@ export const deliveryAPI = {
   },
   submitSignupDocuments: (data) => {
     return apiClient.post(API_ENDPOINTS.DELIVERY.SIGNUP.DOCUMENTS, data);
+  },
+
+  // Reverify (resubmit for approval)
+  reverify: () => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.REVERIFY);
   },
 };
 
@@ -636,6 +657,63 @@ export const adminAPI = {
   // Get delivery partners
   getDelivery: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY, { params });
+  },
+
+  // Get delivery partner join requests
+  getDeliveryPartnerJoinRequests: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_PARTNERS_REQUESTS, { params });
+  },
+
+  // Get delivery partner by ID
+  getDeliveryPartnerById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_BY_ID.replace(':id', id));
+  },
+
+  // Approve delivery partner
+  approveDeliveryPartner: (id) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_APPROVE.replace(':id', id));
+  },
+
+  // Reject delivery partner
+  rejectDeliveryPartner: (id, reason) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_REJECT.replace(':id', id), { reason });
+  },
+
+  // Reverify delivery partner
+  reverifyDeliveryPartner: (id) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_REVERIFY.replace(':id', id));
+  },
+
+  // Get all delivery partners
+  getDeliveryPartners: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_PARTNERS, { params });
+  },
+
+  // Update delivery partner status
+  updateDeliveryPartnerStatus: (id, status, isActive = null) => {
+    const payload = {};
+    if (status) payload.status = status;
+    if (isActive !== null) payload.isActive = isActive;
+    return apiClient.patch(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_STATUS.replace(':id', id), payload);
+  },
+
+  // Delete delivery partner
+  deleteDeliveryPartner: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_DELETE.replace(':id', id));
+  },
+
+  // Add bonus to delivery partner
+  addDeliveryPartnerBonus: (deliveryPartnerId, amount, reference = '') => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_BONUS, {
+      deliveryPartnerId,
+      amount: parseFloat(amount),
+      reference
+    });
+  },
+
+  // Get bonus transactions
+  getDeliveryPartnerBonusTransactions: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_BONUS_TRANSACTIONS, { params });
   },
 
   // Get orders

@@ -9,12 +9,8 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
-// Location routes
-router.post('/location', validate(Joi.object({
-  latitude: Joi.number().min(-90).max(90).required(),
-  longitude: Joi.number().min(-180).max(180).required(),
-  isOnline: Joi.boolean().optional()
-})), updateLocation);
+// Location routes - validation handled in controller for flexibility
+router.post('/location', updateLocation);
 router.get('/location', getLocation);
 
 export default router;

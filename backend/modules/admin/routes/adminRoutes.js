@@ -22,6 +22,20 @@ import {
   toggleCategoryStatus,
   updateCategoryPriority
 } from '../controllers/categoryController.js';
+import {
+  getJoinRequests,
+  getDeliveryPartnerById,
+  approveDeliveryPartner,
+  rejectDeliveryPartner,
+  getDeliveryPartners,
+  updateDeliveryPartnerStatus,
+  deleteDeliveryPartner,
+  reverifyDeliveryPartner
+} from '../controllers/deliveryPartnerController.js';
+import {
+  addBonus,
+  getBonusTransactions
+} from '../controllers/deliveryBonusController.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 
@@ -60,6 +74,20 @@ router.put('/categories/:id', uploadMiddleware.single('image'), updateCategory);
 router.delete('/categories/:id', deleteCategory);
 router.patch('/categories/:id/status', toggleCategoryStatus);
 router.patch('/categories/:id/priority', updateCategoryPriority);
+
+// Delivery Partner Management
+router.get('/delivery-partners/requests', getJoinRequests);
+router.get('/delivery-partners', getDeliveryPartners);
+router.get('/delivery-partners/:id', getDeliveryPartnerById);
+router.post('/delivery-partners/:id/approve', approveDeliveryPartner);
+router.post('/delivery-partners/:id/reject', rejectDeliveryPartner);
+router.post('/delivery-partners/:id/reverify', reverifyDeliveryPartner);
+router.patch('/delivery-partners/:id/status', updateDeliveryPartnerStatus);
+router.delete('/delivery-partners/:id', deleteDeliveryPartner);
+
+// Delivery Partner Bonus Management
+router.post('/delivery-partners/bonus', addBonus);
+router.get('/delivery-partners/bonus/transactions', getBonusTransactions);
 
 export default router;
 

@@ -1,17 +1,22 @@
-import { useState, useMemo } from "react"
-import { Search, Filter, Download, ChevronDown, Eye, Check, X, Package, ArrowUpDown, FileText, FileSpreadsheet, Code } from "lucide-react"
-import { joinRequestsDummy } from "../../data/joinRequestsDummy"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useState, useMemo, useEffect } from "react"
+import { Search, Filter, Eye, Check, X, Package, ArrowUpDown, FileText, FileSpreadsheet, Loader2, Download, ExternalLink, Calendar, MapPin, CreditCard, User, Mail, Phone, Bike, FileCheck } from "lucide-react"
+import { adminAPI } from "@/lib/api"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { exportJoinRequestsToCSV, exportJoinRequestsToExcel, exportJoinRequestsToPDF, exportJoinRequestsToJSON } from "../../components/deliveryman/joinRequestExportUtils"
+import { exportJoinRequestsToExcel, exportJoinRequestsToPDF } from "../../components/deliveryman/joinRequestExportUtils"
 
 export default function JoinRequest() {
   const [activeTab, setActiveTab] = useState("pending")
   const [searchQuery, setSearchQuery] = useState("")
-  const [requests, setRequests] = useState(joinRequestsDummy)
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [isApproveOpen, setIsApproveOpen] = useState(false)
   const [isDenyOpen, setIsDenyOpen] = useState(false)
+  const [isViewOpen, setIsViewOpen] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState(null)
+  const [viewDetails, setViewDetails] = useState(null)
+  const [processing, setProcessing] = useState(false)
+  const [rejectionReason, setRejectionReason] = useState("")
   const [filters, setFilters] = useState({
     zone: "",
     jobType: "",
@@ -19,74 +24,207 @@ export default function JoinRequest() {
   })
   const [isFilterOpen, setIsFilterOpen] = useState(false)
 
+  // Fetch join requests from API
+  const fetchJoinRequests = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const params = {
+        status: activeTab === "pending" ? "pending" : "denied",
+        page: 1,
+        limit: 1000, // Get all for now, can add pagination later
+      }
+
+      // Add search to params if provided
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim()
+      }
+
+      // Add filters to params
+      if (filters.zone) {
+        params.zone = filters.zone
+      }
+      if (filters.vehicleType) {
+        params.vehicleType = filters.vehicleType.toLowerCase()
+      }
+
+      const response = await adminAPI.getDeliveryPartnerJoinRequests(params)
+      
+      if (response.data && response.data.success) {
+        setRequests(response.data.data.requests || [])
+      } else {
+        setError("Failed to fetch join requests")
+        setRequests([])
+      }
+    } catch (err) {
+      console.error("Error fetching join requests:", err)
+      
+      // Better error handling
+      let errorMessage = "Failed to fetch join requests. Please try again."
+      
+      if (err.code === 'ERR_NETWORK') {
+        errorMessage = "Network error. Please check if backend server is running."
+      } else if (err.response?.status === 401) {
+        errorMessage = "Unauthorized. Please login again."
+      } else if (err.response?.status === 403) {
+        errorMessage = "Access denied. You don't have permission to view this."
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      setError(errorMessage)
+      setRequests([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Fetch requests when tab changes
+  useEffect(() => {
+    fetchJoinRequests()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchJoinRequests()
+    }, 500) // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery])
+
+  // Fetch when filters change (only when filter dialog is closed)
+  useEffect(() => {
+    if (!isFilterOpen) {
+      // Only fetch when filter dialog is closed (after applying)
+      fetchJoinRequests()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, isFilterOpen])
+
   const filteredRequests = useMemo(() => {
     let result = [...requests]
     
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      result = result.filter(request =>
-        request.name.toLowerCase().includes(query) ||
-        request.email.toLowerCase().includes(query) ||
-        request.phone.includes(query)
-      )
-    }
-
-    if (filters.zone) {
-      result = result.filter(request => request.zone === filters.zone)
-    }
+    // Client-side filtering for additional filters not supported by backend
     if (filters.jobType) {
       result = result.filter(request => request.jobType === filters.jobType)
     }
-    if (filters.vehicleType) {
-      result = result.filter(request => request.vehicleType === filters.vehicleType)
-    }
 
     return result
-  }, [requests, searchQuery, filters])
+  }, [requests, filters])
 
-  const handleApprove = (sl) => {
-    const request = requests.find(r => r.sl === sl)
+  const handleApprove = (request) => {
     setSelectedRequest(request)
     setIsApproveOpen(true)
   }
 
-  const confirmApprove = () => {
-    if (selectedRequest) {
-      setRequests(requests.filter(request => request.sl !== selectedRequest.sl))
+  const confirmApprove = async () => {
+    if (!selectedRequest) return
+
+    try {
+      setProcessing(true)
+      await adminAPI.approveDeliveryPartner(selectedRequest._id)
+      
+      // Refresh the list
+      await fetchJoinRequests()
+      
       setIsApproveOpen(false)
       setSelectedRequest(null)
+      
+      // Show success message
+      alert(`Successfully approved ${selectedRequest.name}'s join request!`)
+    } catch (err) {
+      console.error("Error approving request:", err)
+      alert(err.response?.data?.message || "Failed to approve request. Please try again.")
+    } finally {
+      setProcessing(false)
     }
   }
 
-  const handleDeny = (sl) => {
-    const request = requests.find(r => r.sl === sl)
+  const handleDeny = (request) => {
     setSelectedRequest(request)
+    setRejectionReason("")
     setIsDenyOpen(true)
   }
 
-  const confirmDeny = () => {
-    if (selectedRequest) {
-      setRequests(requests.filter(request => request.sl !== selectedRequest.sl))
+  const confirmDeny = async () => {
+    if (!selectedRequest) return
+
+    // Validate rejection reason
+    if (!rejectionReason.trim()) {
+      alert("Please provide a reason for rejection")
+      return
+    }
+
+    try {
+      setProcessing(true)
+      await adminAPI.rejectDeliveryPartner(selectedRequest._id, rejectionReason.trim())
+      
+      // Refresh the list
+      await fetchJoinRequests()
+      
       setIsDenyOpen(false)
       setSelectedRequest(null)
+      setRejectionReason("")
+      
+      // Show success message
+      alert(`Successfully rejected ${selectedRequest.name}'s join request.`)
+    } catch (err) {
+      console.error("Error rejecting request:", err)
+      alert(err.response?.data?.message || "Failed to reject request. Please try again.")
+    } finally {
+      setProcessing(false)
     }
   }
 
-  const handleExport = (format) => {
+  const handleView = async (request) => {
+    try {
+      setLoading(true)
+      const response = await adminAPI.getDeliveryPartnerById(request._id)
+      
+      if (response.data && response.data.success) {
+        setViewDetails(response.data.data.delivery)
+        setIsViewOpen(true)
+      } else {
+        alert("Failed to load details")
+      }
+    } catch (err) {
+      console.error("Error fetching details:", err)
+      alert(err.response?.data?.message || "Failed to load details")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleExportPDF = () => {
     if (filteredRequests.length === 0) {
       alert("No data to export")
       return
     }
-    switch (format) {
-      case "csv": exportJoinRequestsToCSV(filteredRequests); break
-      case "excel": exportJoinRequestsToExcel(filteredRequests); break
-      case "pdf": exportJoinRequestsToPDF(filteredRequests); break
-      case "json": exportJoinRequestsToJSON(filteredRequests); break
+    exportJoinRequestsToPDF(filteredRequests)
+  }
+
+  const handleExportExcel = () => {
+    if (filteredRequests.length === 0) {
+      alert("No data to export")
+      return
     }
+    exportJoinRequestsToExcel(filteredRequests)
   }
 
   const handleResetFilters = () => {
     setFilters({ zone: "", jobType: "", vehicleType: "" })
+  }
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    setSearchQuery("") // Reset search when changing tabs
+    setFilters({ zone: "", jobType: "", vehicleType: "" }) // Reset filters
   }
 
   const activeFiltersCount = Object.values(filters).filter(v => v).length
@@ -108,7 +246,7 @@ export default function JoinRequest() {
           {/* Tabs */}
           <div className="flex items-center gap-2 border-b border-slate-200 mb-6">
             <button
-              onClick={() => setActiveTab("pending")}
+              onClick={() => handleTabChange("pending")}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === "pending"
                   ? "border-blue-600 text-blue-600"
@@ -118,7 +256,7 @@ export default function JoinRequest() {
               Pending Delivery Man
             </button>
             <button
-              onClick={() => setActiveTab("denied")}
+              onClick={() => handleTabChange("denied")}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === "denied"
                   ? "border-blue-600 text-blue-600"
@@ -158,155 +296,187 @@ export default function JoinRequest() {
                   </span>
                 )}
               </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
-                    <Download className="w-4 h-4" />
-                    <span className="text-black font-bold">Export</span>
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 animate-in fade-in-0 zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95">
-                  <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport("csv")} className="cursor-pointer">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Export as CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("excel")} className="cursor-pointer">
-                    <FileSpreadsheet className="w-4 h-4 mr-2" />
-                    Export as Excel
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("pdf")} className="cursor-pointer">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Export as PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("json")} className="cursor-pointer">
-                    <Code className="w-4 h-4 mr-2" />
-                    Export as JSON
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <button
+                onClick={handleExportPDF}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all"
+                title="Export as PDF"
+              >
+                <FileText className="w-4 h-4" />
+                <span className="text-black font-bold">PDF</span>
+              </button>
+              <button
+                onClick={handleExportExcel}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all"
+                title="Export as Excel"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span className="text-black font-bold">Excel</span>
+              </button>
             </div>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700">{error}</p>
+              <button
+                onClick={fetchJoinRequests}
+                className="mt-2 text-sm text-red-600 underline hover:text-red-800"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span>SI</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span>Name</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span>Contact</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span>Zone</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span>Job Type</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span>Vehicle Type</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <span>Availability Status</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
-                    </div>
-                  </th>
-                  <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-slate-100">
-                {filteredRequests.length === 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                <span className="ml-3 text-sm text-slate-600">Loading requests...</span>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <td colSpan={8} className="px-6 py-20 text-center">
-                      <p className="text-sm text-slate-500">No requests found</p>
-                    </td>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <span>SI</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <span>Name</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <span>Contact</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <span>Zone</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <span>Job Type</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <span>Vehicle Type</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <span>Availability Status</span>
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">Action</th>
                   </tr>
-                ) : (
-                  filteredRequests.map((request) => (
-                    <tr key={request.sl} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-slate-700">{request.sl}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                            <span className="text-sm">👤</span>
-                          </div>
-                          <span className="text-sm font-medium text-slate-900">{request.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm text-slate-700">{request.email}</span>
-                          <span className="text-xs text-slate-500">{request.phone}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-700">{request.zone}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-700">{request.jobType}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-700">{request.vehicleType}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                          {request.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button className="p-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleApprove(request.sl)}
-                            className="p-1.5 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-                            title="Approve"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeny(request.sl)}
-                            className="p-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                            title="Deny"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-100">
+                  {filteredRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-20 text-center">
+                        <p className="text-sm text-slate-500">
+                          {error ? "Error loading requests" : "No requests found"}
+                        </p>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    filteredRequests.map((request) => (
+                      <tr key={request._id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm font-medium text-slate-700">{request.sl}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                              <span className="text-sm">👤</span>
+                            </div>
+                            <span className="text-sm font-medium text-slate-900">{request.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm text-slate-700">{request.email}</span>
+                            <span className="text-xs text-slate-500">{request.phone}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-slate-700">{request.zone}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-slate-700">{request.jobType}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-slate-700">{request.vehicleType}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium inline-block w-fit ${
+                              request.status === "Pending" || request.status === "pending"
+                                ? "bg-blue-100 text-blue-700"
+                                : request.status === "Denied" || request.status === "denied" || request.status === "blocked"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-green-100 text-green-700"
+                            }`}>
+                              {request.status === "blocked" || request.status === "Blocked" || request.status === "Denied" || request.status === "denied" ? "Rejected" : request.status}
+                            </span>
+                            {request.rejectionReason && (
+                              <span className="text-xs text-red-600 italic max-w-[200px] truncate" title={request.rejectionReason}>
+                                {request.rejectionReason}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleView(request)}
+                              className="p-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {activeTab === "pending" && (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(request)}
+                                  disabled={processing}
+                                  className="p-1.5 rounded bg-green-50 text-green-600 hover:bg-green-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Approve"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeny(request)}
+                                  disabled={processing}
+                                  className="p-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Deny"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>
@@ -325,14 +495,17 @@ export default function JoinRequest() {
           <DialogFooter className="px-6 pb-6">
             <button
               onClick={() => setIsApproveOpen(false)}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all"
+              disabled={processing}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={confirmApprove}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-all shadow-md"
+              disabled={processing}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-all shadow-md disabled:opacity-50 flex items-center gap-2"
             >
+              {processing && <Loader2 className="w-4 h-4 animate-spin" />}
               Approve
             </button>
           </DialogFooter>
@@ -345,23 +518,411 @@ export default function JoinRequest() {
           <DialogHeader className="px-6 pt-6 pb-4">
             <DialogTitle>Deny Request</DialogTitle>
           </DialogHeader>
-          <div className="px-6 pb-6">
+          <div className="px-6 pb-6 space-y-4">
             <p className="text-sm text-slate-700">
-              Are you sure you want to deny "{selectedRequest?.name}"'s join request? This action cannot be undone.
+              Are you sure you want to deny "{selectedRequest?.name}"'s join request?
             </p>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Reason for Rejection <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Please provide specific reasons for rejection (e.g., Invalid documents, Incomplete information, etc.)"
+                rows={5}
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 text-sm resize-none"
+                disabled={processing}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                This reason will be shown to the delivery partner
+              </p>
+            </div>
           </div>
           <DialogFooter className="px-6 pb-6">
             <button
-              onClick={() => setIsDenyOpen(false)}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all"
+              onClick={() => {
+                setIsDenyOpen(false)
+                setRejectionReason("")
+              }}
+              disabled={processing}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={confirmDeny}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-all shadow-md"
+              disabled={processing || !rejectionReason.trim()}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
+              {processing && <Loader2 className="w-4 h-4 animate-spin" />}
               Deny
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
+        <DialogContent className="max-w-3xl bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100 max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200">
+            <DialogTitle className="text-xl font-bold text-slate-900">Delivery Partner Details</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            {viewDetails ? (
+              <div className="space-y-6 mt-4">
+                {/* Profile Image & Basic Info */}
+                <div className="flex items-start gap-6 pb-6 border-b border-slate-200">
+                  <div className="flex-shrink-0">
+                    {viewDetails.profileImage?.url ? (
+                      <img 
+                        src={viewDetails.profileImage.url} 
+                        alt={viewDetails.name}
+                        className="w-24 h-24 rounded-full object-cover border-2 border-slate-200"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 rounded-full bg-slate-200 flex items-center justify-center">
+                        <User className="w-12 h-12 text-slate-400" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
+                        <User className="w-3 h-3" /> Name
+                      </label>
+                      <p className="text-sm font-medium text-slate-900 mt-1">{viewDetails.name || "N/A"}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
+                        <Mail className="w-3 h-3" /> Email
+                      </label>
+                      <p className="text-sm text-slate-900 mt-1">{viewDetails.email || "N/A"}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Phone
+                      </label>
+                      <p className="text-sm text-slate-900 mt-1">{viewDetails.phone || "N/A"}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Delivery ID</label>
+                      <p className="text-sm font-medium text-slate-900 mt-1">{viewDetails.deliveryId || "N/A"}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                        viewDetails.status === 'pending' ? 'bg-blue-100 text-blue-700' :
+                        viewDetails.status === 'approved' || viewDetails.status === 'active' ? 'bg-green-100 text-green-700' :
+                        viewDetails.status === 'blocked' ? 'bg-red-100 text-red-700' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        {viewDetails.status === 'blocked' ? 'Rejected' : (viewDetails.status?.charAt(0).toUpperCase() + viewDetails.status?.slice(1) || "N/A")}
+                      </span>
+                    </div>
+                    {viewDetails.rejectionReason && (
+                      <div className="col-span-2">
+                        <label className="text-xs font-semibold text-slate-500 uppercase text-red-600">Rejection Reason</label>
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-1">
+                          <p className="text-sm text-red-700 whitespace-pre-wrap">{viewDetails.rejectionReason}</p>
+                        </div>
+                      </div>
+                    )}
+                    {viewDetails.dateOfBirth && (
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase flex items-center gap-1">
+                          <Calendar className="w-3 h-3" /> Date of Birth
+                        </label>
+                        <p className="text-sm text-slate-900 mt-1">
+                          {new Date(viewDetails.dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                    )}
+                    {viewDetails.gender && (
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase">Gender</label>
+                        <p className="text-sm text-slate-900 mt-1 capitalize">{viewDetails.gender || "N/A"}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Location Details */}
+                {viewDetails.location && (
+                  <div className="pb-6 border-b border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <MapPin className="w-4 h-4" /> Location Details
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {viewDetails.location.addressLine1 && (
+                        <div className="col-span-2">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Address Line 1</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.location.addressLine1}</p>
+                        </div>
+                      )}
+                      {viewDetails.location.addressLine2 && (
+                        <div className="col-span-2">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Address Line 2</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.location.addressLine2}</p>
+                        </div>
+                      )}
+                      {viewDetails.location.area && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Area</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.location.area}</p>
+                        </div>
+                      )}
+                      {viewDetails.location.city && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">City</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.location.city}</p>
+                        </div>
+                      )}
+                      {viewDetails.location.state && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">State</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.location.state}</p>
+                        </div>
+                      )}
+                      {viewDetails.location.zipCode && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Zip Code</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.location.zipCode}</p>
+                        </div>
+                      )}
+                      {(viewDetails.location.latitude && viewDetails.location.longitude) && (
+                        <div className="col-span-2">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Coordinates</label>
+                          <p className="text-sm text-slate-900 mt-1">
+                            {viewDetails.location.latitude}, {viewDetails.location.longitude}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Vehicle Details */}
+                {viewDetails.vehicle && (
+                  <div className="pb-6 border-b border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <Bike className="w-4 h-4" /> Vehicle Details
+                    </h3>
+                    <div className="grid grid-cols-4 gap-4">
+                      {viewDetails.vehicle.brand && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Brand</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.vehicle.brand}</p>
+                        </div>
+                      )}
+                      {viewDetails.vehicle.model && (
+                        <div className="text-right col-span-1">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Model</label>
+                          <p className="text-xs text-slate-900 mt-1">{viewDetails.vehicle.model}</p>
+                        </div>
+                      )}
+                      {viewDetails.vehicle.number && (
+                        <div className="col-span-2">
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Vehicle Number</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.vehicle.number}</p>
+                        </div>
+                      )}
+                      {viewDetails.vehicle.type && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Vehicle Type</label>
+                          <p className="text-sm text-slate-900 mt-1 capitalize">{viewDetails.vehicle.type}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Documents */}
+                {viewDetails.documents && (
+                  <div className="pb-6 border-b border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <FileCheck className="w-4 h-4" /> Documents
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Aadhar */}
+                      {viewDetails.documents.aadhar && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Aadhar Card</label>
+                          <div className="mt-2">
+                            {viewDetails.documents.aadhar.number && (
+                              <p className="text-sm text-slate-700 mb-1">Number: {viewDetails.documents.aadhar.number}</p>
+                            )}
+                            {viewDetails.documents.aadhar.document && (
+                              <a 
+                                href={viewDetails.documents.aadhar.document} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                              >
+                                <ExternalLink className="w-3 h-3" /> View Document
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* PAN */}
+                      {viewDetails.documents.pan && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">PAN Card</label>
+                          <div className="mt-2">
+                            {viewDetails.documents.pan.number && (
+                              <p className="text-sm text-slate-700 mb-1">Number: {viewDetails.documents.pan.number}</p>
+                            )}
+                            {viewDetails.documents.pan.document && (
+                              <a 
+                                href={viewDetails.documents.pan.document} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                              >
+                                <ExternalLink className="w-3 h-3" /> View Document
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Driving License */}
+                      {viewDetails.documents.drivingLicense && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Driving License</label>
+                          <div className="mt-2">
+                            {viewDetails.documents.drivingLicense.number && (
+                              <p className="text-sm text-slate-700 mb-1">Number: {viewDetails.documents.drivingLicense.number}</p>
+                            )}
+                            {viewDetails.documents.drivingLicense.expiryDate && (
+                              <p className="text-xs text-slate-500 mb-1">
+                                Expiry: {new Date(viewDetails.documents.drivingLicense.expiryDate).toLocaleDateString('en-GB')}
+                              </p>
+                            )}
+                            {viewDetails.documents.drivingLicense.document && (
+                              <a 
+                                href={viewDetails.documents.drivingLicense.document} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                              >
+                                <ExternalLink className="w-3 h-3" /> View Document
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Vehicle RC */}
+                      {viewDetails.documents.vehicleRC && (viewDetails.documents.vehicleRC.number || viewDetails.documents.vehicleRC.document) && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Vehicle RC</label>
+                          <div className="mt-2">
+                            {viewDetails.documents.vehicleRC.number && (
+                              <p className="text-sm text-slate-700 mb-1">Number: {viewDetails.documents.vehicleRC.number}</p>
+                            )}
+                            {viewDetails.documents.vehicleRC.document && (
+                              <a 
+                                href={viewDetails.documents.vehicleRC.document} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                              >
+                                <ExternalLink className="w-3 h-3" /> View Document
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bank Details */}
+                {viewDetails.documents?.bankDetails && (
+                  <div className="pb-6 border-b border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <CreditCard className="w-4 h-4" /> Bank Details
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {viewDetails.documents.bankDetails.accountHolderName && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Account Holder Name</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.documents.bankDetails.accountHolderName}</p>
+                        </div>
+                      )}
+                      {viewDetails.documents.bankDetails.accountNumber && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Account Number</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.documents.bankDetails.accountNumber}</p>
+                        </div>
+                      )}
+                      {viewDetails.documents.bankDetails.ifscCode && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">IFSC Code</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.documents.bankDetails.ifscCode}</p>
+                        </div>
+                      )}
+                      {viewDetails.documents.bankDetails.bankName && (
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase">Bank Name</label>
+                          <p className="text-sm text-slate-900 mt-1">{viewDetails.documents.bankDetails.bankName}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional Info */}
+                <div className="grid grid-cols-2 gap-4">
+                  {viewDetails.signupMethod && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Signup Method</label>
+                      <p className="text-sm text-slate-900 mt-1 capitalize">{viewDetails.signupMethod}</p>
+                    </div>
+                  )}
+                  {viewDetails.phoneVerified !== undefined && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Phone Verified</label>
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                        viewDetails.phoneVerified ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {viewDetails.phoneVerified ? 'Verified' : 'Not Verified'}
+                      </span>
+                    </div>
+                  )}
+                  {viewDetails.createdAt && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Joined Date</label>
+                      <p className="text-sm text-slate-900 mt-1">
+                        {new Date(viewDetails.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                  )}
+                  {viewDetails.verifiedAt && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Verified At</label>
+                      <p className="text-sm text-slate-900 mt-1">
+                        {new Date(viewDetails.verifiedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+              </div>
+            )}
+          </div>
+          <DialogFooter className="px-6 pb-6 border-t border-slate-200">
+            <button
+              onClick={() => setIsViewOpen(false)}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all"
+            >
+              Close
             </button>
           </DialogFooter>
         </DialogContent>

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, ChevronDown } from "lucide-react"
+import { ArrowLeft, ChevronDown, Loader2 } from "lucide-react"
 import { useProgressStore } from "../store/progressStore"
 import FeedNavbar from "../components/FeedNavbar"
+import { deliveryAPI } from "@/lib/api"
 
 export default function TripHistory() {
   const navigate = useNavigate()
@@ -11,64 +12,56 @@ export default function TripHistory() {
   const [selectedTripType, setSelectedTripType] = useState("ALL TRIPS")
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [showTripTypePicker, setShowTripTypePicker] = useState(false)
+  const [trips, setTrips] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const tripTypes = ["ALL TRIPS", "Completed", "Cancelled", "Pending"]
 
-  // Generate dummy trip data based on selected date and filters
-  const generateDummyTrips = (date, period, tripType) => {
-    const trips = []
-    const seed = date.toISOString().split('T')[0].replace(/-/g, '')
-    const seedNum = parseInt(seed) % 1000
-    
-    const count = period === 'daily' ? (seedNum % 10) + 1 : period === 'weekly' ? (seedNum % 30) + 5 : (seedNum % 50) + 10
-
-    for (let i = 0; i < count; i++) {
-      const orderId = `ORD${String(100000 + seedNum + i).slice(-6)}`
-      const statuses = tripType === "ALL TRIPS" 
-        ? ["Completed", "Cancelled", "Pending"]
-        : [tripType]
-      
-      const status = statuses[(seedNum + i) % statuses.length]
-      const hours = Math.floor((seedNum + i) % 24)
-      const minutes = Math.floor((seedNum + i * 2) % 60)
-      const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-      
-      const amount = ((seedNum + i) % 500) + 50
-      
-      trips.push({
-        id: orderId,
-        orderId,
-        restaurant: `Restaurant ${String.fromCharCode(65 + (seedNum + i) % 26)}`,
-        customer: `Customer ${i + 1}`,
-        status,
-        time,
-        amount,
-        date: new Date(date.getTime() - i * 3600000)
-      })
-    }
-
-    return trips.sort((a, b) => b.date - a.date)
-  }
-
-  const [trips, setTrips] = useState(() => 
-    generateDummyTrips(selectedDate, activeTab, selectedTripType)
-  )
-
   const { updateTodayTrips } = useProgressStore()
 
+  // Fetch trips from API
   useEffect(() => {
-    const tripsData = generateDummyTrips(selectedDate, activeTab, selectedTripType)
-    setTrips(tripsData)
-    
-    // Update store if viewing today's data and showing all trips
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const selectedDateNormalized = new Date(selectedDate)
-    selectedDateNormalized.setHours(0, 0, 0, 0)
-    
-    if (activeTab === "daily" && selectedDateNormalized.getTime() === today.getTime() && selectedTripType === "ALL TRIPS") {
-      updateTodayTrips(tripsData.length)
+    const fetchTrips = async () => {
+      setLoading(true)
+      setError("")
+      
+      try {
+        const params = {
+          period: activeTab,
+          date: selectedDate.toISOString().split('T')[0],
+          status: selectedTripType !== "ALL TRIPS" ? selectedTripType : undefined,
+          limit: 1000
+        }
+        
+        const response = await deliveryAPI.getTripHistory(params)
+        
+        if (response.data?.success && response.data?.data?.trips) {
+          const tripsData = response.data.data.trips
+          setTrips(tripsData)
+          
+          // Update store if viewing today's data and showing all trips
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          const selectedDateNormalized = new Date(selectedDate)
+          selectedDateNormalized.setHours(0, 0, 0, 0)
+          
+          if (activeTab === "daily" && selectedDateNormalized.getTime() === today.getTime() && selectedTripType === "ALL TRIPS") {
+            updateTodayTrips(tripsData.length)
+          }
+        } else {
+          setTrips([])
+        }
+      } catch (error) {
+        console.error("Error fetching trip history:", error)
+        setError("Failed to load trip history. Please try again.")
+        setTrips([])
+      } finally {
+        setLoading(false)
+      }
     }
+
+    fetchTrips()
   }, [selectedDate, activeTab, selectedTripType, updateTodayTrips])
 
   // Close dropdowns when clicking outside
@@ -255,7 +248,22 @@ export default function TripHistory() {
 
       {/* Content Area */}
       <div className="px-4 py-6">
-        {trips.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="w-12 h-12 text-green-600 animate-spin mb-4" />
+            <p className="text-gray-500 text-base">Loading trips...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <p className="text-red-600 text-base mb-2">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-green-600 text-sm underline"
+            >
+              Retry
+            </button>
+          </div>
+        ) : trips.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 text-base">No trips found</p>
           </div>
@@ -263,7 +271,7 @@ export default function TripHistory() {
           <div className="space-y-3">
             {trips.map((trip) => (
               <div
-                key={trip.id}
+                key={trip.id || trip.orderId}
                 className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
               >
                 <div className="flex items-start justify-between mb-2">

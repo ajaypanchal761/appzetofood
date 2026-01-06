@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from "react"
+import { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
@@ -24,6 +24,7 @@ import {
   Play,
   Pause,
   IndianRupee,
+  Loader2,
 } from "lucide-react"
 import BottomPopup from "../components/BottomPopup"
 import FeedNavbar from "../components/FeedNavbar"
@@ -124,6 +125,18 @@ export default function DeliveryHome() {
   const navigate = useNavigate()
   const location = useLocation()
   const [animationKey, setAnimationKey] = useState(0)
+
+  // Helper function to safely call preventDefault (handles passive event listeners)
+  const safePreventDefault = (e) => {
+    if (e && e.cancelable !== false && typeof e.preventDefault === 'function') {
+      try {
+        e.preventDefault()
+      } catch (err) {
+        // Silently ignore if preventDefault fails (passive listener)
+        // This prevents console errors
+      }
+    }
+  }
   const [walletState, setWalletState] = useState({
     totalBalance: 0,
     cashInHand: 0,
@@ -141,12 +154,19 @@ export default function DeliveryHome() {
   const [riderLocation, setRiderLocation] = useState([22.7196, 75.8577]) // Indore coordinates
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false)
   const [bankDetailsFilled, setBankDetailsFilled] = useState(false)
+  const [deliveryStatus, setDeliveryStatus] = useState(null) // Store delivery partner status
+  const [rejectionReason, setRejectionReason] = useState(null) // Store rejection reason
+  const [isReverifying, setIsReverifying] = useState(false) // Loading state for reverify
   
   // Map refs and state (Ola Maps removed)
   const mapContainerRef = useRef(null)
   const directionsMapContainerRef = useRef(null)
   const watchPositionIdRef = useRef(null) // Store watchPosition ID for cleanup
   const lastLocationRef = useRef(null) // Store last location for heading calculation
+  const bikeMarkerRef = useRef(null) // Store bike marker instance
+  const routePolylineRef = useRef(null) // Store route polyline instance
+  const routeHistoryRef = useRef([]) // Store route history for traveled path
+  const isOnlineRef = useRef(false) // Store online status for use in callbacks
   const [mapLoading, setMapLoading] = useState(false)
   const [directionsMapLoading, setDirectionsMapLoading] = useState(false)
   const isInitializingMapRef = useRef(false)
@@ -312,6 +332,7 @@ export default function DeliveryHome() {
   const [customerRating, setCustomerRating] = useState(0)
   const [customerReviewText, setCustomerReviewText] = useState("")
   const [routePolyline, setRoutePolyline] = useState([])
+  const [showRoutePath, setShowRoutePath] = useState(true) // Toggle to show/hide route path
   const [reachedPickupButtonProgress, setreachedPickupButtonProgress] = useState(0)
   const [reachedPickupIsAnimatingToComplete, setreachedPickupIsAnimatingToComplete] = useState(false)
   const reachedPickupButtonRef = useRef(null)
@@ -364,11 +385,19 @@ export default function DeliveryHome() {
   const [isOnline, setIsOnline] = useState(() => {
     try {
       const raw = localStorage.getItem(LS_KEY)
-      return raw ? JSON.parse(raw) === true : false
+      const value = raw ? JSON.parse(raw) === true : false
+      isOnlineRef.current = value // Initialize ref
+      return value
     } catch {
+      isOnlineRef.current = false
       return false
     }
   })
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    isOnlineRef.current = isOnline
+  }, [isOnline])
 
   // Sync online status with localStorage changes (from FeedNavbar or other tabs)
   useEffect(() => {
@@ -989,28 +1018,114 @@ export default function DeliveryHome() {
     }
   }, []) // Only run on mount
 
-  // Get rider location - always track location (not just when online)
+  // Get rider location - App open होते ही location fetch करें
   useEffect(() => {
     // Set default location immediately so map can render
     setRiderLocation(prev => prev || [22.7196, 75.8577])
 
+    // Check if we have saved location in localStorage (for refresh handling)
+    const savedLocation = localStorage.getItem('deliveryBoyLastLocation')
+    if (savedLocation) {
+      try {
+        const parsed = JSON.parse(savedLocation)
+        if (parsed && Array.isArray(parsed) && parsed.length === 2) {
+          setRiderLocation(parsed)
+          lastLocationRef.current = parsed
+          routeHistoryRef.current = [{
+            lat: parsed[0],
+            lng: parsed[1]
+          }]
+          console.log('📍 Restored location from localStorage:', parsed)
+        }
+      } catch (e) {
+        console.warn('⚠️ Error parsing saved location:', e)
+      }
+    }
+
     if (navigator.geolocation) {
-      // Get current position first
+      // Get current position first - App open होते ही location लें
+      console.log('📍 Fetching current location on app open...')
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const newLocation = [position.coords.latitude, position.coords.longitude]
-          const heading = position.coords.heading !== null && position.coords.heading !== undefined 
+          // Validate coordinates
+          const latitude = position.coords.latitude
+          const longitude = position.coords.longitude
+          
+          // Validate coordinates are valid numbers
+          if (typeof latitude !== 'number' || typeof longitude !== 'number' || 
+              isNaN(latitude) || isNaN(longitude) ||
+              latitude < -90 || latitude > 90 || 
+              longitude < -180 || longitude > 180) {
+            console.warn("⚠️ Invalid coordinates received:", { latitude, longitude })
+            // Use default location if invalid
+            const defaultLocation = [22.7196, 75.8577]
+            setRiderLocation(defaultLocation)
+            lastLocationRef.current = defaultLocation
+            return
+          }
+          
+          const newLocation = [latitude, longitude] // [lat, lng] format
+          let heading = position.coords.heading !== null && position.coords.heading !== undefined 
             ? position.coords.heading 
             : null
-          setRiderLocation(newLocation)
-          console.log("📍 Current location obtained:", newLocation, "Heading:", heading)
           
-          // Location updated (map removed)
+          // Calculate heading from previous location if GPS heading not available
+          if (heading === null && lastLocationRef.current) {
+            const [prevLat, prevLng] = lastLocationRef.current
+            heading = calculateHeading(prevLat, prevLng, latitude, longitude)
+          }
+          
+          // Initialize route history if empty
+          if (routeHistoryRef.current.length === 0) {
+            routeHistoryRef.current = [{
+              lat: latitude,
+              lng: longitude
+            }]
+          } else {
+            // Add to route history
+            routeHistoryRef.current.push({
+              lat: latitude,
+              lng: longitude
+            })
+            if (routeHistoryRef.current.length > 1000) {
+              routeHistoryRef.current.shift()
+            }
+          }
+          
+          // Save location to localStorage (for refresh handling)
+          localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(newLocation))
+          
+          // Update bike marker if map is initialized and user is online
+          if (window.deliveryMapInstance) {
+            if (isOnlineRef.current) {
+              // Online है तो bike icon show करें
+              createOrUpdateBikeMarker(latitude, longitude, heading)
+              updateRoutePolyline()
+            }
+            // Offline है तो marker hide रहेगा (blue dot नहीं दिखेगा)
+          }
+          
+          setRiderLocation(newLocation)
+          lastLocationRef.current = newLocation
+          console.log("📍 Current location obtained on app open:", { 
+            latitude, 
+            longitude, 
+            heading,
+            accuracy: position.coords.accuracy,
+            isOnline: isOnlineRef.current,
+            timestamp: new Date().toISOString()
+          })
         },
         (error) => {
           console.warn("⚠️ Error getting current location:", error)
           // Keep default location if geolocation fails
-          setRiderLocation(prev => prev || [22.7196, 75.8577])
+          const defaultLocation = [22.7196, 75.8577]
+          setRiderLocation(defaultLocation)
+          lastLocationRef.current = defaultLocation
+          routeHistoryRef.current = [{
+            lat: defaultLocation[0],
+            lng: defaultLocation[1]
+          }]
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
@@ -1024,14 +1139,77 @@ export default function DeliveryHome() {
       // Watch position updates for live tracking
       const watchId = navigator.geolocation.watchPosition(
         (position) => {
-          const newLocation = [position.coords.latitude, position.coords.longitude]
-          const heading = position.coords.heading !== null && position.coords.heading !== undefined 
+          // Validate coordinates
+          const latitude = position.coords.latitude
+          const longitude = position.coords.longitude
+          
+          // Validate coordinates are valid numbers
+          if (typeof latitude !== 'number' || typeof longitude !== 'number' || 
+              isNaN(latitude) || isNaN(longitude) ||
+              latitude < -90 || latitude > 90 || 
+              longitude < -180 || longitude > 180) {
+            console.warn("⚠️ Invalid coordinates received:", { latitude, longitude })
+            return
+          }
+          
+          const newLocation = [latitude, longitude] // [lat, lng] format
+          let heading = position.coords.heading !== null && position.coords.heading !== undefined 
             ? position.coords.heading 
             : null
-          setRiderLocation(newLocation)
-          console.log("📍 Location updated:", newLocation, "Heading:", heading)
           
-          // Location updated (map removed)
+          // Calculate heading from previous location if GPS heading not available
+          if (heading === null && lastLocationRef.current) {
+            const [prevLat, prevLng] = lastLocationRef.current
+            heading = calculateHeading(prevLat, prevLng, latitude, longitude)
+          }
+          
+          // Update route history for traveled path
+          if (lastLocationRef.current) {
+            routeHistoryRef.current.push({
+              lat: latitude,
+              lng: longitude
+            })
+            // Keep only last 1000 points to avoid performance issues
+            if (routeHistoryRef.current.length > 1000) {
+              routeHistoryRef.current.shift()
+            }
+            // Update route polyline on map
+            updateRoutePolyline()
+          } else {
+            // Initialize route history with first location
+            routeHistoryRef.current = [{
+              lat: latitude,
+              lng: longitude
+            }]
+          }
+          
+          // Save location to localStorage (for refresh handling)
+          localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(newLocation))
+          
+          // Update bike marker with new location and heading (create if doesn't exist)
+          // Only update if user is online (use ref to get latest value)
+          if (window.deliveryMapInstance) {
+            if (isOnlineRef.current) {
+              // Online है तो bike icon show करें (blue dot नहीं)
+              createOrUpdateBikeMarker(latitude, longitude, heading)
+            } else {
+              // Offline है तो marker hide करें
+              if (bikeMarkerRef.current) {
+                bikeMarkerRef.current.setMap(null)
+              }
+            }
+          }
+          
+          setRiderLocation(newLocation)
+          lastLocationRef.current = newLocation
+          console.log("📍 Live location updated:", { 
+            latitude, 
+            longitude, 
+            heading,
+            accuracy: position.coords.accuracy,
+            isOnline: isOnlineRef.current,
+            timestamp: new Date().toISOString()
+          })
         },
         (error) => {
           console.warn("⚠️ Error watching location:", error)
@@ -1055,7 +1233,7 @@ export default function DeliveryHome() {
       // Default location if geolocation not available
       setRiderLocation(prev => prev || [22.7196, 75.8577])
     }
-  }, []) // Run only on mount to ensure location tracking continues after reload
+  }, []) // Run only on mount - location tracking should always be active
 
   // Handle new order popup accept button swipe
   const handleNewOrderAcceptTouchStart = (e) => {
@@ -1073,9 +1251,7 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       newOrderAcceptButtonIsSwiping.current = true
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+      safePreventDefault(e)
 
       // Calculate max swipe distance
       const buttonWidth = newOrderAcceptButtonRef.current?.offsetWidth || 300
@@ -1193,9 +1369,7 @@ export default function DeliveryHome() {
     const deltaY = e.touches[0].clientY - newOrderSwipeStartY.current
 
     if (deltaY > 0) {
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+      safePreventDefault(e)
       e.stopPropagation()
       setNewOrderDragY(deltaY)
     }
@@ -1241,9 +1415,7 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       reachedPickupIsSwiping.current = true
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+      safePreventDefault(e)
 
       // Calculate max swipe distance
       const buttonWidth = reachedPickupButtonRef.current?.offsetWidth || 300
@@ -1312,9 +1484,7 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       reachedDropIsSwiping.current = true
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+      safePreventDefault(e)
 
       // Calculate max swipe distance
       const buttonWidth = reachedDropButtonRef.current?.offsetWidth || 300
@@ -1376,9 +1546,7 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       orderIdConfirmIsSwiping.current = true
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+      safePreventDefault(e)
 
       // Calculate max swipe distance
       const buttonWidth = orderIdConfirmButtonRef.current?.offsetWidth || 300
@@ -1478,9 +1646,7 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       orderDeliveredIsSwiping.current = true
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+      safePreventDefault(e)
 
       // Calculate max swipe distance
       const buttonWidth = orderDeliveredButtonRef.current?.offsetWidth || 300
@@ -1548,9 +1714,7 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       acceptButtonIsSwiping.current = true
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+      safePreventDefault(e)
 
       // Calculate max swipe distance
       const buttonWidth = acceptButtonRef.current?.offsetWidth || 300
@@ -1634,16 +1798,12 @@ export default function DeliveryHome() {
 
       // Swipe up to expand
       if (deltaY > 0 && !bottomSheetExpanded && bottomSheetRef.current) {
-        if (e.cancelable) {
-          e.preventDefault()
-        }
+        safePreventDefault(e)
         bottomSheetRef.current.style.transform = `translateY(${-deltaY}px)`
       }
       // Swipe down to collapse
       else if (deltaY < 0 && bottomSheetExpanded && bottomSheetRef.current) {
-        if (e.cancelable) {
-          e.preventDefault()
-        }
+        safePreventDefault(e)
         bottomSheetRef.current.style.transform = `translateY(${-deltaY}px)`
       }
     }
@@ -1851,11 +2011,27 @@ export default function DeliveryHome() {
   // Fetch wallet data from API
   useEffect(() => {
     const fetchWalletData = async () => {
+      // Skip wallet fetch if status is pending
+      if (deliveryStatus === 'pending') {
+        setWalletState({
+          totalBalance: 0,
+          cashInHand: 0,
+          totalWithdrawn: 0,
+          totalEarned: 0,
+          transactions: [],
+          joiningBonusClaimed: false
+        })
+        return
+      }
+
       try {
         const walletData = await fetchDeliveryWallet()
         setWalletState(walletData)
       } catch (error) {
-        console.error('Error fetching wallet data:', error)
+        // Only log error if it's not a network error (backend might be down)
+        if (error.code !== 'ERR_NETWORK') {
+          console.error('Error fetching wallet data:', error)
+        }
         // Keep empty state on error
         setWalletState({
           totalBalance: 0,
@@ -1868,10 +2044,16 @@ export default function DeliveryHome() {
       }
     }
 
-    fetchWalletData()
-  }, [])
+    // Only fetch if status is known and not pending
+    if (deliveryStatus !== null && deliveryStatus !== 'pending') {
+      fetchWalletData()
+    } else if (deliveryStatus === null) {
+      // If status is not yet loaded, wait for it
+      fetchWalletData()
+    }
+  }, [deliveryStatus])
 
-  // Fetch bank details status
+  // Fetch bank details status and delivery partner status
   useEffect(() => {
     const checkBankDetails = async () => {
       try {
@@ -1880,20 +2062,48 @@ export default function DeliveryHome() {
           const profile = response.data.data.profile
           const bankDetails = profile?.documents?.bankDetails
           
-          // Check if all required bank details fields are filled
-          const isFilled = !!(
-            bankDetails?.accountHolderName?.trim() &&
-            bankDetails?.accountNumber?.trim() &&
-            bankDetails?.ifscCode?.trim() &&
-            bankDetails?.bankName?.trim()
-          )
+          // Store delivery partner status first
+          if (profile?.status) {
+            setDeliveryStatus(profile.status)
+          }
           
-          setBankDetailsFilled(isFilled)
+          // Store rejection reason if status is blocked
+          if (profile?.status === 'blocked' && profile?.rejectionReason) {
+            setRejectionReason(profile.rejectionReason)
+          } else {
+            setRejectionReason(null)
+          }
+          
+          // Only check bank details if status is approved/active
+          // Pending users don't need bank details check
+          if (profile?.status && profile.status !== 'pending') {
+            // Check if all required bank details fields are filled
+            const isFilled = !!(
+              bankDetails?.accountHolderName?.trim() &&
+              bankDetails?.accountNumber?.trim() &&
+              bankDetails?.ifscCode?.trim() &&
+              bankDetails?.bankName?.trim()
+            )
+            
+            setBankDetailsFilled(isFilled)
+          } else {
+            // For pending status, don't show bank details banner
+            setBankDetailsFilled(true) // Set to true to hide banner
+          }
         }
       } catch (error) {
-        console.error("Error checking bank details:", error)
-        // Default to showing the banner if we can't check
-        setBankDetailsFilled(false)
+        // Only log error if it's not a network error (backend might be down)
+        if (error.code !== 'ERR_NETWORK') {
+          console.error("Error checking bank details:", error)
+        }
+        // Default to showing the banner if we can't check (only for approved users)
+        // For network errors, assume pending status to show verification message
+        if (error.code === 'ERR_NETWORK') {
+          setDeliveryStatus('pending')
+          setBankDetailsFilled(true) // Hide bank details banner
+        } else {
+          setBankDetailsFilled(false)
+        }
       }
     }
 
@@ -1911,18 +2121,127 @@ export default function DeliveryHome() {
     }
   }, [])
 
+  // Handle reverify (resubmit for approval)
+  const handleReverify = async () => {
+    try {
+      setIsReverifying(true)
+      await deliveryAPI.reverify()
+      
+      // Refresh profile to get updated status
+      const response = await deliveryAPI.getProfile()
+      if (response?.data?.success && response?.data?.data?.profile) {
+        const profile = response.data.data.profile
+        setDeliveryStatus(profile.status)
+        setRejectionReason(null)
+      }
+      
+      alert("Your request has been resubmitted for verification. Admin will review it soon.")
+    } catch (err) {
+      console.error("Error reverifying:", err)
+      alert(err.response?.data?.message || "Failed to resubmit request. Please try again.")
+    } finally {
+      setIsReverifying(false)
+    }
+  }
+
   // Ola Maps SDK check removed
 
-  // Initialize Google Map
+  // Initialize Google Map - Preserve map across navigation, re-attach when returning
   useEffect(() => {
-    if (showHomeSections || !mapContainerRef.current) return
+    if (showHomeSections) {
+      console.log('📍 Map view hidden (showHomeSections is true)');
+      return;
+    }
+
+    if (!mapContainerRef.current) {
+      console.log('📍 Map container ref not available yet');
+      return;
+    }
+
+    // Store preserved state for re-initialization after navigation
+    let preservedState = null;
+    
+    // If map instance exists, preserve state before re-initializing
+    if (window.deliveryMapInstance) {
+      const existingMap = window.deliveryMapInstance;
+      const existingBikeMarker = bikeMarkerRef.current;
+      const existingPolyline = routePolylineRef.current;
+      
+      console.log('📍 Map instance exists, preserving state for re-initialization...');
+      
+      // Check if map is already attached to current container
+      try {
+        const mapDiv = existingMap.getDiv();
+        if (mapDiv && mapDiv === mapContainerRef.current) {
+          console.log('📍 Map already attached to current container, skipping re-initialization');
+          return; // Map is already properly attached, no need to re-initialize
+        }
+      } catch (error) {
+        // Map div check failed, will re-initialize
+        console.log('📍 Map container check failed, will re-initialize');
+      }
+      
+      // Store map state safely
+      try {
+        preservedState = {
+          center: existingMap.getCenter(),
+          zoom: existingMap.getZoom(),
+          bikeMarkerPosition: null,
+          bikeMarkerHeading: null,
+          hasPolyline: !!existingPolyline
+        };
+        
+        // Store bike marker state
+        if (existingBikeMarker) {
+          const pos = existingBikeMarker.getPosition();
+          if (pos) {
+            preservedState.bikeMarkerPosition = { lat: pos.lat(), lng: pos.lng() };
+            // Get heading from icon rotation if available
+            const icon = existingBikeMarker.getIcon();
+            if (icon && typeof icon === 'object' && icon.rotation !== undefined) {
+              preservedState.bikeMarkerHeading = icon.rotation;
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Error preserving map state:', error);
+        preservedState = null;
+      }
+      
+      // Remove markers from old map before clearing (safely)
+      try {
+        if (existingBikeMarker && typeof existingBikeMarker.setMap === 'function') {
+          existingBikeMarker.setMap(null);
+        }
+        if (existingPolyline && typeof existingPolyline.setMap === 'function') {
+          existingPolyline.setMap(null);
+        }
+      } catch (error) {
+        console.warn('⚠️ Error removing markers from old map:', error);
+      }
+      
+      // Clear old map instance reference (will be re-created below)
+      // Markers preserved in refs, will be re-attached after map initialization
+      window.deliveryMapInstance = null;
+    }
+
+    console.log('📍 Starting map initialization...');
 
     // Wait for Google Maps to load
     if (!window.google || !window.google.maps) {
+      console.log('📍 Waiting for Google Maps API to load...');
+      let attempts = 0;
+      const maxAttempts = 50; // 5 seconds max wait
       const checkInterval = setInterval(() => {
+        attempts++;
         if (window.google && window.google.maps) {
           clearInterval(checkInterval);
+          console.log('✅ Google Maps API loaded, initializing map...');
           initializeGoogleMap();
+        } else if (attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+          console.error('❌ Google Maps API failed to load after 5 seconds');
+          setMapLoading(false);
         }
       }, 100);
       return () => clearInterval(checkInterval);
@@ -1932,27 +2251,95 @@ export default function DeliveryHome() {
 
     function initializeGoogleMap() {
       try {
+        if (!mapContainerRef.current) {
+          console.error('❌ Map container ref is null');
+          setMapLoading(false);
+          return;
+        }
+
+        if (!window.google || !window.google.maps) {
+          console.error('❌ Google Maps API not available');
+          setMapLoading(false);
+          return;
+        }
+
+        console.log('📍 Initializing Google Map with container:', mapContainerRef.current);
         setMapLoading(true);
         const initialCenter = riderLocation ? { lat: riderLocation[0], lng: riderLocation[1] } : { lat: 22.7196, lng: 75.8577 };
+        
+        console.log('📍 Map center:', initialCenter);
         
         const map = new window.google.maps.Map(mapContainerRef.current, {
           center: initialCenter,
           zoom: 15,
           mapTypeId: window.google.maps.MapTypeId.ROADMAP,
           tilt: 45,
-          heading: 0
+          heading: 0,
+          disableDefaultUI: false,
+          zoomControl: true,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false
         });
 
         // Store map instance
         window.deliveryMapInstance = map;
+        console.log('✅ Map instance created and stored');
 
-        // Add bike marker if location available
-        if (riderLocation && riderLocation.length === 2) {
-          createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null);
+        // Restore preserved state if coming back from navigation
+        if (preservedState) {
+          if (preservedState.center && preservedState.zoom) {
+            map.setCenter(preservedState.center);
+            map.setZoom(preservedState.zoom);
+            console.log('📍 Restored map center and zoom after navigation');
+          }
+          
+          // Re-create bike marker if it existed before navigation
+          if (preservedState.bikeMarkerPosition && isOnlineRef.current) {
+            console.log('📍 Re-creating bike marker after navigation:', preservedState.bikeMarkerPosition);
+            createOrUpdateBikeMarker(
+              preservedState.bikeMarkerPosition.lat, 
+              preservedState.bikeMarkerPosition.lng, 
+              preservedState.bikeMarkerHeading
+            );
+          }
+          
+          // Re-attach route polyline if it existed
+          if (preservedState.hasPolyline && routePolylineRef.current && routeHistoryRef.current.length >= 2) {
+            routePolylineRef.current.setMap(map);
+            console.log('✅ Route polyline re-attached after navigation');
+          }
+        } else {
+          // Initialize route history with current location (first time initialization)
+          if (riderLocation && riderLocation.length === 2) {
+            routeHistoryRef.current = [{
+              lat: riderLocation[0],
+              lng: riderLocation[1]
+            }];
+            lastLocationRef.current = riderLocation;
+            
+            // Add bike marker if location available and user is online
+            // Use ref to get latest online status
+            if (isOnlineRef.current) {
+              console.log('📍 Creating bike marker on map init - user is online');
+              createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null);
+            } else {
+              console.log('📍 Skipping bike marker - user is offline');
+            }
+          }
         }
 
         map.addListener('tilesloaded', () => {
           setMapLoading(false);
+          // Ensure bike marker is visible after tiles load (if online)
+          if (isOnlineRef.current && riderLocation && riderLocation.length === 2) {
+            setTimeout(() => {
+              if (bikeMarkerRef.current && bikeMarkerRef.current.getMap() === null) {
+                console.log('📍 Re-adding bike marker after tiles loaded');
+                createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null);
+              }
+            }, 500);
+          }
         });
 
         console.log('✅ Google Map initialized');
@@ -1961,13 +2348,140 @@ export default function DeliveryHome() {
         setMapLoading(false);
       }
     }
-  }, [showHomeSections, riderLocation])
+
+    // Cleanup function - DON'T clear map instance on navigation (preserve it for return)
+    return () => {
+      // Preserve map instance and markers for navigation
+      // Map will be re-initialized when component mounts again
+      console.log('📍 Component cleanup - preserving map instance for navigation');
+      
+      // Don't clear map instance - preserve it in window.deliveryMapInstance
+      // Don't clear bike marker - preserve it in bikeMarkerRef
+      // Only temporarily remove polyline from map (preserve reference)
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+        // Don't set to null - preserve reference for re-attachment
+      }
+    }
+  }, [showHomeSections]) // Only re-initialize when showHomeSections changes
+
+  // Update bike marker when going online - ensure bike appears immediately
+  useEffect(() => {
+    console.log('🔄 Online status effect triggered:', { 
+      isOnline, 
+      showHomeSections, 
+      hasMap: !!window.deliveryMapInstance,
+      riderLocation 
+    });
+
+    if (showHomeSections || !window.deliveryMapInstance) {
+      return;
+    }
+
+    if (!isOnline) {
+      // Hide bike marker when offline (blue dot नहीं दिखेगा)
+      if (bikeMarkerRef.current) {
+        bikeMarkerRef.current.setMap(null);
+        console.log('🚫 Bike marker hidden - user offline');
+      }
+      return;
+    }
+
+    // When going online, ensure bike marker is visible at current location IMMEDIATELY
+    if (riderLocation && riderLocation.length === 2) {
+      // Calculate heading if we have previous location
+      let heading = null;
+      if (lastLocationRef.current) {
+        const [prevLat, prevLng] = lastLocationRef.current;
+        heading = calculateHeading(prevLat, prevLng, riderLocation[0], riderLocation[1]);
+      }
+
+      console.log('✅ User went ONLINE - creating/updating bike marker immediately at:', riderLocation);
+
+      // Create or update bike marker IMMEDIATELY (blue dot की जगह bike icon)
+      createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], heading);
+      
+      // Center map on bike location smoothly
+      window.deliveryMapInstance.panTo({
+        lat: riderLocation[0],
+        lng: riderLocation[1]
+      });
+
+      // Initialize route history if empty
+      if (routeHistoryRef.current.length === 0) {
+        routeHistoryRef.current = [{
+          lat: riderLocation[0],
+          lng: riderLocation[1]
+        }];
+      }
+
+      // Update route polyline
+      updateRoutePolyline();
+
+      console.log('✅ Bike marker created/updated when going online:', riderLocation);
+    } else {
+      // Try to get location from localStorage if current location not available
+      const savedLocation = localStorage.getItem('deliveryBoyLastLocation')
+      if (savedLocation) {
+        try {
+          const parsed = JSON.parse(savedLocation)
+          if (parsed && Array.isArray(parsed) && parsed.length === 2) {
+            console.log('📍 Using saved location from localStorage:', parsed)
+            createOrUpdateBikeMarker(parsed[0], parsed[1], null)
+            window.deliveryMapInstance.panTo({
+              lat: parsed[0],
+              lng: parsed[1]
+            })
+          }
+        } catch (e) {
+          console.warn('⚠️ Error using saved location:', e)
+        }
+      } else {
+        console.warn('⚠️ Cannot create bike marker - invalid rider location:', riderLocation);
+      }
+    }
+  }, [isOnline, riderLocation, showHomeSections])
+
+  // Safeguard: Ensure bike marker stays on map (prevent it from disappearing)
+  useEffect(() => {
+    if (!isOnline || showHomeSections || !window.deliveryMapInstance) return;
+
+    // Check every 2 seconds if bike marker is still on map
+    const checkInterval = setInterval(() => {
+      if (isOnlineRef.current && riderLocation && riderLocation.length === 2) {
+        if (bikeMarkerRef.current) {
+          const markerMap = bikeMarkerRef.current.getMap();
+          if (markerMap === null) {
+            console.warn('⚠️ Bike marker lost map reference, re-adding...');
+            createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null);
+          }
+        } else {
+          // Marker doesn't exist, create it
+          console.warn('⚠️ Bike marker missing, creating...');
+          createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null);
+        }
+      }
+    }, 2000); // Check every 2 seconds
+
+    return () => clearInterval(checkInterval);
+  }, [isOnline, riderLocation, showHomeSections])
 
   // Directions Map placeholder (Ola Maps removed)
   useEffect(() => {
     if (!showDirectionsMap || !selectedRestaurant) return
     setDirectionsMapLoading(false)
   }, [showDirectionsMap, selectedRestaurant])
+
+  // Handle route polyline visibility
+  useEffect(() => {
+    if (routePolylineRef.current) {
+      if (showRoutePath && routeHistoryRef.current.length >= 2) {
+        routePolylineRef.current.setMap(window.deliveryMapInstance);
+      } else {
+        routePolylineRef.current.setMap(null);
+      }
+    }
+  }, [showRoutePath])
 
   // Calculate heading from two coordinates (in degrees, 0-360)
   const calculateHeading = (lat1, lng1, lat2, lng2) => {
@@ -1994,12 +2508,20 @@ export default function DeliveryHome() {
     const position = new window.google.maps.LatLng(latitude, longitude);
     const map = window.deliveryMapInstance;
 
+    console.log('🚲 Creating/updating bike marker:', { 
+      latitude, 
+      longitude, 
+      heading,
+      markerExists: !!bikeMarkerRef.current,
+      isOnline: isOnlineRef.current
+    });
+
     if (!bikeMarkerRef.current) {
-      // Create bike marker
+      // Create bike marker with custom icon
       const bikeIcon = {
         url: bikeLogo,
-        scaledSize: new window.google.maps.Size(45, 45),
-        anchor: new window.google.maps.Point(22.5, 22.5),
+        scaledSize: new window.google.maps.Size(60, 60), // Larger size for better visibility
+        anchor: new window.google.maps.Point(30, 30), // Center point
         rotation: heading || 0
       };
 
@@ -2007,19 +2529,106 @@ export default function DeliveryHome() {
         position: position,
         map: map,
         icon: bikeIcon,
-        optimized: false
+        optimized: false,
+        animation: window.google.maps.Animation.DROP // Drop animation on first appearance
       });
+      
+      console.log('✅ Bike marker created successfully:', {
+        position: bikeMarkerRef.current.getPosition()?.toString(),
+        map: !!bikeMarkerRef.current.getMap()
+      });
+      
+      // Remove animation after drop completes
+      setTimeout(() => {
+        if (bikeMarkerRef.current) {
+          bikeMarkerRef.current.setAnimation(null);
+        }
+      }, 2000);
     } else {
-      // Update position and rotation
-      bikeMarkerRef.current.setPosition(position);
+      // ALWAYS ensure marker is on the map (prevent it from disappearing)
+      if (bikeMarkerRef.current.getMap() === null) {
+        bikeMarkerRef.current.setMap(map);
+        console.log('✅ Bike marker re-added to map (was missing)');
+      }
+      
+      // Smooth update position and rotation
+      const currentPosition = bikeMarkerRef.current.getPosition();
+      if (currentPosition) {
+        // Update position first
+        bikeMarkerRef.current.setPosition(position);
+        // Then pan map smoothly
+        map.panTo(position);
+      } else {
+        bikeMarkerRef.current.setPosition(position);
+      }
+      
+      // Update icon with rotation
       const bikeIcon = {
         url: bikeLogo,
-        scaledSize: new window.google.maps.Size(45, 45),
-        anchor: new window.google.maps.Point(22.5, 22.5),
-        rotation: heading || 0
+        scaledSize: new window.google.maps.Size(60, 60),
+        anchor: new window.google.maps.Point(30, 30),
+        rotation: heading !== null && heading !== undefined ? heading : 0
       };
       bikeMarkerRef.current.setIcon(bikeIcon);
-      map.panTo(position);
+      
+      // Double-check marker is still on map after update
+      if (bikeMarkerRef.current.getMap() === null) {
+        console.warn('⚠️ Bike marker lost map reference, re-adding...');
+        bikeMarkerRef.current.setMap(map);
+      }
+      
+      console.log('✅ Bike marker updated:', { 
+        latitude, 
+        longitude, 
+        heading,
+        position: bikeMarkerRef.current.getPosition()?.toString(),
+        map: !!bikeMarkerRef.current.getMap(),
+        isOnMap: bikeMarkerRef.current.getMap() !== null
+      });
+    }
+  }
+
+  // Create or update route polyline (blue line showing traveled path)
+  const updateRoutePolyline = () => {
+    if (!window.google || !window.google.maps || !window.deliveryMapInstance) {
+      return;
+    }
+
+    if (!showRoutePath) {
+      // Hide polyline if showRoutePath is false
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+      return;
+    }
+
+    const map = window.deliveryMapInstance;
+    const routeHistory = routeHistoryRef.current;
+
+    if (routeHistory.length < 2) {
+      return; // Need at least 2 points to draw a line
+    }
+
+    // Convert route history to Google Maps LatLng array
+    const path = routeHistory.map(point => ({
+      lat: point.lat,
+      lng: point.lng
+    }));
+
+    if (!routePolylineRef.current) {
+      // Create new polyline
+      routePolylineRef.current = new window.google.maps.Polyline({
+        path: path,
+        geodesic: true,
+        strokeColor: '#4285F4', // Google Blue color
+        strokeOpacity: 1.0,
+        strokeWeight: 6, // Line thickness
+        map: map
+      });
+    } else {
+      // Update existing polyline path
+      routePolylineRef.current.setPath(path);
+      routePolylineRef.current.setMap(map); // Ensure it's visible
     }
   }
 
@@ -2093,25 +2702,25 @@ export default function DeliveryHome() {
   }, [carouselSlides])
 
   // Reset auto-rotate timer after manual swipe
-  const resetCarouselAutoRotate = () => {
+  const resetCarouselAutoRotate = useCallback(() => {
     if (carouselAutoRotateRef.current) {
       clearInterval(carouselAutoRotateRef.current)
     }
     carouselAutoRotateRef.current = setInterval(() => {
       setCurrentCarouselSlide((prev) => (prev + 1) % carouselSlides.length)
     }, 3000)
-  }
+  }, [carouselSlides.length])
 
   // Handle carousel swipe touch events
   const carouselStartY = useRef(0)
 
-  const handleCarouselTouchStart = (e) => {
+  const handleCarouselTouchStart = useCallback((e) => {
     carouselIsSwiping.current = true
     carouselStartX.current = e.touches[0].clientX
     carouselStartY.current = e.touches[0].clientY
-  }
+  }, [])
 
-  const handleCarouselTouchMove = (e) => {
+  const handleCarouselTouchMove = useCallback((e) => {
     if (!carouselIsSwiping.current) return
 
     const currentX = e.touches[0].clientX
@@ -2121,13 +2730,11 @@ export default function DeliveryHome() {
 
     // Only prevent default if horizontal swipe is dominant
     if (deltaX > deltaY && deltaX > 10) {
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+      safePreventDefault(e)
     }
-  }
+  }, [])
 
-  const handleCarouselTouchEnd = (e) => {
+  const handleCarouselTouchEnd = useCallback((e) => {
     if (!carouselIsSwiping.current) return
 
     const endX = e.changedTouches[0].clientX
@@ -2151,7 +2758,7 @@ export default function DeliveryHome() {
     carouselIsSwiping.current = false
     carouselStartX.current = 0
     carouselStartY.current = 0
-  }
+  }, [carouselSlides.length, resetCarouselAutoRotate])
 
   // Handle carousel mouse events for desktop
   const handleCarouselMouseDown = (e) => {
@@ -2160,7 +2767,7 @@ export default function DeliveryHome() {
 
     const handleMouseMove = (moveEvent) => {
       if (!carouselIsSwiping.current) return
-      moveEvent.preventDefault()
+      safePreventDefault(moveEvent)
     }
 
     const handleMouseUp = (upEvent) => {
@@ -2195,6 +2802,23 @@ export default function DeliveryHome() {
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  // Setup non-passive touch event listeners for carousel to allow preventDefault
+  useEffect(() => {
+    const carouselElement = carouselRef.current
+    if (!carouselElement) return
+
+    // Add event listeners with { passive: false } for touchmove to allow preventDefault
+    carouselElement.addEventListener('touchstart', handleCarouselTouchStart, { passive: true })
+    carouselElement.addEventListener('touchmove', handleCarouselTouchMove, { passive: false })
+    carouselElement.addEventListener('touchend', handleCarouselTouchEnd, { passive: true })
+
+    return () => {
+      carouselElement.removeEventListener('touchstart', handleCarouselTouchStart)
+      carouselElement.removeEventListener('touchmove', handleCarouselTouchMove)
+      carouselElement.removeEventListener('touchend', handleCarouselTouchEnd)
+    }
+  }, [handleCarouselTouchStart, handleCarouselTouchMove, handleCarouselTouchEnd])
+
   // Handle swipe bar touch events
   const handleSwipeBarTouchStart = (e) => {
     // Check if touch is on a button or interactive element
@@ -2206,16 +2830,28 @@ export default function DeliveryHome() {
       return
     }
     
-    // Check if we're at the top of the scrollable area (within first 50px)
-    if (showHomeSections && homeSectionsScrollRef.current) {
+    // Check if touch is on scrollable content area
+    const isOnScrollableContent = target.closest('[ref="homeSectionsScrollRef"]') || 
+                                  target.closest('.overflow-y-auto') ||
+                                  (homeSectionsScrollRef.current && homeSectionsScrollRef.current.contains(target))
+    
+    // Check if we're scrolling vs dragging
+    if (showHomeSections && homeSectionsScrollRef.current && isOnScrollableContent) {
       const scrollTop = homeSectionsScrollRef.current.scrollTop
-      if (scrollTop > 50) {
+      const scrollHeight = homeSectionsScrollRef.current.scrollHeight
+      const clientHeight = homeSectionsScrollRef.current.clientHeight
+      const isScrollable = scrollHeight > clientHeight
+      
+      // If content is scrollable and not at top/bottom, allow scrolling
+      if (isScrollable && (scrollTop > 10 || scrollTop < (scrollHeight - clientHeight - 10))) {
         // User is scrolling, not dragging
         isScrollingHomeSections.current = true
+        isSwipingBar.current = false
         return
       }
     }
     
+    // Only start swipe if touch is on swipe handle or at top/bottom of scrollable area
     isSwipingBar.current = true
     swipeBarStartY.current = e.touches[0].clientY
     setIsDraggingSwipeBar(true)
@@ -2225,29 +2861,46 @@ export default function DeliveryHome() {
   const handleSwipeBarTouchMove = (e) => {
     if (!isSwipingBar.current) return
     
+    const currentY = e.touches[0].clientY
+    const deltaY = swipeBarStartY.current - currentY // Positive = swiping up, Negative = swiping down
+    const windowHeight = window.innerHeight
+
+    // Check if user is scrolling content vs dragging swipe bar
+    if (showHomeSections && homeSectionsScrollRef.current) {
+      const scrollTop = homeSectionsScrollRef.current.scrollTop
+      const scrollHeight = homeSectionsScrollRef.current.scrollHeight
+      const clientHeight = homeSectionsScrollRef.current.clientHeight
+      const isScrollable = scrollHeight > clientHeight
+      
+      // If content is scrollable and user is trying to scroll
+      if (isScrollable) {
+        // Scrolling down (deltaY < 0) - allow scroll if not at top
+        if (deltaY < 0 && scrollTop > 0) {
+          isScrollingHomeSections.current = true
+          isSwipingBar.current = false
+          setIsDraggingSwipeBar(false)
+          return // Allow native scroll
+        }
+        
+        // Scrolling up (deltaY > 0) - allow scroll if not at bottom
+        if (deltaY > 0 && scrollTop < (scrollHeight - clientHeight - 10)) {
+          isScrollingHomeSections.current = true
+          isSwipingBar.current = false
+          setIsDraggingSwipeBar(false)
+          return // Allow native scroll
+        }
+      }
+    }
+
     // If user was scrolling, don't handle as swipe
     if (isScrollingHomeSections.current) {
       return
     }
 
-    const currentY = e.touches[0].clientY
-    const deltaY = swipeBarStartY.current - currentY // Positive = swiping up, Negative = swiping down
-    const windowHeight = window.innerHeight
-
-    // Check if we're scrolling vs dragging
-    if (showHomeSections && homeSectionsScrollRef.current) {
-      const scrollTop = homeSectionsScrollRef.current.scrollTop
-      // If scrolling down and content is scrollable, allow scrolling instead of dragging
-      if (deltaY < 0 && scrollTop > 0) {
-        return
-      }
-    }
-
-    // Only prevent default if we're actually dragging (not scrolling)
-    if (Math.abs(deltaY) > 5) {
-      if (e.cancelable) {
-        e.preventDefault()
-      }
+    // Only prevent default if we're actually dragging swipe bar (not scrolling)
+    // Only prevent if drag is significant enough
+    if (Math.abs(deltaY) > 10) {
+      safePreventDefault(e)
     }
 
     if (showHomeSections) {
@@ -2330,9 +2983,7 @@ export default function DeliveryHome() {
     const windowHeight = window.innerHeight
 
     // Prevent default to avoid text selection
-    if (e.cancelable) {
-      e.preventDefault()
-    }
+    safePreventDefault(e)
 
     if (showHomeSections) {
       // Currently showing home sections - swiping down should go back to map
@@ -2379,6 +3030,24 @@ export default function DeliveryHome() {
     isSwipingBar.current = false
     setIsDraggingSwipeBar(false)
     swipeBarStartY.current = 0
+  }
+
+  // Handle chevron click to slide down swipe bar
+  const handleChevronDownClick = () => {
+    if (showHomeSections) {
+      setShowHomeSections(false)
+      setSwipeBarPosition(0)
+      setIsDraggingSwipeBar(false)
+    }
+  }
+
+  // Handle chevron click to slide up swipe bar
+  const handleChevronUpClick = () => {
+    if (!showHomeSections) {
+      setShowHomeSections(true)
+      setSwipeBarPosition(1)
+      setIsDraggingSwipeBar(false)
+    }
   }
 
   // Add global mouse event listeners
@@ -2433,9 +3102,6 @@ export default function DeliveryHome() {
       <div
         ref={carouselRef}
         className="relative overflow-hidden bg-gray-700 cursor-grab active:cursor-grabbing select-none"
-        onTouchStart={handleCarouselTouchStart}
-        onTouchMove={handleCarouselTouchMove}
-        onTouchEnd={handleCarouselTouchEnd}
         onMouseDown={handleCarouselMouseDown}
       >
         <div className="flex transition-transform duration-500 ease-in-out" style={{ transform: `translateX(-${currentCarouselSlide * 100}%)` }}>
@@ -2584,20 +3250,27 @@ export default function DeliveryHome() {
       {/* Conditional Content Based on Swipe Bar Position */}
       {!showHomeSections ? (
         /* Map View - Shows map with Hotspot or Select drop mode */
-        <div className="relative flex-1" style={{ height: 'calc(100vh - 200px)' }}>
-          {/* Ola Maps Container */}
+        <div className="relative flex-1" style={{ height: 'calc(100vh - 200px)', minHeight: '400px' }}>
+          {/* Google Maps Container */}
           <div
             ref={mapContainerRef}
-            style={{ width: '100%', height: '100%' }}
-            key={`map-${mapViewMode}-${riderLocation[0]}-${riderLocation[1]}`}
-            style={{ height: '100%', width: '100%', zIndex: 1 }}
+            style={{ 
+              height: '100%', 
+              width: '100%', 
+              zIndex: 1, 
+              minHeight: '400px',
+              backgroundColor: '#e5e7eb' // Light gray background while loading
+            }}
             className="z-0"
           />
           
           {/* Loading indicator */}
           {mapLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
-              <div className="text-gray-600">Loading map...</div>
+            <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-gray-600 font-medium">Loading map...</div>
+                <div className="text-xs text-gray-500">Please wait</div>
+              </div>
             </div>
           )}
 
@@ -2675,10 +3348,77 @@ export default function DeliveryHome() {
                 setIsRefreshingLocation(true)
                 navigator.geolocation.getCurrentPosition(
                   (position) => {
-                    const { latitude, longitude } = position.coords
-                    setRiderLocation([latitude, longitude])
+                    // Validate coordinates
+                    const latitude = position.coords.latitude
+                    const longitude = position.coords.longitude
                     
-                    // Location updated (map removed)
+                    // Validate coordinates are valid numbers
+                    if (typeof latitude !== 'number' || typeof longitude !== 'number' || 
+                        isNaN(latitude) || isNaN(longitude) ||
+                        latitude < -90 || latitude > 90 || 
+                        longitude < -180 || longitude > 180) {
+                      console.warn("⚠️ Invalid coordinates received:", { latitude, longitude })
+                      setIsRefreshingLocation(false)
+                      return
+                    }
+                    
+                    const newLocation = [latitude, longitude] // [lat, lng] format
+                    
+                    // Calculate heading from previous location
+                    let heading = null
+                    if (lastLocationRef.current) {
+                      const [prevLat, prevLng] = lastLocationRef.current
+                      heading = calculateHeading(prevLat, prevLng, latitude, longitude)
+                    }
+                    
+                    // Save location to localStorage (for refresh handling)
+                    localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(newLocation))
+                    
+                    // Update route history
+                    if (lastLocationRef.current) {
+                      routeHistoryRef.current.push({
+                        lat: latitude,
+                        lng: longitude
+                      })
+                      if (routeHistoryRef.current.length > 1000) {
+                        routeHistoryRef.current.shift()
+                      }
+                    } else {
+                      routeHistoryRef.current = [{
+                        lat: latitude,
+                        lng: longitude
+                      }]
+                    }
+                    
+                    // Update bike marker (only if online - blue dot नहीं, bike icon)
+                    if (window.deliveryMapInstance) {
+                      if (isOnlineRef.current) {
+                        createOrUpdateBikeMarker(latitude, longitude, heading)
+                        updateRoutePolyline()
+                        
+                        // Center map on location
+                        window.deliveryMapInstance.panTo({
+                          lat: latitude,
+                          lng: longitude
+                        })
+                      } else {
+                        // Offline है तो marker hide करें
+                        if (bikeMarkerRef.current) {
+                          bikeMarkerRef.current.setMap(null)
+                        }
+                      }
+                    }
+                    
+                    setRiderLocation(newLocation)
+                    lastLocationRef.current = newLocation
+                    
+                    console.log("📍 Location refreshed:", { 
+                      latitude, 
+                      longitude, 
+                      heading,
+                      accuracy: position.coords.accuracy,
+                      isOnline: isOnlineRef.current
+                    })
                     
                     // Stop refreshing animation after a short delay
                     setTimeout(() => {
@@ -2688,7 +3428,8 @@ export default function DeliveryHome() {
                   (error) => {
                     console.error('Error getting location:', error)
                     setIsRefreshingLocation(false)
-                  }
+                  },
+                  { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 )
               }
             }}
@@ -2752,7 +3493,7 @@ export default function DeliveryHome() {
             </div>
           </motion.button>
 
-          {/* Floating Banner - No Hotspots Available */}
+          {/* Floating Banner - Status Message */}
           {mapViewMode === "hotspot" && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -2760,8 +3501,56 @@ export default function DeliveryHome() {
               transition={{ delay: 0.2 }}
               className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-sm px-6 py-4 z-20 min-w-[96%] text-center"
             >
-              <h3 className="text-lg font-bold text-gray-900 mb-1">No hotspots are available</h3>
-              <p className="text-sm text-gray-600">Please go online to see hotspots</p>
+              {deliveryStatus === "pending" ? (
+                <>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">Verification Done in 24 Hours</h3>
+                  <p className="text-sm text-gray-600">Your account is under verification. You'll be notified once approved.</p>
+                </>
+              ) : deliveryStatus === "blocked" ? (
+                <>
+                  <h3 className="text-lg font-bold text-red-600 mb-2">Denied Verification</h3>
+                  {rejectionReason && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 text-left">
+                      <p className="text-xs font-semibold text-red-800 mb-2">Reason for Rejection:</p>
+                      <div className="text-xs text-red-700 space-y-1">
+                        {rejectionReason.split('\n').filter(line => line.trim()).length > 1 ? (
+                          <ul className="space-y-1 list-disc list-inside">
+                            {rejectionReason.split('\n').map((point, index) => (
+                              point.trim() && (
+                                <li key={index}>{point.trim()}</li>
+                              )
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-red-700">{rejectionReason}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-700 mb-3">
+                    Please correct the above issues and click "Reverify" to resubmit your request for approval.
+                  </p>
+                  <button
+                    onClick={handleReverify}
+                    disabled={isReverifying}
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mx-auto"
+                  >
+                    {isReverifying ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Reverify"
+                    )}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1">No hotspots are available</h3>
+                  <p className="text-sm text-gray-600">Please go online to see hotspots</p>
+                </>
+              )}
             </motion.div>
           )}
 
@@ -2798,8 +3587,14 @@ export default function DeliveryHome() {
                   }}
                   transition={{ duration: 0.1 }}
                 >
-              <ChevronUp className="!w-12 !h-8 scale-x-150 text-gray-400 -mt-2 font-bold" strokeWidth={3} />
-              </motion.div>
+                  <button
+                    onClick={handleChevronUpClick}
+                    className="flex items-center justify-center p-2 -m-2 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
+                    aria-label="Slide up"
+                  >
+                    <ChevronUp className="!w-12 !h-8 scale-x-150 text-gray-400 -mt-2 font-bold" strokeWidth={3} />
+                  </button>
+                </motion.div>
               </div>
 
               {/* Content Area - Shows map info when down */}
@@ -2851,17 +3646,27 @@ export default function DeliveryHome() {
               }}
               transition={{ duration: 0.1 }}
             >
-<ChevronDown
-  className="!w-12 !h-8 scale-x-150 text-gray-400 -mt-2 font-bold"
-  strokeWidth={3}
-/>
+              <button
+                onClick={handleChevronDownClick}
+                className="flex items-center justify-center p-2 -m-2 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
+                aria-label="Slide down"
+              >
+                <ChevronDown
+                  className="!w-12 !h-8 scale-x-150 text-gray-400 -mt-2 font-bold"
+                  strokeWidth={3}
+                />
+              </button>
             </motion.div>
           </div>
 
           <div 
             ref={homeSectionsScrollRef}
             className="px-4 pt-4 pb-16 space-y-4 overflow-y-auto" 
-            style={{ height: 'calc(100vh - 250px)' }}
+            style={{ 
+              height: 'calc(100vh - 250px)',
+              touchAction: 'pan-y', // Allow vertical scrolling
+              WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
+            }}
           >
             {/* Referral Bonus Banner */}
             <motion.div

@@ -244,6 +244,16 @@ const deliverySchema = new mongoose.Schema(
     verifiedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Admin'
+    },
+    // Rejection details
+    rejectionReason: {
+      type: String,
+      trim: true
+    },
+    rejectedAt: Date,
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin'
     }
   },
   {

@@ -58,58 +58,93 @@ export const exportJoinRequestsToExcel = (requests, filename = "join_requests") 
 }
 
 export const exportJoinRequestsToPDF = (requests, filename = "join_requests") => {
-  const headers = ["SI", "Name", "Email", "Phone", "Zone", "Job Type", "Vehicle Type", "Status"]
-  
-  let htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Join Requests Report</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 10px; }
-        th { background-color: #f2f2f2; font-weight: bold; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        h1 { text-align: center; }
-      </style>
-    </head>
-    <body>
-      <h1>Join Requests Report</h1>
-      <p>Generated on: ${new Date().toLocaleString()}</p>
-      <table>
-        <thead>
-          <tr>
-            ${headers.map(h => `<th>${h}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${requests.map(request => `
-            <tr>
-              <td>${request.sl}</td>
-              <td>${request.name}</td>
-              <td>${request.email}</td>
-              <td>${request.phone}</td>
-              <td>${request.zone}</td>
-              <td>${request.jobType}</td>
-              <td>${request.vehicleType}</td>
-              <td>${request.status}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `
-  
-  const printWindow = window.open("", "_blank")
-  printWindow.document.write(htmlContent)
-  printWindow.document.close()
-  printWindow.focus()
-  setTimeout(() => {
-    printWindow.print()
-    printWindow.close()
-  }, 250)
+  if (!requests || requests.length === 0) {
+    alert("No data to export")
+    return
+  }
+
+  try {
+    // Dynamic import of jsPDF and autoTable for instant download
+    import('jspdf').then(({ default: jsPDF }) => {
+      import('jspdf-autotable').then(({ default: autoTable }) => {
+        const doc = new jsPDF({
+          orientation: 'landscape',
+          unit: 'mm',
+          format: 'a4'
+        })
+
+        // Add title
+        doc.setFontSize(16)
+        doc.text('Join Requests Report', 14, 15)
+        
+        // Add export info
+        doc.setFontSize(10)
+        const exportDate = new Date().toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+        doc.text(`Exported on: ${exportDate} | Total Records: ${requests.length}`, 14, 22)
+
+        // Prepare table data
+        const tableData = requests.map((request) => [
+          request.sl || 'N/A',
+          request.name || 'N/A',
+          request.email || 'N/A',
+          request.phone || 'N/A',
+          request.zone || 'N/A',
+          request.jobType || 'N/A',
+          request.vehicleType || 'N/A',
+          request.status || 'N/A'
+        ])
+
+        // Add table using autoTable
+        autoTable(doc, {
+          head: [["SI", "Name", "Email", "Phone", "Zone", "Job Type", "Vehicle Type", "Status"]],
+          body: tableData,
+          startY: 28,
+          styles: {
+            fontSize: 8,
+            cellPadding: 2,
+          },
+          headStyles: {
+            fillColor: [241, 245, 249],
+            textColor: [15, 23, 42],
+            fontStyle: 'bold',
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252],
+          },
+          columnStyles: {
+            0: { cellWidth: 15 }, // SI
+            1: { cellWidth: 35 }, // Name
+            2: { cellWidth: 45 }, // Email
+            3: { cellWidth: 30 }, // Phone
+            4: { cellWidth: 40 }, // Zone
+            5: { cellWidth: 30 }, // Job Type
+            6: { cellWidth: 30 }, // Vehicle Type
+            7: { cellWidth: 25 }, // Status
+          },
+          margin: { top: 28, left: 14, right: 14 },
+        })
+
+        // Save the PDF instantly (like Excel)
+        const fileTimestamp = new Date().toISOString().split("T")[0]
+        doc.save(`${filename}_${fileTimestamp}.pdf`)
+      }).catch((error) => {
+        console.error("Error loading jspdf-autotable:", error)
+        alert("Failed to load PDF library. Please try again.")
+      })
+    }).catch((error) => {
+      console.error("Error loading jsPDF:", error)
+      alert("Failed to load PDF library. Please try again.")
+    })
+  } catch (error) {
+    console.error("PDF export error:", error)
+    alert("Failed to export PDF. Please try again.")
+  }
 }
 
 export const exportJoinRequestsToJSON = (requests, filename = "join_requests") => {

@@ -1,0 +1,251 @@
+import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
+import { successResponse, errorResponse } from '../../../shared/utils/response.js';
+import Delivery from '../../delivery/models/Delivery.js';
+import DeliveryWallet from '../../delivery/models/DeliveryWallet.js';
+import mongoose from 'mongoose';
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.simple()
+    })
+  ]
+});
+
+/**
+ * Add Bonus to Delivery Partner
+ * POST /api/admin/delivery-partners/bonus
+ * Body: { deliveryPartnerId, amount, reference }
+ */
+export const addBonus = asyncHandler(async (req, res) => {
+  // Declare variables outside try block so they're accessible in catch
+  let deliveryPartnerId, amount, reference, adminId;
+  
+  try {
+    ({ deliveryPartnerId, amount, reference } = req.body);
+    adminId = req.user?._id || req.user?.id;
+    
+    if (!adminId) {
+      logger.error('Admin ID not found in request');
+      return errorResponse(res, 401, 'Unauthorized: Admin authentication required');
+    }
+
+    // Validate inputs
+    if (!deliveryPartnerId) {
+      return errorResponse(res, 400, 'Delivery partner ID is required');
+    }
+
+    if (!amount || parseFloat(amount) <= 0) {
+      return errorResponse(res, 400, 'Valid bonus amount is required');
+    }
+
+    const bonusAmount = parseFloat(amount);
+
+    // Validate delivery partner ID format
+    if (!mongoose.Types.ObjectId.isValid(deliveryPartnerId)) {
+      logger.error(`Invalid delivery partner ID format: ${deliveryPartnerId}`);
+      return errorResponse(res, 400, 'Invalid delivery partner ID format');
+    }
+
+    // Find delivery partner
+    const delivery = await Delivery.findById(deliveryPartnerId);
+    if (!delivery) {
+      logger.error(`Delivery partner not found with ID: ${deliveryPartnerId}`);
+      return errorResponse(res, 404, `Delivery partner not found with ID: ${deliveryPartnerId}`);
+    }
+    
+    logger.info(`Found delivery partner: ${delivery.name} (${delivery.deliveryId})`);
+
+    // Find or create wallet
+    let wallet = await DeliveryWallet.findOne({ deliveryId: deliveryPartnerId });
+    if (!wallet) {
+      wallet = await DeliveryWallet.create({
+        deliveryId: deliveryPartnerId,
+        totalBalance: 0,
+        cashInHand: 0,
+        totalWithdrawn: 0,
+        totalEarned: 0
+      });
+    }
+
+    // Add bonus transaction
+    wallet.addTransaction({
+      amount: bonusAmount,
+      type: 'bonus',
+      status: 'Completed',
+      description: reference ? `Admin Bonus: ${reference}` : 'Admin Bonus',
+      processedAt: new Date(),
+      processedBy: adminId,
+      metadata: reference ? {
+        bonusType: 'admin_bonus',
+        reference: reference
+      } : {
+        bonusType: 'admin_bonus'
+      }
+    });
+
+    // Save wallet
+    await wallet.save();
+
+    // Get the last transaction (the one we just added)
+    const transactionsArray = wallet.transactions || [];
+    const transaction = transactionsArray.length > 0 ? transactionsArray[transactionsArray.length - 1] : null;
+
+    // Safe helper to convert ID to string
+    const safeIdToString = (id) => {
+      if (!id) return null;
+      if (typeof id === 'string') return id;
+      if (id.toString && typeof id.toString === 'function') return id.toString();
+      return String(id);
+    };
+
+    logger.info(`Bonus added to delivery partner: ${deliveryPartnerId}`, {
+      adminId: safeIdToString(adminId) || 'not set',
+      deliveryId: delivery.deliveryId || 'not set',
+      bonusAmount,
+      transactionId: transaction && transaction._id ? safeIdToString(transaction._id) : 'not set',
+      reference: reference || 'none'
+    });
+
+    // Build response safely
+    const responseData = {
+      transaction: {
+        _id: transaction && transaction._id ? transaction._id : null,
+        transactionId: transaction && transaction._id ? safeIdToString(transaction._id) : null,
+        amount: (transaction && transaction.amount !== undefined) ? transaction.amount : bonusAmount,
+        type: (transaction && transaction.type) ? transaction.type : 'bonus',
+        status: (transaction && transaction.status) ? transaction.status : 'Completed',
+        description: (transaction && transaction.description) ? transaction.description : (reference ? `Admin Bonus: ${reference}` : 'Admin Bonus'),
+        createdAt: (transaction && transaction.createdAt) ? transaction.createdAt : new Date(),
+        reference: reference || null
+      },
+      wallet: {
+        totalBalance: (wallet && wallet.totalBalance !== undefined) ? wallet.totalBalance : 0,
+        totalEarned: (wallet && wallet.totalEarned !== undefined) ? wallet.totalEarned : 0
+      },
+      delivery: {
+        _id: (delivery && delivery._id) ? safeIdToString(delivery._id) : null,
+        name: (delivery && delivery.name) ? delivery.name : 'Unknown',
+        deliveryId: (delivery && delivery.deliveryId) ? delivery.deliveryId : null
+      }
+    };
+
+    return successResponse(res, 200, 'Bonus added successfully', responseData);
+  } catch (error) {
+    logger.error(`Error adding bonus: ${error.message}`, { 
+      error: error.stack,
+      deliveryPartnerId: deliveryPartnerId || 'not set',
+      amount: amount || 'not set',
+      adminId: adminId ? (adminId.toString ? adminId.toString() : String(adminId)) : 'not set',
+      errorName: error.name
+    });
+    console.error('=== FULL ERROR DETAILS ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Delivery Partner ID:', deliveryPartnerId || 'not set');
+    console.error('Amount:', amount || 'not set');
+    console.error('Admin ID:', adminId ? (adminId.toString ? adminId.toString() : String(adminId)) : 'not set');
+    console.error('Request body:', req.body);
+    console.error('Request user:', req.user ? { id: req.user._id || req.user.id, role: req.user.role } : 'not set');
+    console.error('==========================');
+    return errorResponse(res, 500, `Failed to add bonus: ${error.message}`);
+  }
+});
+
+/**
+ * Get Bonus Transactions
+ * GET /api/admin/delivery-partners/bonus/transactions
+ * Query params: page, limit, search, deliveryPartnerId
+ */
+export const getBonusTransactions = asyncHandler(async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 50,
+      search,
+      deliveryPartnerId
+    } = req.query;
+
+    // Build query for wallets with bonus transactions
+    const walletQuery = {};
+    if (deliveryPartnerId) {
+      walletQuery.deliveryId = deliveryPartnerId;
+    }
+
+    // Find wallets with bonus transactions
+    const wallets = await DeliveryWallet.find(walletQuery)
+      .populate('deliveryId', 'name deliveryId phone email')
+      .lean();
+
+    // Extract all bonus transactions
+    let allTransactions = [];
+    wallets.forEach(wallet => {
+      wallet.transactions
+        .filter(t => t.type === 'bonus')
+        .forEach(transaction => {
+          allTransactions.push({
+            ...transaction,
+            deliveryPartner: {
+              _id: wallet.deliveryId._id || wallet.deliveryId,
+              name: wallet.deliveryId.name || 'Unknown',
+              deliveryId: wallet.deliveryId.deliveryId || 'N/A',
+              phone: wallet.deliveryId.phone || 'N/A'
+            },
+            walletId: wallet._id
+          });
+        });
+    });
+
+    // Search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      allTransactions = allTransactions.filter(t => 
+        t.deliveryPartner.name.toLowerCase().includes(searchLower) ||
+        t.deliveryPartner.deliveryId.toLowerCase().includes(searchLower) ||
+        t._id.toString().toLowerCase().includes(searchLower) ||
+        (t.metadata?.reference && t.metadata.reference.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Sort by date (newest first)
+    allTransactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const total = allTransactions.length;
+    const paginatedTransactions = allTransactions.slice(skip, skip + parseInt(limit));
+
+    // Format response
+    const formattedTransactions = paginatedTransactions.map((transaction, index) => ({
+      sl: skip + index + 1,
+      transactionId: transaction._id.toString(),
+      deliveryman: transaction.deliveryPartner.name,
+      deliveryPartnerId: transaction.deliveryPartner._id.toString(),
+      deliveryId: transaction.deliveryPartner.deliveryId,
+      bonus: `₹${transaction.amount.toFixed(2)}`,
+      amount: transaction.amount,
+      reference: transaction.metadata?.reference || transaction.description || 'N/A',
+      createdAt: transaction.createdAt,
+      status: transaction.status,
+      processedBy: transaction.processedBy
+    }));
+
+    return successResponse(res, 200, 'Bonus transactions retrieved successfully', {
+      transactions: formattedTransactions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    logger.error(`Error fetching bonus transactions: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to fetch bonus transactions');
+  }
+});
+

@@ -71,7 +71,9 @@ const authenticateFlexible = async (req, res, next) => {
           return errorResponse(res, 401, 'Delivery partner not found');
         }
 
-        if (!delivery.isActive) {
+        // Allow blocked/pending status partners to access (they can see rejection reason or verification message)
+        // Only block if account is inactive AND not blocked/pending (blocked/pending partners can login)
+        if (!delivery.isActive && delivery.status !== 'blocked' && delivery.status !== 'pending') {
           return errorResponse(res, 401, 'Delivery partner account is inactive');
         }
 

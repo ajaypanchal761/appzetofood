@@ -62,7 +62,12 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const mapContainerRef = useRef(null)
   const googleMapRef = useRef(null) // Google Maps instance
   const greenMarkerRef = useRef(null) // Green marker for address selection
-  const blueDotCircleRef = useRef(null) // Blue dot for user location
+  const blueDotCircleRef = useRef(null) // Blue dot circle for Google Maps
+  const userLocationMarkerRef = useRef(null) // Blue dot marker for user location
+  const userLocationAccuracyCircleRef = useRef(null) // Accuracy circle for MapLibre/Mapbox
+  const watchPositionIdRef = useRef(null) // Geolocation watchPosition ID
+  const lastUserLocationRef = useRef(null) // Last user location for tracking
+  const locationUpdateTimeoutRef = useRef(null) // Timeout for location updates
   const [currentAddress, setCurrentAddress] = useState("")
   const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   const reverseGeocodeTimeoutRef = useRef(null) // Debounce timeout for reverse geocoding
@@ -81,7 +86,44 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   // Format should match saved addresses: "B2/4, Gandhi Park Colony, Anand Nagar, Indore, Madhya Pradesh, 452001"
   // Show ALL parts of formattedAddress (like saved addresses show all parts)
   const currentLocationText = (() => {
-    // Priority 1: Use formattedAddress (complete detailed address) - SAVED ADDRESSES FORMAT
+    // Priority 0: Use currentAddress from map (most up-to-date when user selects location on map)
+    // This is updated when map moves or "Use current location" is clicked
+    if (currentAddress && 
+        currentAddress !== "Select location" &&
+        !currentAddress.match(/^-?\d+\.\d+,\s*-?\d+\.\d+$/)) {
+      // Remove "India" from the end if present
+      let fullAddress = currentAddress
+      if (fullAddress.endsWith(', India')) {
+        fullAddress = fullAddress.replace(', India', '').trim()
+      }
+      return fullAddress
+    }
+    
+    // Priority 1: Use addressFormData.additionalDetails (updated when map moves)
+    // This contains the full formatted address from Google Maps Places API
+    if (addressFormData.additionalDetails && 
+        addressFormData.additionalDetails !== "Select location" &&
+        addressFormData.additionalDetails.trim() !== "") {
+      let fullAddress = addressFormData.additionalDetails
+      if (fullAddress.endsWith(', India')) {
+        fullAddress = fullAddress.replace(', India', '').trim()
+      }
+      // Build complete address with all components
+      const addressParts = [fullAddress]
+      if (addressFormData.city) addressParts.push(addressFormData.city)
+      if (addressFormData.state) {
+        if (addressFormData.zipCode) {
+          addressParts.push(`${addressFormData.state} ${addressFormData.zipCode}`)
+        } else {
+          addressParts.push(addressFormData.state)
+        }
+      } else if (addressFormData.zipCode) {
+        addressParts.push(addressFormData.zipCode)
+      }
+      return addressParts.join(', ')
+    }
+    
+    // Priority 2: Use formattedAddress from location hook (complete detailed address) - SAVED ADDRESSES FORMAT
     // Show full address with all parts (street, area, city, state, pincode) - just like saved addresses
     if (location?.formattedAddress && 
         location.formattedAddress !== "Select location" &&
@@ -98,7 +140,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       return fullAddress
     }
     
-    // Priority 2: Build address from components (SAVED ADDRESSES FORMAT)
+    // Priority 3: Build address from components (SAVED ADDRESSES FORMAT)
     // Format: "street/area, city, state, pincode" (matching saved addresses)
     if (location?.address || location?.area || location?.street) {
       const addressParts = []
@@ -209,26 +251,131 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     }
   }, []) // Run once on mount
 
-  // Initialize map position from current location
+  // Initialize map position from current location and update blue dot
   useEffect(() => {
-    if (location?.latitude && location?.longitude) {
-      setMapPosition([location.latitude, location.longitude])
-      // Update map center if Google Maps is initialized
-      if (googleMapRef.current) {
-        googleMapRef.current.setCenter({
-          lat: location.latitude,
-          lng: location.longitude
-        })
-        // Update green marker position
-        if (greenMarkerRef.current) {
-          greenMarkerRef.current.setPosition({
-            lat: location.latitude,
-            lng: location.longitude
-          })
+    if (location?.latitude && location?.longitude && googleMapRef.current && window.google && window.google.maps) {
+      const userPos = {
+        lat: location.latitude,
+        lng: location.longitude
+      }
+      
+      const accuracyRadius = Math.max(location.accuracy || 50, 20)
+      
+      console.log("🔵 Updating blue dot from location hook:", {
+        position: userPos,
+        accuracy: location.accuracy,
+        radius: accuracyRadius
+      })
+      
+      // Update or create blue dot marker
+      if (userLocationMarkerRef.current) {
+        try {
+          if (userLocationMarkerRef.current.setPosition) {
+            userLocationMarkerRef.current.setPosition(userPos)
+          }
+          // Ensure marker is visible and on map
+          const currentMap = userLocationMarkerRef.current.getMap()
+          if (currentMap !== googleMapRef.current) {
+            userLocationMarkerRef.current.setMap(googleMapRef.current)
+          }
+          userLocationMarkerRef.current.setVisible(true)
+          console.log("✅ Updated existing blue dot marker")
+        } catch (e) {
+          console.error("Error updating blue dot marker:", e)
+          // Recreate if update fails
+          userLocationMarkerRef.current = null
         }
       }
+      
+      if (!userLocationMarkerRef.current) {
+        // Create blue dot marker if it doesn't exist
+        try {
+          const blueDotMarker = new window.google.maps.Marker({
+            position: userPos,
+            map: googleMapRef.current,
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: "#4285F4",
+              fillOpacity: 1,
+              strokeColor: "#FFFFFF",
+              strokeWeight: 3,
+            },
+            zIndex: window.google.maps.Marker.MAX_ZINDEX + 1,
+            optimized: false,
+            visible: true,
+            title: "Your location"
+          })
+          userLocationMarkerRef.current = blueDotMarker
+          console.log("✅ Created blue dot marker from location hook")
+        } catch (e) {
+          console.error("Error creating blue dot marker:", e)
+        }
+      }
+      
+      // Update or create accuracy circle
+      if (blueDotCircleRef.current) {
+        try {
+          blueDotCircleRef.current.setCenter(userPos)
+          blueDotCircleRef.current.setRadius(accuracyRadius)
+          // Ensure circle is visible and on map
+          const currentMap = blueDotCircleRef.current.getMap()
+          if (currentMap !== googleMapRef.current) {
+            blueDotCircleRef.current.setMap(googleMapRef.current)
+          }
+          blueDotCircleRef.current.setVisible(true)
+          console.log("✅ Updated existing accuracy circle")
+        } catch (e) {
+          console.error("Error updating accuracy circle:", e)
+          // Recreate if update fails
+          blueDotCircleRef.current = null
+        }
+      }
+      
+      if (!blueDotCircleRef.current) {
+        // Create accuracy circle if it doesn't exist
+        try {
+          const blueDot = new window.google.maps.Circle({
+            strokeColor: "#4285F4",
+            strokeOpacity: 0.4,
+            strokeWeight: 1,
+            fillColor: "#4285F4",
+            fillOpacity: 0.15,
+            map: googleMapRef.current,
+            center: userPos,
+            radius: accuracyRadius,
+            zIndex: window.google.maps.Marker.MAX_ZINDEX,
+            visible: true
+          })
+          blueDotCircleRef.current = blueDot
+          console.log("✅ Created accuracy circle from location hook")
+        } catch (e) {
+          console.error("Error creating accuracy circle:", e)
+        }
+      }
+      
+      // Final verification
+      setTimeout(() => {
+        const markerVisible = userLocationMarkerRef.current?.getVisible()
+        const circleVisible = blueDotCircleRef.current?.getVisible()
+        const markerOnMap = userLocationMarkerRef.current?.getMap() === googleMapRef.current
+        const circleOnMap = blueDotCircleRef.current?.getMap() === googleMapRef.current
+        
+        console.log("🔍 Final Blue Dot Status:", {
+          markerExists: !!userLocationMarkerRef.current,
+          circleExists: !!blueDotCircleRef.current,
+          markerVisible,
+          circleVisible,
+          markerOnMap,
+          circleOnMap
+        })
+      }, 500)
     }
-  }, [location?.latitude, location?.longitude])
+  }, [
+    location?.latitude ?? null, 
+    location?.longitude ?? null, 
+    location?.accuracy ?? null
+  ])
 
   // Initialize Google Maps with Loader (ZOMATO-STYLE)
   useEffect(() => {
@@ -293,54 +440,169 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           handleMapMoveEnd(newLat, newLng)
         })
 
-        // Get user's current location and show Blue Dot
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              if (!isMounted) return
-              
-              const userPos = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-              }
+        // Function to create/update blue dot and accuracy circle
+        const createBlueDotWithCircle = (position, accuracyValue) => {
+          if (!isMounted || !map) return
+          
+          const userPos = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          }
 
-              // Create Blue Dot (Circle) for user location
-              const blueDot = new google.maps.Circle({
-                strokeColor: "#4285F4",
-                strokeOpacity: 0.8,
-                strokeWeight: 2,
-                fillColor: "#4285F4",
-                fillOpacity: 0.35,
-                map: map,
-                center: userPos,
-                radius: 10 // Small blue dot
-              })
+          const accuracyRadius = Math.max(accuracyValue || 50, 20) // Minimum 20m
+          
+          console.log("🔵 Creating/updating blue dot:", {
+            position: userPos,
+            accuracy: accuracyValue,
+            radius: accuracyRadius
+          })
 
-              blueDotCircleRef.current = blueDot
-
-              // Center map on user location
-              map.setCenter(userPos)
-              greenMarker.setPosition(userPos)
-              setMapPosition([userPos.lat, userPos.lng])
-              
-              // Fetch address for user location
-              handleMapMoveEnd(userPos.lat, userPos.lng)
-            },
-            (error) => {
-              console.warn("Geolocation error:", error)
-              // Still fetch address for initial location
-              handleMapMoveEnd(initialLocation.lat, initialLocation.lng)
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 15000,
-              maximumAge: 0
+          // Remove existing blue dot and circle if any
+          if (userLocationMarkerRef.current) {
+            try {
+              userLocationMarkerRef.current.setMap(null)
+            } catch (e) {
+              console.warn("Error removing old marker:", e)
             }
-          )
-        } else {
-          // Fetch address for initial location if geolocation not available
-          handleMapMoveEnd(initialLocation.lat, initialLocation.lng)
+          }
+          if (blueDotCircleRef.current) {
+            try {
+              blueDotCircleRef.current.setMap(null)
+            } catch (e) {
+              console.warn("Error removing old circle:", e)
+            }
+          }
+
+          // Create Blue Dot Marker (Google Maps native style)
+          const blueDotMarker = new google.maps.Marker({
+            position: userPos,
+            map: map,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 10, // Blue dot size
+              fillColor: "#4285F4", // Google blue
+              fillOpacity: 1,
+              strokeColor: "#FFFFFF", // White border
+              strokeWeight: 3,
+            },
+            zIndex: google.maps.Marker.MAX_ZINDEX + 1,
+            optimized: false,
+            visible: true,
+            title: "Your location"
+          })
+
+          // Create Accuracy Circle (Light blue zone around blue dot)
+          const accuracyCircle = new google.maps.Circle({
+            strokeColor: "#4285F4",
+            strokeOpacity: 0.4,
+            strokeWeight: 1,
+            fillColor: "#4285F4",
+            fillOpacity: 0.15, // Light transparent blue
+            map: map,
+            center: userPos,
+            radius: accuracyRadius, // Meters
+            zIndex: google.maps.Marker.MAX_ZINDEX,
+            visible: true
+          })
+
+          blueDotCircleRef.current = accuracyCircle
+          userLocationMarkerRef.current = blueDotMarker
+
+          console.log("✅✅✅ Blue dot and accuracy circle created successfully:", {
+            marker: blueDotMarker,
+            circle: accuracyCircle,
+            radius: accuracyRadius,
+            markerOnMap: blueDotMarker.getMap() === map,
+            circleOnMap: accuracyCircle.getMap() === map
+          })
+
+          // Force visibility check
+          setTimeout(() => {
+            const markerVisible = userLocationMarkerRef.current?.getVisible()
+            const circleVisible = blueDotCircleRef.current?.getVisible()
+            const markerOnMap = userLocationMarkerRef.current?.getMap() === map
+            const circleOnMap = blueDotCircleRef.current?.getMap() === map
+            
+            console.log("🔍 Visibility Check:", {
+              markerVisible,
+              circleVisible,
+              markerOnMap,
+              circleOnMap
+            })
+            
+            if (!markerOnMap || !markerVisible) {
+              console.error("❌ Blue dot marker not visible! Fixing...")
+              if (userLocationMarkerRef.current) {
+                userLocationMarkerRef.current.setMap(map)
+                userLocationMarkerRef.current.setVisible(true)
+              }
+            }
+            
+            if (!circleOnMap || !circleVisible) {
+              console.error("❌ Accuracy circle not visible! Fixing...")
+              if (blueDotCircleRef.current) {
+                blueDotCircleRef.current.setMap(map)
+                blueDotCircleRef.current.setVisible(true)
+              }
+            }
+          }, 1000)
         }
+
+        // Wait for map to be fully ready before getting location
+        google.maps.event.addListenerOnce(map, 'idle', () => {
+          console.log("🗺️ Map is ready, requesting user location...")
+          
+          // Get user's current location and show Blue Dot
+          if (navigator.geolocation) {
+            // First, get current position immediately
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                if (!isMounted) return
+                createBlueDotWithCircle(position, position.coords.accuracy)
+                handleMapMoveEnd(initialLocation.lat, initialLocation.lng)
+              },
+              (error) => {
+                console.warn("Geolocation getCurrentPosition error:", error)
+                handleMapMoveEnd(initialLocation.lat, initialLocation.lng)
+              },
+              {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+              }
+            )
+
+            // Then, watch for position updates (live tracking)
+            const watchId = navigator.geolocation.watchPosition(
+              (position) => {
+                if (!isMounted) return
+                console.log("📍 Live location update:", {
+                  lat: position.coords.latitude,
+                  lng: position.coords.longitude,
+                  accuracy: position.coords.accuracy
+                })
+                createBlueDotWithCircle(position, position.coords.accuracy)
+              },
+              (error) => {
+                // Suppress timeout errors - they're non-critical
+                if (error.code !== 3) {
+                  console.warn("Geolocation watchPosition error:", error)
+                }
+              },
+              {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 5000 // Allow 5 second old cached location
+              }
+            )
+
+            // Store watch ID for cleanup
+            watchPositionIdRef.current = watchId
+          } else {
+            console.warn("Geolocation not supported")
+            handleMapMoveEnd(initialLocation.lat, initialLocation.lng)
+          }
+        })
 
         setMapLoading(false)
       } catch (error) {
@@ -354,12 +616,28 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
     return () => {
       isMounted = false
+      // Cleanup geolocation watch
+      if (watchPositionIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchPositionIdRef.current)
+        watchPositionIdRef.current = null
+      }
       // Cleanup markers
       if (greenMarkerRef.current) {
         greenMarkerRef.current.setMap(null)
       }
+      if (userLocationMarkerRef.current) {
+        try {
+          userLocationMarkerRef.current.setMap(null)
+        } catch (e) {
+          console.warn("Error cleaning up blue dot marker:", e)
+        }
+      }
       if (blueDotCircleRef.current) {
-        blueDotCircleRef.current.setMap(null)
+        try {
+          blueDotCircleRef.current.setMap(null)
+        } catch (e) {
+          console.warn("Error cleaning up accuracy circle:", e)
+        }
       }
     }
   }, [showAddressForm, GOOGLE_MAPS_API_KEY, location?.latitude, location?.longitude])
@@ -477,6 +755,49 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         }
       }
       
+      // Update map position and show address form to display full address
+      if (locationData?.latitude && locationData?.longitude) {
+        setMapPosition([locationData.latitude, locationData.longitude])
+        setShowAddressForm(true)
+        
+        // Update address form data with complete address
+        if (locationData.formattedAddress) {
+          setCurrentAddress(locationData.formattedAddress)
+          setAddressFormData(prev => ({
+            ...prev,
+            street: locationData.street || locationData.area || prev.street,
+            city: locationData.city || prev.city,
+            state: locationData.state || prev.state,
+            zipCode: locationData.postalCode || prev.zipCode,
+            additionalDetails: locationData.formattedAddress || prev.additionalDetails,
+          }))
+        }
+        
+        // Update map if it's initialized
+        if (googleMapRef.current && window.google && window.google.maps) {
+          try {
+            googleMapRef.current.panTo({ lat: locationData.latitude, lng: locationData.longitude })
+            googleMapRef.current.setZoom(17)
+            
+            if (greenMarkerRef.current) {
+              greenMarkerRef.current.setPosition({ lat: locationData.latitude, lng: locationData.longitude })
+            }
+            
+            // Fetch detailed address using Places API
+            setTimeout(async () => {
+              await handleMapMoveEnd(locationData.latitude, locationData.longitude)
+            }, 500)
+          } catch (mapError) {
+            console.error("Error updating map:", mapError)
+          }
+        } else {
+          // Map not initialized, fetch address directly
+          setTimeout(async () => {
+            await handleMapMoveEnd(locationData.latitude, locationData.longitude)
+          }, 300)
+        }
+      }
+      
       // Success toast with address preview
       const addressPreview = locationData?.formattedAddress || locationData?.address || "Location updated"
       toast.success(`Location updated: ${addressPreview.split(',').slice(0, 2).join(', ')}`, {
@@ -484,10 +805,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         duration: 3000,
       })
       
-      // Wait a moment for state to update, then close
-      setTimeout(() => {
-      onClose()
-      }, 500)
+      // Don't close immediately - let user see the full address in the form
+      // User can close manually or save the address
     } catch (error) {
       // Handle permission denied or other errors
       if (error.code === 1 || error.message?.includes("denied") || error.message?.includes("permission")) {
@@ -610,7 +929,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     }
 
     // Helper function to create/update marker (with throttling)
-    const createOrUpdateMarker = (latitude, longitude, heading) => {
+    const createOrUpdateMarker = (latitude, longitude, heading, accuracy = null) => {
       // Check if location changed significantly (at least 10 meters)
       if (lastUserLocationRef.current) {
         const distance = calculateDistance(
@@ -671,7 +990,19 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         el.style.zIndex = '1001'
       }
 
-      // 2. Agar marker pehle se hai to update karein, nahi to naya banayein
+      // 2. Update accuracy circle if it exists
+      if (userLocationAccuracyCircleRef.current) {
+        try {
+          if (userLocationAccuracyCircleRef.current.update) {
+            userLocationAccuracyCircleRef.current.update(latitude, longitude, accuracy)
+            console.log("✅ Updated accuracy circle position and radius")
+          }
+        } catch (circleError) {
+          console.warn("⚠️ Error updating accuracy circle:", circleError.message)
+        }
+      }
+
+      // 3. Agar marker pehle se hai to update karein, nahi to naya banayein
       if (userLocationMarkerRef.current) {
         try {
           if (userLocationMarkerRef.current.setLngLat) {
@@ -794,6 +1125,104 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               }
             }, 1000)
             
+            // Create accuracy circle around blue dot (like Google Maps)
+            const accuracyRadius = accuracy || 50 // Default to 50m if accuracy not available
+            try {
+              // Remove existing circle if any
+              if (userLocationAccuracyCircleRef.current) {
+                if (userLocationAccuracyCircleRef.current.remove) {
+                  userLocationAccuracyCircleRef.current.remove()
+                } else if (mapInstance.removeLayer) {
+                  mapInstance.removeLayer(userLocationAccuracyCircleRef.current)
+                }
+              }
+
+              // Try to create circle using MapLibre/Mapbox API
+              if (mapInstance.addSource && mapInstance.addLayer) {
+                const circleId = 'user-location-accuracy-circle'
+                const sourceId = 'user-location-accuracy-circle-source'
+
+                // Remove existing source/layer if present
+                if (mapInstance.getLayer(circleId)) {
+                  mapInstance.removeLayer(circleId)
+                }
+                if (mapInstance.getSource(sourceId)) {
+                  mapInstance.removeSource(sourceId)
+                }
+
+                // Add circle source
+                mapInstance.addSource(sourceId, {
+                  type: 'geojson',
+                  data: {
+                    type: 'Feature',
+                    geometry: {
+                      type: 'Point',
+                      coordinates: [longitude, latitude]
+                    },
+                    properties: {
+                      radius: accuracyRadius
+                    }
+                  }
+                })
+
+                // Add circle layer
+                // Convert meters to pixels: use zoom-based scaling
+                // At zoom 15: ~1.2 meters per pixel, at zoom 18: ~0.15 meters per pixel
+                mapInstance.addLayer({
+                  id: circleId,
+                  type: 'circle',
+                  source: sourceId,
+                  paint: {
+                    'circle-radius': [
+                      'interpolate',
+                      ['exponential', 2],
+                      ['zoom'],
+                      10, ['/', accuracyRadius, 2],
+                      15, ['/', accuracyRadius, 1.2],
+                      18, ['/', accuracyRadius, 0.15],
+                      20, ['/', accuracyRadius, 0.04]
+                    ],
+                    'circle-color': '#4285F4',
+                    'circle-opacity': 0.15,
+                    'circle-stroke-color': '#4285F4',
+                    'circle-stroke-opacity': 0.4,
+                    'circle-stroke-width': 1
+                  }
+                })
+
+                userLocationAccuracyCircleRef.current = {
+                  sourceId,
+                  layerId: circleId,
+                  update: (newLat, newLng, newAccuracy) => {
+                    if (mapInstance.getSource(sourceId)) {
+                      mapInstance.getSource(sourceId).setData({
+                        type: 'Feature',
+                        geometry: {
+                          type: 'Point',
+                          coordinates: [newLng, newLat]
+                        },
+                        properties: {
+                          radius: newAccuracy || accuracyRadius
+                        }
+                      })
+                    }
+                  },
+                  remove: () => {
+                    if (mapInstance.getLayer(circleId)) {
+                      mapInstance.removeLayer(circleId)
+                    }
+                    if (mapInstance.getSource(sourceId)) {
+                      mapInstance.removeSource(sourceId)
+                    }
+                  }
+                }
+
+                console.log("✅ Accuracy circle created around blue dot:", { radius: accuracyRadius })
+              }
+            } catch (circleError) {
+              console.warn("⚠️ Could not create accuracy circle (non-critical):", circleError.message)
+            }
+
             // Don't auto-fly to user location - let green pin stay at center
             // User can use "Use current location" button if needed
           } else {
@@ -836,12 +1265,12 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           const { latitude, longitude, heading } = position.coords
           console.log("📍📍📍 Initial location received:", { latitude, longitude, heading })
           console.log("🔵 Calling createOrUpdateMarker with:", { latitude, longitude, heading })
-          createOrUpdateMarker(latitude, longitude, heading)
+          createOrUpdateMarker(latitude, longitude, heading, position.coords.accuracy)
           
           // Then start watching for updates (with throttling)
           watchPositionIdRef.current = navigator.geolocation.watchPosition(
             (position) => {
-              const { latitude, longitude, heading } = position.coords
+              const { latitude, longitude, heading, accuracy } = position.coords
               
               // Clear any pending update
               if (locationUpdateTimeoutRef.current) {
@@ -860,7 +1289,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                     ) >= 10) {
                   console.log("📍 Location update (throttled):", { latitude, longitude, heading })
                 }
-                createOrUpdateMarker(latitude, longitude, heading)
+                createOrUpdateMarker(latitude, longitude, heading, accuracy)
               }, 2000) // Wait 2 seconds before processing update
             },
             (error) => {
@@ -896,7 +1325,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                 const location = JSON.parse(cachedLocation)
                 if (location.latitude && location.longitude) {
                   console.log("📍 Using cached location due to timeout:", location)
-                  createOrUpdateMarker(location.latitude, location.longitude, null)
+                  createOrUpdateMarker(location.latitude, location.longitude, null, location.accuracy)
                 }
               }
             } catch (cacheError) {
@@ -914,7 +1343,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           // Even if initial location fails, try watchPosition with less strict options
           watchPositionIdRef.current = navigator.geolocation.watchPosition(
             (position) => {
-              const { latitude, longitude, heading } = position.coords
+              const { latitude, longitude, heading, accuracy } = position.coords
               
               // Clear any pending update
               if (locationUpdateTimeoutRef.current) {
@@ -933,7 +1362,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                     ) >= 10) {
                   console.log("📍 Location update (after initial error, throttled):", { latitude, longitude, heading })
                 }
-                createOrUpdateMarker(latitude, longitude, heading)
+                createOrUpdateMarker(latitude, longitude, heading, accuracy)
               }, 2000) // Wait 2 seconds before processing update
             },
             (error) => {
@@ -998,175 +1427,180 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           lng: roundedLng.toFixed(8) 
         })
       
-      // Use backend API for reverse geocoding (which uses Ola Maps)
-      const response = await locationAPI.reverseGeocode(roundedLat, roundedLng)
-      console.log("📦 Full reverse geocode response:", JSON.stringify(response?.data, null, 2))
+      // Use Google Maps Geocoding API + Places API for complete address details
+      let formattedAddress = ""
+      let city = ""
+      let state = ""
+      let area = ""
+      let street = ""
+      let streetNumber = ""
+      let postalCode = ""
+      let pointOfInterest = ""
+      let premise = ""
       
-      // Backend returns: { success: true, data: { results: [{ formatted_address, address_components: { city, state, area } }] } }
-      const backendData = response?.data?.data
-      const result = backendData?.results?.[0] || backendData?.result?.[0] || null
-      
-      if (result) {
-        console.log("📦 Parsed result:", result)
-        
-        // Extract formatted address (e.g., "New Palasia, Indore, Madhya Pradesh")
-        const formattedAddress = result.formatted_address || result.formattedAddress || ""
-        
-        // Extract address components (backend already processes these)
-        const addressComponents = result.address_components || {}
-        
-        // Get city, state, area from address_components (backend extracts these)
-        let city = addressComponents.city || ""
-        let state = addressComponents.state || ""
-        let area = addressComponents.area || ""
-        
-        // Helper function to intelligently extract city and state from formatted address
-        const extractCityStateFromFormattedAddress = (formattedAddr) => {
-          if (!formattedAddr) return { city: "", state: "" }
+      if (GOOGLE_MAPS_API_KEY) {
+        try {
+          // Step 1: Use Google Geocoding API for address components
+          const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${roundedLat},${roundedLng}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=street_address|premise|point_of_interest|establishment`
+          const geocodeResponse = await fetch(geocodeUrl).then(res => res.json())
           
-          const parts = formattedAddr.split(',').map(p => p.trim()).filter(p => p.length > 0)
-          if (parts.length < 2) return { city: "", state: "" }
-          
-          // Common Indian state names (for pattern matching)
-          const stateNames = [
-            "Madhya Pradesh", "Uttar Pradesh", "Maharashtra", "Gujarat", "Rajasthan",
-            "Karnataka", "Tamil Nadu", "West Bengal", "Odisha", "Bihar", "Andhra Pradesh",
-            "Telangana", "Kerala", "Punjab", "Haryana", "Jharkhand", "Assam", "Himachal Pradesh",
-            "Uttarakhand", "Chhattisgarh", "Goa", "Manipur", "Meghalaya", "Mizoram", "Nagaland",
-            "Sikkim", "Tripura", "Arunachal Pradesh", "Delhi", "Jammu and Kashmir", "Ladakh"
-          ]
-          
-          // Common Indian city names (for pattern matching)
-          const cityNames = [
-            "Mumbai", "Delhi", "Bangalore", "Hyderabad", "Chennai", "Kolkata", "Pune",
-            "Ahmedabad", "Jaipur", "Surat", "Lucknow", "Kanpur", "Nagpur", "Indore",
-            "Thane", "Bhopal", "Visakhapatnam", "Patna", "Vadodara", "Ghaziabad", "Ludhiana"
-          ]
-          
-          let foundCity = ""
-          let foundState = ""
-          
-          // Search from end to beginning (city and state usually at the end)
-          for (let i = parts.length - 1; i >= 0; i--) {
-            const part = parts[i]
-            const partLower = part.toLowerCase()
-            
-            // Skip if it's a number (pincode) or "India"
-            if (part.match(/^\d+$/) || partLower === "india") continue
-            
-            // Check if it's a state name
-            if (!foundState) {
-              const matchingState = stateNames.find(s => 
-                partLower === s.toLowerCase() || 
-                partLower.includes(s.toLowerCase()) ||
-                s.toLowerCase().includes(partLower)
-              )
-              if (matchingState) {
-                foundState = matchingState
-                continue
+          if (geocodeResponse.status === "OK" && geocodeResponse.results && geocodeResponse.results.length > 0) {
+            // Find result with POI/premise for most accurate address
+            let bestResult = geocodeResponse.results[0]
+            for (const result of geocodeResponse.results.slice(0, 5)) {
+              const hasPOI = result.address_components?.some(c => c.types.includes("point_of_interest"))
+              const hasPremise = result.address_components?.some(c => c.types.includes("premise"))
+              if (hasPOI || hasPremise) {
+                bestResult = result
+                break
               }
             }
             
-            // Check if it's a city name (usually comes before state)
-            if (!foundCity && i < parts.length - 1) {
-              const matchingCity = cityNames.find(c => 
-                partLower === c.toLowerCase() || 
-                partLower.includes(c.toLowerCase()) ||
-                c.toLowerCase().includes(partLower)
-              )
-              if (matchingCity) {
-                foundCity = matchingCity
-                continue
+            formattedAddress = bestResult.formatted_address || ""
+            const addressComponents = bestResult.address_components || []
+            
+            // Extract all address components
+            for (const component of addressComponents) {
+              const types = component.types || []
+              if (types.includes("point_of_interest") && !pointOfInterest) {
+                pointOfInterest = component.long_name
               }
+              if (types.includes("premise") && !premise) {
+                premise = component.long_name
+              }
+              if (types.includes("street_number") && !streetNumber) {
+                streetNumber = component.long_name
+              }
+              if (types.includes("route") && !street) {
+                street = component.long_name
+              }
+              if (types.includes("sublocality_level_1") && !area) {
+                area = component.long_name
+              }
+              if (types.includes("locality") && !city) {
+                city = component.long_name
+              }
+              if (types.includes("administrative_area_level_1") && !state) {
+                state = component.long_name
+              }
+              if (types.includes("postal_code") && !postalCode) {
+                postalCode = component.long_name
+              }
+            }
+            
+            // Step 2: Use Places API for even more detailed information
+            try {
+              const nearbyUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${roundedLat},${roundedLng}&radius=50&key=${GOOGLE_MAPS_API_KEY}&language=en`
+              const nearbyResponse = await fetch(nearbyUrl).then(res => res.json())
               
-              // If no exact match, check if it's a single word and looks like a city name
-              // (not too long, not a number, doesn't contain common non-city words)
-              if (part.split(' ').length <= 2 && 
-                  part.length > 2 && 
-                  part.length < 30 &&
-                  !part.match(/^\d+/) &&
-                  !partLower.includes("near") &&
-                  !partLower.includes("sector") &&
-                  !partLower.includes("colony") &&
-                  !partLower.includes("road") &&
-                  !partLower.includes("street") &&
-                  !partLower.includes("nursing") &&
-                  !partLower.includes("home")) {
-                // Likely a city name
-                foundCity = part
+              if (nearbyResponse.status === "OK" && nearbyResponse.results && nearbyResponse.results.length > 0) {
+                const placeId = nearbyResponse.results[0].place_id
+                const placeName = nearbyResponse.results[0].name
+                
+                // Use place name if available (more accurate)
+                if (placeName && !pointOfInterest) {
+                  pointOfInterest = placeName
+                }
+                
+                // Get place details for complete address
+                if (placeId) {
+                  const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,address_components&key=${GOOGLE_MAPS_API_KEY}&language=en`
+                  const detailsResponse = await fetch(detailsUrl).then(res => res.json())
+                  
+                  if (detailsResponse.status === "OK" && detailsResponse.result) {
+                    // Use Places API formatted address if it's more complete
+                    const placesAddress = detailsResponse.result.formatted_address || ""
+                    if (placesAddress && placesAddress.split(',').length > formattedAddress.split(',').length) {
+                      formattedAddress = placesAddress
+                    }
+                  }
+                }
               }
+            } catch (placesError) {
+              console.warn("⚠️ Places API error (non-critical):", placesError.message)
             }
+            
+            console.log("✅✅✅ Google Maps - Complete Address Details:", {
+              formattedAddress,
+              pointOfInterest,
+              premise,
+              street,
+              streetNumber,
+              area,
+              city,
+              state,
+              postalCode
+            })
           }
-          
-          return { city: foundCity, state: foundState }
-        }
-        
-        // If city or state from backend seems wrong, try to extract from formatted address
-        // Check if city/state from backend are reasonable
-        const cityFromBackend = city.toLowerCase()
-        const stateFromBackend = state.toLowerCase()
-        
-        // If city contains words like "near", "sector", "colony", it's probably wrong
-        const citySeemsWrong = city && (
-          cityFromBackend.includes("near") ||
-          cityFromBackend.includes("sector") ||
-          cityFromBackend.includes("colony") ||
-          cityFromBackend.includes("nursing") ||
-          cityFromBackend.includes("home") ||
-          cityFromBackend.includes("f111") ||
-          city.length > 30 // Too long to be a city name
-        )
-        
-        // If state contains words like "sector", "colony", it's probably wrong
-        const stateSeemsWrong = state && (
-          stateFromBackend.includes("sector") ||
-          stateFromBackend.includes("colony") ||
-          stateFromBackend.includes("near") ||
-          state.length > 30 // Too long to be a state name
-        )
-        
-        // If backend values seem wrong, extract from formatted address
-        if (citySeemsWrong || stateSeemsWrong || !city || !state) {
-          console.log("🔍 Backend city/state seem incorrect, extracting from formatted address:", {
-            cityFromBackend: city,
-            stateFromBackend: state,
-            citySeemsWrong,
-            stateSeemsWrong
-          })
-          
-          const extracted = extractCityStateFromFormattedAddress(formattedAddress)
-          if (extracted.city && (citySeemsWrong || !city)) {
-            city = extracted.city
-            console.log("✅ Extracted city from formatted address:", city)
-          }
-          if (extracted.state && (stateSeemsWrong || !state)) {
-            state = extracted.state
-            console.log("✅ Extracted state from formatted address:", state)
+        } catch (googleError) {
+          console.warn("⚠️ Google Maps API error, trying backend fallback:", googleError.message)
+          // Fallback to backend API
+          try {
+            const response = await locationAPI.reverseGeocode(roundedLat, roundedLng)
+            const backendData = response?.data?.data
+            const result = backendData?.results?.[0] || backendData?.result?.[0] || null
+            
+            if (result) {
+              formattedAddress = result.formatted_address || result.formattedAddress || ""
+              const addressComponents = result.address_components || {}
+              city = addressComponents.city || ""
+              state = addressComponents.state || ""
+              area = addressComponents.area || ""
+            }
+          } catch (backendError) {
+            console.error("❌ Backend fallback also failed:", backendError)
           }
         }
+      } else {
+        // No Google API key, use backend
+        const response = await locationAPI.reverseGeocode(roundedLat, roundedLng)
+        const backendData = response?.data?.data
+        const result = backendData?.results?.[0] || backendData?.result?.[0] || null
         
-        // Extract street from formatted address (first part before comma)
-        // Format: "New Palasia, Indore, Madhya Pradesh" -> street = "New Palasia"
-        // OR: "F111, Near Tejas Nursing Home, Sector F" -> street = "F111"
-        let street = ""
-        if (formattedAddress) {
+        if (result) {
+          formattedAddress = result.formatted_address || result.formattedAddress || ""
+          const addressComponents = result.address_components || {}
+          city = addressComponents.city || ""
+          state = addressComponents.state || ""
+          area = addressComponents.area || ""
+        }
+      }
+      
+      if (formattedAddress || city || state) {
+        // Build complete address if we have components
+        if (!formattedAddress || formattedAddress.split(',').length < 3) {
+          // Build from components
+          const addressParts = []
+          if (pointOfInterest) addressParts.push(pointOfInterest)
+          if (premise && premise !== pointOfInterest) addressParts.push(premise)
+          if (streetNumber && street) addressParts.push(`${streetNumber} ${street}`)
+          else if (street) addressParts.push(street)
+          else if (area) addressParts.push(area)
+          if (city) addressParts.push(city)
+          if (state) {
+            if (postalCode) addressParts.push(`${state} ${postalCode}`)
+            else addressParts.push(state)
+          }
+          formattedAddress = addressParts.join(', ')
+        }
+        
+        // Set street from formatted address if not set
+        if (!street && formattedAddress) {
           const parts = formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
           if (parts.length > 0) {
-            // First part is usually the street/area
             street = parts[0]
           }
         }
         
-        // If no street from formatted address, try to use area
-        if (!street && area) {
-          street = area
+        // Set area if not set
+        if (!area) {
+          area = pointOfInterest || premise || street || ""
         }
         
-        // Get zip code
-        const zipCode = addressComponents.pincode || 
-                        addressComponents.postal_code || 
-                        addressComponents.postalCode ||
-                        ""
+        // Remove "India" from formatted address if present
+        if (formattedAddress && formattedAddress.endsWith(', India')) {
+          formattedAddress = formattedAddress.replace(', India', '').trim()
+        }
         
         console.log("✅ Final extracted address components:", { 
           formattedAddress, 
@@ -1174,23 +1608,23 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           city, 
           state, 
           area,
-          zipCode,
-          addressComponentsFromBackend: {
-            city: addressComponents.city,
-            state: addressComponents.state,
-            area: addressComponents.area
-          }
+          postalCode,
+          pointOfInterest,
+          premise
         })
         
         // Update current address display
         setCurrentAddress(formattedAddress || `${roundedLat.toFixed(6)}, ${roundedLng.toFixed(6)}`)
         
         // Update form data
-        // Store full formatted address in additionalDetails (Address details field) - this is what user sees
-        // Priority: formattedAddress > street + city + state > area
+        // Store FULL formatted address in additionalDetails (Address details field) - this is what user sees
+        // This should be the complete address with all parts: POI, Building, Floor, Area, City, State, Pincode
         const fullAddressForField = formattedAddress || 
+                                    (pointOfInterest && city && state ? `${pointOfInterest}, ${city}, ${state}` : '') ||
+                                    (premise && city && state ? `${premise}, ${city}, ${state}` : '') ||
                                     (street && city && state ? `${street}, ${city}, ${state}` : '') || 
-                                    (area ? area : '') ||
+                                    (area && city && state ? `${area}, ${city}, ${state}` : '') ||
+                                    (city && state ? `${city}, ${state}` : '') ||
                                     ''
         
         setAddressFormData(prev => ({
@@ -1198,17 +1632,11 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           street: street || prev.street,
           city: city || prev.city,
           state: state || prev.state,
-          zipCode: zipCode || prev.zipCode,
-          additionalDetails: fullAddressForField || prev.additionalDetails, // Store full address in Address details field
+          zipCode: postalCode || prev.zipCode,
+          additionalDetails: fullAddressForField || prev.additionalDetails, // Store FULL address in Address details field
         }))
       } else {
-        console.warn("⚠️ No address data in response")
-        console.warn("Response structure:", {
-          hasData: !!response?.data,
-          hasDataData: !!response?.data?.data,
-          hasResults: !!response?.data?.data?.results,
-          keys: response?.data ? Object.keys(response.data) : []
-        })
+        console.warn("⚠️ No address data found from Google Maps or backend")
         setCurrentAddress(`${roundedLat.toFixed(6)}, ${roundedLng.toFixed(6)}`)
       }
     } catch (error) {
@@ -1272,10 +1700,63 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             console.log("✅ Updated green marker position")
           }
           
-          // Update blue dot position
+          // Update blue dot marker position
+          if (userLocationMarkerRef.current) {
+            if (userLocationMarkerRef.current.setPosition) {
+              userLocationMarkerRef.current.setPosition({ lat, lng })
+              console.log("✅ Updated blue dot marker position")
+            } else if (userLocationMarkerRef.current.setMap) {
+              // Marker exists but might not be on map, ensure it's visible
+              userLocationMarkerRef.current.setMap(googleMapRef.current)
+              if (userLocationMarkerRef.current.setPosition) {
+                userLocationMarkerRef.current.setPosition({ lat, lng })
+              }
+            }
+          } else if (googleMapRef.current && window.google) {
+            // Create blue dot if it doesn't exist
+            const blueDotMarker = new window.google.maps.Marker({
+              position: { lat, lng },
+              map: googleMapRef.current,
+              icon: {
+                path: window.google.maps.SymbolPath.CIRCLE,
+                scale: 12,
+                fillColor: "#4285F4",
+                fillOpacity: 1,
+                strokeColor: "#FFFFFF",
+                strokeWeight: 4,
+              },
+              zIndex: window.google.maps.Marker.MAX_ZINDEX + 1,
+              optimized: false,
+              visible: true
+            })
+            userLocationMarkerRef.current = blueDotMarker
+            console.log("✅ Created blue dot marker")
+          }
+          
+          // Update blue dot accuracy circle position
           if (blueDotCircleRef.current) {
             blueDotCircleRef.current.setCenter({ lat, lng })
-            console.log("✅ Updated blue dot position")
+            // Update radius if accuracy is available
+            const accuracyRadius = Math.max(locationData?.accuracy || 50, 20)
+            blueDotCircleRef.current.setRadius(accuracyRadius)
+            console.log("✅ Updated blue dot accuracy circle position and radius:", accuracyRadius)
+          } else if (googleMapRef.current && window.google) {
+            // Create accuracy circle if it doesn't exist
+            const accuracyRadius = Math.max(locationData?.accuracy || 50, 20)
+            const blueDot = new window.google.maps.Circle({
+              strokeColor: "#4285F4",
+              strokeOpacity: 0.5,
+              strokeWeight: 2,
+              fillColor: "#4285F4",
+              fillOpacity: 0.2,
+              map: googleMapRef.current,
+              center: { lat, lng },
+              radius: accuracyRadius,
+              zIndex: window.google.maps.Marker.MAX_ZINDEX,
+              visible: true
+            })
+            blueDotCircleRef.current = blueDot
+            console.log("✅ Created blue dot accuracy circle")
           }
           
           // Wait for map to finish moving, then fetch address

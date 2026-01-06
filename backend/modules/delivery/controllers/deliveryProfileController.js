@@ -132,3 +132,41 @@ export const updateProfile = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Reverify Delivery Partner (Resubmit for approval)
+ * POST /api/delivery/reverify
+ */
+export const reverify = asyncHandler(async (req, res) => {
+  try {
+    const delivery = req.delivery;
+
+    if (delivery.status !== 'blocked') {
+      return errorResponse(res, 400, 'Only rejected delivery partners can resubmit for verification');
+    }
+
+    // Reset to pending status and clear rejection details
+    delivery.status = 'pending';
+    delivery.isActive = true; // Allow login to see verification message
+    delivery.rejectionReason = undefined;
+    delivery.rejectedAt = undefined;
+    delivery.rejectedBy = undefined;
+
+    await delivery.save();
+
+    logger.info(`Delivery partner resubmitted for verification: ${delivery._id}`, {
+      deliveryId: delivery.deliveryId
+    });
+
+    return successResponse(res, 200, 'Request resubmitted for verification successfully', {
+      profile: {
+        _id: delivery._id.toString(),
+        name: delivery.name,
+        status: delivery.status
+      }
+    });
+  } catch (error) {
+    logger.error(`Error reverifying delivery partner: ${error.message}`);
+    return errorResponse(res, 500, 'Failed to resubmit for verification');
+  }
+});
+

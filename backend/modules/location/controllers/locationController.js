@@ -40,149 +40,147 @@ export const reverseGeocode = async (req, res) => {
     const clientId = process.env.OLA_MAPS_CLIENT_ID;
     const clientSecret = process.env.OLA_MAPS_CLIENT_SECRET;
 
-    if (!apiKey) {
-      logger.error('OLA_MAPS_API_KEY not configured');
-      return res.status(500).json({
-        success: false,
-        message: 'Location service not configured'
-      });
-    }
-
     try {
       let response = null;
       let lastError = null;
 
-      // Try Method 1a: API Key with latlng combined format (user's example format)
-      // This matches the exact format from Ola Maps documentation
-      try {
-        const requestId = Date.now().toString();
-        const url = `https://api.olamaps.io/places/v1/reverse-geocode?latlng=${latNum},${lngNum}&api_key=${apiKey}`;
-        
-        response = await axios.get(url, {
-          headers: {
-            'X-Request-Id': requestId, // Unique ID for tracking
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          timeout: 10000 // 10 seconds timeout
-        });
-        
-        logger.info('OLA Maps reverse geocode successful (latlng format)', {
-          lat: latNum,
-          lng: lngNum,
-          responseKeys: response.data ? Object.keys(response.data) : [],
-          hasResults: !!(response.data?.results),
-          resultsLength: response.data?.results?.length || 0
-        });
-        
-        // Log first result for debugging
-        if (response.data?.results?.[0]) {
-          logger.info('OLA Maps first result:', {
-            formatted_address: response.data.results[0].formatted_address,
-            hasAddressComponents: !!response.data.results[0].address_components
-          });
-        }
-      } catch (err1a) {
-        lastError = err1a;
-        logger.warn('OLA Maps Method 1a failed:', {
-          error: err1a.message,
-          status: err1a.response?.status,
-          data: err1a.response?.data
-        });
-        response = null;
-        
-        // Try Method 1b: API Key as query parameter (separate lat/lng)
+      // Only try OLA Maps if API key is configured
+      if (apiKey) {
+        // Try Method 1a: API Key with latlng combined format (user's example format)
+        // This matches the exact format from Ola Maps documentation
         try {
-          response = await axios.get(
-            'https://api.olamaps.io/places/v1/reverse-geocode',
-            {
-              params: { 
-                lat: latNum, 
-                lng: lngNum,
-                key: apiKey,
-                // Add parameters for detailed response
-                include_sublocality: true,
-                include_neighborhood: true
-              },
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-Request-Id': Date.now().toString()
-              },
-              timeout: 10000 // 10 seconds timeout
-            }
-          );
-          logger.info('OLA Maps reverse geocode successful (query param)', {
+          const requestId = Date.now().toString();
+          const url = `https://api.olamaps.io/places/v1/reverse-geocode?latlng=${latNum},${lngNum}&api_key=${apiKey}`;
+          
+          response = await axios.get(url, {
+            headers: {
+              'X-Request-Id': requestId, // Unique ID for tracking
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            timeout: 10000 // 10 seconds timeout
+          });
+          
+          logger.info('OLA Maps reverse geocode successful (latlng format)', {
             lat: latNum,
             lng: lngNum,
-            responseKeys: response.data ? Object.keys(response.data) : []
+            responseKeys: response.data ? Object.keys(response.data) : [],
+            hasResults: !!(response.data?.results),
+            resultsLength: response.data?.results?.length || 0
           });
-        } catch (err1b) {
-          lastError = err1b;
-          response = null;
-        }
-      }
-      
-      // Try Method 2: Bearer token with project headers
-      if (!response) {
-        try {
-          const headers = {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'X-Request-Id': Date.now().toString()
-          };
           
-          if (projectId) {
-            headers['X-Project-ID'] = projectId;
+          // Log first result for debugging
+          if (response.data?.results?.[0]) {
+            logger.info('OLA Maps first result:', {
+              formatted_address: response.data.results[0].formatted_address,
+              hasAddressComponents: !!response.data.results[0].address_components
+            });
           }
-          if (clientId) {
-            headers['X-Client-ID'] = clientId;
+        } catch (err1a) {
+          lastError = err1a;
+          logger.warn('OLA Maps Method 1a failed:', {
+            error: err1a.message,
+            status: err1a.response?.status,
+            data: err1a.response?.data
+          });
+          response = null;
+          
+          // Try Method 1b: API Key as query parameter (separate lat/lng)
+          try {
+            response = await axios.get(
+              'https://api.olamaps.io/places/v1/reverse-geocode',
+              {
+                params: { 
+                  lat: latNum, 
+                  lng: lngNum,
+                  key: apiKey,
+                  // Add parameters for detailed response
+                  include_sublocality: true,
+                  include_neighborhood: true
+                },
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                  'X-Request-Id': Date.now().toString()
+                },
+                timeout: 10000 // 10 seconds timeout
+              }
+            );
+            logger.info('OLA Maps reverse geocode successful (query param)', {
+              lat: latNum,
+              lng: lngNum,
+              responseKeys: response.data ? Object.keys(response.data) : []
+            });
+          } catch (err1b) {
+            lastError = err1b;
+            response = null;
           }
+        }
+        
+        // Try Method 2: Bearer token with project headers
+        if (!response) {
+          try {
+            const headers = {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'X-Request-Id': Date.now().toString()
+            };
+            
+            if (projectId) {
+              headers['X-Project-ID'] = projectId;
+            }
+            if (clientId) {
+              headers['X-Client-ID'] = clientId;
+            }
 
-          response = await axios.get(
-            'https://api.olamaps.io/places/v1/reverse-geocode',
-            {
-              params: { lat: latNum, lng: lngNum },
-              headers,
-              timeout: 10000 // 10 seconds timeout
-            }
-          );
-          logger.info('OLA Maps reverse geocode successful (bearer token)', {
-            lat: latNum,
-            lng: lngNum
-          });
-        } catch (err2) {
-          lastError = err2;
-          response = null;
+            response = await axios.get(
+              'https://api.olamaps.io/places/v1/reverse-geocode',
+              {
+                params: { lat: latNum, lng: lngNum },
+                headers,
+                timeout: 10000 // 10 seconds timeout
+              }
+            );
+            logger.info('OLA Maps reverse geocode successful (bearer token)', {
+              lat: latNum,
+              lng: lngNum
+            });
+          } catch (err2) {
+            lastError = err2;
+            response = null;
+          }
         }
+        
+        // Try Method 3: API Key in X-API-Key header
+        if (!response) {
+          try {
+            response = await axios.get(
+              'https://api.olamaps.io/places/v1/reverse-geocode',
+              {
+                params: { lat: latNum, lng: lngNum },
+                headers: {
+                  'X-API-Key': apiKey,
+                  'Content-Type': 'application/json',
+                  'X-Request-Id': Date.now().toString()
+                },
+                timeout: 10000 // 10 seconds timeout
+              }
+            );
+            logger.info('OLA Maps reverse geocode successful (header)', {
+              lat: latNum,
+              lng: lngNum
+            });
+          } catch (err3) {
+            lastError = err3;
+            response = null;
+          }
+        }
+      } else {
+        // OLA Maps API key not configured, skip to fallback
+        logger.warn('OLA_MAPS_API_KEY not configured, using fallback service');
       }
       
-      // Try Method 3: API Key in X-API-Key header
-      if (!response) {
-        try {
-          response = await axios.get(
-            'https://api.olamaps.io/places/v1/reverse-geocode',
-            {
-              params: { lat: latNum, lng: lngNum },
-              headers: {
-                'X-API-Key': apiKey,
-                'Content-Type': 'application/json',
-                'X-Request-Id': Date.now().toString()
-              },
-              timeout: 10000 // 10 seconds timeout
-            }
-          );
-          logger.info('OLA Maps reverse geocode successful (header)', {
-            lat: latNum,
-            lng: lngNum
-          });
-        } catch (err3) {
-          lastError = err3;
-          response = null;
-        }
-      }
-      
-      // All OLA Maps methods failed, use fallback
+      // All OLA Maps methods failed or not configured, use fallback
       if (!response) {
         try {
           logger.warn('All OLA Maps authentication methods failed, using fallback service', {

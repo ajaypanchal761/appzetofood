@@ -226,7 +226,6 @@ export const sidebarMenuData = [
         icon: "Package",
         subItems: [
           { label: "New Join Request", path: "/admin/delivery-partners/join-request" },
-          { label: "Add New Deliveryman", path: "/admin/delivery-partners/add" },
           { label: "Deliveryman List", path: "/admin/delivery-partners" },
           { label: "Deliveryman Reviews", path: "/admin/delivery-partners/reviews" },
           { label: "Bonus", path: "/admin/delivery-partners/bonus" },

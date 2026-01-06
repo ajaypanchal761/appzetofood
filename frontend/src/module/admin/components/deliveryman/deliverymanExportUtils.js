@@ -27,11 +27,12 @@ export const exportDeliverymenToCSV = (deliverymen, filename = "deliverymen") =>
 }
 
 export const exportDeliverymenToExcel = (deliverymen, filename = "deliverymen") => {
-  const headers = ["SI", "Name", "Contact", "Zone", "Total Orders", "Availability Status"]
+  const headers = ["SI", "Name", "Phone", "Email", "Zone", "Total Orders", "Status"]
   const rows = deliverymen.map((dm) => [
     dm.sl,
     dm.name,
     dm.phone,
+    dm.email,
     dm.zone,
     dm.totalOrders,
     dm.status
@@ -54,56 +55,91 @@ export const exportDeliverymenToExcel = (deliverymen, filename = "deliverymen") 
 }
 
 export const exportDeliverymenToPDF = (deliverymen, filename = "deliverymen") => {
-  const headers = ["SI", "Name", "Contact", "Zone", "Total Orders", "Availability Status"]
-  
-  let htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Deliverymen Report</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 10px; }
-        th { background-color: #f2f2f2; font-weight: bold; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        h1 { text-align: center; }
-      </style>
-    </head>
-    <body>
-      <h1>Deliverymen Report</h1>
-      <p>Generated on: ${new Date().toLocaleString()}</p>
-      <table>
-        <thead>
-          <tr>
-            ${headers.map(h => `<th>${h}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${deliverymen.map(dm => `
-            <tr>
-              <td>${dm.sl}</td>
-              <td>${dm.name}</td>
-              <td>${dm.phone}</td>
-              <td>${dm.zone}</td>
-              <td>${dm.totalOrders}</td>
-              <td>${dm.status}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </body>
-    </html>
-  `
-  
-  const printWindow = window.open("", "_blank")
-  printWindow.document.write(htmlContent)
-  printWindow.document.close()
-  printWindow.focus()
-  setTimeout(() => {
-    printWindow.print()
-    printWindow.close()
-  }, 250)
+  if (!deliverymen || deliverymen.length === 0) {
+    alert("No data to export")
+    return
+  }
+
+  try {
+    // Dynamic import of jsPDF and autoTable for instant download
+    import('jspdf').then(({ default: jsPDF }) => {
+      import('jspdf-autotable').then(({ default: autoTable }) => {
+        const doc = new jsPDF({
+          orientation: 'landscape',
+          unit: 'mm',
+          format: 'a4'
+        })
+
+        // Add title
+        doc.setFontSize(16)
+        doc.text('Delivery Partners Report', 14, 15)
+        
+        // Add export info
+        doc.setFontSize(10)
+        const exportDate = new Date().toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+        doc.text(`Exported on: ${exportDate} | Total Records: ${deliverymen.length}`, 14, 22)
+
+        // Prepare table data
+        const tableData = deliverymen.map((dm) => [
+          dm.sl || 'N/A',
+          dm.name || 'N/A',
+          dm.phone || 'N/A',
+          dm.email || 'N/A',
+          dm.zone || 'N/A',
+          dm.totalOrders || 0,
+          dm.status || 'N/A'
+        ])
+
+        // Add table using autoTable
+        autoTable(doc, {
+          head: [["SI", "Name", "Phone", "Email", "Zone", "Total Orders", "Status"]],
+          body: tableData,
+          startY: 28,
+          styles: {
+            fontSize: 8,
+            cellPadding: 2,
+          },
+          headStyles: {
+            fillColor: [241, 245, 249],
+            textColor: [15, 23, 42],
+            fontStyle: 'bold',
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252],
+          },
+          columnStyles: {
+            0: { cellWidth: 15 }, // SI
+            1: { cellWidth: 35 }, // Name
+            2: { cellWidth: 30 }, // Phone
+            3: { cellWidth: 45 }, // Email
+            4: { cellWidth: 40 }, // Zone
+            5: { cellWidth: 25 }, // Total Orders
+            6: { cellWidth: 25 }, // Status
+          },
+          margin: { top: 28, left: 14, right: 14 },
+        })
+
+        // Save the PDF instantly (like Excel)
+        const fileTimestamp = new Date().toISOString().split("T")[0]
+        doc.save(`${filename}_${fileTimestamp}.pdf`)
+      }).catch((error) => {
+        console.error("Error loading jspdf-autotable:", error)
+        alert("Failed to load PDF library. Please try again.")
+      })
+    }).catch((error) => {
+      console.error("Error loading jsPDF:", error)
+      alert("Failed to load PDF library. Please try again.")
+    })
+  } catch (error) {
+    console.error("PDF export error:", error)
+    alert("Failed to export PDF. Please try again.")
+  }
 }
 
 export const exportDeliverymenToJSON = (deliverymen, filename = "deliverymen") => {

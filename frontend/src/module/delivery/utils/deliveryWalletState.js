@@ -95,9 +95,9 @@ export const calculateDeliveryBalances = (state) => {
     .filter(t => t.type === 'withdrawal' && t.status === 'Pending')
     .reduce((sum, t) => sum + (t.amount || 0), 0)
   
-  // Calculate total earnings from payment transactions
+  // Calculate total earnings from payment and bonus transactions
   const totalEarningsFromTransactions = state.transactions
-    .filter(t => t.type === 'payment' && t.status === 'Completed')
+    .filter(t => (t.type === 'payment' || t.type === 'bonus') && t.status === 'Completed')
     .reduce((sum, t) => sum + (t.amount || 0), 0)
   
   return {

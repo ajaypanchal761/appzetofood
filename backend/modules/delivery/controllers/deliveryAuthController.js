@@ -86,7 +86,8 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         phone,
         phoneVerified: true,
         signupMethod: 'phone',
-        status: 'pending' // New delivery boys start as pending approval
+        status: 'pending', // New delivery boys start as pending approval
+        isActive: true // Allow login to see verification message
       };
 
       try {
@@ -123,7 +124,8 @@ export const verifyOTP = asyncHandler(async (req, res) => {
           phone,
           phoneVerified: true,
           signupMethod: 'phone',
-          status: 'pending' // New delivery boys start as pending approval
+          status: 'pending', // New delivery boys start as pending approval
+          isActive: true // Allow login to see verification message
         };
 
         try {
@@ -191,15 +193,16 @@ export const verifyOTP = asyncHandler(async (req, res) => {
             phone: delivery.phone,
             email: delivery.email,
             deliveryId: delivery.deliveryId,
-            status: delivery.status
+            status: delivery.status,
+            rejectionReason: delivery.rejectionReason || null // Include rejection reason for blocked accounts
           },
           needsSignup: true // Signal that signup needs to be completed
         });
       }
     }
 
-    // Check if delivery boy is active
-    if (!delivery.isActive) {
+    // Check if delivery boy is active (blocked/pending status partners can still login to see rejection reason or verification message)
+    if (!delivery.isActive && delivery.status !== 'blocked' && delivery.status !== 'pending') {
       return errorResponse(res, 403, 'Your account has been deactivated. Please contact support.');
     }
 
@@ -240,6 +243,7 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         profileImage: delivery.profileImage,
         isActive: delivery.isActive,
         status: delivery.status,
+        rejectionReason: delivery.rejectionReason || null, // Include rejection reason for blocked accounts
         metrics: delivery.metrics,
         earnings: delivery.earnings
       }

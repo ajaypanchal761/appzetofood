@@ -18,36 +18,68 @@ const logger = winston.createLogger({
 /**
  * Update Delivery Partner Location
  * POST /api/delivery/location
+ * Can update location and/or online status
  */
 const updateLocationSchema = Joi.object({
-  latitude: Joi.number().min(-90).max(90).required(),
-  longitude: Joi.number().min(-180).max(180).required(),
+  latitude: Joi.number().min(-90).max(90).optional(),
+  longitude: Joi.number().min(-180).max(180).optional(),
   isOnline: Joi.boolean().optional()
-});
+}).min(1); // At least one field must be provided
 
 export const updateLocation = asyncHandler(async (req, res) => {
   try {
     const delivery = req.delivery;
     const { latitude, longitude, isOnline } = req.body;
 
-    // Validate input
-    const { error } = updateLocationSchema.validate({ latitude, longitude, isOnline });
-    if (error) {
-      return errorResponse(res, 400, error.details[0].message);
+    // Manual validation: at least one field must be provided
+    const hasLatitude = latitude !== undefined && latitude !== null;
+    const hasLongitude = longitude !== undefined && longitude !== null;
+    const hasIsOnline = isOnline !== undefined && isOnline !== null;
+    
+    if (!hasLatitude && !hasLongitude && !hasIsOnline) {
+      return errorResponse(res, 400, 'At least one field (latitude, longitude, or isOnline) must be provided');
+    }
+    
+    // If latitude or longitude is provided, both must be provided
+    if ((hasLatitude && !hasLongitude) || (!hasLatitude && hasLongitude)) {
+      return errorResponse(res, 400, 'Both latitude and longitude must be provided together');
     }
 
-    // Update location
-    const updateData = {
-      'availability.currentLocation': {
+    // Validate individual fields if provided
+    if (hasLatitude || hasLongitude) {
+      const locationSchema = Joi.object({
+        latitude: Joi.number().min(-90).max(90).required(),
+        longitude: Joi.number().min(-180).max(180).required()
+      });
+      const { error: locationError } = locationSchema.validate({ latitude, longitude });
+      if (locationError) {
+        return errorResponse(res, 400, locationError.details[0].message);
+      }
+    }
+    
+    if (hasIsOnline && typeof isOnline !== 'boolean') {
+      return errorResponse(res, 400, 'isOnline must be a boolean');
+    }
+
+    const updateData = {};
+
+    // Update location only if both latitude and longitude are provided
+    if (typeof latitude === 'number' && typeof longitude === 'number') {
+      updateData['availability.currentLocation'] = {
         type: 'Point',
         coordinates: [longitude, latitude] // MongoDB uses [longitude, latitude]
-      },
-      'availability.lastLocationUpdate': new Date()
-    };
+      };
+      updateData['availability.lastLocationUpdate'] = new Date();
+    }
 
     // Update online status if provided
     if (typeof isOnline === 'boolean') {
       updateData['availability.isOnline'] = isOnline;
+    }
+
+    // If no updates, return error
+    if (Object.keys(updateData).length === 0) {
+      return errorResponse(res, 400, 'At least one field (latitude, longitude, or isOnline) must be provided');
     }
 
     const updatedDelivery = await Delivery.findByIdAndUpdate(
@@ -60,17 +92,20 @@ export const updateLocation = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, 'Delivery partner not found');
     }
 
-    return successResponse(res, 200, 'Location updated successfully', {
-      location: {
-        latitude,
-        longitude,
+    const currentLocation = updatedDelivery.availability?.currentLocation;
+
+    return successResponse(res, 200, 'Status updated successfully', {
+      location: currentLocation ? {
+        latitude: currentLocation.coordinates[1],
+        longitude: currentLocation.coordinates[0],
         isOnline: updatedDelivery.availability?.isOnline || false,
         lastUpdate: updatedDelivery.availability?.lastLocationUpdate
-      }
+      } : null,
+      isOnline: updatedDelivery.availability?.isOnline || false
     });
   } catch (error) {
     logger.error(`Error updating delivery location: ${error.message}`);
-    return errorResponse(res, 500, 'Failed to update location');
+    return errorResponse(res, 500, 'Failed to update status');
   }
 });
 

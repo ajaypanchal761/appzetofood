@@ -21,14 +21,8 @@ if (import.meta.env.DEV) {
   console.log('🌐 Frontend URL:', window.location.origin);
   console.log('🌐 Environment:', import.meta.env.MODE);
   
-  // Verify backend is accessible
-  fetch(`${API_BASE_URL.replace('/api', '')}/health`)
-    .then(r => r.json())
-    .then(data => console.log('✅ Backend health check:', data))
-    .catch(err => {
-      console.error('❌ Backend not accessible at:', API_BASE_URL.replace('/api', ''));
-      console.error('💡 Start backend: cd appzetofood/backend && npm run dev');
-    });
+  // Backend health check removed - errors handled by axios interceptor
+  // Health check will be performed when actual API calls are made
 }
 
 // API endpoints
@@ -117,8 +111,10 @@ export const API_ENDPOINTS = {
     ORDER_STATS: '/delivery/orders/stats',
     PROFILE: '/delivery/profile',
     ORDERS: '/delivery/orders',
+    TRIP_HISTORY: '/delivery/trip-history',
     EARNINGS: '/delivery/earnings',
     LOCATION: '/delivery/location',
+    REVERIFY: '/delivery/reverify',
   },
   // Admin endpoints
   ADMIN: {
@@ -136,6 +132,16 @@ export const API_ENDPOINTS = {
     USER_STATUS: '/admin/users/:id/status',
     RESTAURANTS: '/admin/restaurants',
     DELIVERY: '/admin/delivery',
+    DELIVERY_PARTNERS: '/admin/delivery-partners',
+    DELIVERY_PARTNERS_REQUESTS: '/admin/delivery-partners/requests',
+    DELIVERY_PARTNER_BY_ID: '/admin/delivery-partners/:id',
+    DELIVERY_PARTNER_APPROVE: '/admin/delivery-partners/:id/approve',
+    DELIVERY_PARTNER_REJECT: '/admin/delivery-partners/:id/reject',
+    DELIVERY_PARTNER_REVERIFY: '/admin/delivery-partners/:id/reverify',
+    DELIVERY_PARTNER_STATUS: '/admin/delivery-partners/:id/status',
+    DELIVERY_PARTNER_DELETE: '/admin/delivery-partners/:id',
+    DELIVERY_PARTNER_BONUS: '/admin/delivery-partners/bonus',
+    DELIVERY_PARTNER_BONUS_TRANSACTIONS: '/admin/delivery-partners/bonus/transactions',
     ORDERS: '/admin/orders',
     ANALYTICS: '/admin/analytics',
     DASHBOARD_STATS: '/admin/dashboard/stats',
