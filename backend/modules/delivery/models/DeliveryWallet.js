@@ -187,8 +187,19 @@ deliveryWalletSchema.methods.addTransaction = function(transactionData) {
   // Update balances based on transaction type and status
   if (transaction.status === 'Completed') {
     if (transaction.type === 'payment' || transaction.type === 'bonus' || transaction.type === 'refund') {
+      const oldBalance = this.totalBalance || 0;
       this.totalBalance += transaction.amount;
       this.totalEarned += transaction.amount;
+      
+      // Log bonus transaction for debugging
+      if (transaction.type === 'bonus') {
+        console.log(`💰 BONUS TRANSACTION ADDED:`, {
+          amount: transaction.amount,
+          oldBalance: oldBalance,
+          newBalance: this.totalBalance,
+          walletId: this._id
+        });
+      }
       
       // If payment is collected (COD), add to cash in hand
       if (transaction.paymentCollected) {

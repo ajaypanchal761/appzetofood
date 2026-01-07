@@ -551,6 +551,15 @@ export const deliveryAPI = {
     return apiClient.get(API_ENDPOINTS.DELIVERY.EARNINGS, { params });
   },
 
+  // Get active earning addon offers
+  getActiveEarningAddons: () => {
+    const endpoint = API_ENDPOINTS.DELIVERY.EARNINGS_ACTIVE_OFFERS;
+    if (import.meta.env.DEV) {
+      console.log('📡 Fetching active earning addons from:', endpoint);
+    }
+    return apiClient.get(endpoint);
+  },
+
   // Update location
   updateLocation: (latitude, longitude, isOnline = null) => {
     const payload = {
@@ -757,6 +766,56 @@ export const adminAPI = {
 
   updateCategoryPriority: (id, priority) => {
     return apiClient.patch(API_ENDPOINTS.ADMIN.CATEGORY_PRIORITY.replace(':id', id), { priority });
+  },
+
+  // Earning Addon Management
+  createEarningAddon: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.EARNING_ADDON, data);
+  },
+
+  getEarningAddons: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.EARNING_ADDON, { params });
+  },
+
+  getEarningAddonById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.EARNING_ADDON_BY_ID.replace(':id', id));
+  },
+
+  updateEarningAddon: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.EARNING_ADDON_BY_ID.replace(':id', id), data);
+  },
+
+  deleteEarningAddon: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.EARNING_ADDON_BY_ID.replace(':id', id));
+  },
+
+  toggleEarningAddonStatus: (id, status) => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.EARNING_ADDON_STATUS.replace(':id', id), { status });
+  },
+
+  checkEarningAddonCompletions: (deliveryPartnerId) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.EARNING_ADDON_CHECK_COMPLETIONS, { deliveryPartnerId });
+  },
+
+  // Earning Addon History Management
+  getEarningAddonHistory: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.EARNING_ADDON_HISTORY, { params });
+  },
+
+  getEarningAddonHistoryById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.EARNING_ADDON_HISTORY_BY_ID.replace(':id', id));
+  },
+
+  creditEarningToWallet: (id, notes = '') => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.EARNING_ADDON_HISTORY_CREDIT.replace(':id', id), { notes });
+  },
+
+  cancelEarningAddonHistory: (id, reason = '') => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.EARNING_ADDON_HISTORY_CANCEL.replace(':id', id), { reason });
+  },
+
+  getEarningAddonHistoryStatistics: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.EARNING_ADDON_HISTORY_STATISTICS, { params });
   },
 };
 

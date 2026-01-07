@@ -36,6 +36,22 @@ import {
   addBonus,
   getBonusTransactions
 } from '../controllers/deliveryBonusController.js';
+import {
+  createEarningAddon,
+  getEarningAddons,
+  getEarningAddonById,
+  updateEarningAddon,
+  deleteEarningAddon,
+  toggleEarningAddonStatus,
+  checkEarningAddonCompletions
+} from '../controllers/earningAddonController.js';
+import {
+  getEarningAddonHistory,
+  getEarningAddonHistoryById,
+  creditEarningToWallet,
+  cancelEarningAddonHistory,
+  getEarningAddonHistoryStatistics
+} from '../controllers/earningAddonHistoryController.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 
@@ -88,6 +104,22 @@ router.delete('/delivery-partners/:id', deleteDeliveryPartner);
 // Delivery Partner Bonus Management
 router.post('/delivery-partners/bonus', addBonus);
 router.get('/delivery-partners/bonus/transactions', getBonusTransactions);
+
+// Earning Addon Management
+router.post('/earning-addon', createEarningAddon);
+router.get('/earning-addon', getEarningAddons);
+router.get('/earning-addon/:id', getEarningAddonById);
+router.put('/earning-addon/:id', updateEarningAddon);
+router.delete('/earning-addon/:id', deleteEarningAddon);
+router.patch('/earning-addon/:id/status', toggleEarningAddonStatus);
+router.post('/earning-addon/check-completions', checkEarningAddonCompletions);
+
+// Earning Addon History Management
+router.get('/earning-addon-history', getEarningAddonHistory);
+router.get('/earning-addon-history/statistics', getEarningAddonHistoryStatistics);
+router.get('/earning-addon-history/:id', getEarningAddonHistoryById);
+router.post('/earning-addon-history/:id/credit', creditEarningToWallet);
+router.patch('/earning-addon-history/:id/cancel', cancelEarningAddonHistory);
 
 export default router;
 

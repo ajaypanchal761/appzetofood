@@ -49,8 +49,8 @@ import AddDeliveryman from "../pages/delivery-partners/AddDeliveryman";
 import DeliverymanList from "../pages/delivery-partners/DeliverymanList";
 import DeliverymanReviews from "../pages/delivery-partners/DeliverymanReviews";
 import DeliverymanBonus from "../pages/delivery-partners/DeliverymanBonus";
-import IncentiveRequests from "../pages/delivery-partners/IncentiveRequests";
-import IncentivesHistory from "../pages/delivery-partners/IncentivesHistory";
+import EarningAddon from "../pages/delivery-partners/EarningAddon";
+import EarningAddonHistory from "../pages/delivery-partners/EarningAddonHistory";
 // Disbursement Management
 import RestaurantDisbursement from "../pages/RestaurantDisbursement";
 import DeliverymanDisbursement from "../pages/DeliverymanDisbursement";
@@ -208,8 +208,8 @@ export default function AdminRouter() {
         <Route path="delivery-partners" element={<DeliverymanList />} />
         <Route path="delivery-partners/reviews" element={<DeliverymanReviews />} />
         <Route path="delivery-partners/bonus" element={<DeliverymanBonus />} />
-        <Route path="delivery-partners/incentive-requests" element={<IncentiveRequests />} />
-        <Route path="delivery-partners/incentives-history" element={<IncentivesHistory />} />
+        <Route path="delivery-partners/earning-addon" element={<EarningAddon />} />
+        <Route path="delivery-partners/earning-addon-history" element={<EarningAddonHistory />} />
 
         {/* DISBURSEMENT MANAGEMENT */}
         <Route path="restaurant-disbursement" element={<RestaurantDisbursement />} />

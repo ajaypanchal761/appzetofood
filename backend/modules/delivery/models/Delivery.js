@@ -284,12 +284,59 @@ deliverySchema.pre('save', async function(next) {
 deliverySchema.pre('save', async function(next) {
   if (!this.deliveryId && this.isNew) {
     try {
-      // Generate unique delivery ID
       const DeliveryModel = mongoose.model('Delivery');
-      const count = await DeliveryModel.countDocuments();
-      this.deliveryId = `DEL${String(count + 1).padStart(6, '0')}`;
+      let deliveryId;
+      let isUnique = false;
+      let attempts = 0;
+      const maxAttempts = 100; // Prevent infinite loop
+      
+      // Keep generating IDs until we find a unique one
+      while (!isUnique && attempts < maxAttempts) {
+        // Get the highest existing delivery ID number
+        // Using aggregation for better performance and atomicity
+        const result = await DeliveryModel.aggregate([
+          { $match: { deliveryId: { $exists: true, $ne: null } } },
+          { $project: { 
+              number: { 
+                $toInt: { 
+                  $substr: ['$deliveryId', 3, 6] 
+                } 
+              } 
+            } 
+          },
+          { $sort: { number: -1 } },
+          { $limit: 1 }
+        ]);
+        
+        let nextNumber = 1;
+        if (result.length > 0 && result[0].number) {
+          nextNumber = result[0].number + 1;
+        }
+        
+        deliveryId = `DEL${String(nextNumber).padStart(6, '0')}`;
+        
+        // Check if this ID already exists (handles race conditions)
+        const exists = await DeliveryModel.findOne({ deliveryId }).select('_id');
+        if (!exists) {
+          isUnique = true;
+        } else {
+          attempts++;
+          // If ID exists, increment and try again
+          nextNumber++;
+          deliveryId = `DEL${String(nextNumber).padStart(6, '0')}`;
+          // Small delay to reduce contention
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
+      }
+      
+      if (!isUnique) {
+        // Fallback: use timestamp-based ID if we couldn't find a unique sequential one
+        deliveryId = `DEL${Date.now().toString().slice(-6)}`;
+      }
+      
+      this.deliveryId = deliveryId;
     } catch (error) {
-      // If model not registered yet, use timestamp-based ID
+      // If model not registered yet or any other error, use timestamp-based ID
       this.deliveryId = `DEL${Date.now().toString().slice(-6)}`;
     }
   }

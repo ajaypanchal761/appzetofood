@@ -2,6 +2,7 @@ import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import Delivery from '../models/Delivery.js';
 import Order from '../../order/models/Order.js';
+import EarningAddon from '../../admin/models/EarningAddon.js';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -119,6 +120,79 @@ export const getEarnings = asyncHandler(async (req, res) => {
   } catch (error) {
     logger.error(`Error fetching delivery earnings: ${error.message}`);
     return errorResponse(res, 500, 'Failed to fetch earnings');
+  }
+});
+
+/**
+ * Get Active Earning Addon Offers for Delivery Partner
+ * GET /api/delivery/earnings/active-offers
+ */
+export const getActiveEarningAddons = asyncHandler(async (req, res) => {
+  try {
+    const delivery = req.delivery;
+    const now = new Date();
+
+    // Get ALL active earning addons (not just those currently valid)
+    // This includes offers that haven't started yet but are active
+    const activeAddons = await EarningAddon.find({
+      status: 'active',
+      endDate: { $gte: now }, // Only show offers that haven't ended yet
+      $or: [
+        { maxRedemptions: null },
+        { $expr: { $lt: ['$currentRedemptions', '$maxRedemptions'] } }
+      ]
+    })
+      .select('title description requiredOrders earningAmount startDate endDate status maxRedemptions currentRedemptions createdAt')
+      .sort({ createdAt: -1 }) // Get most recent first
+      .lean();
+
+    logger.info(`Found ${activeAddons.length} active earning addons for delivery partner ${delivery._id}`);
+
+    // Check validity for each addon and add delivery partner's progress
+    const addonsWithProgress = await Promise.all(
+      activeAddons.map(async (addon) => {
+        const startDate = new Date(addon.startDate);
+        const endDate = new Date(addon.endDate);
+        
+        // Calculate delivery partner's order count for the offer period
+        // Count orders from start date to now (or end date if offer hasn't started)
+        const countStartDate = now > startDate ? startDate : now;
+        const orderCount = await Order.countDocuments({
+          deliveryPartnerId: delivery._id,
+          status: 'delivered',
+          deliveredAt: {
+            $gte: countStartDate,
+            $lte: now > endDate ? endDate : now
+          }
+        });
+
+        // Check if offer is currently valid (started and not ended)
+        const isValid = addon.status === 'active' &&
+          now >= startDate &&
+          now <= endDate &&
+          (addon.maxRedemptions === null || addon.currentRedemptions < addon.maxRedemptions);
+
+        // Check if offer is upcoming (not started yet)
+        const isUpcoming = addon.status === 'active' && now < startDate;
+
+        return {
+          ...addon,
+          isValid,
+          isUpcoming,
+          currentOrders: orderCount,
+          progress: addon.requiredOrders > 0 ? Math.min(orderCount / addon.requiredOrders, 1) : 0
+        };
+      })
+    );
+
+    logger.info(`Returning ${addonsWithProgress.length} offers with progress data`);
+
+    return successResponse(res, 200, 'Active earning addons retrieved successfully', {
+      activeOffers: addonsWithProgress
+    });
+  } catch (error) {
+    logger.error(`Error fetching active earning addons: ${error.message}`, { stack: error.stack });
+    return errorResponse(res, 500, 'Failed to fetch active earning addons');
   }
 });
 

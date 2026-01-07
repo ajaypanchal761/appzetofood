@@ -7,41 +7,78 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { 
-  getDeliveryTransactionsByType, 
-  getDeliveryTransactionsByStatus 
+  fetchWalletTransactions
 } from "../utils/deliveryWalletState"
 import { formatCurrency } from "../../restaurant/utils/currency"
 
 export default function TransactionHistory() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [activeTab, setActiveTab] = useState("withdraw")
+  const [activeTab, setActiveTab] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("All")
   const [showDropdown, setShowDropdown] = useState(false)
   const [transactions, setTransactions] = useState([])
+  const [loading, setLoading] = useState(true)
   const dropdownRef = useRef(null)
 
-  // Load transactions based on active tab and selected status
+  // Load transactions from API based on active tab and selected status
   useEffect(() => {
-    const loadTransactions = () => {
-      let filteredTransactions = []
-      
-      if (activeTab === "withdraw") {
-        filteredTransactions = getDeliveryTransactionsByType("withdrawal")
-      } else if (activeTab === "payment") {
-        filteredTransactions = getDeliveryTransactionsByType("payment")
-      } else {
-        filteredTransactions = getDeliveryTransactionsByType("all")
+    const loadTransactions = async () => {
+      try {
+        setLoading(true)
+        
+        // Build query params
+        const params = {
+          limit: 1000
+        }
+        
+        // Filter by type based on active tab
+        if (activeTab === "withdraw") {
+          params.type = "withdrawal"
+        } else if (activeTab === "payment") {
+          params.type = "payment"
+        } else if (activeTab === "bonus") {
+          params.type = "bonus"
+        }
+        // "all" tab - don't filter by type
+        
+        // Filter by status if not "All"
+        if (selectedStatus !== "All") {
+          params.status = selectedStatus
+        }
+        
+        const fetchedTransactions = await fetchWalletTransactions(params)
+        
+        // Format transactions for display
+        const formattedTransactions = fetchedTransactions.map(t => ({
+          id: t._id || t.id,
+          amount: t.amount || 0,
+          type: t.type,
+          status: t.status || 'Pending',
+          description: t.description || t.metadata?.reference || 'Transaction',
+          date: t.date || t.createdAt ? new Date(t.date || t.createdAt).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }) : 'N/A'
+        }))
+        
+        // Sort by date (newest first)
+        formattedTransactions.sort((a, b) => {
+          const dateA = new Date(a.date)
+          const dateB = new Date(b.date)
+          return dateB - dateA
+        })
+        
+        setTransactions(formattedTransactions)
+      } catch (error) {
+        console.error('Error loading transactions:', error)
+        setTransactions([])
+      } finally {
+        setLoading(false)
       }
-      
-      // Filter by status if not "All"
-      if (selectedStatus !== "All") {
-        filteredTransactions = filteredTransactions.filter(
-          t => t.status === selectedStatus
-        )
-      }
-      
-      setTransactions(filteredTransactions)
     }
 
     loadTransactions()
@@ -51,10 +88,16 @@ export default function TransactionHistory() {
       loadTransactions()
     }
 
+    // Refresh transactions every 10 seconds
+    const refreshInterval = setInterval(() => {
+      loadTransactions()
+    }, 10000)
+
     window.addEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
     window.addEventListener('storage', handleWalletUpdate)
 
     return () => {
+      clearInterval(refreshInterval)
       window.removeEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
       window.removeEventListener('storage', handleWalletUpdate)
     }
@@ -107,15 +150,15 @@ export default function TransactionHistory() {
         {/* Tabs */}
         <div className="flex gap-4 mb-4 border-b border-gray-200">
           <button
-            onClick={() => setActiveTab("withdraw")}
+            onClick={() => setActiveTab("all")}
             className={`pb-3 px-2 text-sm md:text-base font-medium transition-colors relative ${
-              activeTab === "withdraw"
+              activeTab === "all"
                 ? "text-[#ff8100]"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
-            Withdraw Request
-            {activeTab === "withdraw" && (
+            All
+            {activeTab === "all" && (
               <motion.div
                 layoutId="activeTab"
                 className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
@@ -130,8 +173,40 @@ export default function TransactionHistory() {
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
-            Payment History
+            Payment
             {activeTab === "payment" && (
+              <motion.div
+                layoutId="activeTab"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
+              />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("bonus")}
+            className={`pb-3 px-2 text-sm md:text-base font-medium transition-colors relative ${
+              activeTab === "bonus"
+                ? "text-[#ff8100]"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Bonus
+            {activeTab === "bonus" && (
+              <motion.div
+                layoutId="activeTab"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
+              />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("withdraw")}
+            className={`pb-3 px-2 text-sm md:text-base font-medium transition-colors relative ${
+              activeTab === "withdraw"
+                ? "text-[#ff8100]"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Withdraw
+            {activeTab === "withdraw" && (
               <motion.div
                 layoutId="activeTab"
                 className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
@@ -219,7 +294,11 @@ export default function TransactionHistory() {
 
         {/* Transaction List */}
         <div className="space-y-4">
-          {transactions.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-gray-900 text-base md:text-lg">Loading transactions...</p>
+            </div>
+          ) : transactions.length > 0 ? (
             transactions.map((transaction, index) => (
               <motion.div
                 key={transaction.id}

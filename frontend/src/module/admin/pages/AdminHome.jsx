@@ -38,15 +38,15 @@ export default function AdminHome() {
 
   const getOrderStats = () => {
     const base = [
-      { label: "Delivered", value: 1260, color: "#0ea5e9" },
-      { label: "Cancelled", value: 84, color: "#ef4444" },
-      { label: "Refunded", value: 24, color: "#f59e0b" },
-      { label: "Pending", value: 312, color: "#10b981" },
+      { label: "Delivered", value: 0, color: "#0ea5e9" },
+      { label: "Cancelled", value: 0, color: "#ef4444" },
+      { label: "Refunded", value: 0, color: "#f59e0b" },
+      { label: "Pending", value: 0, color: "#10b981" },
     ]
     if (selectedZone !== "all" || selectedPeriod !== "overall") {
       return base.map((item) => ({
         ...item,
-        value: Math.round(item.value * (0.75 + Math.random() * 0.5)),
+        value: 0,
       }))
     }
     return base
@@ -54,25 +54,25 @@ export default function AdminHome() {
 
   const getMonthlyData = () => {
     const baseData = [
-      { month: "Jan", commission: 6200, revenue: 18200, orders: 4100 },
-      { month: "Feb", commission: 5400, revenue: 16200, orders: 3800 },
-      { month: "Mar", commission: 7600, revenue: 20600, orders: 4700 },
-      { month: "Apr", commission: 8800, revenue: 23200, orders: 5100 },
-      { month: "May", commission: 9400, revenue: 25200, orders: 5400 },
-      { month: "Jun", commission: 10200, revenue: 27200, orders: 5800 },
-      { month: "Jul", commission: 11800, revenue: 30500, orders: 6400 },
-      { month: "Aug", commission: 11200, revenue: 29400, orders: 6200 },
-      { month: "Sep", commission: 9800, revenue: 26800, orders: 5900 },
-      { month: "Oct", commission: 10400, revenue: 27900, orders: 6000 },
-      { month: "Nov", commission: 12200, revenue: 31400, orders: 6600 },
-      { month: "Dec", commission: 13900, revenue: 34200, orders: 7100 },
+      { month: "Jan", commission: 0, revenue: 0, orders: 0 },
+      { month: "Feb", commission: 0, revenue: 0, orders: 0 },
+      { month: "Mar", commission: 0, revenue: 0, orders: 0 },
+      { month: "Apr", commission: 0, revenue: 0, orders: 0 },
+      { month: "May", commission: 0, revenue: 0, orders: 0 },
+      { month: "Jun", commission: 0, revenue: 0, orders: 0 },
+      { month: "Jul", commission: 0, revenue: 0, orders: 0 },
+      { month: "Aug", commission: 0, revenue: 0, orders: 0 },
+      { month: "Sep", commission: 0, revenue: 0, orders: 0 },
+      { month: "Oct", commission: 0, revenue: 0, orders: 0 },
+      { month: "Nov", commission: 0, revenue: 0, orders: 0 },
+      { month: "Dec", commission: 0, revenue: 0, orders: 0 },
     ]
     if (selectedZone !== "all" || selectedPeriod !== "overall") {
       return baseData.map((m) => ({
         ...m,
-        commission: Math.round(m.commission * (0.8 + Math.random() * 0.4)),
-        revenue: Math.round(m.revenue * (0.8 + Math.random() * 0.4)),
-        orders: Math.round(m.orders * (0.8 + Math.random() * 0.4)),
+        commission: 0,
+        revenue: 0,
+        orders: 0,
       }))
     }
     return baseData
@@ -91,12 +91,7 @@ export default function AdminHome() {
     fill: item.color,
   }))
 
-  const activityFeed = [
-    { title: "New restaurant onboarded", detail: "Urban Spoon, Zone 4", time: "8m" },
-    { title: "Payout cycle closed", detail: "₹12.4L processed", time: "36m" },
-    { title: "SLA recovered", detail: "Late orders reduced by 6%", time: "1h" },
-    { title: "Ad campaign live", detail: "Weekend boost · 18% CTR", time: "2h" },
-  ]
+  const activityFeed = []
 
   return (
     <div className="px-4 pb-10 lg:px-6 pt-4">
@@ -171,7 +166,7 @@ export default function AdminHome() {
             />
             <MetricCard
               title="Active partners"
-              value="1,482"
+              value="0"
               helper="Vendors & couriers"
               icon={<Users className="h-5 w-5 text-cyan-600" />}
               accent="bg-cyan-200/40"
@@ -297,7 +292,7 @@ export default function AdminHome() {
             <Card className="border-neutral-200 bg-white">
               <CardHeader className="flex items-center justify-between border-b border-neutral-200 pb-4">
                 <CardTitle className="text-lg text-neutral-900">Momentum snapshot</CardTitle>
-                <span className="text-xs text-emerald-600">+9.4% vs last period</span>
+                <span className="text-xs text-neutral-500">No data available</span>
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="h-64">

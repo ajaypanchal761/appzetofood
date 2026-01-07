@@ -71,8 +71,21 @@ export const addBonus = asyncHandler(async (req, res) => {
       });
     }
 
+    // Store old balance for logging
+    const oldBalance = wallet.totalBalance || 0;
+    const oldPocketBalance = (wallet.totalBalance || 0) - (wallet.cashInHand || 0);
+
+    // Log before adding transaction
+    logger.info(`📝 Before adding bonus:`, {
+      walletId: wallet._id,
+      currentTotalBalance: wallet.totalBalance,
+      currentTotalEarned: wallet.totalEarned,
+      currentCashInHand: wallet.cashInHand,
+      bonusAmount: bonusAmount
+    });
+
     // Add bonus transaction
-    wallet.addTransaction({
+    const transaction = wallet.addTransaction({
       amount: bonusAmount,
       type: 'bonus',
       status: 'Completed',
@@ -87,12 +100,75 @@ export const addBonus = asyncHandler(async (req, res) => {
       }
     });
 
-    // Save wallet
-    await wallet.save();
+    // Log after adding transaction (before save)
+    logger.info(`📝 After addTransaction (before save):`, {
+      walletId: wallet._id,
+      totalBalance: wallet.totalBalance,
+      totalEarned: wallet.totalEarned,
+      transactionAmount: transaction.amount,
+      transactionType: transaction.type,
+      transactionStatus: transaction.status
+    });
 
-    // Get the last transaction (the one we just added)
-    const transactionsArray = wallet.transactions || [];
-    const transaction = transactionsArray.length > 0 ? transactionsArray[transactionsArray.length - 1] : null;
+    // Mark wallet as modified to ensure Mongoose saves all changes
+    wallet.markModified('transactions');
+    wallet.markModified('totalBalance');
+    wallet.markModified('totalEarned');
+    
+    // Save wallet (this will update totalBalance and totalEarned)
+    await wallet.save();
+    
+    // Double-check: Verify wallet was saved correctly
+    const verifyWallet = await DeliveryWallet.findById(wallet._id);
+    if (verifyWallet.totalBalance !== wallet.totalBalance) {
+      logger.error(`❌ Wallet balance mismatch after save! Expected: ${wallet.totalBalance}, Got: ${verifyWallet.totalBalance}`);
+    }
+
+    // Log after save
+    logger.info(`📝 After wallet.save():`, {
+      walletId: wallet._id,
+      totalBalance: wallet.totalBalance,
+      totalEarned: wallet.totalEarned
+    });
+
+    // Reload wallet from database to ensure we have the latest data
+    const updatedWallet = await DeliveryWallet.findById(wallet._id);
+    
+    if (!updatedWallet) {
+      logger.error(`❌ Wallet not found after save: ${wallet._id}`);
+      return errorResponse(res, 500, 'Failed to update wallet');
+    }
+
+    // Verify the balance was updated
+    const newBalance = updatedWallet.totalBalance || 0;
+    const newPocketBalance = updatedWallet.totalBalance || 0; // Pocket balance = total balance
+    
+    // Log final state
+    logger.info(`📝 Final wallet state:`, {
+      walletId: updatedWallet._id,
+      newTotalBalance: newBalance,
+      newPocketBalance: newPocketBalance,
+      totalEarned: updatedWallet.totalEarned,
+      cashInHand: updatedWallet.cashInHand,
+      transactionsCount: updatedWallet.transactions.length,
+      lastTransaction: updatedWallet.transactions[updatedWallet.transactions.length - 1]
+    });
+    
+    logger.info(`✅ Bonus added successfully:`, {
+      deliveryPartnerId: deliveryPartnerId,
+      bonusAmount: bonusAmount,
+      oldBalance: oldBalance,
+      newBalance: newBalance,
+      balanceIncrease: newBalance - oldBalance,
+      oldPocketBalance: oldPocketBalance,
+      newPocketBalance: newPocketBalance,
+      pocketBalanceIncrease: newPocketBalance - oldPocketBalance,
+      totalEarned: updatedWallet.totalEarned,
+      cashInHand: updatedWallet.cashInHand,
+      transactionId: transaction._id?.toString()
+    });
+
+    // Transaction is already available from addTransaction() call above
 
     // Safe helper to convert ID to string
     const safeIdToString = (id) => {
@@ -123,8 +199,13 @@ export const addBonus = asyncHandler(async (req, res) => {
         reference: reference || null
       },
       wallet: {
-        totalBalance: (wallet && wallet.totalBalance !== undefined) ? wallet.totalBalance : 0,
-        totalEarned: (wallet && wallet.totalEarned !== undefined) ? wallet.totalEarned : 0
+        totalBalance: newBalance,
+        totalEarned: (updatedWallet && updatedWallet.totalEarned !== undefined) ? updatedWallet.totalEarned : 0,
+        cashInHand: (updatedWallet && updatedWallet.cashInHand !== undefined) ? updatedWallet.cashInHand : 0,
+        pocketBalance: newPocketBalance, // Pocket balance = total balance (includes bonus)
+        bonusAdded: bonusAmount,
+        balanceBefore: oldBalance,
+        balanceAfter: newBalance
       },
       delivery: {
         _id: (delivery && delivery._id) ? safeIdToString(delivery._id) : null,

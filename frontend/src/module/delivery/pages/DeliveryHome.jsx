@@ -531,8 +531,20 @@ export default function DeliveryHome() {
   // Calculate today's gigs count
   const todayGigsCount = bookedGigs.filter(gig => gig.date === todayDateKey).length
 
-  // Calculate weekly earnings from wallet transactions
-  const weeklyEarnings = calculatePeriodEarnings(walletState, 'week') || 0
+  // Calculate weekly earnings from wallet transactions (only payment, not bonus for guarantee display)
+  // Bonus is included in totalBalance and pocket balance, but not in earnings guarantee
+  const weeklyEarnings = walletState?.transactions
+    ?.filter(t => {
+      if (t.type !== 'payment' || t.status !== 'Completed') return false
+      const now = new Date()
+      const startOfWeek = new Date(now)
+      startOfWeek.setDate(now.getDate() - now.getDay())
+      startOfWeek.setHours(0, 0, 0, 0)
+      const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+      if (!transactionDate) return false
+      return transactionDate >= startOfWeek && transactionDate <= now
+    })
+    .reduce((sum, t) => sum + (t.amount || 0), 0) || 0
 
   // Calculate weekly orders count from transactions
   const calculateWeeklyOrders = () => {
@@ -556,14 +568,80 @@ export default function DeliveryHome() {
 
   const weeklyOrders = calculateWeeklyOrders()
 
-  // Earnings Guarantee - Calculate from real data (no default values)
-  // Current values come from real wallet transactions
-  // If no transactions, show 0 for everything (no defaults)
-  const hasTransactions = walletState?.transactions && walletState.transactions.length > 0
-  const earningsGuaranteeTarget = hasTransactions ? 180 : 0 // Only show target if there's data
-  const earningsGuaranteeOrdersTarget = hasTransactions ? 4 : 0 // Only show target if there's data
-  const earningsGuaranteeCurrentOrders = weeklyOrders
-  const earningsGuaranteeCurrentEarnings = weeklyEarnings
+  // State for active earning addon
+  const [activeEarningAddon, setActiveEarningAddon] = useState(null)
+
+  // Fetch active earning addon offers
+  useEffect(() => {
+    const fetchActiveEarningAddons = async () => {
+      try {
+        const response = await deliveryAPI.getActiveEarningAddons()
+        console.log('Active earning addons response:', response?.data)
+        
+        if (response?.data?.success && response?.data?.data?.activeOffers) {
+          const offers = response.data.data.activeOffers
+          console.log('Active offers found:', offers)
+          
+          // Get the first valid active offer (prioritize isValid, then isUpcoming, then any active status)
+          const activeOffer = offers.find(offer => offer.isValid) || 
+                             offers.find(offer => offer.isUpcoming) ||
+                             offers.find(offer => offer.status === 'active') || 
+                             offers[0] || 
+                             null
+          
+          console.log('Selected active offer:', activeOffer)
+          setActiveEarningAddon(activeOffer)
+        } else {
+          console.log('No active offers found in response')
+          setActiveEarningAddon(null)
+        }
+      } catch (error) {
+        console.error('Error fetching active earning addons:', error)
+        if (error.code === 'ERR_NETWORK') {
+          console.warn('Network error - make sure backend server is running and route is registered')
+        } else {
+          console.error('Error details:', error.response?.data || error.message)
+        }
+        setActiveEarningAddon(null)
+      }
+    }
+
+    // Fetch immediately on mount
+    fetchActiveEarningAddons()
+
+    // Refresh every 5 seconds to get latest offers
+    const refreshInterval = setInterval(() => {
+      fetchActiveEarningAddons()
+    }, 5000)
+
+    // Refresh when page becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchActiveEarningAddons()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Also listen for focus events for instant refresh
+    const handleFocus = () => {
+      fetchActiveEarningAddons()
+    }
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
+
+  // Earnings Guarantee - Use active earning addon if available, otherwise show 0
+  // When no offer is active, show 0 of 0 and ₹0
+  const earningsGuaranteeTarget = activeEarningAddon?.earningAmount || 0
+  const earningsGuaranteeOrdersTarget = activeEarningAddon?.requiredOrders || 0
+  // Only show current orders/earnings if there's an active offer
+  const earningsGuaranteeCurrentOrders = activeEarningAddon ? (activeEarningAddon.currentOrders ?? weeklyOrders) : 0
+  const earningsGuaranteeCurrentEarnings = activeEarningAddon ? weeklyEarnings : 0
   const ordersProgress = earningsGuaranteeOrdersTarget > 0 
     ? Math.min(earningsGuaranteeCurrentOrders / earningsGuaranteeOrdersTarget, 1) 
     : 0
@@ -571,8 +649,14 @@ export default function DeliveryHome() {
     ? Math.min(earningsGuaranteeCurrentEarnings / earningsGuaranteeTarget, 1) 
     : 0
 
-  // Get week end date for valid till
+  // Get week end date for valid till - use offer end date if available
   const getWeekEndDate = () => {
+    if (activeEarningAddon?.endDate) {
+      const endDate = new Date(activeEarningAddon.endDate)
+      const day = endDate.getDate()
+      const month = endDate.toLocaleString('en-US', { month: 'short' })
+      return `${day} ${month}`
+    }
     const now = new Date()
     const endOfWeek = new Date(now)
     endOfWeek.setDate(now.getDate() - now.getDay() + 6) // End of week (Saturday)
@@ -582,6 +666,8 @@ export default function DeliveryHome() {
   }
 
   const weekEndDate = getWeekEndDate()
+  // Offer is live if it's valid (started) or upcoming (not started yet but active)
+  const isOfferLive = activeEarningAddon?.isValid || activeEarningAddon?.isUpcoming || false
 
   // Calculate total hours worked today (prefer store, then calculated; default to 0)
   const calculatedHours = bookedGigs
@@ -3736,10 +3822,12 @@ export default function DeliveryHome() {
                     <h2 className="text-lg font-bold text-white mb-1">Earnings Guarantee</h2>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-white">Valid till {weekEndDate}</span>
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-sm text-green-600 font-medium">Live</span>
-                      </div>
+                      {isOfferLive && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-sm text-green-600 font-medium">Live</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   {/* Summary Box */}
@@ -3786,7 +3874,7 @@ export default function DeliveryHome() {
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-xl font-bold text-gray-900">{earningsGuaranteeCurrentOrders} of {earningsGuaranteeOrdersTarget}</span>
+                        <span className="text-xl font-bold text-gray-900">{earningsGuaranteeCurrentOrders} of {earningsGuaranteeOrdersTarget || 0}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 mt-3">

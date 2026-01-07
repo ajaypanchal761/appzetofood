@@ -1,15 +1,39 @@
 import { useState, useMemo, useEffect } from "react"
-import { Search, Wallet, Settings, Folder, Download, ChevronDown, FileText, FileSpreadsheet, Code, Check, Columns, Loader2 } from "lucide-react"
+import { Search, Wallet, Settings, Folder, Download, ChevronDown, FileText, FileSpreadsheet, Check, Columns, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { exportBonusToCSV, exportBonusToExcel, exportBonusToPDF, exportBonusToJSON } from "../../components/deliveryman/deliverymanExportUtils"
+import { exportBonusToExcel, exportBonusToPDF } from "../../components/deliveryman/deliverymanExportUtils"
 import { adminAPI } from "@/lib/api"
+
+// Helper function to format bonus amount properly
+const formatBonusAmount = (transaction) => {
+  // Use raw amount if available, otherwise clean the bonus string
+  if (transaction.amount !== undefined && transaction.amount !== null) {
+    return `₹${parseFloat(transaction.amount).toFixed(2)}`
+  }
+  
+  if (!transaction.bonus) return '₹0.00'
+  
+  // Clean the bonus string - remove superscript characters
+  let cleaned = transaction.bonus.toString()
+    .replace(/¹/g, '') // Remove superscript 1
+    .replace(/[\u2070-\u207F\u2080-\u208F]/g, '') // Remove all superscript characters
+    .trim()
+  
+  // Extract numeric value
+  const numericMatch = cleaned.match(/[\d.]+/)
+  if (numericMatch) {
+    const amount = parseFloat(numericMatch[0])
+    return `₹${amount.toFixed(2)}`
+  }
+  
+  return '₹0.00'
+}
 
 export default function DeliverymanBonus() {
   const [formData, setFormData] = useState({
     deliveryPartnerId: "",
     amount: "",
-    reference: "",
   })
   const [searchQuery, setSearchQuery] = useState("")
   const [transactions, setTransactions] = useState([])
@@ -23,9 +47,9 @@ export default function DeliverymanBonus() {
   const [visibleColumns, setVisibleColumns] = useState({
     si: true,
     transactionId: true,
+    deliveryBoyId: true,
     deliveryman: true,
     bonus: true,
-    reference: true,
     createdAt: true,
   })
 
@@ -86,7 +110,7 @@ export default function DeliverymanBonus() {
     return transactions.filter(transaction =>
       transaction.deliveryman?.toLowerCase().includes(query) ||
       transaction.transactionId?.toLowerCase().includes(query) ||
-      transaction.reference?.toLowerCase().includes(query)
+      transaction.deliveryId?.toLowerCase().includes(query)
     )
   }, [transactions, searchQuery])
 
@@ -119,15 +143,14 @@ export default function DeliverymanBonus() {
     // Log request details
     console.log("Submitting bonus with data:", {
       deliveryPartnerId: formData.deliveryPartnerId,
-      amount: formData.amount,
-      reference: formData.reference
+      amount: formData.amount
     })
     
     try {
       const response = await adminAPI.addDeliveryPartnerBonus(
         formData.deliveryPartnerId,
         formData.amount,
-        formData.reference
+        '' // No reference
       )
       
       console.log("Bonus response:", response)
@@ -151,7 +174,7 @@ export default function DeliverymanBonus() {
           setTransactions(formatted)
         }
         
-        setFormData({ deliveryPartnerId: "", amount: "", reference: "" })
+        setFormData({ deliveryPartnerId: "", amount: "" })
         setShowSuccessDialog(true)
       } else {
         setError("Unexpected response format. Please check console for details.")
@@ -208,7 +231,6 @@ export default function DeliverymanBonus() {
     setFormData({
       deliveryPartnerId: "",
       amount: "",
-      reference: "",
     })
     setFormErrors({})
     setError("")
@@ -220,10 +242,9 @@ export default function DeliverymanBonus() {
       return
     }
     switch (format) {
-      case "csv": exportBonusToCSV(filteredTransactions); break
       case "excel": exportBonusToExcel(filteredTransactions); break
       case "pdf": exportBonusToPDF(filteredTransactions); break
-      case "json": exportBonusToJSON(filteredTransactions); break
+      default: break
     }
   }
 
@@ -235,9 +256,9 @@ export default function DeliverymanBonus() {
     setVisibleColumns({
       si: true,
       transactionId: true,
+      deliveryBoyId: true,
       deliveryman: true,
       bonus: true,
-      reference: true,
       createdAt: true,
     })
   }
@@ -245,9 +266,9 @@ export default function DeliverymanBonus() {
   const columnsConfig = {
     si: "Serial Number",
     transactionId: "Transaction ID",
+    deliveryBoyId: "Delivery Boy ID",
     deliveryman: "Deliveryman",
     bonus: "Bonus",
-    reference: "Reference",
     createdAt: "Created At",
   }
 
@@ -310,19 +331,6 @@ export default function DeliverymanBonus() {
                 {formErrors.amount && <p className="text-xs text-red-500 mt-1">{formErrors.amount}</p>}
               </div>
 
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Reference (Optional)
-                </label>
-                <textarea
-                  value={formData.reference}
-                  onChange={(e) => handleInputChange("reference", e.target.value)}
-                  placeholder="Enter reference"
-                  rows={4}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
-                  disabled={submitting}
-                />
-              </div>
               {error && (
                 <div className="md:col-span-2">
                   <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>
@@ -383,10 +391,6 @@ export default function DeliverymanBonus() {
                 <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 animate-in fade-in-0 zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95">
                   <DropdownMenuLabel>Export Format</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport("csv")} className="cursor-pointer">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Export as CSV
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport("excel")} className="cursor-pointer">
                     <FileSpreadsheet className="w-4 h-4 mr-2" />
                     Export as Excel
@@ -394,10 +398,6 @@ export default function DeliverymanBonus() {
                   <DropdownMenuItem onClick={() => handleExport("pdf")} className="cursor-pointer">
                     <FileText className="w-4 h-4 mr-2" />
                     Export as PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("json")} className="cursor-pointer">
-                    <Code className="w-4 h-4 mr-2" />
-                    Export as JSON
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -429,35 +429,48 @@ export default function DeliverymanBonus() {
               <table className="w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">SI</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Transaction Id</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">DeliveryMan</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Bonus</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Reference</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Created At</th>
+                    {visibleColumns.si && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">SI</th>}
+                    {visibleColumns.transactionId && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Transaction Id</th>}
+                    {visibleColumns.deliveryBoyId && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Delivery Boy ID</th>}
+                    {visibleColumns.deliveryman && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">DeliveryMan</th>}
+                    {visibleColumns.bonus && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Bonus</th>}
+                    {visibleColumns.reference && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Reference</th>}
+                    {visibleColumns.createdAt && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Created At</th>}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
                   {filteredTransactions.map((transaction) => (
                     <tr key={transaction.sl} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-slate-700">{transaction.sl}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-700">{transaction.transactionId}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-700">{transaction.deliveryman}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-slate-900">{transaction.bonus}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-700">{transaction.reference}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-slate-700">{transaction.createdAt}</span>
-                      </td>
+                      {visibleColumns.si && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm font-medium text-slate-700">{transaction.sl}</span>
+                        </td>
+                      )}
+                      {visibleColumns.transactionId && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-slate-700">{transaction.transactionId}</span>
+                        </td>
+                      )}
+                      {visibleColumns.deliveryBoyId && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-slate-700 font-medium">{transaction.deliveryId || 'N/A'}</span>
+                        </td>
+                      )}
+                      {visibleColumns.deliveryman && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-slate-700">{transaction.deliveryman}</span>
+                        </td>
+                      )}
+                      {visibleColumns.bonus && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm font-medium text-slate-900">{formatBonusAmount(transaction)}</span>
+                        </td>
+                      )}
+                      {visibleColumns.createdAt && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-slate-700">{transaction.createdAt}</span>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

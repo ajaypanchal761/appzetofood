@@ -14,7 +14,6 @@ import {
   CheckCircle,
   Receipt,
   FileText as FileTextIcon,
-  FuelIcon,
   Wallet as WalletIcon,
   Sparkles,
   IndianRupee
@@ -61,6 +60,8 @@ export default function PocketPage() {
   const [bankDetailsFilled, setBankDetailsFilled] = useState(false)
   const [dashboardData, setDashboardData] = useState(null)
   const [dashboardLoading, setDashboardLoading] = useState(true)
+  const [activeEarningAddon, setActiveEarningAddon] = useState(null)
+  const [earningAddonLoading, setEarningAddonLoading] = useState(true)
 
   const {
     isOnline,
@@ -133,9 +134,40 @@ export default function PocketPage() {
 
   // Calculate balances
   const balances = calculateDeliveryBalances(walletState)
+  
+  // Debug: Log wallet state and balances
+  useEffect(() => {
+    console.log('💰 Wallet State:', walletState)
+    console.log('💰 Calculated Balances:', balances)
+    // Pocket balance = total balance (includes bonus)
+    const calculatedPocketBalance = walletState?.totalBalance || balances.totalBalance || 0
+    console.log('💰 Pocket Balance (same as Total Balance):', calculatedPocketBalance)
+    console.log('💰 Total Balance (includes bonus):', walletState?.totalBalance || balances.totalBalance)
+    console.log('💰 Cash In Hand:', walletState?.cashInHand || balances.cashInHand)
+    // Check for bonus transactions
+    const bonusTransactions = walletState?.transactions?.filter(t => t.type === 'bonus' && t.status === 'Completed') || []
+    console.log('💰 Bonus Transactions:', bonusTransactions)
+    if (bonusTransactions.length > 0) {
+      const totalBonus = bonusTransactions.reduce((sum, t) => sum + (t.amount || 0), 0)
+      console.log('💰 Total Bonus Amount:', totalBonus)
+      console.log('💰 Pocket Balance should include this bonus:', totalBonus)
+    }
+  }, [walletState, balances])
 
-  // Calculate weekly earnings from wallet transactions
-  const weeklyEarnings = calculatePeriodEarnings(walletState, 'week') || 0
+  // Calculate weekly earnings from wallet transactions (only payment, not bonus for guarantee display)
+  // Bonus is included in totalBalance and pocket balance, but not in earnings guarantee
+  const weeklyEarnings = walletState?.transactions
+    ?.filter(t => {
+      if (t.type !== 'payment' || t.status !== 'Completed') return false
+      const now = new Date()
+      const startOfWeek = new Date(now)
+      startOfWeek.setDate(now.getDate() - now.getDay())
+      startOfWeek.setHours(0, 0, 0, 0)
+      const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+      if (!transactionDate) return false
+      return transactionDate >= startOfWeek && transactionDate <= now
+    })
+    .reduce((sum, t) => sum + (t.amount || 0), 0) || 0
 
   // Calculate weekly orders count from transactions
   const calculateWeeklyOrders = () => {
@@ -159,14 +191,88 @@ export default function PocketPage() {
 
   const weeklyOrders = calculateWeeklyOrders()
 
-  // Earnings Guarantee - Calculate from real data (no default values)
-  // Current values come from real wallet transactions
-  // If no transactions, show 0 for everything (no defaults)
-  const hasTransactions = walletState?.transactions && walletState.transactions.length > 0
-  const earningsGuaranteeTarget = hasTransactions ? 180 : 0 // Only show target if there's data
-  const earningsGuaranteeOrdersTarget = hasTransactions ? 4 : 0 // Only show target if there's data
-  const earningsGuaranteeCurrentOrders = weeklyOrders
-  const earningsGuaranteeCurrentEarnings = weeklyEarnings
+  // Fetch active earning addon offers
+  useEffect(() => {
+    const fetchActiveEarningAddons = async () => {
+      try {
+        setEarningAddonLoading(true)
+        console.log('🔄 Fetching active earning addons...')
+        const response = await deliveryAPI.getActiveEarningAddons()
+        console.log('✅ Active earning addons response:', response?.data)
+        
+        if (response?.data?.success && response?.data?.data?.activeOffers) {
+          const offers = response.data.data.activeOffers
+          console.log('📦 Active offers found:', offers.length, offers)
+          
+          // Get the first valid active offer (prioritize isValid, then isUpcoming, then any active status)
+          const activeOffer = offers.find(offer => offer.isValid) || 
+                             offers.find(offer => offer.isUpcoming) ||
+                             offers.find(offer => offer.status === 'active') || 
+                             offers[0] || 
+                             null
+          
+          console.log('🎯 Selected active offer:', activeOffer)
+          setActiveEarningAddon(activeOffer)
+        } else {
+          console.log('ℹ️ No active offers found in response')
+          setActiveEarningAddon(null)
+        }
+      } catch (error) {
+        console.error('❌ Error fetching active earning addons:', error)
+        if (error.code === 'ERR_NETWORK') {
+          console.error('🔴 Network Error - Backend server may not be running!')
+          console.error('💡 Please ensure:')
+          console.error('   1. Backend server is running on http://localhost:5000')
+          console.error('   2. Backend server has been restarted after adding the new route')
+          console.error('   3. Route /api/delivery/earnings/active-offers is registered')
+          console.error('   4. No CORS issues blocking the request')
+        } else if (error.response) {
+          console.error('⚠️ Server responded with error:', error.response.status, error.response.data)
+        } else {
+          console.error('⚠️ Error details:', error.message)
+        }
+        setActiveEarningAddon(null)
+      } finally {
+        setEarningAddonLoading(false)
+      }
+    }
+
+    // Fetch immediately on mount
+    fetchActiveEarningAddons()
+
+    // Refresh every 5 seconds to get latest offers
+    const refreshInterval = setInterval(() => {
+      fetchActiveEarningAddons()
+    }, 3000) // Refresh every 3 seconds - FAST REFRESH
+
+    // Refresh when page becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchActiveEarningAddons()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Also listen for focus events for instant refresh
+    const handleFocus = () => {
+      fetchActiveEarningAddons()
+    }
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
+
+  // Earnings Guarantee - Use active earning addon if available, otherwise show 0
+  // When no offer is active, show 0 of 0 and ₹0
+  const earningsGuaranteeTarget = activeEarningAddon?.earningAmount || 0
+  const earningsGuaranteeOrdersTarget = activeEarningAddon?.requiredOrders || 0
+  // Only show current orders/earnings if there's an active offer
+  const earningsGuaranteeCurrentOrders = activeEarningAddon ? (activeEarningAddon.currentOrders ?? weeklyOrders) : 0
+  const earningsGuaranteeCurrentEarnings = activeEarningAddon ? weeklyEarnings : 0
   const ordersProgress = earningsGuaranteeOrdersTarget > 0 
     ? Math.min(earningsGuaranteeCurrentOrders / earningsGuaranteeOrdersTarget, 1) 
     : 0
@@ -174,8 +280,14 @@ export default function PocketPage() {
     ? Math.min(earningsGuaranteeCurrentEarnings / earningsGuaranteeTarget, 1) 
     : 0
 
-  // Get week end date for valid till
+  // Get week end date for valid till - use offer end date if available
   const getWeekEndDate = () => {
+    if (activeEarningAddon?.endDate) {
+      const endDate = new Date(activeEarningAddon.endDate)
+      const day = endDate.getDate()
+      const month = endDate.toLocaleString('en-US', { month: 'short' })
+      return `${day} ${month}`
+    }
     const now = new Date()
     const endOfWeek = new Date(now)
     endOfWeek.setDate(now.getDate() - now.getDay() + 6) // End of week (Saturday)
@@ -185,12 +297,55 @@ export default function PocketPage() {
   }
 
   const weekEndDate = getWeekEndDate()
+  // Offer is live if it's valid (started) or upcoming (not started yet but active)
+  const isOfferLive = activeEarningAddon?.isValid || activeEarningAddon?.isUpcoming || false
 
-  // Pocket balance and cash limit - using balances from walletState
-  // Pocket balance = total balance minus cash in hand
-  // If negative, it means the delivery person owes money (cash taken exceeds earnings)
-  // If cashInHand > totalBalance, pocket balance is negative
-  const pocketBalance = (balances.totalBalance || 0) - (balances.cashInHand || 0)
+  // Calculate total bonus amount from all bonus transactions
+  const totalBonus = walletState?.transactions
+    ?.filter(t => t.type === 'bonus' && t.status === 'Completed')
+    .reduce((sum, t) => sum + (t.amount || 0), 0) || 0
+  
+  // Pocket balance - shows total balance (includes bonus)
+  // Total balance = all earnings + bonus - withdrawals
+  // This is what delivery partner can withdraw
+  // IMPORTANT: Use walletState.pocketBalance if available (from API), otherwise use totalBalance
+  let pocketBalance = walletState?.pocketBalance !== undefined 
+    ? walletState.pocketBalance 
+    : (walletState?.totalBalance || balances.totalBalance || 0)
+  
+  // IMPORTANT: Ensure pocket balance includes bonus
+  // If backend totalBalance is 0 but we have bonus, calculate it manually
+  // This ensures bonus is always reflected in pocket balance
+  if (pocketBalance === 0 && totalBonus > 0) {
+    // If totalBalance is 0 but we have bonus, pocket balance = bonus
+    pocketBalance = totalBonus
+  } else if (pocketBalance > 0 && totalBonus > 0) {
+    // Verify pocket balance includes bonus
+    // Calculate expected: Earnings + Bonus - Withdrawals
+    const totalWithdrawn = balances.totalWithdrawn || 0
+    const expectedBalance = weeklyEarnings + totalBonus - totalWithdrawn
+    // Use the higher value to ensure bonus is included
+    if (expectedBalance > pocketBalance) {
+      pocketBalance = expectedBalance
+    }
+  }
+  
+  // Debug: Log pocket balance calculation
+  useEffect(() => {
+    const bonusTransactions = walletState?.transactions?.filter(t => t.type === 'bonus' && t.status === 'Completed') || []
+    const calculatedTotalBonus = bonusTransactions.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
+    
+    console.log('💰 FINAL Pocket Balance Display:', {
+      pocketBalance: pocketBalance,
+      walletStatePocketBalance: walletState?.pocketBalance,
+      walletStateTotalBalance: walletState?.totalBalance,
+      balancesTotalBalance: balances.totalBalance,
+      totalBonus: calculatedTotalBonus,
+      weeklyEarnings: weeklyEarnings,
+      bonusTransactions: bonusTransactions
+    })
+    // Only depend on walletState and balances - totalBonus and weeklyEarnings are derived from these
+  }, [pocketBalance, walletState, balances])
   // Available cash limit = cash in hand (real data from wallet)
   const availableCashLimit = balances.cashInHand || 0
   const depositAmount = pocketBalance < 0 ? Math.abs(pocketBalance) : 0
@@ -248,6 +403,13 @@ export default function PocketPage() {
         setWalletLoading(true)
         const walletData = await fetchDeliveryWallet()
         setWalletState(walletData)
+        console.log('💰 Wallet data fetched:', walletData)
+        console.log('💰 Total Balance from API:', walletData?.totalBalance)
+        console.log('💰 Pocket Balance from API:', walletData?.pocketBalance)
+        console.log('💰 Bonus Transactions:', walletData?.transactions?.filter(t => t.type === 'bonus'))
+        const totalBonus = walletData?.transactions?.filter(t => t.type === 'bonus' && t.status === 'Completed')
+          .reduce((sum, t) => sum + (t.amount || 0), 0) || 0
+        console.log('💰 Total Bonus Amount:', totalBonus)
       } catch (error) {
         console.error('Error fetching wallet data:', error)
         // Keep empty state on error
@@ -265,6 +427,40 @@ export default function PocketPage() {
     }
 
     fetchWalletData()
+
+    // Refresh wallet data every 3 seconds to get latest balance (including bonus) - FAST REFRESH
+    const refreshInterval = setInterval(() => {
+      fetchWalletData()
+    }, 3000)
+
+    // INSTANT refresh when page becomes visible (user switches back to tab) - BONUS SHOWS FAST
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchWalletData() // Instant refresh when user comes back
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // INSTANT refresh when window gets focus - BONUS SHOWS FAST
+    const handleFocus = () => {
+      fetchWalletData() // Instant refresh when window gets focus
+    }
+    window.addEventListener('focus', handleFocus)
+
+    // Listen for custom wallet update events
+    const handleWalletUpdate = () => {
+      fetchWalletData()
+    }
+    window.addEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
+    window.addEventListener('storage', handleWalletUpdate)
+
+    return () => {
+      clearInterval(refreshInterval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
+      window.removeEventListener('storage', handleWalletUpdate)
+    }
   }, [location.pathname])
 
   useEffect(() => {
@@ -583,10 +779,12 @@ export default function PocketPage() {
                 <h2 className="text-lg font-bold text-white mb-1">Earnings Guarantee</h2>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-white">Valid till {weekEndDate}</span>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-sm text-green-600 font-medium">Live</span>
-                  </div>
+                  {isOfferLive && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-sm text-green-600 font-medium">Live</span>
+                    </div>
+                  )}
                 </div>
               </div>
               {/* Summary Box */}
@@ -633,7 +831,7 @@ export default function PocketPage() {
                     />
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xl font-bold text-gray-900">{earningsGuaranteeCurrentOrders} of {earningsGuaranteeOrdersTarget}</span>
+                    <span className="text-xl font-bold text-gray-900">{earningsGuaranteeCurrentOrders} of {earningsGuaranteeOrdersTarget || 0}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-3">
@@ -834,7 +1032,7 @@ export default function PocketPage() {
             >
               <CardContent className="p-4 flex flex-col items-start text-start">
                 <div className="w-12 h-12 flex items-center justify-center mb-3">
-                  <FuelIcon className="w-8 h-8 text-black" />
+                  <UtensilsCrossed className="w-8 h-8 text-black" />
                 </div>
                 <div className="text-black text-sm font-medium">Fuel Payment</div>
               </CardContent>

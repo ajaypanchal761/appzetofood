@@ -2,7 +2,7 @@ import { ArrowLeft, AlertTriangle } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
 import {
-  getDeliveryWalletState,
+  fetchDeliveryWallet,
   calculateDeliveryBalances,
   calculatePeriodEarnings
 } from "../utils/deliveryWalletState"
@@ -10,15 +10,45 @@ import { formatCurrency } from "../../restaurant/utils/currency"
 
 export default function PocketBalancePage() {
   const navigate = useNavigate()
-  const [walletState, setWalletState] = useState(() => getDeliveryWalletState())
+  const [walletState, setWalletState] = useState({
+    totalBalance: 0,
+    cashInHand: 0,
+    totalWithdrawn: 0,
+    totalEarned: 0,
+    transactions: [],
+    joiningBonusClaimed: false
+  })
+  const [walletLoading, setWalletLoading] = useState(true)
 
-  // Listen for wallet state updates
+  // Fetch wallet data from API
   useEffect(() => {
-    const handleWalletUpdate = () => {
-      setWalletState(getDeliveryWalletState())
+    const fetchWalletData = async () => {
+      try {
+        setWalletLoading(true)
+        const walletData = await fetchDeliveryWallet()
+        setWalletState(walletData)
+      } catch (error) {
+        console.error('Error fetching wallet data:', error)
+        setWalletState({
+          totalBalance: 0,
+          cashInHand: 0,
+          totalWithdrawn: 0,
+          totalEarned: 0,
+          transactions: [],
+          joiningBonusClaimed: false
+        })
+      } finally {
+        setWalletLoading(false)
+      }
     }
 
-    handleWalletUpdate()
+    fetchWalletData()
+
+    // Listen for wallet state updates
+    const handleWalletUpdate = () => {
+      fetchWalletData()
+    }
+
     window.addEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
     window.addEventListener('storage', handleWalletUpdate)
 
@@ -30,15 +60,39 @@ export default function PocketBalancePage() {
 
   const balances = calculateDeliveryBalances(walletState)
   
-  // Calculate pocket balance (totalBalance - cashInHand)
-  // If negative, delivery person owes money
-  const pocketBalance = (balances.totalBalance || 0) - (balances.cashInHand || 0)
-  
-  // Calculate weekly earnings for the current week
+  // Calculate weekly earnings for the current week (excludes bonus)
   const weeklyEarnings = calculatePeriodEarnings(walletState, 'week')
   
-  // Calculate total withdrawn
+  // Calculate total bonus amount from all bonus transactions
+  const totalBonus = walletState?.transactions
+    ?.filter(t => t.type === 'bonus' && t.status === 'Completed')
+    .reduce((sum, t) => sum + (t.amount || 0), 0) || 0
+  
+  // Calculate total withdrawn (needed for pocket balance calculation)
   const totalWithdrawn = balances.totalWithdrawn || 0
+  
+  // Pocket balance = total balance (includes bonus + earnings)
+  // Formula: Pocket Balance = Earnings + Bonus - Withdrawals
+  // Use walletState.pocketBalance if available, otherwise calculate from totalBalance
+  let pocketBalance = walletState?.pocketBalance !== undefined 
+    ? walletState.pocketBalance 
+    : (walletState?.totalBalance || balances.totalBalance || 0)
+  
+  // IMPORTANT: Ensure pocket balance includes bonus
+  // If backend totalBalance is 0 but we have bonus, calculate it manually
+  // This ensures bonus is always reflected in pocket balance and withdrawable amount
+  if (pocketBalance === 0 && totalBonus > 0) {
+    // If totalBalance is 0 but we have bonus, pocket balance = bonus
+    pocketBalance = totalBonus
+  } else if (pocketBalance > 0 && totalBonus > 0) {
+    // Verify pocket balance includes bonus
+    // Calculate expected: Earnings + Bonus - Withdrawals
+    const expectedBalance = weeklyEarnings + totalBonus - totalWithdrawn
+    // Use the higher value to ensure bonus is included
+    if (expectedBalance > pocketBalance) {
+      pocketBalance = expectedBalance
+    }
+  }
   
   // Calculate cash collected (cash in hand)
   const cashCollected = balances.cashInHand || 0
@@ -49,8 +103,20 @@ export default function PocketBalancePage() {
   // Minimum balance required (can be dynamic based on business logic)
   const minBalanceRequired = 300
   
-  // Withdrawable amount = pocket balance if positive, otherwise 0
+  // Withdrawable amount = pocket balance (includes bonus + earnings)
+  // Pocket balance already includes bonus, so withdrawable amount should show it
   const withdrawableAmount = pocketBalance > 0 ? pocketBalance : 0
+  
+  // Debug logging
+  console.log('💰 PocketBalance Page Calculations:', {
+    walletStateTotalBalance: walletState?.totalBalance,
+    walletStatePocketBalance: walletState?.pocketBalance,
+    balancesTotalBalance: balances.totalBalance,
+    calculatedPocketBalance: pocketBalance,
+    totalBonus: totalBonus,
+    weeklyEarnings: weeklyEarnings,
+    withdrawableAmount: withdrawableAmount
+  })
 
   // Get current week date range
   const getCurrentWeekRange = () => {
@@ -114,6 +180,7 @@ export default function PocketBalancePage() {
       <div className="px-4 pt-2">
 
         <DetailRow label="Earnings" value={formatCurrency(weeklyEarnings)} />
+        <DetailRow label="Bonus" value={formatCurrency(totalBonus)} />
         <DetailRow label="Amount withdrawn" value={formatCurrency(totalWithdrawn)} />
         <DetailRow label="Cash collected" value={formatCurrency(cashCollected)} />
         <DetailRow label="Deductions" value={formatCurrency(deductions)} />

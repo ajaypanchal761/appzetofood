@@ -67,12 +67,17 @@ export const getWallet = asyncHandler(async (req, res) => {
       paymentCollected: t.paymentCollected
     }));
 
+    // Calculate bonus amount from transactions for logging
+    const bonusTransactions = transactions.filter(t => t.type === 'bonus' && t.status === 'Completed');
+    const totalBonus = bonusTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    
     const walletData = {
       totalBalance: wallet.totalBalance || 0,
       cashInHand: wallet.cashInHand || 0,
       totalWithdrawn: wallet.totalWithdrawn || 0,
       totalEarned: wallet.totalEarned || 0,
-      pocketBalance: (wallet.totalBalance || 0) - (wallet.cashInHand || 0),
+      // Pocket balance = total balance (includes bonus, earnings, etc.)
+      pocketBalance: wallet.totalBalance || 0,
       pendingWithdrawals: pendingWithdrawals,
       joiningBonusClaimed: wallet.joiningBonusClaimed || false,
       joiningBonusAmount: wallet.joiningBonusAmount || 0,
@@ -82,6 +87,17 @@ export const getWallet = asyncHandler(async (req, res) => {
       recentTransactions: transactions.slice(0, 10),
       totalTransactions: wallet.transactions.length
     };
+
+    // Log wallet data for debugging
+    console.log('💰 Wallet API Response:', {
+      deliveryId: delivery._id,
+      totalBalance: walletData.totalBalance,
+      pocketBalance: walletData.pocketBalance,
+      cashInHand: walletData.cashInHand,
+      totalBonus: totalBonus,
+      bonusTransactionsCount: bonusTransactions.length,
+      totalTransactions: walletData.totalTransactions
+    });
 
     return successResponse(res, 200, 'Wallet balance retrieved successfully', {
       wallet: walletData
