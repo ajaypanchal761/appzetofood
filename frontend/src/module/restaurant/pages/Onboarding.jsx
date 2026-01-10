@@ -318,7 +318,6 @@ export default function RestaurantOnboarding() {
         if (data) {
           if (data.step1) {
             setStep1((prev) => ({
-              ...prev,
               restaurantName: data.step1.restaurantName || "",
               ownerName: data.step1.ownerName || "",
               ownerEmail: data.step1.ownerEmail || "",
@@ -334,8 +333,7 @@ export default function RestaurantOnboarding() {
             }))
           }
           if (data.step2) {
-            setStep2((prev) => ({
-              ...prev,
+            setStep2({
               // Load menu images from URLs if available
               menuImages: data.step2.menuImageUrls || [],
               // Load profile image URL if available
@@ -344,27 +342,40 @@ export default function RestaurantOnboarding() {
               openingTime: data.step2.deliveryTimings?.openingTime || "",
               closingTime: data.step2.deliveryTimings?.closingTime || "",
               openDays: data.step2.openDays || [],
-            }))
+            })
           }
           if (data.step3) {
-            setStep3((prev) => ({
-              ...prev,
+            setStep3({
               panNumber: data.step3.pan?.panNumber || "",
               nameOnPan: data.step3.pan?.nameOnPan || "",
+              panImage: null, // Don't load images from API, user needs to re-upload
               gstRegistered: data.step3.gst?.isRegistered || false,
               gstNumber: data.step3.gst?.gstNumber || "",
               gstLegalName: data.step3.gst?.legalName || "",
               gstAddress: data.step3.gst?.address || "",
+              gstImage: null, // Don't load images from API, user needs to re-upload
               fssaiNumber: data.step3.fssai?.registrationNumber || "",
               fssaiExpiry: data.step3.fssai?.expiryDate
                 ? data.step3.fssai.expiryDate.slice(0, 10)
                 : "",
+              fssaiImage: null, // Don't load images from API, user needs to re-upload
               accountNumber: data.step3.bank?.accountNumber || "",
               confirmAccountNumber: data.step3.bank?.accountNumber || "",
               ifscCode: data.step3.bank?.ifscCode || "",
               accountHolderName: data.step3.bank?.accountHolderName || "",
               accountType: data.step3.bank?.accountType || "",
-            }))
+            })
+          }
+          
+          if (data.step4) {
+            setStep4({
+              estimatedDeliveryTime: data.step4.estimatedDeliveryTime || "",
+              distance: data.step4.distance || "",
+              priceRange: data.step4.priceRange || "$$",
+              featuredDish: data.step4.featuredDish || "",
+              featuredPrice: data.step4.featuredPrice || "",
+              offer: data.step4.offer || "",
+            })
           }
           
           // Determine which step to show based on completeness
@@ -372,7 +383,15 @@ export default function RestaurantOnboarding() {
           setStep(stepToShow)
         }
       } catch (err) {
-        // ignore for now
+        // Handle error gracefully - if it's a 401 (unauthorized), the user might need to login again
+        // Otherwise, just continue with empty onboarding data
+        if (err?.response?.status === 401) {
+          console.error("Authentication error fetching onboarding:", err)
+          // Don't show error to user, they can still fill the form
+          // The error might be because restaurant is not yet active (pending verification)
+        } else {
+          console.error("Error fetching onboarding data:", err)
+        }
       } finally {
         setLoading(false)
       }
@@ -381,9 +400,16 @@ export default function RestaurantOnboarding() {
   }, [])
 
   const handleUpload = async (file, folder) => {
-    const res = await uploadAPI.uploadMedia(file, { folder })
-    const d = res?.data?.data || res?.data
-    return { url: d.url, publicId: d.publicId }
+    try {
+      const res = await uploadAPI.uploadMedia(file, { folder })
+      const d = res?.data?.data || res?.data
+      return { url: d.url, publicId: d.publicId }
+    } catch (err) {
+      // Provide more informative error message for upload failures
+      const errorMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to upload image"
+      console.error("Upload error:", errorMsg, err)
+      throw new Error(`Image upload failed: ${errorMsg}`)
+    }
   }
 
   // Validation functions for each step
@@ -815,7 +841,7 @@ export default function RestaurantOnboarding() {
           <div>
             <Label className="text-xs text-gray-700">Restaurant name*</Label>
             <Input
-              value={step1.restaurantName}
+              value={step1.restaurantName || ""}
               onChange={(e) => setStep1({ ...step1, restaurantName: e.target.value })}
               className="mt-1 bg-white text-sm text-black placeholder-black"
               placeholder="Customers will see this name"
@@ -833,7 +859,7 @@ export default function RestaurantOnboarding() {
           <div>
             <Label className="text-xs text-gray-700">Full name*</Label>
             <Input
-              value={step1.ownerName}
+              value={step1.ownerName || ""}
               onChange={(e) => setStep1({ ...step1, ownerName: e.target.value })}
               className="mt-1 bg-white text-sm text-black placeholder-black"
               placeholder="Owner full name"
@@ -843,7 +869,7 @@ export default function RestaurantOnboarding() {
             <Label className="text-xs text-gray-700">Email address*</Label>
             <Input
               type="email"
-              value={step1.ownerEmail}
+              value={step1.ownerEmail || ""}
               onChange={(e) => setStep1({ ...step1, ownerEmail: e.target.value })}
               className="mt-1 bg-white text-sm text-black placeholder-black"
               placeholder="owner@example.com"
@@ -852,7 +878,7 @@ export default function RestaurantOnboarding() {
           <div>
             <Label className="text-xs text-gray-700">Phone number*</Label>
             <Input
-              value={step1.ownerPhone}
+              value={step1.ownerPhone || ""}
               onChange={(e) => setStep1({ ...step1, ownerPhone: e.target.value })}
               className="mt-1 bg-white text-sm text-black placeholder-black"
               placeholder="+91 98XXXXXX"
@@ -866,7 +892,7 @@ export default function RestaurantOnboarding() {
         <div>
           <Label className="text-xs text-gray-700">Primary contact number*</Label>
           <Input
-            value={step1.primaryContactNumber}
+            value={step1.primaryContactNumber || ""}
             onChange={(e) =>
               setStep1({ ...step1, primaryContactNumber: e.target.value })
             }
@@ -883,7 +909,7 @@ export default function RestaurantOnboarding() {
             Add your restaurant's location for order pick-up.
           </p>
           <Input
-            value={step1.location.area}
+            value={step1.location?.area || ""}
             onChange={(e) =>
               setStep1({
                 ...step1,
@@ -894,7 +920,7 @@ export default function RestaurantOnboarding() {
             placeholder="Area / Sector / Locality*"
           />
           <Input
-            value={step1.location.city}
+            value={step1.location?.city || ""}
             onChange={(e) =>
               setStep1({
                 ...step1,
@@ -905,7 +931,7 @@ export default function RestaurantOnboarding() {
             placeholder="City"
           />
           <Input
-            value={step1.location.addressLine1}
+            value={step1.location?.addressLine1 || ""}
             onChange={(e) =>
               setStep1({
                 ...step1,
@@ -916,7 +942,7 @@ export default function RestaurantOnboarding() {
             placeholder="Shop no. / building no. (optional)"
           />
           <Input
-            value={step1.location.addressLine2}
+            value={step1.location?.addressLine2 || ""}
             onChange={(e) =>
               setStep1({
                 ...step1,
@@ -927,7 +953,7 @@ export default function RestaurantOnboarding() {
             placeholder="Floor / tower (optional)"
           />
           <Input
-            value={step1.location.landmark}
+            value={step1.location?.landmark || ""}
             onChange={(e) =>
               setStep1({
                 ...step1,
@@ -1147,13 +1173,13 @@ export default function RestaurantOnboarding() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <TimeSelector
               label="Opening time"
-              value={step2.openingTime}
-              onChange={(val) => setStep2({ ...step2, openingTime: val })}
+              value={step2.openingTime || ""}
+              onChange={(val) => setStep2({ ...step2, openingTime: val || "" })}
             />
             <TimeSelector
               label="Closing time"
-              value={step2.closingTime}
-              onChange={(val) => setStep2({ ...step2, closingTime: val })}
+              value={step2.closingTime || ""}
+              onChange={(val) => setStep2({ ...step2, closingTime: val || "" })}
             />
           </div>
         </div>
@@ -1197,7 +1223,7 @@ export default function RestaurantOnboarding() {
           <div>
             <Label className="text-xs text-gray-700">PAN number</Label>
             <Input
-              value={step3.panNumber}
+              value={step3.panNumber || ""}
               onChange={(e) => setStep3({ ...step3, panNumber: e.target.value })}
               className="mt-1 bg-white text-sm text-black placeholder-black"
             />
@@ -1205,7 +1231,7 @@ export default function RestaurantOnboarding() {
           <div>
             <Label className="text-xs text-gray-700">Name on PAN</Label>
             <Input
-              value={step3.nameOnPan}
+              value={step3.nameOnPan || ""}
               onChange={(e) => setStep3({ ...step3, nameOnPan: e.target.value })}
               className="mt-1 bg-white text-sm text-black placeholder-black"
             />
@@ -1250,19 +1276,19 @@ export default function RestaurantOnboarding() {
         {step3.gstRegistered && (
           <div className="space-y-3">
             <Input
-              value={step3.gstNumber}
+              value={step3.gstNumber || ""}
               onChange={(e) => setStep3({ ...step3, gstNumber: e.target.value })}
               className="bg-white text-sm"
               placeholder="GST number"
             />
             <Input
-              value={step3.gstLegalName}
+              value={step3.gstLegalName || ""}
               onChange={(e) => setStep3({ ...step3, gstLegalName: e.target.value })}
               className="bg-white text-sm"
               placeholder="Legal name"
             />
             <Input
-              value={step3.gstAddress}
+              value={step3.gstAddress || ""}
               onChange={(e) => setStep3({ ...step3, gstAddress: e.target.value })}
               className="bg-white text-sm"
               placeholder="Registered address"
@@ -1283,7 +1309,7 @@ export default function RestaurantOnboarding() {
         <h2 className="text-lg font-semibold text-black">FSSAI details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            value={step3.fssaiNumber}
+            value={step3.fssaiNumber || ""}
             onChange={(e) => setStep3({ ...step3, fssaiNumber: e.target.value })}
             className="bg-white text-sm"
             placeholder="FSSAI number"
@@ -1339,7 +1365,7 @@ export default function RestaurantOnboarding() {
         <h2 className="text-lg font-semibold text-black">Bank account details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            value={step3.accountNumber}
+            value={step3.accountNumber || ""}
             onChange={(e) =>
               setStep3({ ...step3, accountNumber: e.target.value.trim() })
             }
@@ -1347,7 +1373,7 @@ export default function RestaurantOnboarding() {
             placeholder="Account number"
           />
           <Input
-            value={step3.confirmAccountNumber}
+            value={step3.confirmAccountNumber || ""}
             onChange={(e) =>
               setStep3({ ...step3, confirmAccountNumber: e.target.value.trim() })
             }
@@ -1357,20 +1383,20 @@ export default function RestaurantOnboarding() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            value={step3.ifscCode}
+            value={step3.ifscCode || ""}
             onChange={(e) => setStep3({ ...step3, ifscCode: e.target.value })}
             className="bg-white text-sm"
             placeholder="IFSC code"
           />
           <Input
-            value={step3.accountType}
+            value={step3.accountType || ""}
             onChange={(e) => setStep3({ ...step3, accountType: e.target.value })}
             className="bg-white text-sm"
             placeholder="Account type (savings / current)"
           />
         </div>
         <Input
-          value={step3.accountHolderName}
+          value={step3.accountHolderName || ""}
           onChange={(e) =>
             setStep3({ ...step3, accountHolderName: e.target.value })
           }
@@ -1392,7 +1418,7 @@ export default function RestaurantOnboarding() {
         <div>
           <Label className="text-xs text-gray-700">Estimated Delivery Time*</Label>
           <Input
-            value={step4.estimatedDeliveryTime}
+            value={step4.estimatedDeliveryTime || ""}
             onChange={(e) => setStep4({ ...step4, estimatedDeliveryTime: e.target.value })}
             className="mt-1 bg-white text-sm"
             placeholder="e.g., 25-30 mins"
@@ -1402,7 +1428,7 @@ export default function RestaurantOnboarding() {
         <div>
           <Label className="text-xs text-gray-700">Distance from City Center*</Label>
           <Input
-            value={step4.distance}
+            value={step4.distance || ""}
             onChange={(e) => setStep4({ ...step4, distance: e.target.value })}
             className="mt-1 bg-white text-sm"
             placeholder="e.g., 1.2 km"
@@ -1412,8 +1438,8 @@ export default function RestaurantOnboarding() {
         <div>
           <Label className="text-xs text-gray-700">Price Range*</Label>
           <Select
-            value={step4.priceRange}
-            onValueChange={(value) => setStep4({ ...step4, priceRange: value })}
+            value={step4.priceRange || "$$"}
+            onValueChange={(value) => setStep4({ ...step4, priceRange: value || "$$" })}
           >
             <SelectTrigger className="mt-1 bg-white text-sm">
               <SelectValue placeholder="Select price range" />
@@ -1430,7 +1456,7 @@ export default function RestaurantOnboarding() {
         <div>
           <Label className="text-xs text-gray-700">Featured Dish Name*</Label>
           <Input
-            value={step4.featuredDish}
+            value={step4.featuredDish || ""}
             onChange={(e) => setStep4({ ...step4, featuredDish: e.target.value })}
             className="mt-1 bg-white text-sm"
             placeholder="e.g., Butter Chicken Special"
@@ -1441,7 +1467,7 @@ export default function RestaurantOnboarding() {
           <Label className="text-xs text-gray-700">Featured Dish Price (₹)*</Label>
           <Input
             type="number"
-            value={step4.featuredPrice}
+            value={step4.featuredPrice || ""}
             onChange={(e) => setStep4({ ...step4, featuredPrice: e.target.value })}
             className="mt-1 bg-white text-sm"
             placeholder="e.g., 249"
@@ -1452,7 +1478,7 @@ export default function RestaurantOnboarding() {
         <div>
           <Label className="text-xs text-gray-700">Special Offer/Promotion*</Label>
           <Input
-            value={step4.offer}
+            value={step4.offer || ""}
             onChange={(e) => setStep4({ ...step4, offer: e.target.value })}
             className="mt-1 bg-white text-sm"
             placeholder="e.g., Flat ₹50 OFF above ₹199"

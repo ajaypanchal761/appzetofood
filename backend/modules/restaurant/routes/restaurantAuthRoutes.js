@@ -8,6 +8,7 @@ import {
   refreshToken,
   logout,
   getCurrentRestaurant,
+  reverifyRestaurant,
   firebaseGoogleLogin
 } from '../controllers/restaurantAuthController.js';
 import { authenticate } from '../middleware/restaurantAuth.js';
@@ -79,6 +80,7 @@ router.post('/firebase/google-login', validate(firebaseGoogleLoginSchema), fireb
 router.post('/refresh-token', refreshToken);
 router.post('/logout', logout);
 router.get('/me', authenticate, getCurrentRestaurant);
+router.post('/reverify', authenticate, reverifyRestaurant);
 
 export default router;
 

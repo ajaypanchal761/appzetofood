@@ -21,16 +21,25 @@ class EmailService {
   constructor() {
     // Initialize transporter based on environment
     this.transporter = null;
-    this.initializeTransporter();
+    // Initialize asynchronously (don't await in constructor)
+    this.initializeTransporter().catch(err => {
+      logger.warn(`Error initializing email transporter: ${err.message}`);
+    });
   }
 
   /**
    * Initialize Nodemailer transporter
    * Supports both SMTP and development/test mode
    */
-  initializeTransporter() {
-    // Check if SMTP credentials are provided
-    const hasSMTPConfig = process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_HOST;
+  async initializeTransporter() {
+    // Get SMTP credentials from database
+    const { getSMTPCredentials } = await import('../../../shared/utils/envService.js');
+    const smtpCreds = await getSMTPCredentials();
+    
+    // Check if SMTP credentials are provided (from database or env)
+    const hasSMTPConfig = (smtpCreds.user || process.env.SMTP_USER) && 
+                         (smtpCreds.pass || process.env.SMTP_PASS) && 
+                         (smtpCreds.host || process.env.SMTP_HOST);
     
     // For development/testing, use Ethereal Email if no SMTP config
     if (process.env.NODE_ENV === 'development' && !hasSMTPConfig) {
@@ -53,17 +62,22 @@ class EmailService {
     } else if (!hasSMTPConfig) {
       // Production mode but no SMTP config
       logger.warn('SMTP configuration missing. Email OTP will not work.');
-      logger.warn('Please configure SMTP_HOST, SMTP_USER, and SMTP_PASS in .env file');
+      logger.warn('Please configure SMTP_HOST, SMTP_USER, and SMTP_PASS in ENV Setup or .env file');
       return;
     } else {
-      // Production SMTP configuration
+      // Production SMTP configuration (use database values, fallback to env)
+      const smtpHost = smtpCreds.host || process.env.SMTP_HOST;
+      const smtpPort = smtpCreds.port || process.env.SMTP_PORT || '587';
+      const smtpUser = smtpCreds.user || process.env.SMTP_USER;
+      const smtpPass = smtpCreds.pass || process.env.SMTP_PASS;
+      
       this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
+        host: smtpHost,
+        port: parseInt(smtpPort),
         secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
+          user: smtpUser,
+          pass: smtpPass
         },
         // For Gmail, you need to use an App Password
         // See: https://support.google.com/accounts/answer/185833
@@ -76,7 +90,7 @@ class EmailService {
         if (error) {
           logger.warn(`Email transporter verification failed: ${error.message}`);
           logger.warn('Email OTP will not work until SMTP is properly configured');
-          logger.warn('Check your SMTP credentials in .env file');
+          logger.warn('Check your SMTP credentials in ENV Setup or .env file');
         } else {
           logger.info('Email transporter is ready');
         }
@@ -183,10 +197,17 @@ Security Notice:
     try {
       // Check if transporter is configured
       if (!this.transporter) {
-        throw new Error('Email transporter is not configured. Please set up SMTP credentials in .env file');
+        // Try to reinitialize if not configured
+        await this.initializeTransporter();
+        if (!this.transporter) {
+          throw new Error('Email transporter is not configured. Please set up SMTP credentials in ENV Setup or .env file');
+        }
       }
 
-      const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@appzetofood.com';
+      // Get SMTP credentials for from email
+      const { getSMTPCredentials } = await import('../../../shared/utils/envService.js');
+      const smtpCreds = await getSMTPCredentials();
+      const fromEmail = process.env.SMTP_FROM || smtpCreds.user || process.env.SMTP_USER || 'noreply@appzetofood.com';
       const fromName = process.env.SMTP_FROM_NAME || 'Appzeto Food';
 
       const mailOptions = {
@@ -237,7 +258,10 @@ Security Notice:
    */
   async sendWelcomeEmail(email, name) {
     try {
-      const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@appzetofood.com';
+      // Get SMTP credentials for from email
+      const { getSMTPCredentials } = await import('../../../shared/utils/envService.js');
+      const smtpCreds = await getSMTPCredentials();
+      const fromEmail = process.env.SMTP_FROM || smtpCreds.user || process.env.SMTP_USER || 'noreply@appzetofood.com';
       const fromName = process.env.SMTP_FROM_NAME || 'Appzeto Food';
 
       const mailOptions = {

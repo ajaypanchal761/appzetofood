@@ -108,11 +108,13 @@ export function useLocation() {
   /* ===================== GOOGLE MAPS REVERSE GEOCODE ===================== */
   const reverseGeocodeWithGoogleMaps = async (latitude, longitude) => {
     try {
-      const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+      // Get Google Maps API key from backend database
+      const { getGoogleMapsApiKey } = await import('@/lib/utils/googleMapsApiKey.js');
+      const GOOGLE_MAPS_API_KEY = await getGoogleMapsApiKey();
       
       if (!GOOGLE_MAPS_API_KEY) {
         console.warn("⚠️ Google Maps API key not found, using fallback");
-        console.warn("⚠️ Please set VITE_GOOGLE_MAPS_API_KEY in .env file");
+        console.warn("⚠️ Please set Google Maps API Key in ENV Setup");
         return reverseGeocodeDirect(latitude, longitude);
       }
 
@@ -366,9 +368,18 @@ export function useLocation() {
       let placePhotos = [];
       
       try {
+        // Get API key dynamically from backend
+        const { getGoogleMapsApiKey } = await import('@/lib/utils/googleMapsApiKey.js');
+        const apiKey = await getGoogleMapsApiKey();
+        
+        if (!apiKey) {
+          console.warn("⚠️ Google Maps API key not found, skipping Places API");
+          return null;
+        }
+        
         // Step 1: Use Nearby Search to find the closest place
         console.log("🔍 Using Google Places Nearby Search for detailed information...");
-        const nearbySearchUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=50&key=${GOOGLE_MAPS_API_KEY}&language=en`;
+        const nearbySearchUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=50&key=${apiKey}&language=en`;
         const nearbyResponse = await fetch(nearbySearchUrl).then(res => res.json());
         
         if (nearbyResponse.status === "OK" && nearbyResponse.results && nearbyResponse.results.length > 0) {
@@ -387,7 +398,7 @@ export function useLocation() {
           // Step 2: Get detailed place information using Place Details API
           if (placeId) {
             console.log("🔍 Fetching detailed place information...");
-            const placeDetailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,formatted_phone_number,website,rating,opening_hours,photos,address_components,geometry,types&key=${GOOGLE_MAPS_API_KEY}&language=en`;
+            const placeDetailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,formatted_phone_number,website,rating,opening_hours,photos,address_components,geometry,types&key=${apiKey}&language=en`;
             const detailsResponse = await fetch(placeDetailsUrl).then(res => res.json());
             
             if (detailsResponse.status === "OK" && detailsResponse.result) {
@@ -404,7 +415,7 @@ export function useLocation() {
                   reference: photo.photo_reference,
                   width: photo.width,
                   height: photo.height,
-                  url: `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo.photo_reference}&key=${GOOGLE_MAPS_API_KEY}`
+                  url: `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo.photo_reference}&key=${apiKey}`
                 }));
               }
               

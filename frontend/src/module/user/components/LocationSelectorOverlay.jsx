@@ -69,7 +69,16 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   const lastUserLocationRef = useRef(null) // Last user location for tracking
   const locationUpdateTimeoutRef = useRef(null) // Timeout for location updates
   const [currentAddress, setCurrentAddress] = useState("")
-  const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState(null)
+  
+  // Load Google Maps API key from backend
+  useEffect(() => {
+    import('@/lib/utils/googleMapsApiKey.js').then(({ getGoogleMapsApiKey }) => {
+      getGoogleMapsApiKey().then(key => {
+        setGOOGLE_MAPS_API_KEY(key)
+      })
+    })
+  }, [])
   const reverseGeocodeTimeoutRef = useRef(null) // Debounce timeout for reverse geocoding
   const lastReverseGeocodeCoordsRef = useRef(null) // Track last coordinates to avoid duplicate calls
 
@@ -78,9 +87,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
     if (GOOGLE_MAPS_API_KEY) {
       console.log("✅ Google Maps API Key loaded:", GOOGLE_MAPS_API_KEY.substring(0, 10) + "...")
     } else {
-      console.error("❌ Google Maps API Key NOT found! Check .env file and restart dev server.")
+      console.warn("⚠️ Google Maps API Key NOT found! Please set it in ENV Setup.")
     }
-  }, [])
+  }, [GOOGLE_MAPS_API_KEY])
 
   // Current location display - Show complete formatted address (SAVED ADDRESSES FORMAT)
   // Format should match saved addresses: "B2/4, Gandhi Park Colony, Anand Nagar, Indore, Madhya Pradesh, 452001"
@@ -1441,7 +1450,10 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       if (GOOGLE_MAPS_API_KEY) {
         try {
           // Step 1: Use Google Geocoding API for address components
-          const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${roundedLat},${roundedLng}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=street_address|premise|point_of_interest|establishment`
+          // Get API key dynamically from backend
+          const { getGoogleMapsApiKey } = await import('@/lib/utils/googleMapsApiKey.js');
+          const apiKey = await getGoogleMapsApiKey() || GOOGLE_MAPS_API_KEY;
+          const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${roundedLat},${roundedLng}&key=${apiKey}&language=en&region=in&result_type=street_address|premise|point_of_interest|establishment`
           const geocodeResponse = await fetch(geocodeUrl).then(res => res.json())
           
           if (geocodeResponse.status === "OK" && geocodeResponse.results && geocodeResponse.results.length > 0) {
@@ -1490,7 +1502,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             
             // Step 2: Use Places API for even more detailed information
             try {
-              const nearbyUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${roundedLat},${roundedLng}&radius=50&key=${GOOGLE_MAPS_API_KEY}&language=en`
+              const nearbyUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${roundedLat},${roundedLng}&radius=50&key=${apiKey}&language=en`
               const nearbyResponse = await fetch(nearbyUrl).then(res => res.json())
               
               if (nearbyResponse.status === "OK" && nearbyResponse.results && nearbyResponse.results.length > 0) {
@@ -1504,7 +1516,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
                 
                 // Get place details for complete address
                 if (placeId) {
-                  const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,address_components&key=${GOOGLE_MAPS_API_KEY}&language=en`
+                  const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_address,address_components&key=${apiKey}&language=en`
                   const detailsResponse = await fetch(detailsUrl).then(res => res.json())
                   
                   if (detailsResponse.status === "OK" && detailsResponse.result) {

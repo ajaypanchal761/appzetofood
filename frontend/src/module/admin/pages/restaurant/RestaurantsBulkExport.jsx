@@ -1,20 +1,13 @@
-import { useState } from "react"
-import { Download, RefreshCw, Calendar, FileSpreadsheet } from "lucide-react"
+import { Download, RefreshCw, FileSpreadsheet } from "lucide-react"
 
 export default function RestaurantsBulkExport() {
-  const [dataType, setDataType] = useState("all")
-  const [fromDate, setFromDate] = useState("")
-  const [toDate, setToDate] = useState("")
-
   const handleExport = () => {
     // Handle export logic here
-    alert(`Exporting ${dataType} data...`)
+    alert("Exporting all restaurant data...")
   }
 
   const handleReset = () => {
-    setDataType("all")
-    setFromDate("")
-    setToDate("")
+    // Reset logic if needed
   }
 
   return (
@@ -34,75 +27,19 @@ export default function RestaurantsBulkExport() {
         </div>
       </div>
 
-      {/* Step 1 */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-lg">
-            1
-          </div>
-          <h2 className="text-xl font-bold text-slate-900">Select Data Type</h2>
-        </div>
-        <div className="ml-14">
-          <label className="block text-sm font-semibold text-slate-700 mb-2">
-            Type
-          </label>
-          <select
-            value={dataType}
-            onChange={(e) => setDataType(e.target.value)}
-            className="w-full max-w-md px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-          >
-            <option value="all">All data</option>
-            <option value="active">Active Restaurants</option>
-            <option value="inactive">Inactive Restaurants</option>
-            <option value="commission">Commission Based Restaurants</option>
-            <option value="subscription">Subscription Based Restaurants</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Step 2 */}
+      {/* Export Info */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-lg">
-            2
+            1
           </div>
-          <h2 className="text-xl font-bold text-slate-900">Select Data Range by Date and Export</h2>
+          <h2 className="text-xl font-bold text-slate-900">Export All Restaurant Data</h2>
         </div>
         <div className="ml-14">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                From Date
-              </label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                To Date
-              </label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
             <div className="flex items-center gap-2 text-sm text-slate-600">
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              <span>Data will be exported in Excel (.xlsx) format</span>
+              <span>All restaurant data will be exported in Excel (.xlsx) format</span>
             </div>
           </div>
         </div>

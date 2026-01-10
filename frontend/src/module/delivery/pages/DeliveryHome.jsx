@@ -596,11 +596,14 @@ export default function DeliveryHome() {
           setActiveEarningAddon(null)
         }
       } catch (error) {
-        console.error('Error fetching active earning addons:', error)
-        if (error.code === 'ERR_NETWORK') {
-          console.warn('Network error - make sure backend server is running and route is registered')
-        } else {
-          console.error('Error details:', error.response?.data || error.message)
+        // Skip logging timeout errors (handled by axios interceptor)
+        if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error('Error fetching active earning addons:', error)
+          if (error.code === 'ERR_NETWORK') {
+            console.warn('Network error - make sure backend server is running and route is registered')
+          } else {
+            console.error('Error details:', error.response?.data || error.message)
+          }
         }
         setActiveEarningAddon(null)
       }
@@ -2178,13 +2181,13 @@ export default function DeliveryHome() {
           }
         }
       } catch (error) {
-        // Only log error if it's not a network error (backend might be down)
-        if (error.code !== 'ERR_NETWORK') {
+        // Only log error if it's not a network or timeout error (backend might be down/slow)
+        if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
           console.error("Error checking bank details:", error)
         }
         // Default to showing the banner if we can't check (only for approved users)
-        // For network errors, assume pending status to show verification message
-        if (error.code === 'ERR_NETWORK') {
+        // For network/timeout errors, assume pending status to show verification message
+        if (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
           setDeliveryStatus('pending')
           setBankDetailsFilled(true) // Hide bank details banner
         } else {
@@ -3175,7 +3178,7 @@ export default function DeliveryHome() {
 
   // Render normal feed view when offline or no gig booked
   return (
-    <div className="min-h-screen bg-[#f6e9dc] overflow-x-hidden">
+    <div className="min-h-screen bg-[#f6e9dc] overflow-x-hidden flex flex-col" style={{ height: '100vh' }}>
       {/* Top Navigation Bar */}
       <FeedNavbar
         isOnline={isOnline}
@@ -3187,7 +3190,7 @@ export default function DeliveryHome() {
       {/* Carousel */}
       <div
         ref={carouselRef}
-        className="relative overflow-hidden bg-gray-700 cursor-grab active:cursor-grabbing select-none"
+        className="relative overflow-hidden bg-gray-700 cursor-grab active:cursor-grabbing select-none flex-shrink-0"
         onMouseDown={handleCarouselMouseDown}
       >
         <div className="flex transition-transform duration-500 ease-in-out" style={{ transform: `translateX(-${currentCarouselSlide * 100}%)` }}>
@@ -3336,15 +3339,14 @@ export default function DeliveryHome() {
       {/* Conditional Content Based on Swipe Bar Position */}
       {!showHomeSections ? (
         /* Map View - Shows map with Hotspot or Select drop mode */
-        <div className="relative flex-1" style={{ height: 'calc(100vh - 200px)', minHeight: '400px' }}>
+        <div className="relative flex-1 overflow-hidden pb-16 md:pb-0" style={{ minHeight: 0 }}>
           {/* Google Maps Container */}
           <div
             ref={mapContainerRef}
             style={{ 
               height: '100%', 
               width: '100%', 
-              zIndex: 1, 
-              minHeight: '400px',
+              zIndex: 1,
               backgroundColor: '#e5e7eb' // Light gray background while loading
             }}
             className="z-0"

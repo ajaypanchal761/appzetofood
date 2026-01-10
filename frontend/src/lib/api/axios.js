@@ -399,6 +399,46 @@ apiClient.interceptors.response.use(
       }
       return Promise.reject(error);
     }
+
+    // Handle timeout errors (ECONNABORTED)
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      // Timeout errors are usually due to slow backend or network issues
+      // Don't spam console with timeout errors, but handle them gracefully
+      if (import.meta.env.DEV) {
+        const now = Date.now();
+        const timeSinceLastError = now - networkErrorState.lastErrorTime;
+        const timeSinceLastToast = now - networkErrorState.lastToastTime;
+        
+        // Only log console errors if cooldown period has passed
+        if (timeSinceLastError >= networkErrorState.COOLDOWN_PERIOD) {
+          networkErrorState.errorCount++;
+          networkErrorState.lastErrorTime = now;
+        }
+        
+        // Only show toast if cooldown period has passed
+        if (timeSinceLastToast >= networkErrorState.TOAST_COOLDOWN_PERIOD) {
+          networkErrorState.lastToastTime = now;
+          
+          // Show helpful error message (only once per minute)
+          toast.error(`Request timeout - Backend may be slow or not responding. Check server status.`, {
+            duration: 8000,
+            id: 'timeout-error-toast', // Use ID to prevent duplicate toasts
+            style: {
+              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              color: '#ffffff',
+              border: '1px solid #b45309',
+              borderRadius: '12px',
+              padding: '16px',
+              fontSize: '14px',
+              fontWeight: '500',
+              boxShadow: '0 10px 25px -5px rgba(245, 158, 11, 0.3), 0 8px 10px -6px rgba(245, 158, 11, 0.2)',
+            },
+            className: 'timeout-error-toast',
+          });
+        }
+      }
+      return Promise.reject(error);
+    }
     
     // Handle 404 errors (route not found)
     if (error.response?.status === 404) {

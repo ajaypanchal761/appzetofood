@@ -223,6 +223,34 @@ const restaurantSchema = new mongoose.Schema(
         default: 0,
       },
     },
+    // Approval/Rejection fields
+    rejectionReason: {
+      type: String,
+      default: null,
+    },
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null,
+    },
+    rejectedAt: {
+      type: Date,
+      default: null,
+    },
+    rejectedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null,
+    },
+    businessModel: {
+      type: String,
+      enum: ['Commission Base', 'Subscription Base'],
+      default: 'Commission Base',
+    },
   },
   {
     timestamps: true,

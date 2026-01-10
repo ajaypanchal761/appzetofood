@@ -14,7 +14,6 @@ import SubscriptionOrders from "../pages/SubscriptionOrders";
 import Category from "../pages/categories/Category";
 // Restaurant Management
 import ZoneSetup from "../pages/restaurant/ZoneSetup";
-import AddRestaurant from "../pages/restaurant/AddRestaurant";
 import RestaurantsList from "../pages/restaurant/RestaurantsList";
 import JoiningRequest from "../pages/restaurant/JoiningRequest";
 import RestaurantsBulkImport from "../pages/restaurant/RestaurantsBulkImport";
@@ -43,7 +42,7 @@ import LoyaltyPointReport from "../pages/loyalty-point/Report";
 import SubscribedMailList from "../pages/SubscribedMailList";
 // Deliveryman Management
 import VehiclesCategorySetup from "../pages/VehiclesCategorySetup";
-import ShiftSetup from "../pages/ShiftSetup";
+import DeliveryBoyCommission from "../pages/DeliveryBoyCommission";
 import JoinRequest from "../pages/delivery-partners/JoinRequest";
 import AddDeliveryman from "../pages/delivery-partners/AddDeliveryman";
 import DeliverymanList from "../pages/delivery-partners/DeliverymanList";
@@ -109,7 +108,7 @@ import PageMetaData from "../pages/system/PageMetaData";
 import ReactSite from "../pages/system/ReactSite";
 import CleanDatabase from "../pages/system/CleanDatabase";
 import AddonActivation from "../pages/system/AddonActivation";
-// System Addons
+// ENV Setup (formerly System Addons)
 import SystemAddons from "../pages/system/SystemAddons";
 import LandingPageManagement from "../pages/system/LandingPageManagement";
 
@@ -159,7 +158,6 @@ export default function AdminRouter() {
         <Route path="zone-setup" element={<ZoneSetup />} />
         <Route path="cuisine" element={<Cuisine />} />
         {/* Restaurants */}
-        <Route path="restaurants/add" element={<AddRestaurant />} />
         <Route path="restaurants" element={<RestaurantsList />} />
         <Route path="restaurants/joining-request" element={<JoiningRequest />} />
         <Route path="restaurants/bulk-import" element={<RestaurantsBulkImport />} />
@@ -201,7 +199,7 @@ export default function AdminRouter() {
 
         {/* DELIVERYMAN MANAGEMENT */}
         <Route path="vehicles-category-setup" element={<VehiclesCategorySetup />} />
-        <Route path="shift-setup" element={<ShiftSetup />} />
+        <Route path="delivery-boy-commission" element={<DeliveryBoyCommission />} />
         {/* Delivery Partners */}
         <Route path="delivery-partners/join-request" element={<JoinRequest />} />
         <Route path="delivery-partners/add" element={<AddDeliveryman />} />
@@ -288,7 +286,7 @@ export default function AdminRouter() {
         <Route path="clean-database" element={<CleanDatabase />} />
         <Route path="addon-activation" element={<AddonActivation />} />
 
-        {/* SYSTEM ADDONS */}
+        {/* ENV SETUP */}
         <Route path="system-addons" element={<SystemAddons />} />
         {/* HERO BANNER MANAGEMENT */}
         <Route path="hero-banner-management" element={<LandingPageManagement />} />

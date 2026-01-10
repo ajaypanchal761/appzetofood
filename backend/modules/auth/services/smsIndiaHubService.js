@@ -11,10 +11,18 @@ dotenv.config();
  */
 class SMSIndiaHubService {
   constructor() {
-    // Load credentials from environment variables
-    this.apiKey = process.env.SMSINDIAHUB_API_KEY?.trim();
-    this.senderId = process.env.SMSINDIAHUB_SENDER_ID?.trim();
+    // Credentials will be loaded from database dynamically
+    this.apiKey = null;
+    this.senderId = null;
     this.baseUrl = "http://cloud.smsindiahub.in/vendorsms/pushsms.aspx";
+    this.initializeCredentials();
+  }
+
+  async initializeCredentials() {
+    const { getSMSHubIndiaCredentials } = await import('../../../shared/utils/envService.js');
+    const creds = await getSMSHubIndiaCredentials();
+    this.apiKey = creds.apiKey?.trim() || process.env.SMSINDIAHUB_API_KEY?.trim();
+    this.senderId = creds.senderId?.trim() || process.env.SMSINDIAHUB_SENDER_ID?.trim();
 
     // Log configuration status (only in development)
     if (process.env.NODE_ENV === "development") {
@@ -35,12 +43,12 @@ class SMSIndiaHubService {
    * Check if SMSIndia Hub is properly configured
    * @returns {boolean}
    */
-  isConfigured() {
-    // Load credentials dynamically in case they weren't available during construction
-    const apiKey = (this.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
-    const senderId = (
-      this.senderId || process.env.SMSINDIAHUB_SENDER_ID
-    )?.trim();
+  async isConfigured() {
+    // Load credentials dynamically from database
+    const { getSMSHubIndiaCredentials } = await import('../../../shared/utils/envService.js');
+    const creds = await getSMSHubIndiaCredentials();
+    const apiKey = (this.apiKey || creds.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
+    const senderId = (this.senderId || creds.senderId || process.env.SMSINDIAHUB_SENDER_ID)?.trim();
 
     return !!(apiKey && senderId);
   }
@@ -82,11 +90,11 @@ class SMSIndiaHubService {
    */
   async sendOTP(phone, otp, purpose = 'register') {
     try {
-      // Load credentials dynamically (with trim to remove whitespace)
-      const apiKey = (this.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
-      const senderId = (
-        this.senderId || process.env.SMSINDIAHUB_SENDER_ID
-      )?.trim();
+      // Load credentials dynamically from database
+      const { getSMSHubIndiaCredentials } = await import('../../../shared/utils/envService.js');
+      const creds = await getSMSHubIndiaCredentials();
+      const apiKey = (this.apiKey || creds.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
+      const senderId = (this.senderId || creds.senderId || process.env.SMSINDIAHUB_SENDER_ID)?.trim();
 
       if (!apiKey || !senderId) {
         console.error("❌ SMSIndia Hub Configuration Error:");
@@ -301,11 +309,11 @@ class SMSIndiaHubService {
    */
   async sendCustomSMS(phone, message) {
     try {
-      // Load credentials dynamically (with trim to remove whitespace)
-      const apiKey = (this.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
-      const senderId = (
-        this.senderId || process.env.SMSINDIAHUB_SENDER_ID
-      )?.trim();
+      // Load credentials dynamically from database
+      const { getSMSHubIndiaCredentials } = await import('../../../shared/utils/envService.js');
+      const creds = await getSMSHubIndiaCredentials();
+      const apiKey = (this.apiKey || creds.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
+      const senderId = (this.senderId || creds.senderId || process.env.SMSINDIAHUB_SENDER_ID)?.trim();
 
       if (!apiKey || !senderId) {
         console.error("❌ SMSIndia Hub Configuration Error:");
@@ -399,11 +407,11 @@ class SMSIndiaHubService {
    */
   async testConnection() {
     try {
-      // Load credentials dynamically (with trim to remove whitespace)
-      const apiKey = (this.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
-      const senderId = (
-        this.senderId || process.env.SMSINDIAHUB_SENDER_ID
-      )?.trim();
+      // Load credentials dynamically from database
+      const { getSMSHubIndiaCredentials } = await import('../../../shared/utils/envService.js');
+      const creds = await getSMSHubIndiaCredentials();
+      const apiKey = (this.apiKey || creds.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
+      const senderId = (this.senderId || creds.senderId || process.env.SMSINDIAHUB_SENDER_ID)?.trim();
 
       if (!apiKey || !senderId) {
         console.error("❌ SMSIndia Hub Configuration Error:");
@@ -466,8 +474,10 @@ class SMSIndiaHubService {
    */
   async getBalance() {
     try {
-      // Load credentials dynamically (with trim to remove whitespace)
-      const apiKey = (this.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
+      // Load credentials dynamically from database
+      const { getSMSHubIndiaCredentials } = await import('../../../shared/utils/envService.js');
+      const creds = await getSMSHubIndiaCredentials();
+      const apiKey = (this.apiKey || creds.apiKey || process.env.SMSINDIAHUB_API_KEY)?.trim();
 
       if (!apiKey) {
         console.error("❌ SMSIndia Hub Configuration Error:");

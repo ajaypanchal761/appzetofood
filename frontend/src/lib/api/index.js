@@ -263,6 +263,10 @@ export const restaurantAPI = {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.AUTH.ME);
   },
 
+  reverify: () => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.REVERIFY);
+  },
+
   resetPassword: (email, otp, newPassword) => {
     return apiClient.post(API_ENDPOINTS.RESTAURANT.AUTH.RESET_PASSWORD, {
       email,
@@ -663,6 +667,36 @@ export const adminAPI = {
     return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANTS, { params });
   },
 
+  // Get restaurant by ID
+  getRestaurantById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_BY_ID.replace(':id', id));
+  },
+
+  // Update restaurant status
+  updateRestaurantStatus: (id, isActive) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.RESTAURANT_STATUS.replace(':id', id), { isActive });
+  },
+
+  // Get restaurant join requests
+  getRestaurantJoinRequests: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_REQUESTS, { params });
+  },
+
+  // Approve restaurant
+  approveRestaurant: (id) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.RESTAURANT_APPROVE.replace(':id', id));
+  },
+
+  // Reject restaurant
+  rejectRestaurant: (id, reason) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.RESTAURANT_REJECT.replace(':id', id), { reason });
+  },
+
+  // Delete restaurant
+  deleteRestaurant: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.RESTAURANT_DELETE.replace(':id', id));
+  },
+
   // Get delivery partners
   getDelivery: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY, { params });
@@ -816,6 +850,49 @@ export const adminAPI = {
 
   getEarningAddonHistoryStatistics: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.EARNING_ADDON_HISTORY_STATISTICS, { params });
+  },
+
+  // Environment Variables Management
+  getEnvVariables: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ENV_VARIABLES);
+  },
+
+  saveEnvVariables: (envData) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.ENV_VARIABLES, envData);
+  },
+
+  // Public Environment Variables (for frontend use)
+  getPublicEnvVariables: () => {
+    return apiClient.get('/env/public');
+  },
+
+  // Delivery Boy Commission Management
+  getCommissionRules: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION, { params });
+  },
+
+  getCommissionRuleById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION_BY_ID.replace(':id', id));
+  },
+
+  createCommissionRule: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION, data);
+  },
+
+  updateCommissionRule: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION_BY_ID.replace(':id', id), data);
+  },
+
+  deleteCommissionRule: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION_BY_ID.replace(':id', id));
+  },
+
+  toggleCommissionRuleStatus: (id, status) => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION_STATUS.replace(':id', id), { status });
+  },
+
+  calculateCommission: (distance) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION_CALCULATE, { distance });
   },
 };
 

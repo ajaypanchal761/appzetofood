@@ -55,7 +55,10 @@ export default function BottomNavigation() {
           }
         }
       } catch (error) {
-        console.error("Error fetching profile image for navigation:", error)
+        // Skip logging timeout errors (handled by axios interceptor)
+        if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error("Error fetching profile image for navigation:", error)
+        }
       }
     }
 

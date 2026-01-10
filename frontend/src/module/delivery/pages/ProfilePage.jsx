@@ -276,16 +276,7 @@ export default function ProfilePage() {
       <div className="px-4 py-6 pb-24 md:pb-6">
 
         {/* Navigation Buttons */}
-        <div ref={navButtonsRef} className="grid grid-cols-3 gap-3 mb-6">
-          <button
-            onClick={() => navigate("/delivery/gig?tab=history")}
-            className="bg-white rounded-lg p-4 flex flex-col items-center gap-1 hover:bg-gray-200 transition-colors"
-          >
-            <div className="rounded-lg p-2">
-              <span className="text-xl font-bold">g</span>
-            </div>
-            <span className="text-xs font-medium">Gigs history</span>
-          </button>
+        <div ref={navButtonsRef} className="grid grid-cols-2 gap-3 mb-6">
           <button
             onClick={() => navigate("/delivery/trip-history")}
             className="bg-white rounded-lg p-4 flex flex-col items-center gap-1 hover:bg-gray-200 transition-colors"

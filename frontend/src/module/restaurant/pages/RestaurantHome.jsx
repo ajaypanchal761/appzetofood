@@ -39,6 +39,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import BottomNavbar from "../components/BottomNavbar"
 import MenuOverlay from "../components/MenuOverlay"
 import RestaurantNavbar from "../components/RestaurantNavbar"
+import { restaurantAPI } from "@/lib/api"
+import { AlertCircle, X } from "lucide-react"
 
 export default function RestaurantHome() {
   const navigate = useNavigate()
@@ -49,6 +51,12 @@ export default function RestaurantHome() {
   const timeFilterRef = useRef(null)
   const [walletState, setWalletState] = useState(() => getWalletState())
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(() => getUnreadNotificationCount())
+  const [restaurantStatus, setRestaurantStatus] = useState({
+    isActive: null,
+    rejectionReason: null,
+    onboarding: null,
+    isLoading: true
+  })
 
 
   // Lenis smooth scrolling
@@ -68,6 +76,40 @@ export default function RestaurantHome() {
 
     return () => {
       lenis.destroy()
+    }
+  }, [])
+
+  // Fetch restaurant verification status
+  useEffect(() => {
+    const fetchRestaurantStatus = async () => {
+      try {
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const restaurant = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (restaurant) {
+          setRestaurantStatus({
+            isActive: restaurant.isActive,
+            rejectionReason: restaurant.rejectionReason || null,
+            onboarding: restaurant.onboarding || null,
+            isLoading: false
+          })
+        }
+      } catch (error) {
+        console.error("Error fetching restaurant status:", error)
+        setRestaurantStatus(prev => ({ ...prev, isLoading: false }))
+      }
+    }
+
+    fetchRestaurantStatus()
+
+    // Listen for restaurant profile updates
+    const handleProfileRefresh = () => {
+      fetchRestaurantStatus()
+    }
+
+    window.addEventListener('restaurantProfileRefresh', handleProfileRefresh)
+
+    return () => {
+      window.removeEventListener('restaurantProfileRefresh', handleProfileRefresh)
     }
   }, [])
 
@@ -252,6 +294,115 @@ export default function RestaurantHome() {
       <RestaurantNavbar />
       {/* Main Content */}
       <div className="px-4 py-6 pb-24 md:pb-6">
+        {/* Verification Status Banner - Show if onboarding is complete (all 4 steps) and restaurant is not active */}
+        {!restaurantStatus.isLoading && 
+         !restaurantStatus.isActive && 
+         restaurantStatus.onboarding?.completedSteps === 4 && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className={`mb-6 rounded-xl p-4 md:p-5 border ${
+              restaurantStatus.rejectionReason
+                ? 'bg-red-50 border-red-200'
+                : 'bg-yellow-50 border-yellow-200'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`flex-shrink-0 rounded-full p-2 ${
+                restaurantStatus.rejectionReason
+                  ? 'bg-red-100'
+                  : 'bg-yellow-100'
+              }`}>
+                <AlertCircle className={`w-5 h-5 ${
+                  restaurantStatus.rejectionReason
+                    ? 'text-red-600'
+                    : 'text-yellow-600'
+                }`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                {restaurantStatus.rejectionReason ? (
+                  <>
+                    <h3 className="text-lg font-bold text-red-900 mb-2">
+                      Verification Rejected
+                    </h3>
+                    <div className="bg-white border border-red-200 rounded-lg p-3 mb-3">
+                      <p className="text-xs font-semibold text-red-800 mb-2">
+                        Reason for Rejection:
+                      </p>
+                      <div className="text-sm text-red-700 whitespace-pre-wrap">
+                        {restaurantStatus.rejectionReason}
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                      <Button
+                        onClick={async () => {
+                          try {
+                            setRestaurantStatus(prev => ({ ...prev, isLoading: true }))
+                            await restaurantAPI.reverify()
+                            alert('Restaurant reverified successfully! Verification will be done in 24 hours.')
+                            // Refresh restaurant status
+                            const response = await restaurantAPI.getCurrentRestaurant()
+                            const restaurant = response?.data?.data?.restaurant || response?.data?.restaurant
+                            if (restaurant) {
+                              setRestaurantStatus({
+                                isActive: restaurant.isActive,
+                                rejectionReason: restaurant.rejectionReason || null,
+                                onboarding: restaurant.onboarding || null,
+                                isLoading: false
+                              })
+                            }
+                            // Trigger profile refresh event
+                            window.dispatchEvent(new Event('restaurantProfileRefresh'))
+                          } catch (error) {
+                            // Don't log network/timeout errors (backend might be down)
+                            if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+                              console.error("Error reverifying restaurant:", error)
+                            }
+                            
+                            // Handle 401 Unauthorized errors (token expired/invalid)
+                            if (error.response?.status === 401) {
+                              const errorMessage = error.response?.data?.message || 'Your session has expired. Please login again.'
+                              alert(errorMessage)
+                              // The axios interceptor should handle redirecting to login
+                              // But if it doesn't, we can manually redirect
+                              if (!error.response?.data?.message?.includes('inactive')) {
+                                // Only redirect if it's not an "inactive" error (which we handle differently)
+                                setTimeout(() => {
+                                  window.location.href = '/restaurant/login'
+                                }, 1500)
+                              }
+                            } else {
+                              // Other errors (400, 500, etc.)
+                              const errorMessage = error.response?.data?.message || "Failed to reverify restaurant. Please try again."
+                              alert(errorMessage)
+                            }
+                            setRestaurantStatus(prev => ({ ...prev, isLoading: false }))
+                          }
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Reverify
+                      </Button>
+                      <p className="text-sm text-red-700 flex items-center">
+                        Please correct the issues mentioned above and click "Reverify" to resubmit your application for review.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-lg font-bold text-yellow-900 mb-1">
+                      Verification Pending - Done in 24 Hours
+                    </h3>
+                    <p className="text-sm text-yellow-800">
+                      Your restaurant registration is under review. Admin will verify your details and activate your account within 24 hours. You'll be notified once approved.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
         {/* Business Analytics Section */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">

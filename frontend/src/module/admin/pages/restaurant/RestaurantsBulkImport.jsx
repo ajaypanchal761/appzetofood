@@ -2,7 +2,6 @@ import { useState } from "react"
 import { FileSpreadsheet, Download, Upload, FileCheck, ArrowRight, FileX, RefreshCw } from "lucide-react"
 
 export default function RestaurantsBulkImport() {
-  const [uploadType, setUploadType] = useState("new")
   const [selectedFile, setSelectedFile] = useState(null)
 
   const handleFileChange = (e) => {
@@ -23,7 +22,6 @@ export default function RestaurantsBulkImport() {
 
   const handleReset = () => {
     setSelectedFile(null)
-    setUploadType("new")
   }
 
   return (
@@ -133,37 +131,6 @@ export default function RestaurantsBulkImport() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h2 className="text-xl font-bold text-slate-900 mb-6">Excel File Upload</h2>
         
-        {/* Upload Type Selection */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-slate-700 mb-3">
-            Select Data Upload type:
-          </label>
-          <div className="flex gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="uploadType"
-                value="new"
-                checked={uploadType === "new"}
-                onChange={(e) => setUploadType(e.target.value)}
-                className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
-              />
-              <span className="text-sm font-medium text-slate-700">Upload New Data</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="uploadType"
-                value="update"
-                checked={uploadType === "update"}
-                onChange={(e) => setUploadType(e.target.value)}
-                className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
-              />
-              <span className="text-sm font-medium text-slate-700">Update Existing Data</span>
-            </label>
-          </div>
-        </div>
-
         {/* File Upload Area */}
         <div className="mb-6">
           <label className="block text-sm font-semibold text-slate-700 mb-3">

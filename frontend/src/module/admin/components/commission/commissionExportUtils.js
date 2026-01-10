@@ -1,12 +1,14 @@
-// Export utility functions for shifts
-export const exportShiftsToCSV = (shifts, filename = "shifts") => {
-  const headers = ["SI", "Name", "Start Time", "End Time", "Status"]
-  const rows = shifts.map((shift) => [
-    shift.sl,
-    shift.name,
-    shift.startTime,
-    shift.endTime,
-    shift.status ? "Active" : "Inactive"
+// Export utility functions for commission rules
+export const exportCommissionToCSV = (commissions, filename = "delivery-boy-commission") => {
+  const headers = ["SI", "Name", "Min Distance (km)", "Max Distance (km)", "Commission Per Km (₹)", "Base Payout (₹)", "Status"]
+  const rows = commissions.map((commission) => [
+    commission.sl,
+    commission.name,
+    commission.minDistance,
+    commission.maxDistance === null ? "Unlimited" : commission.maxDistance,
+    commission.commissionPerKm,
+    commission.basePayout,
+    commission.status ? "Active" : "Inactive"
   ])
   
   const csvContent = [
@@ -25,14 +27,16 @@ export const exportShiftsToCSV = (shifts, filename = "shifts") => {
   document.body.removeChild(link)
 }
 
-export const exportShiftsToExcel = (shifts, filename = "shifts") => {
-  const headers = ["SI", "Name", "Start Time", "End Time", "Status"]
-  const rows = shifts.map((shift) => [
-    shift.sl,
-    shift.name,
-    shift.startTime,
-    shift.endTime,
-    shift.status ? "Active" : "Inactive"
+export const exportCommissionToExcel = (commissions, filename = "delivery-boy-commission") => {
+  const headers = ["SI", "Name", "Min Distance (km)", "Max Distance (km)", "Commission Per Km (₹)", "Base Payout (₹)", "Status"]
+  const rows = commissions.map((commission) => [
+    commission.sl,
+    commission.name,
+    commission.minDistance,
+    commission.maxDistance === null ? "Unlimited" : commission.maxDistance,
+    commission.commissionPerKm,
+    commission.basePayout,
+    commission.status ? "Active" : "Inactive"
   ])
   
   const csvContent = [
@@ -51,14 +55,14 @@ export const exportShiftsToExcel = (shifts, filename = "shifts") => {
   document.body.removeChild(link)
 }
 
-export const exportShiftsToPDF = (shifts, filename = "shifts") => {
-  const headers = ["SI", "Name", "Start Time", "End Time", "Status"]
+export const exportCommissionToPDF = (commissions, filename = "delivery-boy-commission") => {
+  const headers = ["SI", "Name", "Min Distance (km)", "Max Distance (km)", "Commission Per Km (₹)", "Base Payout (₹)", "Status"]
   
   let htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Shifts Report</title>
+      <title>Delivery Boy Commission Report</title>
       <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -69,7 +73,7 @@ export const exportShiftsToPDF = (shifts, filename = "shifts") => {
       </style>
     </head>
     <body>
-      <h1>Shifts Report</h1>
+      <h1>Delivery Boy Commission Report</h1>
       <p>Generated on: ${new Date().toLocaleString()}</p>
       <table>
         <thead>
@@ -78,13 +82,15 @@ export const exportShiftsToPDF = (shifts, filename = "shifts") => {
           </tr>
         </thead>
         <tbody>
-          ${shifts.map(shift => `
+          ${commissions.map(commission => `
             <tr>
-              <td>${shift.sl}</td>
-              <td>${shift.name}</td>
-              <td>${shift.startTime}</td>
-              <td>${shift.endTime}</td>
-              <td>${shift.status ? "Active" : "Inactive"}</td>
+              <td>${commission.sl}</td>
+              <td>${commission.name}</td>
+              <td>${commission.minDistance}</td>
+              <td>${commission.maxDistance === null ? "Unlimited" : commission.maxDistance}</td>
+              <td>₹${commission.commissionPerKm}</td>
+              <td>₹${commission.basePayout}</td>
+              <td>${commission.status ? "Active" : "Inactive"}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -103,8 +109,8 @@ export const exportShiftsToPDF = (shifts, filename = "shifts") => {
   }, 250)
 }
 
-export const exportShiftsToJSON = (shifts, filename = "shifts") => {
-  const jsonContent = JSON.stringify(shifts, null, 2)
+export const exportCommissionToJSON = (commissions, filename = "delivery-boy-commission") => {
+  const jsonContent = JSON.stringify(commissions, null, 2)
   const blob = new Blob([jsonContent], { type: "application/json" })
   const link = document.createElement("a")
   const url = URL.createObjectURL(blob)

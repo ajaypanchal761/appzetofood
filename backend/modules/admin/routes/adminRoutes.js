@@ -11,7 +11,14 @@ import {
   changeAdminPassword,
   getUsers,
   getUserById,
-  updateUserStatus
+  updateUserStatus,
+  getRestaurants,
+  updateRestaurantStatus,
+  getRestaurantJoinRequests,
+  approveRestaurant,
+  rejectRestaurant,
+  reverifyRestaurant,
+  deleteRestaurant
 } from '../controllers/adminController.js';
 import {
   getCategories,
@@ -52,6 +59,19 @@ import {
   cancelEarningAddonHistory,
   getEarningAddonHistoryStatistics
 } from '../controllers/earningAddonHistoryController.js';
+import {
+  getEnvVariables,
+  saveEnvVariables
+} from '../controllers/envVariablesController.js';
+import {
+  getCommissionRules,
+  getCommissionRuleById,
+  createCommissionRule,
+  updateCommissionRule,
+  deleteCommissionRule,
+  toggleCommissionRuleStatus,
+  calculateCommission
+} from '../controllers/deliveryBoyCommissionController.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 
@@ -81,6 +101,15 @@ router.put('/settings/change-password', changeAdminPassword);
 router.get('/users', getUsers);
 router.get('/users/:id', getUserById);
 router.put('/users/:id/status', updateUserStatus);
+
+// Restaurant Management
+router.get('/restaurants', getRestaurants);
+router.get('/restaurants/requests', getRestaurantJoinRequests);
+router.post('/restaurants/:id/approve', approveRestaurant);
+router.post('/restaurants/:id/reject', rejectRestaurant);
+router.post('/restaurants/:id/reverify', reverifyRestaurant);
+router.put('/restaurants/:id/status', updateRestaurantStatus);
+router.delete('/restaurants/:id', deleteRestaurant);
 
 // Category Management
 router.get('/categories', getCategories);
@@ -120,6 +149,19 @@ router.get('/earning-addon-history/statistics', getEarningAddonHistoryStatistics
 router.get('/earning-addon-history/:id', getEarningAddonHistoryById);
 router.post('/earning-addon-history/:id/credit', creditEarningToWallet);
 router.patch('/earning-addon-history/:id/cancel', cancelEarningAddonHistory);
+
+// Environment Variables Management
+router.get('/env-variables', getEnvVariables);
+router.post('/env-variables', saveEnvVariables);
+
+// Delivery Boy Commission Management
+router.get('/delivery-boy-commission', getCommissionRules);
+router.post('/delivery-boy-commission', createCommissionRule);
+router.post('/delivery-boy-commission/calculate', calculateCommission);
+router.get('/delivery-boy-commission/:id', getCommissionRuleById);
+router.put('/delivery-boy-commission/:id', updateCommissionRule);
+router.delete('/delivery-boy-commission/:id', deleteCommissionRule);
+router.patch('/delivery-boy-commission/:id/status', toggleCommissionRuleStatus);
 
 export default router;
 

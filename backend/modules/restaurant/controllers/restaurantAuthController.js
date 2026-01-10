@@ -118,6 +118,9 @@ export const verifyOTP = asyncHandler(async (req, res) => {
       // Set owner name from restaurant name if not provided separately
       restaurantData.ownerName = name;
 
+      // Set isActive to false - restaurant needs admin approval before becoming active
+      restaurantData.isActive = false;
+
       try {
         restaurant = await Restaurant.create(restaurantData);
         logger.info(`New restaurant registered: ${restaurant._id}`, { 
@@ -230,6 +233,9 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         }
 
         restaurantData.ownerName = name;
+
+        // Set isActive to false - restaurant needs admin approval before becoming active
+        restaurantData.isActive = false;
 
         try {
           restaurant = await Restaurant.create(restaurantData);
@@ -366,7 +372,9 @@ export const register = asyncHandler(async (req, res) => {
     ownerName: ownerName || name,
     ownerEmail: ownerEmail || email,
     ownerPhone: ownerPhone || phone || null,
-    signupMethod: 'email'
+    signupMethod: 'email',
+    // Set isActive to false - restaurant needs admin approval before becoming active
+    isActive: false
   });
 
   // Generate tokens (email may be null for phone signups)
@@ -531,9 +539,12 @@ export const refreshToken = asyncHandler(async (req, res) => {
     // Get restaurant from database
     const restaurant = await Restaurant.findById(decoded.userId).select('-password');
 
-    if (!restaurant || !restaurant.isActive) {
-      return errorResponse(res, 401, 'Restaurant not found or inactive');
+    if (!restaurant) {
+      return errorResponse(res, 401, 'Restaurant not found');
     }
+
+    // Allow inactive restaurants to refresh tokens - they need access to complete onboarding
+    // The middleware will handle blocking inactive restaurants from accessing restricted routes
 
     // Generate new access token
     const accessToken = jwtService.generateAccessToken({
@@ -594,9 +605,52 @@ export const getCurrentRestaurant = asyncHandler(async (req, res) => {
       deliveryTimings: req.restaurant.deliveryTimings,
       menuImages: req.restaurant.menuImages,
       slug: req.restaurant.slug,
-      isAcceptingOrders: req.restaurant.isAcceptingOrders
+      isAcceptingOrders: req.restaurant.isAcceptingOrders,
+      // Include verification status
+      rejectionReason: req.restaurant.rejectionReason || null,
+      approvedAt: req.restaurant.approvedAt || null,
+      rejectedAt: req.restaurant.rejectedAt || null
     }
   });
+});
+
+/**
+ * Reverify Restaurant (Resubmit for approval)
+ * POST /api/restaurant/auth/reverify
+ */
+export const reverifyRestaurant = asyncHandler(async (req, res) => {
+  try {
+    const restaurant = req.restaurant; // Already attached by authenticate middleware
+
+    // Check if restaurant was rejected
+    if (!restaurant.rejectionReason) {
+      return errorResponse(res, 400, 'Restaurant is not rejected. Only rejected restaurants can be reverified.');
+    }
+
+    // Clear rejection details and mark as pending again
+    restaurant.rejectionReason = null;
+    restaurant.rejectedAt = undefined;
+    restaurant.rejectedBy = undefined;
+    restaurant.isActive = false; // Keep inactive until approved
+
+    await restaurant.save();
+
+    logger.info(`Restaurant reverified: ${restaurant._id}`, {
+      restaurantName: restaurant.name
+    });
+
+    return successResponse(res, 200, 'Restaurant reverified successfully. Waiting for admin approval. Verification will be done in 24 hours.', {
+      restaurant: {
+        id: restaurant._id.toString(),
+        name: restaurant.name,
+        isActive: restaurant.isActive,
+        rejectionReason: null
+      }
+    });
+  } catch (error) {
+    logger.error(`Error reverifying restaurant: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to reverify restaurant');
+  }
 });
 
 /**
@@ -680,7 +734,8 @@ export const firebaseGoogleLogin = asyncHandler(async (req, res) => {
         profileImage: picture ? { url: picture } : null,
         ownerName: name.trim(),
         ownerEmail: email.toLowerCase().trim(),
-        isActive: true
+        // Set isActive to false - restaurant needs admin approval before becoming active
+        isActive: false
       };
 
       try {

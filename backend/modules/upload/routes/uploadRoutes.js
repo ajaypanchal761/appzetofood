@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 import { uploadSingleMedia } from '../controllers/uploadController.js';
 import jwtService from '../../auth/services/jwtService.js';
@@ -51,9 +52,12 @@ const authenticateFlexible = async (req, res, next) => {
         return errorResponse(res, 401, 'Restaurant not found');
       }
 
-      if (!restaurant.isActive) {
-        return errorResponse(res, 401, 'Restaurant account is inactive');
-      }
+      // Allow inactive restaurants to access upload routes - they need to upload images during onboarding
+      // Similar to delivery partners, inactive restaurants can access upload during onboarding/verification
+      // The middleware in restaurant routes will handle blocking inactive restaurants from other restricted routes
+      // if (!restaurant.isActive) {
+      //   return errorResponse(res, 401, 'Restaurant account is inactive');
+      // }
 
       req.user = restaurant; // Use req.user for consistency with other modules
       req.restaurant = restaurant; // Also attach as req.restaurant for clarity
@@ -106,10 +110,29 @@ const authenticateFlexible = async (req, res, next) => {
 };
 
 // POST /api/upload/media - Accepts both admin and user tokens
+// Handle multer errors before controller
 router.post(
   '/media',
   authenticateFlexible,
-  uploadMiddleware.single('file'),
+  (req, res, next) => {
+    uploadMiddleware.single('file')(req, res, (err) => {
+      if (err) {
+        console.error('❌ Multer upload error:', err);
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            return errorResponse(res, 400, 'File size exceeds 20MB limit');
+          }
+          return errorResponse(res, 400, `Upload error: ${err.message}`);
+        }
+        // For non-multer errors (e.g., fileFilter errors)
+        if (err.message) {
+          return errorResponse(res, 400, err.message);
+        }
+        return errorResponse(res, 400, 'File upload error');
+      }
+      next();
+    });
+  },
   uploadSingleMedia
 );
 

@@ -1,6 +1,7 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import winston from 'winston';
+import { getRazorpayCredentials } from '../../../shared/utils/envService.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -15,9 +16,10 @@ const logger = winston.createLogger({
 // Initialize Razorpay instance
 let razorpayInstance = null;
 
-const initializeRazorpay = () => {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+const initializeRazorpay = async () => {
+  const credentials = await getRazorpayCredentials();
+  const keyId = credentials.keyId;
+  const keySecret = credentials.keySecret;
 
   if (!keyId || !keySecret) {
     logger.warn('Razorpay credentials not found. Payment gateway will not work.');
@@ -38,9 +40,9 @@ const initializeRazorpay = () => {
 };
 
 // Get Razorpay instance
-const getRazorpayInstance = () => {
+const getRazorpayInstance = async () => {
   if (!razorpayInstance) {
-    return initializeRazorpay();
+    return await initializeRazorpay();
   }
   return razorpayInstance;
 };
@@ -55,7 +57,7 @@ const getRazorpayInstance = () => {
  * @returns {Promise<Object>} Razorpay order object
  */
 const createOrder = async (options) => {
-  const razorpay = getRazorpayInstance();
+  const razorpay = await getRazorpayInstance();
   if (!razorpay) {
     throw new Error('Razorpay is not initialized. Please check your credentials.');
   }
@@ -92,8 +94,9 @@ const createOrder = async (options) => {
  * @param {String} razorpaySignature - Razorpay signature
  * @returns {Boolean} True if signature is valid
  */
-const verifyPayment = (razorpayOrderId, razorpayPaymentId, razorpaySignature) => {
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+const verifyPayment = async (razorpayOrderId, razorpayPaymentId, razorpaySignature) => {
+  const credentials = await getRazorpayCredentials();
+  const keySecret = credentials.keySecret;
   
   if (!keySecret) {
     logger.error('Razorpay key secret not found');
@@ -130,7 +133,7 @@ const verifyPayment = (razorpayOrderId, razorpayPaymentId, razorpaySignature) =>
  * @returns {Promise<Object>} Payment details
  */
 const fetchPayment = async (paymentId) => {
-  const razorpay = getRazorpayInstance();
+  const razorpay = await getRazorpayInstance();
   if (!razorpay) {
     throw new Error('Razorpay is not initialized');
   }
@@ -152,7 +155,7 @@ const fetchPayment = async (paymentId) => {
  * @returns {Promise<Object>} Refund details
  */
 const createRefund = async (paymentId, amount = null, notes = {}) => {
-  const razorpay = getRazorpayInstance();
+  const razorpay = await getRazorpayInstance();
   if (!razorpay) {
     throw new Error('Razorpay is not initialized');
   }

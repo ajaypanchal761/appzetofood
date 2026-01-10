@@ -199,7 +199,10 @@ export default function FeedNavbar({ className = "" }) {
           }
         }
       } catch (error) {
-        console.error("Error fetching profile image for navbar:", error);
+        // Skip logging timeout errors (handled by axios interceptor)
+        if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error("Error fetching profile image for navbar:", error);
+        }
       }
     };
 

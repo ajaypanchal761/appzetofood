@@ -8,8 +8,8 @@ import { errorResponse } from '../../../shared/utils/response.js';
  */
 export const authenticateAdmin = async (req, res, next) => {
   try {
-    // Get token from Authorization header
-    const authHeader = req.headers.authorization;
+    // Get token from Authorization header (case-insensitive check)
+    const authHeader = req.headers.authorization || req.headers.Authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return errorResponse(res, 401, 'No token provided');
@@ -36,8 +36,9 @@ export const authenticateAdmin = async (req, res, next) => {
       return errorResponse(res, 401, 'Admin account is inactive');
     }
 
-    // Attach admin to request
+    // Attach admin to request (both req.user and req.admin for compatibility)
     req.user = admin;
+    req.admin = admin; // Also set req.admin for consistency
     req.token = decoded;
     
     next();

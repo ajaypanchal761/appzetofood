@@ -585,12 +585,6 @@ export default function ItemDetailsPage() {
 
       // Prepare nutrition data as strings (as per menu model)
       const nutritionStrings = []
-      if (weightPerServing) nutritionStrings.push(`Weight per serving: ${weightPerServing} grams`)
-      if (calorieCount) nutritionStrings.push(`Calorie count: ${calorieCount} Kcal`)
-      if (proteinCount) nutritionStrings.push(`Protein count: ${proteinCount} mg`)
-      if (carbohydrates) nutritionStrings.push(`Carbohydrates: ${carbohydrates} mg`)
-      if (fatCount) nutritionStrings.push(`Fat count: ${fatCount} mg`)
-      if (fibreCount) nutritionStrings.push(`Fibre count: ${fibreCount} mg`)
 
       // Prepare item data according to menu model
       const itemDataToSave = {
@@ -615,16 +609,16 @@ export default function ItemDetailsPage() {
         isAvailable: isInStock,
         isRecommended: isRecommended,
         variations: [],
-        tags: selectedTags,
+        tags: [],
         nutrition: nutritionStrings,
-        allergies: allergens ? allergens.split(",").map(a => a.trim()).filter(a => a) : [],
+        allergies: [],
         photoCount: allImageUrls.length || 1,
         // Additional fields for complete item details
         subCategory: subCategory || "",
-        servesInfo: servesInfo || "",
-        itemSize: itemSizeQuantity ? `${itemSizeQuantity} ${itemSizeUnit}` : "",
-        itemSizeQuantity: itemSizeQuantity || "",
-        itemSizeUnit: itemSizeUnit || "piece",
+        servesInfo: "",
+        itemSize: "",
+        itemSizeQuantity: "",
+        itemSizeUnit: "piece",
         gst: parseFloat(gst) || 0,
       }
 
@@ -681,7 +675,7 @@ export default function ItemDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col pb-24">
+    <div className="h-screen bg-white flex flex-col overflow-hidden">
       <style>{`
         [data-slot="switch"][data-state="checked"] {
           background-color: #16a34a !important;
@@ -691,7 +685,7 @@ export default function ItemDetailsPage() {
         }
       `}</style>
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-white border-b border-gray-200">
+      <div className="sticky top-0 z-40 bg-white border-b border-gray-200 flex-shrink-0">
         <div className="px-4 py-3 flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
@@ -705,7 +699,7 @@ export default function ItemDetailsPage() {
 
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-24">
         {/* Image Carousel */}
         <div className="relative bg-white">
           {images.length > 0 ? (
@@ -870,50 +864,6 @@ export default function ItemDetailsPage() {
             </div>
           </div>
 
-          {/* Serves Info */}
-          <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">
-              Serves info, select no. of people
-            </label>
-            <button
-              onClick={() => setIsServesPopupOpen(true)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between bg-white hover:bg-gray-50 transition-colors"
-            >
-              <span className="text-sm text-gray-900">
-                {servesInfo || "Serves eg. 1-2 people"}
-              </span>
-              <ChevronDown className="w-5 h-5 text-gray-500" />
-            </button>
-            <p className="text-xs text-gray-500 mt-2">
-              Number of adults who can be served with 1 item
-            </p>
-          </div>
-
-          {/* Item Size */}
-          <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">
-              Item size
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={itemSizeQuantity}
-                onChange={(e) => setItemSizeQuantity(e.target.value)}
-                placeholder="Eg. 4"
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <button
-                onClick={() => setIsItemSizePopupOpen(true)}
-                className="px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between bg-white hover:bg-gray-50 transition-colors min-w-[100px]"
-              >
-                <span className="text-sm text-gray-900">{itemSizeUnit}</span>
-                <ChevronDown className="w-5 h-5 text-gray-500 ml-2" />
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Size of the item e.g. Paneer Tikka, 8 pieces.
-            </p>
-          </div>
 
           {/* Item Description */}
           <div>
@@ -1053,138 +1003,7 @@ export default function ItemDetailsPage() {
             </div>
           </div>
 
-          {/* Nutritional info per serving */}
-          <div>
-            <h3 className="text-base font-bold text-gray-900 mb-1">Nutritional info per serving</h3>
-            <p className="text-xs text-gray-500 mb-4">Per serving is corresponding to 1 adult</p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Weight per serving</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={weightPerServing}
-                    onChange={(e) => setWeightPerServing(e.target.value)}
-                    placeholder="Eg. 500"
-                    className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">grams</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Calorie count</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={calorieCount}
-                    onChange={(e) => setCalorieCount(e.target.value)}
-                    placeholder="Eg. 300"
-                    className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">Kcal</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Protein count</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={proteinCount}
-                    onChange={(e) => setProteinCount(e.target.value)}
-                    placeholder="Eg. 50"
-                    className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">mg</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Carbohydrates</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={carbohydrates}
-                    onChange={(e) => setCarbohydrates(e.target.value)}
-                    placeholder="Eg. 100"
-                    className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">mg</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">Fat count</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={fatCount}
-                    onChange={(e) => setFatCount(e.target.value)}
-                    placeholder="Eg. 300"
-                    className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">mg</span>
-                </div>
-              </div>
-              
-              {showMoreNutrition && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-900 mb-2">Fibre count</label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={fibreCount}
-                        onChange={(e) => setFibreCount(e.target.value)}
-                        placeholder="Eg. 10"
-                        className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">mg</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-900 mb-2">Allergens</label>
-                    <input
-                      type="text"
-                      value={allergens}
-                      onChange={(e) => setAllergens(e.target.value)}
-                      placeholder="Eg. Milk"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </>
-              )}
 
-              <button
-                onClick={() => setShowMoreNutrition(!showMoreNutrition)}
-                className="w-full py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white hover:bg-gray-50 transition-colors"
-              >
-                {showMoreNutrition ? "View less" : "View more"}
-              </button>
-            </div>
-
-            {/* Calculation Tips */}
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <h4 className="text-sm font-bold text-gray-900 mb-2">Calculation Tips:</h4>
-              <ol className="text-xs text-gray-700 space-y-1 list-decimal list-inside">
-                <li>Calories (kcal) is generally equal to 4 x Protein (in g) + 4 x Carbs (in g) + 9 x Fats (in g)</li>
-                <li>Partial information would not be shown to the customer</li>
-              </ol>
-            </div>
-          </div>
-
-          {/* Select item tags */}
-          <div className="mb-12">
-            <label className="block text-sm font-medium text-gray-900 mb-2">
-              Select item tags
-            </label>
-            <button
-              onClick={() => setIsTagsPopupOpen(true)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left flex items-center justify-between bg-white hover:bg-gray-50 transition-colors"
-            >
-              <span className="text-sm text-gray-900">
-                {selectedTags.length > 0 ? selectedTags.join(", ") : "Select tags"}
-              </span>
-              <ChevronDown className="w-5 h-5 text-gray-500" />
-            </button>
-          </div>
         </div>
       </div>
 
@@ -1271,105 +1090,6 @@ export default function ItemDetailsPage() {
         )}
       </AnimatePresence>
 
-      {/* Serves Info Popup */}
-      <AnimatePresence>
-        {isServesPopupOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsServesPopupOpen(false)}
-              className="fixed inset-0 bg-black/50 z-50"
-            />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[60vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900">Select serves info</h2>
-                <button
-                  onClick={() => setIsServesPopupOpen(false)}
-                  className="p-1 rounded-full hover:bg-gray-100"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4">
-                <div className="space-y-2">
-                  {servesOptions.map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => handleServesSelect(option)}
-                      className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                        servesInfo === option
-                          ? "bg-gray-900 text-white"
-                          : "bg-gray-50 text-gray-900 hover:bg-gray-100"
-                      }`}
-                    >
-                      {option}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Item Size Unit Popup */}
-      <AnimatePresence>
-        {isItemSizePopupOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsItemSizePopupOpen(false)}
-              className="fixed inset-0 bg-black/50 z-50"
-            />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[60vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900">Select unit</h2>
-                <button
-                  onClick={() => setIsItemSizePopupOpen(false)}
-                  className="p-1 rounded-full hover:bg-gray-100"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4">
-                <div className="space-y-2">
-                  {itemSizeUnits.map((unit) => (
-                    <button
-                      key={unit}
-                      onClick={() => handleItemSizeUnitSelect(unit)}
-                      className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                        itemSizeUnit === unit
-                          ? "bg-gray-900 text-white"
-                          : "bg-gray-50 text-gray-900 hover:bg-gray-100"
-                      }`}
-                    >
-                      {unit}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
 
       {/* GST Popup */}
       {/* <AnimatePresence>
@@ -1421,72 +1141,6 @@ export default function ItemDetailsPage() {
         )}
       </AnimatePresence> */}
 
-      {/* Tags Popup */}
-      <AnimatePresence>
-        {isTagsPopupOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsTagsPopupOpen(false)}
-              className="fixed inset-0 bg-black/50 z-50"
-            />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[85vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900">Select item tags</h2>
-                <button
-                  onClick={() => setIsTagsPopupOpen(false)}
-                  className="p-1 rounded-full hover:bg-gray-100"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4">
-                <div className="space-y-6">
-                  {itemTagsCategories.map((category) => (
-                    <div key={category.category}>
-                      <h3 className="text-sm font-bold text-gray-900 mb-3">
-                        {category.category}
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {category.tags.map((tag) => (
-                          <button
-                            key={tag}
-                            onClick={() => handleTagToggle(tag)}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors border ${
-                              selectedTags.includes(tag)
-                                ? "bg-gray-900 text-white border-gray-900"
-                                : "bg-white text-gray-900 border-gray-900 hover:bg-gray-50"
-                            }`}
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="px-4 py-4 border-t border-gray-200">
-                <button
-                  onClick={() => setIsTagsPopupOpen(false)}
-                  className={`w-full py-3 px-4  ${selectedTags.length > 0 ? 'bg-black' : 'bg-gray-500 cursor-not-allowed' } text-white rounded-xl text-sm font-semibold hover:bg-gray-500 transition-colors`}
-                >
-                  Confirm
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
 
       {/* Bottom Sticky Buttons */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200  z-40">

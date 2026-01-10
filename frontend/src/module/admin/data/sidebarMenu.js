@@ -24,14 +24,6 @@ export const sidebarMenuData = [
           { label: "Category", path: "/admin/categories" },
         ],
       },
-      {
-        type: "expandable",
-        label: "Foods",
-        icon: "Utensils",
-        subItems: [
-          { label: "List", path: "/admin/foods" },
-        ],
-      },
     ],
   },
   {
@@ -55,11 +47,16 @@ export const sidebarMenuData = [
         label: "Restaurants",
         icon: "UtensilsCrossed",
         subItems: [
-          { label: "Add Restaurant", path: "/admin/restaurants/add" },
           { label: "Restaurants List", path: "/admin/restaurants" },
           { label: "New Joining Request", path: "/admin/restaurants/joining-request" },
-          { label: "Bulk Import", path: "/admin/restaurants/bulk-import" },
-          { label: "Bulk Export", path: "/admin/restaurants/bulk-export" },
+        ],
+      },
+      {
+        type: "expandable",
+        label: "Foods",
+        icon: "Utensils",
+        subItems: [
+          { label: "List", path: "/admin/foods" },
         ],
       },
     ],
@@ -216,9 +213,9 @@ export const sidebarMenuData = [
       },
       {
         type: "link",
-        label: "Shift Setup",
-        path: "/admin/shift-setup",
-        icon: "Calendar",
+        label: "Delivery Boy Commission",
+        path: "/admin/delivery-boy-commission",
+        icon: "DollarSign",
       },
       {
         type: "expandable",
@@ -541,7 +538,7 @@ export const sidebarMenuData = [
     items: [
       {
         type: "link",
-        label: "System Addons",
+        label: "ENV Setup",
         path: "/admin/system-addons",
         icon: "Plus",
       },

@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
-import { Printer, Volume2, VolumeX, ChevronDown, ChevronUp, Minus, Plus, X } from "lucide-react"
+import { Printer, Volume2, VolumeX, ChevronDown, ChevronUp, Minus, Plus, X, AlertCircle, Loader2 } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
 import RestaurantNavbar from "../components/RestaurantNavbar"
 import notificationSound from "@/assets/audio/alert.mp3"
+import { restaurantAPI } from "@/lib/api"
 
 const STORAGE_KEY = "restaurant_online_status"
 
@@ -43,6 +44,13 @@ export default function OrdersMain() {
   const [showRejectPopup, setShowRejectPopup] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const audioRef = useRef(null)
+  const [restaurantStatus, setRestaurantStatus] = useState({
+    isActive: null,
+    rejectionReason: null,
+    onboarding: null,
+    isLoading: true
+  })
+  const [isReverifying, setIsReverifying] = useState(false)
 
   const rejectReasons = [
     "Restaurant is too busy",
@@ -52,6 +60,94 @@ export default function OrdersMain() {
     "Technical issue",
     "Other reason"
   ]
+
+  // Fetch restaurant verification status
+  useEffect(() => {
+    const fetchRestaurantStatus = async () => {
+      try {
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const restaurant = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (restaurant) {
+          setRestaurantStatus({
+            isActive: restaurant.isActive,
+            rejectionReason: restaurant.rejectionReason || null,
+            onboarding: restaurant.onboarding || null,
+            isLoading: false
+          })
+        }
+      } catch (error) {
+        // Only log error if it's not a network/timeout error (backend might be down/slow)
+        if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error("Error fetching restaurant status:", error)
+        }
+        // Set loading to false so UI doesn't stay in loading state
+        setRestaurantStatus(prev => ({ ...prev, isLoading: false }))
+      }
+    }
+
+    fetchRestaurantStatus()
+
+    // Listen for restaurant profile updates
+    const handleProfileRefresh = () => {
+      fetchRestaurantStatus()
+    }
+
+    window.addEventListener('restaurantProfileRefresh', handleProfileRefresh)
+
+    return () => {
+      window.removeEventListener('restaurantProfileRefresh', handleProfileRefresh)
+    }
+  }, [])
+
+  // Handle reverify (resubmit for approval)
+  const handleReverify = async () => {
+    try {
+      setIsReverifying(true)
+      await restaurantAPI.reverify()
+      
+      // Refresh restaurant status
+      const response = await restaurantAPI.getCurrentRestaurant()
+      const restaurant = response?.data?.data?.restaurant || response?.data?.restaurant
+      if (restaurant) {
+        setRestaurantStatus({
+          isActive: restaurant.isActive,
+          rejectionReason: restaurant.rejectionReason || null,
+          onboarding: restaurant.onboarding || null,
+          isLoading: false
+        })
+      }
+      
+      // Trigger profile refresh event
+      window.dispatchEvent(new Event('restaurantProfileRefresh'))
+      
+      alert('Restaurant reverified successfully! Verification will be done in 24 hours.')
+    } catch (error) {
+      // Don't log network/timeout errors (backend might be down)
+      if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+        console.error("Error reverifying restaurant:", error)
+      }
+      
+      // Handle 401 Unauthorized errors (token expired/invalid)
+      if (error.response?.status === 401) {
+        const errorMessage = error.response?.data?.message || 'Your session has expired. Please login again.'
+        alert(errorMessage)
+        // The axios interceptor should handle redirecting to login
+        // But if it doesn't, we can manually redirect
+        if (!error.response?.data?.message?.includes('inactive')) {
+          // Only redirect if it's not an "inactive" error (which we handle differently)
+          setTimeout(() => {
+            window.location.href = '/restaurant/login'
+          }, 1500)
+        }
+      } else {
+        // Other errors (400, 500, etc.)
+        const errorMessage = error.response?.data?.message || "Failed to reverify restaurant. Please try again."
+        alert(errorMessage)
+      }
+    } finally {
+      setIsReverifying(false)
+    }
+  }
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -457,6 +553,74 @@ export default function OrdersMain() {
             display: none;
           }
         `}</style>
+        
+        {/* Verification Pending Card - Show if onboarding is complete (all 4 steps) and restaurant is not active */}
+        {!restaurantStatus.isLoading && 
+         !restaurantStatus.isActive && 
+         restaurantStatus.onboarding?.completedSteps === 4 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className={`mt-4 mb-4 rounded-2xl shadow-sm px-6 py-4 ${
+              restaurantStatus.rejectionReason
+                ? 'bg-white border border-red-200'
+                : 'bg-white border border-yellow-200'
+            }`}
+          >
+            {restaurantStatus.rejectionReason ? (
+              <>
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="flex-shrink-0 rounded-full p-2 bg-red-100">
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-bold text-red-600 mb-2">Denied Verification</h3>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+                      <p className="text-xs font-semibold text-red-800 mb-2">Reason for Rejection:</p>
+                      <div className="text-xs text-red-700 space-y-1">
+                        {restaurantStatus.rejectionReason.split('\n').filter(line => line.trim()).length > 1 ? (
+                          <ul className="space-y-1 list-disc list-inside">
+                            {restaurantStatus.rejectionReason.split('\n').map((point, index) => (
+                              point.trim() && (
+                                <li key={index}>{point.trim()}</li>
+                              )
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-red-700">{restaurantStatus.rejectionReason}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-700 mb-3">
+                  Please correct the above issues and click "Reverify" to resubmit your request for approval.
+                </p>
+                <button
+                  onClick={handleReverify}
+                  disabled={isReverifying}
+                  className="w-full px-6 py-2.5 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isReverifying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Reverify"
+                  )}
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">Verification Done in 24 Hours</h3>
+                <p className="text-sm text-gray-600">Your account is under verification. You'll be notified once approved.</p>
+              </>
+            )}
+          </motion.div>
+        )}
+        
         <AnimatePresence mode="wait">
           <motion.div
             key={activeFilter}

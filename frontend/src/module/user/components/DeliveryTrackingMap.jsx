@@ -23,7 +23,16 @@ const DeliveryTrackingMap = ({
   const [currentLocation, setCurrentLocation] = useState(null);
 
   const backendUrl = API_BASE_URL.replace('/api', '');
-  const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+  const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState("");
+  
+  // Load Google Maps API key from backend
+  useEffect(() => {
+    import('@/lib/utils/googleMapsApiKey.js').then(({ getGoogleMapsApiKey }) => {
+      getGoogleMapsApiKey().then(key => {
+        setGOOGLE_MAPS_API_KEY(key)
+      })
+    })
+  }, [])
 
   // Draw route using Google Maps Directions API
   const drawRoute = useCallback((start, end) => {

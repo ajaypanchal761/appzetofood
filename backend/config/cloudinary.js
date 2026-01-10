@@ -1,4 +1,5 @@
 import { v2 as cloudinary } from 'cloudinary';
+import { getCloudinaryCredentials } from '../shared/utils/envService.js';
 
 // Normalize env values (trim quotes if present)
 function cleanEnv(value) {
@@ -13,23 +14,62 @@ function cleanEnv(value) {
   return v;
 }
 
+// Initialize Cloudinary with database credentials
+let cloudinaryInitialized = false;
+
+async function initializeCloudinary() {
+  if (cloudinaryInitialized) {
+    return cloudinary;
+  }
+
+  try {
+    const credentials = await getCloudinaryCredentials();
+    const cloudName = cleanEnv(credentials.cloudName || process.env.CLOUDINARY_CLOUD_NAME);
+    const apiKey = cleanEnv(credentials.apiKey || process.env.CLOUDINARY_API_KEY);
+    const apiSecret = cleanEnv(credentials.apiSecret || process.env.CLOUDINARY_API_SECRET);
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      console.warn(
+        '⚠️  Cloudinary is not fully configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in ENV Setup or backend .env'
+      );
+      return cloudinary;
+    }
+
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret
+    });
+
+    cloudinaryInitialized = true;
+    console.log('✅ Cloudinary initialized successfully');
+  } catch (error) {
+    console.error('Error initializing Cloudinary:', error.message);
+  }
+
+  return cloudinary;
+}
+
+// Initialize on module load (fallback to process.env)
 const CLOUDINARY_CLOUD_NAME = cleanEnv(process.env.CLOUDINARY_CLOUD_NAME);
 const CLOUDINARY_API_KEY = cleanEnv(process.env.CLOUDINARY_API_KEY);
 const CLOUDINARY_API_SECRET = cleanEnv(process.env.CLOUDINARY_API_SECRET);
 
-// Basic validation – we don't exit the process, but log a clear warning
-if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
-  console.warn(
-    '⚠️  Cloudinary is not fully configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in backend .env'
-  );
-} else {
+if (CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET) {
   cloudinary.config({
     cloud_name: CLOUDINARY_CLOUD_NAME,
     api_key: CLOUDINARY_API_KEY,
     api_secret: CLOUDINARY_API_SECRET
   });
+  cloudinaryInitialized = true;
 }
 
-export { cloudinary };
+// Reinitialize function (call after updating env variables)
+export async function reinitializeCloudinary() {
+  cloudinaryInitialized = false;
+  return await initializeCloudinary();
+}
+
+export { cloudinary, initializeCloudinary };
 
 

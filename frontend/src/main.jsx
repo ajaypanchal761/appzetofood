@@ -4,16 +4,32 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.jsx'
+import { getGoogleMapsApiKey } from './lib/utils/googleMapsApiKey.js'
 
-// Load Google Maps API dynamically from environment variable
-const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-if (googleMapsApiKey && !window.google) {
-  const script = document.createElement('script')
-  script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry`
-  script.async = true
-  script.defer = true
-  document.head.appendChild(script)
-}
+// Load Google Maps API dynamically from backend database
+(async () => {
+  try {
+    const googleMapsApiKey = await getGoogleMapsApiKey()
+    if (googleMapsApiKey && !window.google) {
+      const script = document.createElement('script')
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry`
+      script.async = true
+      script.defer = true
+      document.head.appendChild(script)
+    }
+  } catch (error) {
+    console.warn('Failed to load Google Maps API key:', error.message)
+    // Fallback to env variable
+    const fallbackKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+    if (fallbackKey && !window.google) {
+      const script = document.createElement('script')
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${fallbackKey}&libraries=places,geometry`
+      script.async = true
+      script.defer = true
+      document.head.appendChild(script)
+    }
+  }
+})()
 
 // Apply theme on app initialization
 const savedTheme = localStorage.getItem('appTheme') || 'light'
@@ -64,6 +80,16 @@ console.error = (...args) => {
   ) {
     // Only show first occurrence, subsequent ones are suppressed
     // The axios interceptor already handles throttling
+    return
+  }
+  
+  // Suppress timeout errors (handled by axios interceptor)
+  if (
+    errorStr.includes('timeout of') ||
+    errorStr.includes('ECONNABORTED') ||
+    (errorStr.includes('AxiosError') && errorStr.includes('timeout'))
+  ) {
+    // Timeout errors are handled by axios interceptor with proper error handling
     return
   }
   

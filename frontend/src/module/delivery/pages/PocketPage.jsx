@@ -92,7 +92,10 @@ export default function PocketPage() {
           setBankDetailsFilled(isFilled)
         }
       } catch (error) {
-        console.error("Error checking bank details:", error)
+        // Skip logging timeout errors (handled by axios interceptor)
+        if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error("Error checking bank details:", error)
+        }
         // Default to showing the banner if we can't check
         setBankDetailsFilled(false)
       }
@@ -218,18 +221,21 @@ export default function PocketPage() {
           setActiveEarningAddon(null)
         }
       } catch (error) {
-        console.error('❌ Error fetching active earning addons:', error)
-        if (error.code === 'ERR_NETWORK') {
-          console.error('🔴 Network Error - Backend server may not be running!')
-          console.error('💡 Please ensure:')
-          console.error('   1. Backend server is running on http://localhost:5000')
-          console.error('   2. Backend server has been restarted after adding the new route')
-          console.error('   3. Route /api/delivery/earnings/active-offers is registered')
-          console.error('   4. No CORS issues blocking the request')
-        } else if (error.response) {
-          console.error('⚠️ Server responded with error:', error.response.status, error.response.data)
-        } else {
-          console.error('⚠️ Error details:', error.message)
+        // Skip logging timeout errors (handled by axios interceptor)
+        if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error('❌ Error fetching active earning addons:', error)
+          if (error.code === 'ERR_NETWORK') {
+            console.error('🔴 Network Error - Backend server may not be running!')
+            console.error('💡 Please ensure:')
+            console.error('   1. Backend server is running on http://localhost:5000')
+            console.error('   2. Backend server has been restarted after adding the new route')
+            console.error('   3. Route /api/delivery/earnings/active-offers is registered')
+            console.error('   4. No CORS issues blocking the request')
+          } else if (error.response) {
+            console.error('⚠️ Server responded with error:', error.response.status, error.response.data)
+          } else {
+            console.error('⚠️ Error details:', error.message)
+          }
         }
         setActiveEarningAddon(null)
       } finally {
