@@ -72,6 +72,17 @@ import {
   toggleCommissionRuleStatus,
   calculateCommission
 } from '../controllers/deliveryBoyCommissionController.js';
+import {
+  getRestaurantCommissions,
+  getApprovedRestaurants,
+  getRestaurantCommissionById,
+  getCommissionByRestaurantId,
+  createRestaurantCommission,
+  updateRestaurantCommission,
+  deleteRestaurantCommission,
+  toggleRestaurantCommissionStatus,
+  calculateCommission as calculateRestaurantCommission
+} from '../controllers/restaurantCommissionController.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 
@@ -162,6 +173,17 @@ router.get('/delivery-boy-commission/:id', getCommissionRuleById);
 router.put('/delivery-boy-commission/:id', updateCommissionRule);
 router.delete('/delivery-boy-commission/:id', deleteCommissionRule);
 router.patch('/delivery-boy-commission/:id/status', toggleCommissionRuleStatus);
+
+// Restaurant Commission Management
+router.get('/restaurant-commission', getRestaurantCommissions);
+router.get('/restaurant-commission/approved-restaurants', getApprovedRestaurants);
+router.get('/restaurant-commission/restaurant/:restaurantId', getCommissionByRestaurantId);
+router.post('/restaurant-commission', createRestaurantCommission);
+router.post('/restaurant-commission/calculate', calculateRestaurantCommission);
+router.get('/restaurant-commission/:id', getRestaurantCommissionById);
+router.put('/restaurant-commission/:id', updateRestaurantCommission);
+router.delete('/restaurant-commission/:id', deleteRestaurantCommission);
+router.patch('/restaurant-commission/:id/status', toggleRestaurantCommissionStatus);
 
 export default router;
 

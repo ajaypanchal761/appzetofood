@@ -49,6 +49,7 @@ export const sidebarMenuData = [
         subItems: [
           { label: "Restaurants List", path: "/admin/restaurants" },
           { label: "New Joining Request", path: "/admin/restaurants/joining-request" },
+          { label: "Restaurant Commission", path: "/admin/restaurants/commission" },
         ],
       },
       {
@@ -205,12 +206,6 @@ export const sidebarMenuData = [
     type: "section",
     label: "DELIVERYMAN MANAGEMENT",
     items: [
-      {
-        type: "link",
-        label: "Vehicles Category Setup",
-        path: "/admin/vehicles-category-setup",
-        icon: "Truck",
-      },
       {
         type: "link",
         label: "Delivery Boy Commission",

@@ -171,6 +171,12 @@ export const API_ENDPOINTS = {
     DELIVERY_BOY_COMMISSION_BY_ID: '/admin/delivery-boy-commission/:id',
     DELIVERY_BOY_COMMISSION_STATUS: '/admin/delivery-boy-commission/:id/status',
     DELIVERY_BOY_COMMISSION_CALCULATE: '/admin/delivery-boy-commission/calculate',
+    RESTAURANT_COMMISSION: '/admin/restaurant-commission',
+    RESTAURANT_COMMISSION_APPROVED_RESTAURANTS: '/admin/restaurant-commission/approved-restaurants',
+    RESTAURANT_COMMISSION_BY_RESTAURANT_ID: '/admin/restaurant-commission/restaurant/:restaurantId',
+    RESTAURANT_COMMISSION_BY_ID: '/admin/restaurant-commission/:id',
+    RESTAURANT_COMMISSION_STATUS: '/admin/restaurant-commission/:id/status',
+    RESTAURANT_COMMISSION_CALCULATE: '/admin/restaurant-commission/calculate',
   },
   // Order endpoints
   ORDER: {

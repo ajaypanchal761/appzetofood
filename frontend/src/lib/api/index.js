@@ -697,6 +697,46 @@ export const adminAPI = {
     return apiClient.delete(API_ENDPOINTS.ADMIN.RESTAURANT_DELETE.replace(':id', id));
   },
 
+  // Restaurant Commission Management
+  getRestaurantCommissions: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION, { params });
+  },
+
+  getApprovedRestaurants: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION_APPROVED_RESTAURANTS, { params });
+  },
+
+  getRestaurantCommissionById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION_BY_ID.replace(':id', id));
+  },
+
+  getCommissionByRestaurantId: (restaurantId) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION_BY_RESTAURANT_ID.replace(':restaurantId', restaurantId));
+  },
+
+  createRestaurantCommission: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION, data);
+  },
+
+  updateRestaurantCommission: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION_BY_ID.replace(':id', id), data);
+  },
+
+  deleteRestaurantCommission: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION_BY_ID.replace(':id', id));
+  },
+
+  toggleRestaurantCommissionStatus: (id) => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION_STATUS.replace(':id', id));
+  },
+
+  calculateRestaurantCommission: (restaurantId, orderAmount) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION_CALCULATE, {
+      restaurantId,
+      orderAmount
+    });
+  },
+
   // Get delivery partners
   getDelivery: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY, { params });

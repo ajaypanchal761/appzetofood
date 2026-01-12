@@ -16,6 +16,7 @@ import Category from "../pages/categories/Category";
 import ZoneSetup from "../pages/restaurant/ZoneSetup";
 import RestaurantsList from "../pages/restaurant/RestaurantsList";
 import JoiningRequest from "../pages/restaurant/JoiningRequest";
+import RestaurantCommission from "../pages/restaurant/RestaurantCommission";
 import RestaurantsBulkImport from "../pages/restaurant/RestaurantsBulkImport";
 import RestaurantsBulkExport from "../pages/restaurant/RestaurantsBulkExport";
 // Food Management
@@ -41,7 +42,6 @@ import Bonus from "../pages/wallet/Bonus";
 import LoyaltyPointReport from "../pages/loyalty-point/Report";
 import SubscribedMailList from "../pages/SubscribedMailList";
 // Deliveryman Management
-import VehiclesCategorySetup from "../pages/VehiclesCategorySetup";
 import DeliveryBoyCommission from "../pages/DeliveryBoyCommission";
 import JoinRequest from "../pages/delivery-partners/JoinRequest";
 import AddDeliveryman from "../pages/delivery-partners/AddDeliveryman";
@@ -160,6 +160,7 @@ export default function AdminRouter() {
         {/* Restaurants */}
         <Route path="restaurants" element={<RestaurantsList />} />
         <Route path="restaurants/joining-request" element={<JoiningRequest />} />
+        <Route path="restaurants/commission" element={<RestaurantCommission />} />
         <Route path="restaurants/bulk-import" element={<RestaurantsBulkImport />} />
         <Route path="restaurants/bulk-export" element={<RestaurantsBulkExport />} />
 
@@ -198,7 +199,6 @@ export default function AdminRouter() {
         <Route path="subscribed-mail-list" element={<SubscribedMailList />} />
 
         {/* DELIVERYMAN MANAGEMENT */}
-        <Route path="vehicles-category-setup" element={<VehiclesCategorySetup />} />
         <Route path="delivery-boy-commission" element={<DeliveryBoyCommission />} />
         {/* Delivery Partners */}
         <Route path="delivery-partners/join-request" element={<JoinRequest />} />
