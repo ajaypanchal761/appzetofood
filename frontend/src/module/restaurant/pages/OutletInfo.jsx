@@ -26,6 +26,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { restaurantAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 const CUISINES_STORAGE_KEY = "restaurant_cuisines"
 
@@ -283,6 +284,7 @@ export default function OutletInfo() {
       // Since backend replaces first image, we'll collect all uploaded URLs
       // and then update profile with complete array
       const uploadedImageData = []
+      const failedUploads = []
       
       for (let i = 0; i < files.length; i++) {
         try {
@@ -303,12 +305,29 @@ export default function OutletInfo() {
                 url: menuImages[0].url,
                 publicId: menuImages[0].publicId || null
               })
+            } else {
+              throw new Error("No image URL in response")
             }
           }
         } catch (error) {
-          console.error(`Error uploading image ${i + 1}:`, error)
+          const errorMessage = error?.response?.data?.message || error?.message || "Unknown error"
+          const fileName = files[i]?.name || `Image ${i + 1}`
+          failedUploads.push({ fileName, error: errorMessage })
+          console.error(`Error uploading image ${i + 1} (${fileName}):`, {
+            error: errorMessage,
+            status: error?.response?.status,
+            data: error?.response?.data
+          })
           // Continue with other images even if one fails
         }
+      }
+
+      // Show error messages for failed uploads
+      if (failedUploads.length > 0) {
+        const errorSummary = failedUploads.length === 1
+          ? `Failed to upload ${failedUploads[0].fileName}: ${failedUploads[0].error}`
+          : `Failed to upload ${failedUploads.length} image(s). Please check file size and format, then try again.`
+        toast.error(errorSummary)
       }
 
       if (uploadedImageData.length > 0) {
@@ -326,8 +345,14 @@ export default function OutletInfo() {
           await restaurantAPI.updateProfile({
             menuImages: allImages
           })
+          if (uploadedImageData.length === files.length) {
+            toast.success(`Successfully uploaded ${uploadedImageData.length} image(s)`)
+          } else {
+            toast.warning(`Uploaded ${uploadedImageData.length} of ${files.length} image(s)`)
+          }
         } catch (updateError) {
           console.error("Error updating profile with images:", updateError)
+          toast.error("Images uploaded but failed to save. Please try again.")
           // Continue anyway - images are uploaded, just not in correct order
         }
 
@@ -352,10 +377,14 @@ export default function OutletInfo() {
             setMainImage(refreshedImages[0].url)
           }
         }
+      } else if (failedUploads.length === files.length) {
+        // All uploads failed
+        toast.error("Failed to upload all images. Please check file size (max 5MB) and format (JPG, PNG, WEBP), then try again.")
       }
     } catch (error) {
       console.error("Error uploading menu images:", error)
-      alert(`Failed to upload ${files.length > 1 ? 'some images' : 'image'}. Please try again.`)
+      const errorMessage = error?.response?.data?.message || error?.message || "Unknown error"
+      toast.error(`Failed to upload images: ${errorMessage}`)
     } finally {
       setUploadingImage(false)
       setImageType(null)

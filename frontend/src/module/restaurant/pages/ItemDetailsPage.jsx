@@ -348,23 +348,50 @@ export default function ItemDetailsPage() {
   }
 
   const handleImageDelete = (index) => {
+    if (index < 0 || index >= images.length) return
+    
+    // Confirm deletion
+    if (!window.confirm('Are you sure you want to delete this image?')) {
+      return
+    }
+    
     const imageToDelete = images[index]
     const newImages = images.filter((_, i) => i !== index)
     const newImageFilesMap = new Map(imageFiles)
     
-    // Remove the file mapping and revoke the blob URL if it's a preview
+    // Remove the file mapping and revoke the blob URL if it's a preview (new upload)
     if (imageToDelete && imageToDelete.startsWith('blob:')) {
       newImageFilesMap.delete(imageToDelete)
       URL.revokeObjectURL(imageToDelete)
+      console.log('Deleted preview image (blob URL):', imageToDelete)
+    } else if (imageToDelete && (imageToDelete.startsWith('http://') || imageToDelete.startsWith('https://'))) {
+      // For already uploaded images, we need to remove from imageFiles map if it exists
+      // Find and remove the file entry if it exists
+      for (const [previewUrl, file] of newImageFilesMap.entries()) {
+        // This shouldn't happen for HTTP URLs, but just in case
+        if (previewUrl === imageToDelete) {
+          newImageFilesMap.delete(previewUrl)
+          URL.revokeObjectURL(previewUrl)
+        }
+      }
+      console.log('Deleted uploaded image (HTTP URL):', imageToDelete)
     }
     
     setImages(newImages)
     setImageFiles(newImageFilesMap)
-    if (currentImageIndex >= newImages.length && newImages.length > 0) {
-      setCurrentImageIndex(newImages.length - 1)
-    } else if (newImages.length === 0) {
+    
+    // Adjust current image index after deletion
+    if (newImages.length === 0) {
       setCurrentImageIndex(0)
+    } else if (currentImageIndex >= newImages.length) {
+      setCurrentImageIndex(newImages.length - 1)
+    } else if (currentImageIndex > index) {
+      // If we deleted an image before the current one, no need to change index
+      // If we deleted the current one or after, index stays the same (shows next image)
     }
+    
+    toast.success('Image deleted successfully')
+    console.log(`Image deleted. Remaining images: ${newImages.length}`)
   }
 
   // Swipe handlers
@@ -451,27 +478,41 @@ export default function ItemDetailsPage() {
 
       // Upload new images to Cloudinary
       const uploadedImageUrls = []
+      
+      // Separate existing URLs (already uploaded) from new files (blob URLs)
       const existingImageUrls = images.filter(img => 
-        typeof img === 'string' && (img.startsWith('http') || img.startsWith('https')) && !img.startsWith('blob:')
+        typeof img === 'string' && 
+        (img.startsWith('http://') || img.startsWith('https://')) && 
+        !img.startsWith('blob:')
       )
       
-      // Upload new File objects to Cloudinary
+      console.log('Images state:', images)
+      console.log('Existing image URLs (already uploaded):', existingImageUrls)
+      console.log('Image files map:', imageFiles)
+      
+      // Upload new File objects to Cloudinary (files that are blob URLs)
       const filesToUpload = Array.from(imageFiles.values())
+      console.log('Files to upload:', filesToUpload.length, filesToUpload)
+      
       if (filesToUpload.length > 0) {
         toast.info(`Uploading ${filesToUpload.length} image(s)...`)
-        for (const file of filesToUpload) {
+        for (let i = 0; i < filesToUpload.length; i++) {
+          const file = filesToUpload[i]
           try {
+            console.log(`Uploading image ${i + 1}/${filesToUpload.length}:`, file.name)
             const uploadResponse = await uploadAPI.uploadMedia(file, {
               folder: 'appzeto/restaurant/menu-items'
             })
             const imageUrl = uploadResponse?.data?.data?.url || uploadResponse?.data?.url
             if (imageUrl) {
               uploadedImageUrls.push(imageUrl)
+              console.log(`Successfully uploaded image ${i + 1}:`, imageUrl)
             } else {
+              console.error('Upload response:', uploadResponse)
               throw new Error("Failed to get uploaded image URL")
             }
           } catch (uploadError) {
-            console.error("Error uploading image:", uploadError)
+            console.error(`Error uploading image ${i + 1} (${file.name}):`, uploadError)
             toast.error(`Failed to upload ${file.name}. Please try again.`)
             setUploadingImages(false)
             return
@@ -480,11 +521,23 @@ export default function ItemDetailsPage() {
       }
 
       // Combine existing URLs and newly uploaded URLs
-      // Filter out blob URLs (previews) and keep only actual URLs
+      // Remove duplicates and filter out any empty strings
       const allImageUrls = [
         ...existingImageUrls,
         ...uploadedImageUrls
-      ]
+      ].filter((url, index, self) => 
+        url && 
+        typeof url === 'string' && 
+        url.trim() !== '' && 
+        self.indexOf(url) === index // Remove duplicates
+      )
+      
+      // Debug: Log image URLs
+      console.log('=== IMAGE UPLOAD SUMMARY ===')
+      console.log('Existing image URLs:', existingImageUrls.length, existingImageUrls)
+      console.log('Newly uploaded URLs:', uploadedImageUrls.length, uploadedImageUrls)
+      console.log('Total image URLs to save:', allImageUrls.length, allImageUrls)
+      console.log('==========================')
 
       // Get current menu
       const menuResponse = await restaurantAPI.getMenu()
@@ -592,7 +645,7 @@ export default function ItemDetailsPage() {
         name: itemName.trim(),
         nameArabic: "",
         image: allImageUrls.length > 0 ? allImageUrls[0] : "",
-        images: allImageUrls, // Multiple images support - all Cloudinary URLs
+        images: allImageUrls.length > 0 ? allImageUrls : [], // Multiple images support - all Cloudinary URLs (ensure it's always an array)
         category: category,
         rating: itemData?.rating || 0.0,
         reviews: itemData?.reviews || 0,
@@ -641,11 +694,34 @@ export default function ItemDetailsPage() {
       }
 
       // Update menu with new sections
-      console.log('Updating menu with sections. Item ID:', itemId, 'Is new item:', isNewItem)
+      console.log('=== SAVING ITEM DATA ===')
+      console.log('Item ID:', itemId, 'Is new item:', isNewItem)
+      console.log('Item name:', itemDataToSave.name)
+      console.log('Images array type:', Array.isArray(itemDataToSave.images) ? 'Array' : typeof itemDataToSave.images)
+      console.log('Images array:', itemDataToSave.images)
+      console.log('Images count:', itemDataToSave.images?.length)
+      console.log('PhotoCount:', itemDataToSave.photoCount)
+      console.log('Full itemDataToSave:', JSON.stringify(itemDataToSave, null, 2))
+      
+      // Verify sections structure
+      console.log('Sections being sent:', sections.length, 'sections')
+      const itemSection = sections.find(s => s.items?.some(item => item.id === itemId))
+      if (itemSection) {
+        const itemInSection = itemSection.items.find(item => item.id === itemId)
+        if (itemInSection) {
+          console.log('Item in section before API call - images:', itemInSection.images, 'count:', itemInSection.images?.length)
+        }
+      }
+      
       const updateResponse = await restaurantAPI.updateMenu({ sections })
       
       if (updateResponse.data?.success) {
-        toast.success(isNewItem ? "Item created successfully" : "Item updated successfully")
+        const imageCount = allImageUrls.length
+        toast.success(
+          isNewItem 
+            ? `Item created successfully with ${imageCount} image(s)` 
+            : `Item updated successfully with ${imageCount} image(s)`
+        )
         // Small delay to ensure backend has processed the update
         await new Promise(resolve => setTimeout(resolve, 300))
         // Navigate back to HubMenu with replace to prevent back navigation issues
@@ -722,11 +798,13 @@ export default function ItemDetailsPage() {
                     transition={{ duration: 0.3, ease: "easeInOut" }}
                     className="absolute inset-0"
                   >
-                    <img
-                      src={images[currentImageIndex]}
-                      alt={`${itemName} - Image ${currentImageIndex + 1}`}
-                      className="w-full h-full object-cover"
-                    />
+                    {images[currentImageIndex] ? (
+                      <img
+                        src={images[currentImageIndex]}
+                        alt={`${itemName} - Image ${currentImageIndex + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : null}
                   </motion.div>
                 </AnimatePresence>
 
@@ -793,7 +871,7 @@ export default function ItemDetailsPage() {
                   <Camera className="w-10 h-10 text-gray-400" />
                 </div>
                 <p className="text-sm font-medium text-gray-600">No images added yet</p>
-                <p className="text-xs text-gray-500 mt-1">Tap the button below to add images</p>
+                <p className="text-xs text-gray-500 mt-1">Tap the button below to add multiple images</p>
               </div>
             </div>
           )}
@@ -816,7 +894,7 @@ export default function ItemDetailsPage() {
               <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
                 <Plus className="w-4 h-4" />
               </div>
-              <span>Add Image</span>
+              <span>Add Images</span>
             </label>
           </div>
         </div>

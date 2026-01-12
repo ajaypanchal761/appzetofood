@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
@@ -21,11 +21,12 @@ export default function AddToCartAnimation({
   bottomOffset = 96,
   pillClassName = '',
   hideOnPages = true,
-  linkTo = '/user/cart',
+  linkTo = '/cart',
   dynamicBottom = null,
 }) {
   const { items, itemCount, total, lastAddEvent, lastRemoveEvent } = useCart();
   const location = useLocation();
+  const navigate = useNavigate();
   const linkRef = useRef(null);
   const [removedProduct, setRemovedProduct] = useState(null);
   const [flyingProduct, setFlyingProduct] = useState(null);
@@ -34,7 +35,10 @@ export default function AddToCartAnimation({
   const prevItemsRef = useRef(items);
 
   // Hide pill on cart pages, order pages, and account page (if enabled)
-  const iscartPage = location.pathname === '/cart' || location.pathname.startsWith('/cart/');
+  const iscartPage = location.pathname === '/cart' || 
+                     location.pathname === '/user/cart' ||
+                     location.pathname.startsWith('/cart/') ||
+                     location.pathname.startsWith('/user/cart/');
   const isOrderPage = location.pathname.startsWith('/orders/');
   const isAccountPage = location.pathname === '/account';
   const shouldHidePill = hideOnPages && (iscartPage || isOrderPage || isAccountPage);
@@ -429,10 +433,15 @@ export default function AddToCartAnimation({
             }}
             className={`${dynamicBottom ? `fixed ${dynamicBottom}` : 'sticky dark:bg-[#1a1a1a] bottom-0'} left-0 right-0 z-40 flex justify-center px-4 pb-4 md:pb-6 transition-all duration-300 ease-in-out`}
           >
-            <Link
+            <button
               ref={linkRef}
-              to={linkTo}
-              className={`bg-gradient-to-r from-green-700 via-green-600 to-green-700 text-white rounded-full shadow-xl shadow-green-900/30 px-3 py-2 flex items-center gap-2 hover:from-green-800 hover:via-green-700 hover:to-green-800 transition-all duration-300 pointer-events-auto border border-green-800/30 backdrop-blur-sm ${pillClassName}`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('View cart clicked, navigating to:', linkTo);
+                navigate(linkTo);
+              }}
+              className={`bg-gradient-to-r from-green-700 via-green-600 to-green-700 text-white rounded-full shadow-xl shadow-green-900/30 px-3 py-2 flex items-center gap-2 hover:from-green-800 hover:via-green-700 hover:to-green-800 transition-all duration-300 pointer-events-auto border border-green-800/30 backdrop-blur-sm cursor-pointer ${pillClassName}`}
             >
               {/* Left: Product thumbnails */}
               <div className="flex items-center -space-x-4">
@@ -502,7 +511,7 @@ export default function AddToCartAnimation({
                   />
                 </svg>
               </motion.div>
-            </Link>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

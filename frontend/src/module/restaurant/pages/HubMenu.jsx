@@ -15,12 +15,14 @@ import {
   Camera,
   SlidersHorizontal,
   ArrowLeft,
-  Trash2
+  Trash2,
+  RefreshCw,
+  Loader2
 } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
 // Removed foodManagement - now using backend API directly
 import { useNavigate } from "react-router-dom"
-import { restaurantAPI } from "@/lib/api"
+import { restaurantAPI, uploadAPI } from "@/lib/api"
 import { toast } from "sonner"
 
 export default function HubMenu() {
@@ -54,6 +56,19 @@ export default function HubMenu() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [restaurantData, setRestaurantData] = useState(null)
+  const [isAddAddonModalOpen, setIsAddAddonModalOpen] = useState(false)
+  const [addons, setAddons] = useState([])
+  const [loadingAddons, setLoadingAddons] = useState(false)
+  
+  // Add-on form state
+  const [addonName, setAddonName] = useState("")
+  const [addonDescription, setAddonDescription] = useState("")
+  const [addonPrice, setAddonPrice] = useState("")
+  const [addonImages, setAddonImages] = useState([])
+  const [addonImageFiles, setAddonImageFiles] = useState(new Map())
+  const [uploadingAddonImages, setUploadingAddonImages] = useState(false)
+  const [editingAddon, setEditingAddon] = useState(null) // Store addon being edited
+  const addonFileInputRef = useRef(null)
 
   // Restaurant info - fetch from backend
   const restaurantName = restaurantData?.name || ""
@@ -156,38 +171,79 @@ export default function HubMenu() {
     fetchRestaurantData()
   }, [])
 
-  // Fetch menu from API on mount
-  useEffect(() => {
-    const fetchMenu = async () => {
-      try {
+  // Fetch menu from API - reusable function
+  const fetchMenu = async (showLoading = true) => {
+    try {
+      if (showLoading) {
         setLoadingMenu(true)
-        const response = await restaurantAPI.getMenu()
+      }
+      const response = await restaurantAPI.getMenu()
+      
+      if (response.data && response.data.success && response.data.data && response.data.data.menu) {
+        const menuSections = response.data.data.menu.sections || []
+        setMenuData(menuSections)
         
-        if (response.data && response.data.success && response.data.data && response.data.data.menu) {
-          const menuSections = response.data.data.menu.sections || []
-          setMenuData(menuSections)
-          
-          // Menu data is now directly from backend, no need to transform
-        } else {
-          // Empty menu - start fresh
-          setMenuData([])
-        }
-      } catch (error) {
-        console.error('Error fetching menu:', error)
-        // Check if it's a network error (backend not running)
-        if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-          toast.error('Cannot connect to server. Please check if backend is running.')
-        } else {
-          toast.error('Failed to load menu')
-        }
+        // Menu data is now directly from backend, no need to transform
+      } else {
+        // Empty menu - start fresh
         setMenuData([])
-      } finally {
+      }
+    } catch (error) {
+      console.error('Error fetching menu:', error)
+      // Check if it's a network error (backend not running)
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        toast.error('Cannot connect to server. Please check if backend is running.')
+      } else {
+        toast.error('Failed to load menu')
+      }
+      setMenuData([])
+    } finally {
+      if (showLoading) {
         setLoadingMenu(false)
       }
     }
-    
+  }
+
+  // Fetch menu from API on mount
+  useEffect(() => {
     fetchMenu()
   }, [])
+
+  // Refresh menu when page comes into focus (e.g., when user switches from admin panel)
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('Page focused - refreshing menu to check for approval updates')
+      fetchMenu(false) // Refresh without showing loading spinner
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page visible - refreshing menu to check for approval updates')
+        fetchMenu(false) // Refresh without showing loading spinner
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
+  // Periodic refresh to check for approval updates (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Only refresh if page is visible and not loading
+      if (document.visibilityState === 'visible' && !loadingMenu) {
+        console.log('Periodic refresh - checking for approval updates')
+        fetchMenu(false) // Refresh without showing loading spinner
+      }
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
+  }, [loadingMenu])
 
   // Save menu to API whenever menuData changes (debounced)
   useEffect(() => {
@@ -228,6 +284,11 @@ export default function HubMenu() {
               nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
               allergies: Array.isArray(item.allergies) ? item.allergies : [],
               photoCount: item.photoCount ?? 1,
+              // Approval status fields
+              approvalStatus: item.approvalStatus || 'pending',
+              rejectionReason: item.rejectionReason || '',
+              requestedAt: item.requestedAt,
+              approvedAt: item.approvedAt,
             })) : [],
             subsections: Array.isArray(section.subsections) ? section.subsections.map(subsection => ({
               id: subsection.id || `subsection-${Date.now()}`,
@@ -262,6 +323,11 @@ export default function HubMenu() {
                 nutrition: Array.isArray(item.nutrition) ? item.nutrition : [],
                 allergies: Array.isArray(item.allergies) ? item.allergies : [],
                 photoCount: item.photoCount ?? 1,
+                // Approval status fields
+                approvalStatus: item.approvalStatus || 'pending',
+                rejectionReason: item.rejectionReason || '',
+                requestedAt: item.requestedAt,
+                approvedAt: item.approvedAt,
               })) : [],
             })) : [],
             isEnabled: section.isEnabled !== undefined ? section.isEnabled : true,
@@ -287,6 +353,225 @@ export default function HubMenu() {
     }
   }, [menuData, loadingMenu])
 
+  // Fetch add-ons when add-ons tab is active
+  const fetchAddons = async (showLoading = true) => {
+    try {
+      if (showLoading) setLoadingAddons(true)
+      const response = await restaurantAPI.getAddons()
+      const data = response?.data?.data?.addons || response?.data?.addons || []
+      setAddons(data)
+    } catch (error) {
+      console.error('Error fetching add-ons:', error)
+      toast.error('Failed to load add-ons')
+      setAddons([])
+    } finally {
+      if (showLoading) setLoadingAddons(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "add-ons") {
+      fetchAddons(true)
+    }
+  }, [activeTab])
+
+  // Handle add-on image add
+  const handleAddonImageAdd = (e) => {
+    const files = Array.from(e.target.files)
+    
+    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"]
+    const validFiles = files.filter(file => {
+      if (!allowedTypes.includes(file.type)) {
+        toast.error(`${file.name}: Invalid file type. Please upload PNG, JPG, JPEG, or WEBP.`)
+        return false
+      }
+      const maxSize = 5 * 1024 * 1024 // 5MB
+      if (file.size > maxSize) {
+        toast.error(`${file.name}: File size exceeds 5MB limit.`)
+        return false
+      }
+      return true
+    })
+
+    if (validFiles.length === 0) return
+
+    const newImagePreviews = []
+    const newImageFilesMap = new Map(addonImageFiles)
+    
+    validFiles.forEach(file => {
+      const previewUrl = URL.createObjectURL(file)
+      newImagePreviews.push(previewUrl)
+      newImageFilesMap.set(previewUrl, file)
+    })
+    
+    setAddonImages([...addonImages, ...newImagePreviews])
+    setAddonImageFiles(newImageFilesMap)
+    
+    if (addonFileInputRef.current) {
+      addonFileInputRef.current.value = ""
+    }
+  }
+
+  // Handle add-on image delete
+  const handleAddonImageDelete = (index) => {
+    if (index < 0 || index >= addonImages.length) return
+    
+    if (!window.confirm('Are you sure you want to delete this image?')) {
+      return
+    }
+    
+    const imageToDelete = addonImages[index]
+    const newImages = addonImages.filter((_, i) => i !== index)
+    setAddonImages(newImages)
+    
+    // Revoke blob URL if it's a preview
+    if (imageToDelete.startsWith('blob:')) {
+      URL.revokeObjectURL(imageToDelete)
+      addonImageFiles.delete(imageToDelete)
+      setAddonImageFiles(new Map(addonImageFiles))
+    }
+    
+    toast.success('Image removed')
+  }
+
+  // Handle add-on save
+  const handleSaveAddon = async () => {
+    if (!addonName.trim()) {
+      toast.error("Please enter add-on name")
+      return
+    }
+    if (!addonPrice || parseFloat(addonPrice) < 0) {
+      toast.error("Please enter a valid price")
+      return
+    }
+
+    try {
+      setUploadingAddonImages(true)
+
+      // Upload new images to Cloudinary
+      const uploadedImageUrls = []
+      
+      const existingImageUrls = addonImages.filter(img => 
+        typeof img === 'string' && 
+        (img.startsWith('http://') || img.startsWith('https://')) && 
+        !img.startsWith('blob:')
+      )
+      
+      const filesToUpload = Array.from(addonImageFiles.values())
+      
+      if (filesToUpload.length > 0) {
+        toast.info(`Uploading ${filesToUpload.length} image(s)...`)
+        for (let i = 0; i < filesToUpload.length; i++) {
+          const file = filesToUpload[i]
+          try {
+            const uploadResponse = await uploadAPI.uploadMedia(file, {
+              folder: 'appzeto/restaurant/addons'
+            })
+            const imageUrl = uploadResponse?.data?.data?.url || uploadResponse?.data?.url
+            if (imageUrl) {
+              uploadedImageUrls.push(imageUrl)
+            }
+          } catch (uploadError) {
+            console.error(`Error uploading image ${i + 1}:`, uploadError)
+            toast.error(`Failed to upload ${file.name}. Please try again.`)
+            setUploadingAddonImages(false)
+            return
+          }
+        }
+      }
+
+      const allImageUrls = [
+        ...existingImageUrls,
+        ...uploadedImageUrls
+      ].filter((url, index, self) => 
+        url && 
+        typeof url === 'string' && 
+        url.trim() !== '' && 
+        self.indexOf(url) === index
+      )
+
+      const addonData = {
+        name: addonName.trim(),
+        description: addonDescription.trim(),
+        price: parseFloat(addonPrice) || 0,
+        image: allImageUrls.length > 0 ? allImageUrls[0] : '',
+        images: allImageUrls
+      }
+
+      if (editingAddon) {
+        // Update existing add-on
+        await restaurantAPI.updateAddon(editingAddon.id, addonData)
+        toast.success('Add-on updated successfully! Pending admin approval if previously approved.')
+      } else {
+        // Create new add-on
+        await restaurantAPI.addAddon(addonData)
+        toast.success('Add-on added successfully! Pending admin approval.')
+      }
+      
+      // Reset form
+      setAddonName("")
+      setAddonDescription("")
+      setAddonPrice("")
+      setAddonImages([])
+      setAddonImageFiles(new Map())
+      setEditingAddon(null)
+      setIsAddAddonModalOpen(false)
+      
+      // Refresh add-ons list
+      fetchAddons(true)
+    } catch (error) {
+      console.error('Error saving add-on:', error)
+      toast.error(error?.response?.data?.message || (editingAddon ? 'Failed to update add-on' : 'Failed to add add-on'))
+    } finally {
+      setUploadingAddonImages(false)
+    }
+  }
+
+  // Handle edit add-on
+  const handleEditAddon = (addon) => {
+    setEditingAddon(addon)
+    setAddonName(addon.name || "")
+    setAddonDescription(addon.description || "")
+    setAddonPrice(addon.price?.toString() || "")
+    setAddonImages(addon.images && addon.images.length > 0 ? addon.images : (addon.image ? [addon.image] : []))
+    setAddonImageFiles(new Map())
+    setIsAddAddonModalOpen(true)
+  }
+
+  // Handle delete add-on
+  const handleDeleteAddon = async (addon) => {
+    if (!window.confirm(`Are you sure you want to delete "${addon.name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      await restaurantAPI.deleteAddon(addon.id)
+      toast.success('Add-on deleted successfully')
+      fetchAddons(true)
+    } catch (error) {
+      console.error('Error deleting add-on:', error)
+      toast.error(error?.response?.data?.message || 'Failed to delete add-on')
+    }
+  }
+
+  // Reset add-on form when modal closes
+  useEffect(() => {
+    if (!isAddAddonModalOpen) {
+      setAddonName("")
+      setAddonDescription("")
+      setAddonPrice("")
+      setAddonImages([])
+      setAddonImageFiles(new Map())
+      setEditingAddon(null)
+      // Revoke blob URLs
+      addonImages.forEach(img => {
+        if (img.startsWith('blob:')) {
+          URL.revokeObjectURL(img)
+        }
+      })
+    }
+  }, [isAddAddonModalOpen])
+
   // Initialize menuData from menuGroups if empty (for backward compatibility)
   // This is now handled in the fetchMenu useEffect, so we don't need this anymore
   // Keeping it commented out in case we need it for migration
@@ -306,7 +591,7 @@ export default function HubMenu() {
   // Prevent body scroll when popups are open
   useEffect(() => {
     if (isFilterOpen || isAddPopupOpen || isMenuOpen || isAvailabilityPopupOpen || 
-        isCategoryOptionsOpen || isEditCategoryOpen || isAddSubCategoryOpen || isAddCategoryPopupOpen || isSearchOpen) {
+        isCategoryOptionsOpen || isEditCategoryOpen || isAddSubCategoryOpen || isAddCategoryPopupOpen || isSearchOpen || isAddAddonModalOpen) {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = 'unset'
@@ -315,7 +600,7 @@ export default function HubMenu() {
       document.body.style.overflow = 'unset'
     }
   }, [isFilterOpen, isAddPopupOpen, isMenuOpen, isAvailabilityPopupOpen, 
-      isCategoryOptionsOpen, isEditCategoryOpen, isAddSubCategoryOpen, isAddCategoryPopupOpen, isSearchOpen])
+      isCategoryOptionsOpen, isEditCategoryOpen, isAddSubCategoryOpen, isAddCategoryPopupOpen, isSearchOpen, isAddAddonModalOpen])
 
   // Filter menu based on active filter and search query
   const filteredMenuGroups = useMemo(() => {
@@ -664,6 +949,16 @@ export default function HubMenu() {
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <button 
+                onClick={() => {
+                  fetchMenu(true)
+                  toast.success('Menu refreshed')
+                }}
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                title="Refresh menu"
+              >
+                <RefreshCw className="w-5 h-5 text-gray-700" />
+              </button>
+              <button 
                 onClick={() => setIsSearchOpen(true)}
                 className="p-2 rounded-full hover:bg-gray-100 transition-colors"
               >
@@ -768,11 +1063,92 @@ export default function HubMenu() {
       {/* Content */}
       <div className="flex-1 space-y-4 pt-8">
         {activeTab === "add-ons" ? (
-          <div className="flex flex-col items-center justify-center py-20 px-4">
-            <div className="text-center">
-              <p className="text-lg font-medium text-gray-500">No add-ons available</p>
-              <p className="text-sm text-gray-400 mt-2">Add-ons will appear here when you create them</p>
+          <div className="px-4 pb-20">
+            {/* Add Add-on Button */}
+            <div className="mb-6">
+              <button
+                onClick={() => setIsAddAddonModalOpen(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+              >
+                <Plus className="h-5 w-5" />
+                <span>Add Add-on</span>
+              </button>
             </div>
+
+            {/* Add-ons List */}
+            {loadingAddons ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              </div>
+            ) : addons.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 px-4">
+                <div className="text-center">
+                  <p className="text-lg font-medium text-gray-500">No add-ons available</p>
+                  <p className="text-sm text-gray-400 mt-2">Add-ons will appear here when you create them</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {addons.map((addon) => (
+                  <div
+                    key={addon.id}
+                    className="bg-white rounded-lg border border-gray-200 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-base font-semibold text-gray-900">{addon.name}</h3>
+                          {addon.approvalStatus === 'pending' && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">Pending</span>
+                          )}
+                          {addon.approvalStatus === 'approved' && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded">Approved</span>
+                          )}
+                          {addon.approvalStatus === 'rejected' && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded">Rejected</span>
+                          )}
+                        </div>
+                        {addon.description && (
+                          <p className="text-sm text-gray-600 mb-2">{addon.description}</p>
+                        )}
+                        <p className="text-base font-bold text-gray-900">₹{addon.price}</p>
+                        {addon.rejectionReason && (
+                          <p className="text-xs text-red-600 mt-1">Reason: {addon.rejectionReason}</p>
+                        )}
+                      </div>
+                      <div className="flex items-start gap-2">
+                        {addon.images && addon.images.length > 0 && addon.images[0] && (
+                          <img
+                            src={addon.images[0]}
+                            alt={addon.name}
+                            className="w-20 h-20 object-cover rounded-lg"
+                            onError={(e) => {
+                              e.target.style.display = 'none'
+                            }}
+                          />
+                        )}
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => handleEditAddon(addon)}
+                            className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                            title="Edit add-on"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAddon(addon)}
+                            className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                            title="Delete add-on"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           filteredMenuGroups.map((group) => {
@@ -850,7 +1226,27 @@ export default function HubMenu() {
                                 }`} />
                               </div>
                             </div>
-                            <h5 className="text-base font-bold text-gray-900">{item.name}</h5>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h5 className="text-base font-bold text-gray-900">{item.name}</h5>
+                              {/* Approval Status Tag */}
+                              {item.approvalStatus && (
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    item.approvalStatus === 'approved'
+                                      ? 'bg-green-100 text-green-700 border border-green-300'
+                                      : item.approvalStatus === 'rejected'
+                                      ? 'bg-red-100 text-red-700 border border-red-300'
+                                      : 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+                                  }`}
+                                >
+                                  {item.approvalStatus === 'approved'
+                                    ? 'Approved'
+                                    : item.approvalStatus === 'rejected'
+                                    ? 'Rejected'
+                                    : 'Pending'}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm font-medium text-gray-700 mb-3">₹{item.price}</p>
                           </div>
 
@@ -1642,6 +2038,163 @@ export default function HubMenu() {
               )}
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      {/* Add Add-on Modal */}
+      <AnimatePresence>
+        {isAddAddonModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setIsAddAddonModalOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {editingAddon ? 'Edit Add-on' : 'Add New Add-on'}
+                </h2>
+                <button
+                  onClick={() => setIsAddAddonModalOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-600" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 space-y-4">
+                {/* Name Field */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Add-on Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={addonName}
+                    onChange={(e) => setAddonName(e.target.value)}
+                    placeholder="e.g., Coke, Chips, Sauce"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Description Field */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={addonDescription}
+                    onChange={(e) => setAddonDescription(e.target.value)}
+                    placeholder="Describe the add-on..."
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                  />
+                </div>
+
+                {/* Price Field */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={addonPrice}
+                    onChange={(e) => setAddonPrice(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Images Section */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Images
+                  </label>
+                  
+                  {/* Image Preview Grid */}
+                  {addonImages.length > 0 && (
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      {addonImages.map((img, index) => (
+                        <div key={index} className="relative group">
+                          {img && (
+                            <img
+                              src={img}
+                              alt={`Add-on ${index + 1}`}
+                              className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                              onError={(e) => {
+                                e.target.style.display = 'none'
+                              }}
+                            />
+                          )}
+                          <button
+                            onClick={() => handleAddonImageDelete(index)}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add Image Button */}
+                  <input
+                    ref={addonFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleAddonImageAdd}
+                    className="hidden"
+                    id="addon-image-upload"
+                  />
+                  <label
+                    htmlFor="addon-image-upload"
+                    className="flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 hover:bg-green-50 transition-colors"
+                  >
+                    <Camera className="h-5 w-5 text-gray-500" />
+                    <span className="text-sm font-medium text-gray-700">Add Images</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">Add multiple images (PNG, JPG, WEBP - max 5MB each)</p>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex items-center gap-3">
+                <button
+                  onClick={() => setIsAddAddonModalOpen(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveAddon}
+                  disabled={!addonName.trim() || !addonPrice || uploadingAddonImages}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  {uploadingAddonImages ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <span>{editingAddon ? 'Update Add-on' : 'Add Add-on'}</span>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 

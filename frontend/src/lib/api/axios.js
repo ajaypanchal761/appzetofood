@@ -462,6 +462,31 @@ apiClient.interceptors.response.use(
             },
           });
         }
+        // Show toast for restaurant routes (but not for getRestaurantById which can legitimately return 404)
+        else if (url.includes('/restaurant/')) {
+          // Only show error for critical restaurant endpoints like /restaurant/list
+          // Individual restaurant lookups (like /restaurant/:id) can legitimately return 404 if restaurant doesn't exist
+          // So we silently handle those 404s
+          const isIndividualRestaurantLookup = /\/restaurant\/[a-f0-9]{24}$/i.test(url) || 
+                                                (url.match(/\/restaurant\/[^/]+$/) && !url.includes('/restaurant/list'));
+          
+          if (!isIndividualRestaurantLookup && url.includes('/restaurant/list')) {
+            toast.error('Restaurant API endpoint not found. Check backend routes.', {
+              duration: 5000,
+              style: {
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                color: '#ffffff',
+                border: '1px solid #b91c1c',
+                borderRadius: '12px',
+                padding: '16px',
+                fontSize: '14px',
+                fontWeight: '500',
+              },
+            });
+          }
+          // Silently handle 404 for individual restaurant lookups (getRestaurantById)
+          // These are expected to fail if restaurant doesn't exist in DB
+        }
       }
       return Promise.reject(error);
     }

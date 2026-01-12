@@ -28,11 +28,25 @@ async function initializeCloudinary() {
     const apiKey = cleanEnv(credentials.apiKey || process.env.CLOUDINARY_API_KEY);
     const apiSecret = cleanEnv(credentials.apiSecret || process.env.CLOUDINARY_API_SECRET);
 
+    console.log('🔧 Cloudinary initialization check:', {
+      hasCloudName: !!cloudName,
+      hasApiKey: !!apiKey,
+      hasApiSecret: !!apiSecret,
+      cloudNameLength: cloudName?.length || 0,
+      apiKeyLength: apiKey?.length || 0,
+      apiSecretLength: apiSecret?.length || 0
+    });
+
     if (!cloudName || !apiKey || !apiSecret) {
-      console.warn(
-        '⚠️  Cloudinary is not fully configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in ENV Setup or backend .env'
+      const missing = [];
+      if (!cloudName) missing.push('CLOUDINARY_CLOUD_NAME');
+      if (!apiKey) missing.push('CLOUDINARY_API_KEY');
+      if (!apiSecret) missing.push('CLOUDINARY_API_SECRET');
+      
+      console.error(
+        `❌ Cloudinary is not fully configured. Missing: ${missing.join(', ')}. Set these in ENV Setup or backend .env`
       );
-      return cloudinary;
+      throw new Error(`Cloudinary configuration incomplete. Missing: ${missing.join(', ')}`);
     }
 
     cloudinary.config({
@@ -44,7 +58,12 @@ async function initializeCloudinary() {
     cloudinaryInitialized = true;
     console.log('✅ Cloudinary initialized successfully');
   } catch (error) {
-    console.error('Error initializing Cloudinary:', error.message);
+    console.error('❌ Error initializing Cloudinary:', {
+      message: error.message,
+      stack: error.stack
+    });
+    cloudinaryInitialized = false;
+    throw error; // Re-throw to let caller handle
   }
 
   return cloudinary;

@@ -420,6 +420,21 @@ export const restaurantAPI = {
   addItemToSubsection: (sectionId, subsectionId, item) => {
     return apiClient.post(`${API_ENDPOINTS.RESTAURANT.MENU}/subsection/item`, { sectionId, subsectionId, item });
   },
+
+  // Add-on operations
+  addAddon: (addonData) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.ADDON, addonData);
+  },
+  getAddons: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.ADDONS);
+  },
+  updateAddon: (id, addonData) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.ADDON_BY_ID.replace(':id', id), addonData);
+  },
+  deleteAddon: (id) => {
+    return apiClient.delete(API_ENDPOINTS.RESTAURANT.ADDON_BY_ID.replace(':id', id));
+  },
+
   getMenuByRestaurantId: (restaurantId) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.MENU_BY_RESTAURANT_ID.replace(':id', restaurantId));
   },
@@ -955,6 +970,19 @@ export const adminAPI = {
 
   calculateCommission: (distance) => {
     return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION_CALCULATE, { distance });
+  },
+
+  // Food Approval
+  getPendingFoodApprovals: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.FOOD_APPROVALS, { params });
+  },
+
+  approveFoodItem: (id) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.FOOD_APPROVAL_APPROVE.replace(':id', id));
+  },
+
+  rejectFoodItem: (id, reason) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.FOOD_APPROVAL_REJECT.replace(':id', id), { reason });
   },
 };
 

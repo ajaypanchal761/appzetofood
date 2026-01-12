@@ -40,6 +40,16 @@ const menuItemSchema = new mongoose.Schema({
   itemSizeUnit: { type: String, default: 'piece' },
   gst: { type: Number, default: 0 },
   images: { type: [String], default: [] }, // Multiple images support
+  approvalStatus: { 
+    type: String, 
+    enum: ['pending', 'approved', 'rejected'], 
+    default: 'pending' 
+  },
+  rejectionReason: { type: String, default: '' },
+  requestedAt: { type: Date, default: Date.now },
+  approvedAt: { type: Date },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+  rejectedAt: { type: Date },
 }, { _id: false });
 
 const subsectionSchema = new mongoose.Schema({
@@ -57,6 +67,26 @@ const menuSectionSchema = new mongoose.Schema({
   order: { type: Number, default: 0 },
 }, { _id: false });
 
+const addonSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  name: { type: String, required: true },
+  description: { type: String, default: '' },
+  price: { type: Number, required: true },
+  image: { type: String, default: '' },
+  images: { type: [String], default: [] }, // Multiple images support
+  isAvailable: { type: Boolean, default: true },
+  approvalStatus: { 
+    type: String, 
+    enum: ['pending', 'approved', 'rejected'], 
+    default: 'pending' 
+  },
+  rejectionReason: { type: String, default: '' },
+  requestedAt: { type: Date, default: Date.now },
+  approvedAt: { type: Date },
+  approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+  rejectedAt: { type: Date },
+}, { _id: false });
+
 const menuSchema = new mongoose.Schema({
   restaurant: {
     type: mongoose.Schema.Types.ObjectId,
@@ -66,6 +96,7 @@ const menuSchema = new mongoose.Schema({
     index: true,
   },
   sections: { type: [menuSectionSchema], default: [] },
+  addons: { type: [addonSchema], default: [] }, // Add-ons array
   isActive: { type: Boolean, default: true },
 }, {
   timestamps: true,

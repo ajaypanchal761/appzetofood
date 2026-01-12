@@ -83,6 +83,11 @@ import {
   toggleRestaurantCommissionStatus,
   calculateCommission as calculateRestaurantCommission
 } from '../controllers/restaurantCommissionController.js';
+import {
+  getPendingFoodApprovals,
+  approveFoodItem,
+  rejectFoodItem
+} from '../controllers/foodApprovalController.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 
@@ -184,6 +189,11 @@ router.get('/restaurant-commission/:id', getRestaurantCommissionById);
 router.put('/restaurant-commission/:id', updateRestaurantCommission);
 router.delete('/restaurant-commission/:id', deleteRestaurantCommission);
 router.patch('/restaurant-commission/:id/status', toggleRestaurantCommissionStatus);
+
+// Food Approval Management
+router.get('/food-approvals', getPendingFoodApprovals);
+router.post('/food-approvals/:id/approve', approveFoodItem);
+router.post('/food-approvals/:id/reject', rejectFoodItem);
 
 export default router;
 

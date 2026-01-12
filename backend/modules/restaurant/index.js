@@ -5,7 +5,7 @@ import { uploadMiddleware } from '../../shared/utils/cloudinaryService.js';
 import restaurantAuthRoutes from './routes/restaurantAuthRoutes.js';
 import { getOnboarding, upsertOnboarding, createRestaurantFromOnboardingManual } from './controllers/restaurantOnboardingController.js';
 import { getRestaurants, getRestaurantById, getRestaurantByOwner, updateRestaurantProfile, uploadProfileImage, uploadMenuImage, deleteRestaurantAccount, updateDeliveryStatus, getRestaurantsWithDishesUnder250 } from './controllers/restaurantController.js';
-import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection } from './controllers/menuController.js';
+import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection, addAddon, getAddons, updateAddon, deleteAddon } from './controllers/menuController.js';
 import { scheduleItemAvailability, cancelScheduledAvailability, getItemSchedule } from './controllers/menuScheduleController.js';
 import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
 import { addStaff, getStaff, getStaffById, updateStaff, deleteStaff } from './controllers/staffManagementController.js';
@@ -28,6 +28,13 @@ router.post('/menu/section', authenticate, addSection);
 router.post('/menu/section/item', authenticate, addItemToSection);
 router.post('/menu/section/subsection', authenticate, addSubsectionToSection);
 router.post('/menu/subsection/item', authenticate, addItemToSubsection);
+
+// Add-on routes
+router.post('/menu/addon', authenticate, addAddon);
+router.get('/menu/addons', authenticate, getAddons);
+router.put('/menu/addon/:id', authenticate, updateAddon);
+router.delete('/menu/addon/:id', authenticate, deleteAddon);
+
 // Menu item scheduling routes
 router.post('/menu/item/schedule', authenticate, scheduleItemAvailability);
 router.delete('/menu/item/schedule/:scheduleId', authenticate, cancelScheduledAvailability);

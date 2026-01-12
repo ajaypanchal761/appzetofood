@@ -12,55 +12,6 @@ import { useOrders } from "../../context/OrdersContext"
 import { orderAPI, restaurantAPI } from "@/lib/api"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
-// Payment method icons as SVG components
-const GooglePayIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-800 flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
-    <svg viewBox="0 0 24 24" className="w-6 h-6">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-    </svg>
-  </div>
-)
-
-const PhonePeIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center bg-[#5f259f]">
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="white">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H8l5-6v4h3l-5 6z"/>
-    </svg>
-  </div>
-)
-
-const UPIIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-800 flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
-    <span className="text-xs font-bold text-gray-600">UPI</span>
-  </div>
-)
-
-const AmazonPayIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center bg-gray-900">
-    <span className="text-xs font-bold text-orange-400">pay</span>
-  </div>
-)
-
-const MobikwikIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center bg-blue-600">
-    <span className="text-xs font-bold text-white">M</span>
-  </div>
-)
-
-const PluxeeIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-800 flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
-    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">pluxee</span>
-  </div>
-)
-
-const CardIcon = () => (
-  <div className="w-10 h-10 rounded-lg border border-gray-200 dark:border-gray-800 flex items-center justify-center bg-white dark:bg-[#1a1a1a]">
-    <CreditCard className="w-5 h-5 text-gray-600" />
-  </div>
-)
 
 // Sample suggested items for "Complete your meal"
 const suggestedItems = [
@@ -95,10 +46,6 @@ export default function Cart() {
   const [sendCutlery, setSendCutlery] = useState(true)
   const [isPlacingOrder, setIsPlacingOrder] = useState(false)
   const [showBillDetails, setShowBillDetails] = useState(false)
-  const [showDiscountBanner, setShowDiscountBanner] = useState(true)
-  const [couponApplied, setCouponApplied] = useState(false)
-  const [showPaymentSelection, setShowPaymentSelection] = useState(false)
-  const [selectedPayment, setSelectedPayment] = useState(null)
   const [showPlacingOrder, setShowPlacingOrder] = useState(false)
   const [orderProgress, setOrderProgress] = useState(0)
   const [showOrderSuccess, setShowOrderSuccess] = useState(false)
@@ -110,7 +57,6 @@ export default function Cart() {
   const [pricing, setPricing] = useState(null)
   const [loadingPricing, setLoadingPricing] = useState(false)
   
-  const paymentOptionsRef = useRef(null)
 
   const cartCount = getCartCount()
   const defaultAddress = getDefaultAddress()
@@ -119,52 +65,11 @@ export default function Cart() {
   // Get restaurant ID from cart
   const restaurantId = cart.length > 0 ? cart[0]?.restaurantId || cart[0]?.restaurant?.toLowerCase().replace(/\s+/g, "-") : null
   
-  // Check if banner has been shown before (using sessionStorage for this session)
-  useEffect(() => {
-    if (cart.length > 0) {
-      const hasSeenBanner = sessionStorage.getItem('cartDiscountBannerShown')
-      if (!hasSeenBanner) {
-        // Small delay to show banner after page loads
-        const timer = setTimeout(() => {
-          setShowDiscountBanner(true)
-        }, 500)
-        return () => clearTimeout(timer)
-      }
-    }
-  }, [cart.length])
 
-  // Show payment selection modal only once if payment hasn't been selected before
-  useEffect(() => {
-    if (cart.length > 0 && !selectedPayment && !defaultPayment) {
-      const hasSeenPaymentSelection = localStorage.getItem('cartPaymentSelectionShown')
-      if (!hasSeenPaymentSelection) {
-        // Small delay to show payment selection after page loads
-        const timer = setTimeout(() => {
-          setShowPaymentSelection(true)
-          localStorage.setItem('cartPaymentSelectionShown', 'true')
-        }, 800)
-        return () => clearTimeout(timer)
-      }
-    }
-  }, [cart.length, selectedPayment, defaultPayment])
-
-  // Scroll to top when payment selection modal opens
-  useEffect(() => {
-    if (showPaymentSelection) {
-      // Small delay to ensure the modal is rendered before scrolling
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, behavior: 'instant' })
-        // Also scroll the payment options container to top
-        if (paymentOptionsRef.current) {
-          paymentOptionsRef.current.scrollTop = 0
-        }
-      })
-    }
-  }, [showPaymentSelection])
 
   // Lock body scroll and scroll to top when any full-screen modal opens
   useEffect(() => {
-    if (showPlacingOrder || showOrderSuccess || showPaymentSelection) {
+    if (showPlacingOrder || showOrderSuccess) {
       // Lock body scroll
       document.body.style.overflow = 'hidden'
       document.body.style.position = 'fixed'
@@ -192,7 +97,7 @@ export default function Cart() {
       document.body.style.width = ''
       document.body.style.top = ''
     }
-  }, [showPlacingOrder, showOrderSuccess, showPaymentSelection])
+  }, [showPlacingOrder, showOrderSuccess])
 
   // Fetch restaurant data when cart has items
   useEffect(() => {
@@ -275,8 +180,8 @@ export default function Cart() {
           }
         }
       } catch (error) {
-        // Only log non-404 errors, 404 is expected if restaurant doesn't exist
-        if (error.response?.status !== 404) {
+        // Network errors or 404 errors - silently handle, fallback to frontend calculation
+        if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
           console.error("Error calculating pricing:", error)
         }
         // Fallback to frontend calculation if backend fails
@@ -339,60 +244,6 @@ export default function Cart() {
     }
   }
 
-  const handleBannerApply = () => {
-    // Trigger confetti animation
-    const duration = 3000
-    const animationEnd = Date.now() + duration
-    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 10000 }
-
-    function randomInRange(min, max) {
-      return Math.random() * (max - min) + min
-    }
-
-    const interval = setInterval(function() {
-      const timeLeft = animationEnd - Date.now()
-
-      if (timeLeft <= 0) {
-        return clearInterval(interval)
-      }
-
-      const particleCount = 50 * (timeLeft / duration)
-      
-      // Launch confetti from multiple positions
-      confetti({
-        ...defaults,
-        particleCount,
-        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
-      })
-      confetti({
-        ...defaults,
-        particleCount,
-        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
-      })
-    }, 250)
-
-    // Apply the coupon
-    const coupon = { code: "GETOFF220ON599", discount: 220, minOrder: 599, description: "Save ₹220 on orders above ₹599" }
-    if (subtotal >= coupon.minOrder) {
-      setCouponApplied(true)
-      // Show applied animation, then close banner
-      setTimeout(() => {
-        handleApplyCoupon(coupon)
-        setShowDiscountBanner(false)
-        setCouponApplied(false)
-        sessionStorage.setItem('cartDiscountBannerShown', 'true')
-      }, 2000)
-    } else {
-      // If order value is less, just close the banner
-      setShowDiscountBanner(false)
-      sessionStorage.setItem('cartDiscountBannerShown', 'true')
-    }
-  }
-
-  const handleCloseBanner = () => {
-    setShowDiscountBanner(false)
-    sessionStorage.setItem('cartDiscountBannerShown', 'true')
-  }
 
   const handleRemoveCoupon = async () => {
     setAppliedCoupon(null)
@@ -428,47 +279,6 @@ export default function Cart() {
     }
   }
 
-  const handleSelectPayment = (payment) => {
-    setSelectedPayment(payment)
-    setShowPaymentSelection(false)
-    // Mark payment selection as shown in localStorage
-    localStorage.setItem('cartPaymentSelectionShown', 'true')
-  }
-
-  // Available payment methods
-  const paymentOptions = {
-    recommended: [
-      { id: 'gpay', name: 'Google Pay UPI', type: 'UPI', icon: 'gpay', isRecommended: true },
-      { id: 'phonepe', name: 'PhonePe UPI', type: 'UPI', icon: 'phonepe', isRecommended: true },
-    ],
-    cards: [
-      { id: 'add_card', name: 'Add credit or debit cards', type: 'Card', icon: 'card', isAddNew: true },
-      { id: 'pluxee', name: 'Add Pluxee', type: 'Card', icon: 'pluxee', isAddNew: true },
-    ],
-    upi: [
-      { id: 'add_upi', name: 'Add new UPI ID', type: 'UPI', icon: 'upi', isAddNew: true },
-    ],
-    wallets: [
-      { id: 'amazon_pay', name: 'Amazon Pay Balance', type: 'Wallet', icon: 'amazon' },
-      { id: 'mobikwik', name: 'Mobikwik', type: 'Wallet', icon: 'mobikwik' },
-    ],
-    payLater: [
-      { id: 'amazon_later', name: 'Amazon Pay Later', type: 'Pay Later', icon: 'amazon' },
-    ]
-  }
-
-  const renderPaymentIcon = (iconType) => {
-    switch(iconType) {
-      case 'gpay': return <GooglePayIcon />
-      case 'phonepe': return <PhonePeIcon />
-      case 'card': return <CardIcon />
-      case 'pluxee': return <PluxeeIcon />
-      case 'upi': return <UPIIcon />
-      case 'amazon': return <AmazonPayIcon />
-      case 'mobikwik': return <MobikwikIcon />
-      default: return <CardIcon />
-    }
-  }
 
   const handlePlaceOrder = async () => {
     if (!defaultAddress) {
@@ -1069,424 +879,28 @@ export default function Cart() {
         </div>
       </div>
 
-      {/* Bottom Sticky - Payment & Place Order */}
+      {/* Bottom Sticky - Place Order */}
       <div className="bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 shadow-lg z-30 flex-shrink-0 fixed bottom-0 left-0 right-0">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
-            <button 
-              onClick={() => setShowPaymentSelection(true)}
-              className="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg p-1 -m-1 transition-colors"
-            >
-            {selectedPayment ? (
-              <div className="w-7 h-7 rounded flex items-center justify-center overflow-hidden">
-                {selectedPayment.icon === 'gpay' ? (
-                  <div className="w-7 h-7 bg-white rounded flex items-center justify-center border border-gray-200">
-                    <svg viewBox="0 0 24 24" className="w-5 h-5">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                  </div>
-                ) : selectedPayment.icon === 'phonepe' ? (
-                  <div className="w-7 h-7 bg-[#5f259f] rounded flex items-center justify-center">
-                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="white">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H8l5-6v4h3l-5 6z"/>
-                    </svg>
-                  </div>
-                ) : (
-                  <div className="w-7 h-7 bg-gradient-to-r from-blue-500 to-cyan-500 rounded flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">G</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="w-7 h-7 bg-gray-200 rounded flex items-center justify-center">
-                <CreditCard className="h-4 w-4 text-gray-500" />
-              </div>
-            )}
-              <div>
-                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                  PAY USING <ChevronUp className="h-3 w-3 md:h-4 md:w-4" />
-                </p>
-                <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200 text-start">
-                  {"Razorpay"}
-                </p>
-              </div>
-            </button>
+          <div className="flex items-center justify-center px-4 md:px-6 py-4 md:py-5">
             <Button
               size="lg"
               onClick={handlePlaceOrder}
               disabled={isPlacingOrder}
-              className="bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700 text-white px-5 md:px-7 h-11 md:h-12 rounded-sm md:rounded-md text-sm md:text-base"
+              className="w-full max-w-md md:max-w-lg bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700 text-white px-6 md:px-10 h-14 md:h-16 rounded-lg md:rounded-xl text-base md:text-lg font-bold shadow-lg"
             >
-              <div className="text-left mr-2 md:mr-3">
-                <p className="text-xs md:text-sm opacity-90">₹{total.toFixed(0)}</p>
-                <p className="text-xs opacity-75">TOTAL</p>
+              <div className="text-left mr-3 md:mr-4">
+                <p className="text-sm md:text-base opacity-90">₹{total.toFixed(0)}</p>
+                <p className="text-xs md:text-sm opacity-75">TOTAL</p>
               </div>
-              <span className="font-semibold text-sm md:text-base">
+              <span className="font-bold text-base md:text-lg">
                 {isPlacingOrder ? "Processing..." : "Place Order"}
               </span>
-              <ChevronRight className="h-4 w-4 md:h-5 md:w-5 ml-1" />
+              <ChevronRight className="h-5 w-5 md:h-6 md:w-6 ml-2" />
             </Button>
           </div>
         </div>
       </div>
-
-      {/* Payment Selection Modal */}
-      {showPaymentSelection && (
-        <div className="fixed inset-0 z-50 h-screen w-screen overflow-hidden">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/40 transition-opacity"
-            onClick={() => setShowPaymentSelection(false)}
-          />
-          
-          {/* Payment Selection Sheet */}
-          <div 
-            className="absolute inset-0 bg-gray-50 animate-slideUpFull h-screen overflow-hidden"
-            style={{ animation: 'slideUpFull 0.3s ease-out' }}
-          >
-            {/* Header */}
-            <div className="bg-white border-b sticky top-0 z-10">
-              <div className="flex items-center gap-3 px-4 py-3">
-          <button 
-            onClick={() => {
-              setShowPaymentSelection(false)
-              // Mark payment selection as shown when user closes it
-              localStorage.setItem('cartPaymentSelectionShown', 'true')
-            }}
-            className="h-8 w-8 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-700" />
-          </button>
-                <span className="font-semibold text-gray-800">Bill total: ₹{total.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Payment Options */}
-            <div ref={paymentOptionsRef} className="overflow-y-auto" style={{ height: 'calc(100vh - 56px)' }}>
-              {/* Recommended Section */}
-              <div className="pt-4 pb-2">
-                <p className="px-4 text-xs font-semibold text-gray-500 tracking-wider mb-2">RECOMMENDED</p>
-                <div className="bg-white">
-                  {paymentOptions.recommended.map((payment, index) => (
-                    <button
-                      key={payment.id}
-                      onClick={() => handleSelectPayment(payment)}
-                      className={`w-full flex items-center justify-between px-4 py-4 hover:bg-gray-50 transition-colors ${
-                        index !== paymentOptions.recommended.length - 1 ? 'border-b border-gray-100' : ''
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {renderPaymentIcon(payment.icon)}
-                        <span className="text-sm font-medium text-gray-800">{payment.name}</span>
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-gray-400" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Cards Section */}
-              <div className="pt-4 pb-2">
-                <p className="px-4 text-xs font-semibold text-gray-500 tracking-wider mb-2">CARDS</p>
-                <div className="bg-white">
-                  {paymentOptions.cards.map((payment, index) => (
-                    <button
-                      key={payment.id}
-                      onClick={() => handleSelectPayment(payment)}
-                      className={`w-full flex items-center justify-between px-4 py-4 hover:bg-gray-50 transition-colors ${
-                        index !== paymentOptions.cards.length - 1 ? 'border-b border-gray-100' : ''
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {renderPaymentIcon(payment.icon)}
-                        <span className="text-sm font-medium text-gray-800">{payment.name}</span>
-                      </div>
-                      {payment.isAddNew ? (
-                        <Plus className="h-5 w-5 text-gray-400" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5 text-gray-400" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* UPI Section */}
-              <div className="pt-4 pb-2">
-                <p className="px-4 text-xs font-semibold text-gray-500 tracking-wider mb-2">PAY BY ANY UPI APP</p>
-                <div className="bg-white">
-                  {paymentOptions.upi.map((payment) => (
-                    <button
-                      key={payment.id}
-                      onClick={() => handleSelectPayment(payment)}
-                      className="w-full flex items-center justify-between px-4 py-4 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {renderPaymentIcon(payment.icon)}
-                        <span className="text-sm font-medium text-gray-800">{payment.name}</span>
-                      </div>
-                      <Plus className="h-5 w-5 text-gray-400" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Wallets Section */}
-              <div className="pt-4 pb-2">
-                <p className="px-4 text-xs font-semibold text-gray-500 tracking-wider mb-2">WALLETS</p>
-                <div className="bg-white">
-                  {paymentOptions.wallets.map((payment, index) => (
-                    <button
-                      key={payment.id}
-                      onClick={() => handleSelectPayment(payment)}
-                      className={`w-full flex items-center justify-between px-4 py-4 hover:bg-gray-50 transition-colors ${
-                        index !== paymentOptions.wallets.length - 1 ? 'border-b border-gray-100' : ''
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {renderPaymentIcon(payment.icon)}
-                        <span className="text-sm font-medium text-gray-800">{payment.name}</span>
-                      </div>
-                      <Plus className="h-5 w-5 text-gray-400" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Pay Later Section */}
-              <div className="pt-4 pb-8">
-                <p className="px-4 text-xs font-semibold text-gray-500 tracking-wider mb-2">PAY LATER</p>
-                <div className="bg-white">
-                  {paymentOptions.payLater.map((payment) => (
-                    <button
-                      key={payment.id}
-                      onClick={() => handleSelectPayment(payment)}
-                      className="w-full flex items-center justify-between px-4 py-4 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {renderPaymentIcon(payment.icon)}
-                        <span className="text-sm font-medium text-gray-800">{payment.name}</span>
-                      </div>
-                      <Plus className="h-5 w-5 text-gray-400" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Discount Banner Modal */}
-      <AnimatePresence>
-        {showDiscountBanner && (
-          <motion.div 
-            className="fixed inset-0 z-[1000]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {/* Backdrop */}
-            <motion.div 
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={handleCloseBanner}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            />
-            
-            {/* Banner Modal - Centered */}
-            <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4 pointer-events-none">
-              <motion.div
-                className="relative w-full max-w-sm pointer-events-auto"
-                initial={{ scale: 0.8, opacity: 0, y: 50 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.8, opacity: 0, y: 50 }}
-                transition={{ 
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 30
-                }}
-              >
-                <div className="relative bg-gradient-to-br from-blue-50 via-sky-50 to-blue-100 dark:from-blue-900/98 dark:via-sky-900/98 dark:to-blue-800/98 rounded-3xl shadow-2xl overflow-hidden">
-                  {/* Close button - Black circle with white X */}
-                  <motion.button
-                    onClick={handleCloseBanner}
-                    className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black dark:bg-gray-800 flex items-center justify-center hover:bg-gray-800 dark:hover:bg-gray-700 transition-colors shadow-lg"
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    <X className="h-4 w-4 text-white" strokeWidth={3} />
-                  </motion.button>
-
-                  {/* Content */}
-                  <div className="relative px-8 py-10">
-                    {/* Applied State */}
-                    <AnimatePresence mode="wait">
-                      {couponApplied ? (
-                        <motion.div 
-                          className="space-y-6 text-center"
-                          initial={{ scale: 0, opacity: 0, rotate: -180 }}
-                          animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                          exit={{ scale: 0, opacity: 0, rotate: 180 }}
-                          transition={{ 
-                            type: "spring",
-                            stiffness: 200,
-                            damping: 15
-                          }}
-                        >
-                          <motion.div 
-                            className="relative inline-block"
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                          >
-                            {/* Pulsing rings */}
-                            <motion.div 
-                              className="absolute inset-0 rounded-full bg-green-400"
-                              initial={{ scale: 0, opacity: 0.8 }}
-                              animate={{ scale: 2, opacity: 0 }}
-                              transition={{ duration: 1.5, repeat: Infinity }}
-                            />
-                            <motion.div 
-                              className="absolute inset-0 rounded-full bg-green-400"
-                              initial={{ scale: 0, opacity: 0.6 }}
-                              animate={{ scale: 2.5, opacity: 0 }}
-                              transition={{ duration: 1.5, delay: 0.3, repeat: Infinity }}
-                            />
-                            <div className="relative w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-2xl">
-                              <motion.div
-                                initial={{ pathLength: 0 }}
-                                animate={{ pathLength: 1 }}
-                                transition={{ duration: 0.6, delay: 0.3 }}
-                              >
-                                <Check className="h-12 w-12 text-white" strokeWidth={3} />
-                              </motion.div>
-                            </div>
-                          </motion.div>
-                          <motion.h3 
-                            className="text-3xl font-bold text-gray-900 dark:text-gray-100"
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.4 }}
-                          >
-                            Coupon Applied!
-                          </motion.h3>
-                          <motion.p 
-                            className="text-xl text-emerald-600 dark:text-emerald-400 font-semibold"
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.5 }}
-                          >
-                            You saved ₹220 on this order
-                          </motion.p>
-                        </motion.div>
-                      ) : (
-                        <motion.div 
-                          className="space-y-6"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                        >
-                          {/* Percentage Icon with Spotlight Effect */}
-                          <div className="flex justify-center">
-                            <motion.div 
-                              className="relative"
-                              initial={{ scale: 0, rotate: -180 }}
-                              animate={{ scale: 1, rotate: 0 }}
-                              transition={{ 
-                                type: "spring",
-                                stiffness: 200,
-                                damping: 15,
-                                delay: 0.2
-                              }}
-                            >
-                              {/* White radial lines (spotlight effect) */}
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                {[...Array(12)].map((_, i) => (
-                                  <motion.div
-                                    key={i}
-                                    className="absolute w-1 bg-white/40 rounded-full"
-                                    style={{
-                                      height: '80px',
-                                      transformOrigin: 'center',
-                                      transform: `rotate(${i * 30}deg) translateY(-40px)`
-                                    }}
-                                    initial={{ opacity: 0, scale: 0 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: 0.4 + i * 0.02 }}
-                                  />
-                                ))}
-                              </div>
-                              {/* Large percentage icon */}
-                              <motion.div 
-                                className="relative w-24 h-24 bg-gradient-to-br from-blue-500 to-sky-600 rounded-full flex items-center justify-center shadow-2xl"
-                                whileHover={{ scale: 1.1, rotate: 360 }}
-                                transition={{ duration: 0.6 }}
-                              >
-                                <Percent className="h-12 w-12 text-white" strokeWidth={2.5} />
-                              </motion.div>
-                            </motion.div>
-                          </div>
-
-                          {/* Exclusively For You Text */}
-                          <motion.div 
-                            className="text-center"
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.3 }}
-                          >
-                            <div className="flex items-center justify-center gap-2 mb-4">
-                              <Sparkles className="h-5 w-5 text-yellow-400" fill="currentColor" />
-                              <span className="text-base font-bold text-gray-900 dark:text-gray-100">EXCLUSIVELY FOR YOU</span>
-                              <Sparkles className="h-5 w-5 text-yellow-400" fill="currentColor" />
-                            </div>
-                          </motion.div>
-
-                          {/* Offer Text */}
-                          <motion.div 
-                            className="text-center space-y-3"
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.4 }}
-                          >
-                            <h3 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100">
-                              Save <span className="text-blue-600 dark:text-blue-400">₹220</span> on this order
-                            </h3>
-                            <p className="text-base text-gray-600 dark:text-gray-300">
-                              with coupon <span className="font-semibold text-gray-800 dark:text-gray-200">'GETOFF220ON599'</span>
-                            </p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                              Tap on 'APPLY' to avail this
-                            </p>
-                          </motion.div>
-
-                          {/* Apply Button */}
-                          <motion.button
-                            onClick={handleBannerApply}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-2xl shadow-xl transition-all duration-300 text-lg flex items-center justify-center gap-2"
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.5 }}
-                          >
-                            <span>APPLY</span>
-                          </motion.button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Placing Order Modal */}
       {showPlacingOrder && (
@@ -1506,22 +920,7 @@ export default function Cart() {
               {/* Payment Info */}
               <div className="flex items-center gap-4 mb-5">
                 <div className="w-14 h-14 rounded-xl border border-gray-200 flex items-center justify-center bg-white shadow-sm">
-                  {selectedPayment?.icon === 'gpay' ? (
-                    <svg viewBox="0 0 24 24" className="w-8 h-8">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                  ) : selectedPayment?.icon === 'phonepe' ? (
-                    <div className="w-10 h-10 bg-[#5f259f] rounded-lg flex items-center justify-center">
-                      <svg viewBox="0 0 24 24" className="w-6 h-6" fill="white">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-4H8l5-6v4h3l-5 6z"/>
-                      </svg>
-                    </div>
-                  ) : (
-                    <CreditCard className="w-6 h-6 text-gray-600" />
-                  )}
+                  <CreditCard className="w-6 h-6 text-gray-600" />
                 </div>
                 <div>
                   <p className="text-lg font-semibold text-gray-900">
