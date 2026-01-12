@@ -9,6 +9,7 @@ import AnimatedPage from "../components/AnimatedPage"
 import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
+import { diningAPI } from "@/lib/api"
 import PageNavbar from "../components/PageNavbar"
 import OptimizedImage from "@/components/OptimizedImage"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
@@ -29,280 +30,21 @@ import iciciLogo from "@/assets/banklogo/icici.png"
 import pnbLogo from "@/assets/banklogo/pnb.png"
 import sbiLogo from "@/assets/banklogo/sbi.png"
 
-const diningCategories = [
-  {
-    id: 1,
-    name: "Pure veg",
-    image: diningCard1,
-  },
-  {
-    id: 2,
-    name: "Drink & dine",
-    image: diningCard2,
-  },
-  {
-    id: 3,
-    name: "Family dining",
-    image: diningCard3,
-  },
-  {
-    id: 4,
-    name: "Rooftops",
-    image: diningCard4,
-  },
-  {
-    id: 5,
-    name: "Cozy cafes",
-    image: diningCard5,
-  },
-  {
-    id: 6,
-    name: "Premium dining",
-    image: diningCard6,
-  },
-]
+// Mock data removed in favor of dynamic fetching
+const diningCategories = []
 
-const limelightRestaurants = [
-  {
-    id: 1,
-    name: "The Grand Bistro",
-    subheading: "Fine Dining Experience",
-    image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&h=600&fit=crop",
-    discount: "25% OFF",
-  },
-  {
-    id: 2,
-    name: "Skyline Rooftop",
-    subheading: "Panoramic City Views",
-    image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&h=600&fit=crop",
-    discount: "30% OFF",
-  },
-  {
-    id: 3,
-    name: "Coastal Kitchen",
-    subheading: "Fresh Seafood Specialties",
-    image: "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=1200&h=600&fit=crop",
-    discount: "20% OFF",
-  },
-  {
-    id: 4,
-    name: "Garden Terrace",
-    subheading: "Al Fresco Dining",
-    image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=600&fit=crop",
-    discount: "35% OFF",
-  },
-  {
-    id: 5,
-    name: "Midnight Lounge",
-    subheading: "Cocktails & Cuisine",
-    image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=600&fit=crop",
-    discount: "25% OFF",
-  },
-]
+const limelightRestaurants = []
 
-const bankOffers = [
-  {
-    id: 1,
-    name: "Axis Bank",
-    cardType: "CORPORATE CARDS",
-    discount: "15% OFF",
-    maxDiscount: "up to ₹2000",
-    logo: axisLogo,
-    offerText: "Get 15% OFF for up to ₹2000 using Axis Bank Corporate Cards",
-    minAmount: "₹5000",
-    terms: [
-      "Offer valid once per customer during the offer period.",
-      "Offer applicable only on cards with BIN- 512042",
-      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
-      "Offer valid on all days",
-      "Offer not valid on Axis Bank Cashback / Rewards Credit Card variant",
-      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
-      "Other T&Cs may apply"
-    ]
-  },
-  {
-    id: 2,
-    name: "HDFC Bank",
-    cardType: "PREMIER CREDIT CARD",
-    discount: "10% OFF",
-    maxDiscount: "up to ₹1000",
-    logo: hdfcLogo,
-    offerText: "Get 10% OFF for up to ₹1000 using HDFC Premier Credit Cards",
-    minAmount: "₹5000",
-    terms: [
-      "Offer valid once per customer during the offer period.",
-      "Offer applicable only on cards with BIN- 512042",
-      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
-      "Offer valid on all days",
-      "Offer not valid on HDFC Cashback / Live+ Credit Card variant",
-      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
-      "Other T&Cs may apply"
-    ]
-  },
-  {
-    id: 3,
-    name: "ICICI Bank",
-    cardType: "CREDIT CARD",
-    discount: "15% OFF",
-    maxDiscount: "up to ₹750",
-    logo: iciciLogo,
-    offerText: "Get 15% OFF for up to ₹750 using ICICI Bank Credit Cards",
-    minAmount: "₹4000",
-    terms: [
-      "Offer valid once per customer during the offer period.",
-      "Offer applicable only on cards with BIN- 512042",
-      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
-      "Offer valid on all days",
-      "Offer not valid on ICICI Bank Cashback / Rewards Credit Card variant",
-      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
-      "Other T&Cs may apply"
-    ]
-  },
-  {
-    id: 4,
-    name: "SBI Bank",
-    cardType: "CREDIT CARD",
-    discount: "12% OFF",
-    maxDiscount: "up to ₹1500",
-    logo: sbiLogo,
-    offerText: "Get 12% OFF for up to ₹1500 using SBI Bank Credit Cards",
-    minAmount: "₹4500",
-    terms: [
-      "Offer valid once per customer during the offer period.",
-      "Offer applicable only on cards with BIN- 512042",
-      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
-      "Offer valid on all days",
-      "Offer not valid on SBI Cashback / Rewards Credit Card variant",
-      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
-      "Other T&Cs may apply"
-    ]
-  },
-  {
-    id: 5,
-    name: "PNB Bank",
-    cardType: "PREMIUM CARD",
-    discount: "20% OFF",
-    maxDiscount: "up to ₹2500",
-    logo: pnbLogo,
-    offerText: "Get 20% OFF for up to ₹2500 using PNB Bank Premium Cards",
-    minAmount: "₹6000",
-    terms: [
-      "Offer valid once per customer during the offer period.",
-      "Offer applicable only on cards with BIN- 512042",
-      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
-      "Offer valid on all days",
-      "Offer not valid on PNB Cashback / Rewards Credit Card variant",
-      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
-      "Other T&Cs may apply"
-    ]
-  },
-  {
-    id: 6,
-    name: "Baroda Bank",
-    cardType: "CREDIT CARD",
-    discount: "18% OFF",
-    maxDiscount: "up to ₹1800",
-    logo: barodaLogo,
-    offerText: "Get 18% OFF for up to ₹1800 using Baroda Bank Credit Cards",
-    minAmount: "₹5500",
-    terms: [
-      "Offer valid once per customer during the offer period.",
-      "Offer applicable only on cards with BIN- 512042",
-      "Offer applicable only on final billable amount net of other discounts (excluding tips)",
-      "Offer valid on all days",
-      "Offer not valid on Baroda Cashback / Rewards Credit Card variant",
-      "Restaurants applicable under this program can be found on the app & are subject to change from time to time",
-      "Other T&Cs may apply"
-    ]
-  },
-]
+const bankOffers = []
 
-const popularRestaurants = [
-  {
-    id: 1,
-    name: "IRIS",
-    rating: 4.3,
-    location: "Press Complex, Indore",
-    distance: "2.9 km",
-    cuisine: "Continental",
-    price: "₹1500 for two",
-    image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
-    offer: "Flat 30% OFF + 3 more",
-    deliveryTime: "30-35 mins",
-    featuredDish: "Pasta",
-    featuredPrice: 450,
-  },
-  {
-    id: 2,
-    name: "Skyline Rooftop",
-    rating: 4.5,
-    location: "MG Road, Indore",
-    distance: "3.2 km",
-    cuisine: "Multi-cuisine",
-    price: "₹2000 for two",
-    image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&h=600&fit=crop",
-    offer: "Flat 25% OFF + 2 more",
-    deliveryTime: "35-40 mins",
-    featuredDish: "Grilled Chicken",
-    featuredPrice: 550,
-  },
-  {
-    id: 3,
-    name: "The Grand Bistro",
-    rating: 4.7,
-    location: "Vijay Nagar, Indore",
-    distance: "1.8 km",
-    cuisine: "Continental",
-    price: "₹1800 for two",
-    image: "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=600&fit=crop",
-    offer: "Flat 35% OFF + 4 more",
-    deliveryTime: "25-30 mins",
-    featuredDish: "Risotto",
-    featuredPrice: 650,
-  },
-  {
-    id: 4,
-    name: "Coastal Kitchen",
-    rating: 4.4,
-    location: "Palasia, Indore",
-    distance: "2.1 km",
-    cuisine: "Seafood",
-    price: "₹1600 for two",
-    image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=600&fit=crop",
-    offer: "Flat 20% OFF + 2 more",
-    deliveryTime: "28-33 mins",
-    featuredDish: "Fish Curry",
-    featuredPrice: 480,
-  },
-  {
-    id: 5,
-    name: "Garden Terrace",
-    rating: 4.6,
-    location: "Scheme 54, Indore",
-    distance: "4.5 km",
-    cuisine: "North Indian",
-    price: "₹1200 for two",
-    image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&h=600&fit=crop",
-    offer: "Flat 30% OFF + 3 more",
-    deliveryTime: "40-45 mins",
-    featuredDish: "Butter Chicken",
-    featuredPrice: 380,
-  },
-  {
-    id: 6,
-    name: "Midnight Lounge",
-    rating: 4.2,
-    location: "Bhawarkua, Indore",
-    distance: "3.8 km",
-    cuisine: "Continental",
-    price: "₹2200 for two",
-    image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
-    offer: "Flat 25% OFF + 2 more",
-    deliveryTime: "35-40 mins",
-    featuredDish: "Steak",
-    featuredPrice: 750,
-  },
-]
+const MOCK_BANK_OFFERS = bankOffers
+
+const popularRestaurants = []
+// Static data removed in favor of dynamic fetching
+const MOCK_CATEGORIES = diningCategories
+const MOCK_LIMELIGHT = limelightRestaurants
+const MOCK_MUST_TRIES = []
+const MOCK_RESTAURANTS = popularRestaurants
 
 export default function Dining() {
   const navigate = useNavigate()
@@ -321,6 +63,38 @@ export default function Dining() {
   const { location } = useLocationHook()
   const { addFavorite, removeFavorite, isFavorite } = useProfile()
 
+  const [categories, setCategories] = useState([])
+  const [limelightItems, setLimelightItems] = useState([])
+  const [mustTryItems, setMustTryItems] = useState([])
+  const [restaurantList, setRestaurantList] = useState([])
+  const [bankOfferItems, setBankOfferItems] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchDiningData = async () => {
+      try {
+        const [cats, limes, tries, rests, offers] = await Promise.all([
+          diningAPI.getCategories(),
+          diningAPI.getLimelight(),
+          diningAPI.getMustTries(),
+          diningAPI.getRestaurants(location?.city ? { city: location.city } : {}),
+          diningAPI.getBankOffers()
+        ])
+
+        if (cats.data.success && cats.data.data.length > 0) setCategories(cats.data.data)
+        if (limes.data.success && limes.data.data.length > 0) setLimelightItems(limes.data.data)
+        if (tries.data.success && tries.data.data.length > 0) setMustTryItems(tries.data.data)
+        if (rests.data.success && rests.data.data.length > 0) setRestaurantList(rests.data.data)
+        if (offers.data.success && offers.data.data.length > 0) setBankOfferItems(offers.data.data)
+      } catch (error) {
+        console.error("Failed to fetch dining data", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchDiningData()
+  }, [location?.city])
+
   const toggleFilter = (filterId) => {
     setActiveFilters(prev => {
       const newSet = new Set(prev)
@@ -334,7 +108,7 @@ export default function Dining() {
   }
 
   const filteredRestaurants = useMemo(() => {
-    let filtered = [...popularRestaurants]
+    let filtered = [...restaurantList]
 
     if (activeFilters.has('delivery-under-30')) {
       filtered = filtered.filter(r => {
@@ -396,7 +170,7 @@ export default function Dining() {
   // Auto-play carousel
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentRestaurantIndex((prev) => (prev + 1) % limelightRestaurants.length)
+      setCurrentRestaurantIndex((prev) => (prev + 1) % limelightItems.length)
     }, 2000) // Change every 2 seconds
 
     return () => clearInterval(interval)
@@ -406,7 +180,7 @@ export default function Dining() {
   return (
     <AnimatedPage className="bg-white dark:bg-[#0a0a0a]" style={{ minHeight: '100vh', paddingBottom: '80px', overflow: 'visible' }}>
       {/* Unified Navbar & Hero Section */}
-      <div 
+      <div
         className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16 cursor-pointer"
         onClick={() => navigate('/user/dining/restaurants')}
       >
@@ -424,15 +198,15 @@ export default function Dining() {
 
         {/* Navbar */}
         <div className="relative z-20 pt-2 sm:pt-3 lg:pt-4">
-          <PageNavbar 
-            textColor="white" 
-            zIndex={20} 
+          <PageNavbar
+            textColor="white"
+            zIndex={20}
             onNavClick={(e) => e.stopPropagation()}
           />
         </div>
 
         {/* Hero Section with Search */}
-        <section 
+        <section
           className="relative z-20 w-full py-2 sm:py-3 md:py-4"
           onClick={(e) => e.stopPropagation()}
         >
@@ -488,13 +262,13 @@ export default function Dining() {
               <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
             </div>
           </div>
-          
+
           {/* Light blue-grey background container */}
           <div className="bg-white dark:bg-[#1a1a1a] rounded-2xl">
             <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4">
-              {diningCategories.map((category, index) => (
+              {categories.map((category, index) => (
                 <Link
-                  key={category.id}
+                  key={category._id || category.id}
                   to={`/user/dining/${category.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
                   <motion.div
@@ -511,7 +285,7 @@ export default function Dining() {
                         {category.name}
                       </p>
                     </div>
-                    
+
                     {/* Image at Bottom */}
                     <div className="relative flex-1 mt-auto overflow-hidden">
                       <motion.div
@@ -555,17 +329,17 @@ export default function Dining() {
               <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
             </div>
           </div>
-          
+
           {/* Landscape Carousel */}
           <div className="relative w-full h-[200px] sm:h-[280px] md:h-[350px] lg:h-[400px] rounded-2xl overflow-hidden shadow-lg">
             {/* Carousel Container */}
-            <div 
+            <div
               className="flex h-full transition-transform duration-700 ease-in-out"
               style={{ transform: `translateX(-${currentRestaurantIndex * 100}%)` }}
             >
-              {limelightRestaurants.map((restaurant, index) => (
+              {limelightItems.map((restaurant, index) => (
                 <div
-                  key={restaurant.id}
+                  key={restaurant._id || restaurant.id}
                   className="min-w-full h-full relative flex-shrink-0 w-full"
                 >
                   {/* Restaurant Image */}
@@ -578,7 +352,7 @@ export default function Dining() {
                     placeholder="blur"
                     priority={index === 0}
                   />
-                  
+
                   {/* Discount Tag - Top Left */}
                   <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10">
                     <div className="bg-white/95 backdrop-blur-sm px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg shadow-lg">
@@ -596,7 +370,7 @@ export default function Dining() {
                         {restaurant.name}
                       </h4>
                     </div>
-                    
+
                     {/* Subheading - White text on black bg */}
                     <div className="bg-black/90 backdrop-blur-sm rounded-b-lg px-2 py-1.5 sm:px-3 sm:py-2 shadow-lg">
                       <p className="text-[10px] sm:text-xs font-semibold text-white">
@@ -610,15 +384,14 @@ export default function Dining() {
 
             {/* Carousel Indicators */}
             <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-10 flex gap-2">
-              {limelightRestaurants.map((_, index) => (
+              {limelightItems.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentRestaurantIndex(index)}
-                  className={`h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full transition-all ${
-                    index === currentRestaurantIndex
-                      ? "bg-white w-6 sm:w-8"
-                      : "bg-white/50"
-                  }`}
+                  className={`h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full transition-all ${index === currentRestaurantIndex
+                    ? "bg-white w-6 sm:w-8"
+                    : "bg-white/50"
+                    }`}
                   aria-label={`Go to slide ${index + 1}`}
                 />
               ))}
@@ -638,7 +411,7 @@ export default function Dining() {
               <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
             </div>
           </div>
-          
+
           {/* Mobile: Explore Section */}
           <div className="mb-6 md:hidden">
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -718,7 +491,7 @@ export default function Dining() {
                 <div className="flex-grow border-t border-gray-300"></div>
               </div>
             </div>
-            
+
             {/* Desktop: Side by Side Layout - 25%, 25%, 50% */}
             <div className="flex gap-4 lg:gap-6">
               {/* First Explore Card - 25% */}
@@ -738,7 +511,7 @@ export default function Dining() {
                   />
                 </motion.div>
               </Link>
-              
+
               {/* Second Explore Card - 25% */}
               <Link to="/user/dining/explore/near-rated" className="w-[25%] rounded-xl overflow-hidden shadow-sm cursor-pointer">
                 <motion.div
@@ -756,7 +529,7 @@ export default function Dining() {
                   />
                 </motion.div>
               </Link>
-              
+
               {/* Exclusive on Dining - 50% */}
               <Link to="/user/dining/coffee" className="w-[50%] rounded-xl overflow-hidden shadow-lg cursor-pointer">
                 <motion.div
@@ -789,11 +562,11 @@ export default function Dining() {
               <div className="flex-grow border-t border-gray-300"></div>
             </div>
           </div>
-          
+
           {/* Horizontal Scroll Container */}
-          <div 
+          <div
             className="overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
-            style={{ 
+            style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch'
@@ -805,47 +578,11 @@ export default function Dining() {
               }
             `}</style>
             <div className="flex gap-4 pb-4 must-tries-scroll" style={{ width: 'max-content' }}>
-              {[
-                {
-                  id: 1,
-                  name: "Luxury Dining",
-                  image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500&h=300&fit=crop",
-                },
-                {
-                  id: 2,
-                  name: "Romantic Dining",
-                  image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=500&h=300&fit=crop",
-                },
-                {
-                  id: 3,
-                  name: "Great Cafes",
-                  image: "https://images.unsplash.com/photo-1501339847302-ac426a4c7cfe?w=500&h=300&fit=crop",
-                },
-                {
-                  id: 4,
-                  name: "Local Favorite Places",
-                  image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500&h=300&fit=crop",
-                },
-                {
-                  id: 5,
-                  name: "Pan Asian Restaurant",
-                  image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=500&h=300&fit=crop",
-                },
-                {
-                  id: 6,
-                  name: "Sky High Sips",
-                  image: "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=500&h=300&fit=crop",
-                },
-                {
-                  id: 7,
-                  name: "Great Buffets",
-                  image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop",
-                },
-              ].map((item, index) => (
+              {mustTryItems.map((item, index) => (
                 <motion.div
-                  key={item.id}
+                  key={item._id || item.id}
                   className="relative flex-shrink-0 rounded-xl overflow-hidden shadow-sm cursor-pointer"
-                  style={{ 
+                  style={{
                     width: 'calc((100vw - 3rem) / 2.5)',
                     minWidth: '140px',
                     maxWidth: '200px'
@@ -908,7 +645,7 @@ export default function Dining() {
 
           {/* Filters */}
           <section className="py-1 mb-4">
-            <div 
+            <div
               className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pb-1"
               style={{
                 scrollbarWidth: "none",
@@ -942,11 +679,10 @@ export default function Dining() {
                     key={filter.id}
                     variant="outline"
                     onClick={() => toggleFilter(filter.id)}
-                    className={`h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${
-                      isActive
-                        ? 'bg-green-500 text-white border border-green-500 hover:bg-green-500/90'
-                        : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
-                    }`}
+                    className={`h-7 sm:h-8 px-2 sm:px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 transition-all font-medium ${isActive
+                      ? 'bg-green-500 text-white border border-green-500 hover:bg-green-500/90'
+                      : 'bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
+                      }`}
                   >
                     {Icon && <Icon className={`h-3 w-3 sm:h-4 sm:w-4 ${isActive ? 'fill-white' : ''}`} />}
                     <span className="text-xs sm:text-sm font-bold text-black dark:text-white">{filter.label}</span>
@@ -960,7 +696,7 @@ export default function Dining() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6 lg:gap-8">
             {/* First 2 Restaurants */}
             {filteredRestaurants.slice(0, 2).map((restaurant, index) => {
-              const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+              const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
               const favorite = isFavorite(restaurantSlug)
 
               const handleToggleFavorite = (e) => {
@@ -983,13 +719,13 @@ export default function Dining() {
 
               return (
                 <motion.div
-                  key={restaurant.id}
+                  key={restaurant._id || restaurant.id}
                   className="h-full"
                   initial={{ opacity: 0, y: 30, scale: 0.95 }}
                   whileInView={{ opacity: 1, y: 0, scale: 1 }}
                   viewport={{ once: true, margin: "-50px" }}
-                  transition={{ 
-                    duration: 0.5, 
+                  transition={{
+                    duration: 0.5,
                     delay: index * 0.1,
                     type: "spring",
                     stiffness: 100
@@ -1041,7 +777,7 @@ export default function Dining() {
                               priority={index < 3}
                             />
                           </motion.div>
-                          
+
                           {/* Gradient Overlay on Hover */}
                           <motion.div
                             className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0"
@@ -1051,13 +787,13 @@ export default function Dining() {
                             }}
                             transition={{ duration: 0.4 }}
                           />
-                          
+
                           {/* Shine Effect */}
                           <motion.div
                             className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full"
                             variants={{
                               rest: { x: "-100%" },
-                              hover: { 
+                              hover: {
                                 x: "200%",
                                 transition: {
                                   duration: 0.8,
@@ -1067,109 +803,109 @@ export default function Dining() {
                               }
                             }}
                           />
-                      
-                      {/* Featured Dish Badge - Top Left */}
-                      <motion.div 
-                        className="absolute top-3 left-3 flex items-center z-10"
-                        variants={{
-                          rest: { scale: 1, y: 0 },
-                          hover: { scale: 1.05, y: -2 }
-                        }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <div className="bg-gray-800/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium shadow-lg">
-                          {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
-                        </div>
-                      </motion.div>
-                      
-                      {/* Bookmark Icon - Top Right */}
-                      <motion.div
-                        variants={{
-                          rest: { scale: 1, rotate: 0 },
-                          hover: { scale: 1.1, rotate: 5 }
-                        }}
-                        transition={{ duration: 0.3 }}
-                        className="absolute top-3 right-3 z-10"
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-9 w-9 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-sm rounded-lg hover:bg-white dark:hover:bg-[#2a2a2a] transition-colors"
-                          onClick={handleToggleFavorite}
-                        >
-                          <Bookmark className={`h-5 w-5 ${favorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
-                        </Button>
-                      </motion.div>
 
-                      {/* Blue Section - Bottom 40% */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-transparent" style={{ height: '40%' }}>
-                        <div className="h-full flex flex-col justify-end">
-                          <div className="pl-4 sm:pl-5 pb-4 sm:pb-5">
-                            <p className="text-white text-xs sm:text-sm font-medium uppercase tracking-wide mb-1">
-                              PRE-BOOK TABLE
-                            </p>
-                            <div className="h-px bg-white/30 mb-2 w-24"></div>
-                            <p className="text-white text-base sm:text-lg font-bold">
-                              {restaurant.offer}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Content Section */}
-                    <motion.div
-                      variants={{
-                        rest: { y: 0 },
-                        hover: { y: -4 }
-                      }}
-                      transition={{ duration: 0.4, ease: "easeOut" }}
-                    >
-                      <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
-                        {/* Restaurant Name & Rating */}
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <motion.h3 
-                              className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white line-clamp-1"
-                              variants={{
-                                rest: {},
-                                hover: { color: "rgb(34, 197, 94)" }
-                              }}
-                              transition={{ duration: 0.3 }}
-                            >
-                              {restaurant.name}
-                            </motion.h3>
-                          </div>
-                          <motion.div 
-                            className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1"
+                          {/* Featured Dish Badge - Top Left */}
+                          <motion.div
+                            className="absolute top-3 left-3 flex items-center z-10"
+                            variants={{
+                              rest: { scale: 1, y: 0 },
+                              hover: { scale: 1.05, y: -2 }
+                            }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <div className="bg-gray-800/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium shadow-lg">
+                              {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
+                            </div>
+                          </motion.div>
+
+                          {/* Bookmark Icon - Top Right */}
+                          <motion.div
                             variants={{
                               rest: { scale: 1, rotate: 0 },
                               hover: { scale: 1.1, rotate: 5 }
                             }}
-                            transition={{ duration: 0.3, type: "spring", stiffness: 400 }}
+                            transition={{ duration: 0.3 }}
+                            className="absolute top-3 right-3 z-10"
                           >
-                            <span className="text-sm font-bold">{restaurant.rating}</span>
-                            <Star className="h-3 w-3 fill-white text-white" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-sm rounded-lg hover:bg-white dark:hover:bg-[#2a2a2a] transition-colors"
+                              onClick={handleToggleFavorite}
+                            >
+                              <Bookmark className={`h-5 w-5 ${favorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
+                            </Button>
                           </motion.div>
-                        </div>
-                        
-                        {/* Delivery Time & Distance */}
-                        <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
-                          <Clock className="h-4 w-4" strokeWidth={1.5} />
-                          <span className="font-medium">{restaurant.deliveryTime}</span>
-                          <span className="mx-1">|</span>
-                          <span className="font-medium">{restaurant.distance}</span>
-                        </div>
-                        
-                        {/* Offer Badge */}
-                        {restaurant.offer && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <BadgePercent className="h-4 w-4 text-blue-600 dark:text-blue-400" strokeWidth={2} />
-                            <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
+
+                          {/* Blue Section - Bottom 40% */}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-transparent" style={{ height: '40%' }}>
+                            <div className="h-full flex flex-col justify-end">
+                              <div className="pl-4 sm:pl-5 pb-4 sm:pb-5">
+                                <p className="text-white text-xs sm:text-sm font-medium uppercase tracking-wide mb-1">
+                                  PRE-BOOK TABLE
+                                </p>
+                                <div className="h-px bg-white/30 mb-2 w-24"></div>
+                                <p className="text-white text-base sm:text-lg font-bold">
+                                  {restaurant.offer}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </CardContent>
-                    </motion.div>
+                        </div>
+
+                        {/* Content Section */}
+                        <motion.div
+                          variants={{
+                            rest: { y: 0 },
+                            hover: { y: -4 }
+                          }}
+                          transition={{ duration: 0.4, ease: "easeOut" }}
+                        >
+                          <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
+                            {/* Restaurant Name & Rating */}
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div className="flex-1 min-w-0">
+                                <motion.h3
+                                  className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white line-clamp-1"
+                                  variants={{
+                                    rest: {},
+                                    hover: { color: "rgb(34, 197, 94)" }
+                                  }}
+                                  transition={{ duration: 0.3 }}
+                                >
+                                  {restaurant.name}
+                                </motion.h3>
+                              </div>
+                              <motion.div
+                                className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1"
+                                variants={{
+                                  rest: { scale: 1, rotate: 0 },
+                                  hover: { scale: 1.1, rotate: 5 }
+                                }}
+                                transition={{ duration: 0.3, type: "spring", stiffness: 400 }}
+                              >
+                                <span className="text-sm font-bold">{restaurant.rating}</span>
+                                <Star className="h-3 w-3 fill-white text-white" />
+                              </motion.div>
+                            </div>
+
+                            {/* Delivery Time & Distance */}
+                            <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
+                              <Clock className="h-4 w-4" strokeWidth={1.5} />
+                              <span className="font-medium">{restaurant.deliveryTime}</span>
+                              <span className="mx-1">|</span>
+                              <span className="font-medium">{restaurant.distance}</span>
+                            </div>
+
+                            {/* Offer Badge */}
+                            {restaurant.offer && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <BadgePercent className="h-4 w-4 text-blue-600 dark:text-blue-400" strokeWidth={2} />
+                                <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
+                              </div>
+                            )}
+                          </CardContent>
+                        </motion.div>
                       </Card>
                     </Link>
                   </motion.div>
@@ -1190,9 +926,9 @@ export default function Dining() {
               </div>
 
               {/* Horizontal Scroll Container */}
-              <div 
+              <div
                 className="overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
-                style={{ 
+                style={{
                   scrollbarWidth: 'none',
                   msOverflowStyle: 'none',
                   WebkitOverflowScrolling: 'touch'
@@ -1204,9 +940,9 @@ export default function Dining() {
                   }
                 `}</style>
                 <div className="flex gap-3 sm:gap-4 pb-2 bank-offers-scroll" style={{ width: 'max-content' }}>
-                  {bankOffers.map((bank, bankIndex) => (
-                    <motion.div 
-                      key={bank.id} 
+                  {bankOfferItems.map((bank, bankIndex) => (
+                    <motion.div
+                      key={bank._id || bank.id}
                       onClick={() => setSelectedBankOffer(bank)}
                       className="flex-shrink-0 w-[calc((100vw-3rem)/3)] sm:w-[240px] md:w-[280px] bg-white dark:bg-[#1a1a1a] rounded-xl shadow-sm border-2 border-gray-300 dark:border-gray-700 p-3 sm:p-4 cursor-pointer"
                       initial={{ opacity: 0, y: 20 }}
@@ -1238,7 +974,7 @@ export default function Dining() {
 
             {/* Remaining Restaurants */}
             {filteredRestaurants.slice(2).map((restaurant, index) => {
-              const restaurantSlug = restaurant.name.toLowerCase().replace(/\s+/g, "-")
+              const restaurantSlug = restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, "-")
               const favorite = isFavorite(restaurantSlug)
 
               const handleToggleFavorite = (e) => {
@@ -1261,13 +997,13 @@ export default function Dining() {
 
               return (
                 <motion.div
-                  key={restaurant.id}
+                  key={restaurant._id || restaurant.id}
                   className="h-full"
                   initial={{ opacity: 0, y: 30, scale: 0.95 }}
                   whileInView={{ opacity: 1, y: 0, scale: 1 }}
                   viewport={{ once: true, margin: "-50px" }}
-                  transition={{ 
-                    duration: 0.5, 
+                  transition={{
+                    duration: 0.5,
                     delay: (index + 2) * 0.1,
                     type: "spring",
                     stiffness: 100
@@ -1318,7 +1054,7 @@ export default function Dining() {
                               placeholder="blur"
                             />
                           </motion.div>
-                          
+
                           {/* Gradient Overlay on Hover */}
                           <motion.div
                             className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0"
@@ -1328,13 +1064,13 @@ export default function Dining() {
                             }}
                             transition={{ duration: 0.4 }}
                           />
-                          
+
                           {/* Shine Effect */}
                           <motion.div
                             className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full"
                             variants={{
                               rest: { x: "-100%" },
-                              hover: { 
+                              hover: {
                                 x: "200%",
                                 transition: {
                                   duration: 0.8,
@@ -1344,71 +1080,71 @@ export default function Dining() {
                               }
                             }}
                           />
-                      
-                      {/* Featured Dish Badge - Top Left */}
-                      <div className="absolute top-3 left-3">
-                        <div className="bg-gray-800/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium">
-                          {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
-                        </div>
-                      </div>
-                      
-                      {/* Bookmark Icon - Top Right */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-3 right-3 h-9 w-9 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-sm rounded-lg hover:bg-white dark:hover:bg-[#2a2a2a] transition-colors"
-                        onClick={handleToggleFavorite}
-                      >
-                        <Bookmark className={`h-5 w-5 ${favorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
-                      </Button>
 
-                      {/* Blue Section - Bottom 40% */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-transparent" style={{ height: '40%' }}>
-                        <div className="h-full flex flex-col justify-end">
-                          <div className="pl-4 sm:pl-5 pb-4 sm:pb-5">
-                            <p className="text-white text-xs sm:text-sm font-medium uppercase tracking-wide mb-1">
-                              PRE-BOOK TABLE
-                            </p>
-                            <div className="h-px bg-white/30 mb-2 w-24"></div>
-                            <p className="text-white text-base sm:text-lg font-bold">
-                              {restaurant.offer}
-                            </p>
+                          {/* Featured Dish Badge - Top Left */}
+                          <div className="absolute top-3 left-3">
+                            <div className="bg-gray-800/80 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium">
+                              {restaurant.featuredDish} · ₹{restaurant.featuredPrice}
+                            </div>
+                          </div>
+
+                          {/* Bookmark Icon - Top Right */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-3 right-3 h-9 w-9 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-sm rounded-lg hover:bg-white dark:hover:bg-[#2a2a2a] transition-colors"
+                            onClick={handleToggleFavorite}
+                          >
+                            <Bookmark className={`h-5 w-5 ${favorite ? "fill-gray-800 dark:fill-gray-200 text-gray-800 dark:text-gray-200" : "text-gray-600 dark:text-gray-400"}`} strokeWidth={2} />
+                          </Button>
+
+                          {/* Blue Section - Bottom 40% */}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-transparent" style={{ height: '40%' }}>
+                            <div className="h-full flex flex-col justify-end">
+                              <div className="pl-4 sm:pl-5 pb-4 sm:pb-5">
+                                <p className="text-white text-xs sm:text-sm font-medium uppercase tracking-wide mb-1">
+                                  PRE-BOOK TABLE
+                                </p>
+                                <div className="h-px bg-white/30 mb-2 w-24"></div>
+                                <p className="text-white text-base sm:text-lg font-bold">
+                                  {restaurant.offer}
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                    
-                    {/* Content Section */}
-                    <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
-                      {/* Restaurant Name & Rating */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white line-clamp-1">
-                            {restaurant.name}
-                          </h3>
-                        </div>
-                        <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1">
-                          <span className="text-sm font-bold">{restaurant.rating}</span>
-                          <Star className="h-3 w-3 fill-white text-white" />
-                        </div>
-                      </div>
-                      
-                      {/* Delivery Time & Distance */}
-                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
-                        <Clock className="h-4 w-4" strokeWidth={1.5} />
-                        <span className="font-medium">{restaurant.deliveryTime}</span>
-                        <span className="mx-1">|</span>
-                        <span className="font-medium">{restaurant.distance}</span>
-                      </div>
-                      
-                      {/* Offer Badge */}
-                      {restaurant.offer && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <BadgePercent className="h-4 w-4 text-blue-600 dark:text-blue-400" strokeWidth={2} />
-                          <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
-                        </div>
-                      )}
-                    </CardContent>
+
+                        {/* Content Section */}
+                        <CardContent className="p-3 sm:p-4 pt-3 sm:pt-4">
+                          {/* Restaurant Name & Rating */}
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white line-clamp-1">
+                                {restaurant.name}
+                              </h3>
+                            </div>
+                            <div className="flex-shrink-0 bg-green-600 text-white px-2 py-1 rounded-lg flex items-center gap-1">
+                              <span className="text-sm font-bold">{restaurant.rating}</span>
+                              <Star className="h-3 w-3 fill-white text-white" />
+                            </div>
+                          </div>
+
+                          {/* Delivery Time & Distance */}
+                          <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-2">
+                            <Clock className="h-4 w-4" strokeWidth={1.5} />
+                            <span className="font-medium">{restaurant.deliveryTime}</span>
+                            <span className="mx-1">|</span>
+                            <span className="font-medium">{restaurant.distance}</span>
+                          </div>
+
+                          {/* Offer Badge */}
+                          {restaurant.offer && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <BadgePercent className="h-4 w-4 text-blue-600 dark:text-blue-400" strokeWidth={2} />
+                              <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
+                            </div>
+                          )}
+                        </CardContent>
                       </Card>
                     </Link>
                   </motion.div>
@@ -1423,17 +1159,17 @@ export default function Dining() {
       {isFilterOpen && (
         <div className="fixed inset-0 z-[100]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
           {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/50" 
+          <div
+            className="absolute inset-0 bg-black/50"
             onClick={() => setIsFilterOpen(false)}
           />
-          
+
           {/* Modal Content */}
           <div className="absolute bottom-0 left-0 right-0 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-4xl bg-white dark:bg-[#1a1a1a] rounded-t-3xl md:rounded-3xl max-h-[85vh] md:max-h-[90vh] flex flex-col animate-[slideUp_0.3s_ease-out]">
             {/* Header */}
             <div className="flex items-center justify-between px-4 md:px-6 py-4 md:py-5 border-b dark:border-gray-800">
               <h2 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">Filters and sorting</h2>
-              <button 
+              <button
                 onClick={() => {
                   setActiveFilters(new Set())
                   setSortBy(null)
@@ -1444,7 +1180,7 @@ export default function Dining() {
                 Clear all
               </button>
             </div>
-            
+
             {/* Body */}
             <div className="flex flex-1 overflow-hidden">
               {/* Left Sidebar - Tabs */}
@@ -1463,9 +1199,8 @@ export default function Dining() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveFilterTab(tab.id)}
-                            className={`flex flex-col items-center gap-1 py-4 px-2 text-center relative transition-colors ${
-                        isActive ? 'bg-white dark:bg-[#1a1a1a] text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                      }`}
+                      className={`flex flex-col items-center gap-1 py-4 px-2 text-center relative transition-colors ${isActive ? 'bg-white dark:bg-[#1a1a1a] text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
                     >
                       {isActive && (
                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-600 rounded-r" />
@@ -1476,7 +1211,7 @@ export default function Dining() {
                   )
                 })}
               </div>
-              
+
               {/* Right Content Area - Scrollable */}
               <div ref={rightContentRef} className="flex-1 overflow-y-auto p-4 md:p-6">
                 {/* Sort By Tab */}
@@ -1492,11 +1227,10 @@ export default function Dining() {
                         <button
                           key={option.id || 'relevance'}
                           onClick={() => setSortBy(option.id)}
-                          className={`px-4 md:px-5 py-3 md:py-4 rounded-xl border text-left transition-colors ${
-                            sortBy === option.id
-                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                          }`}
+                          className={`px-4 md:px-5 py-3 md:py-4 rounded-xl border text-left transition-colors ${sortBy === option.id
+                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                            }`}
                         >
                           <span className={`text-sm md:text-base font-medium ${sortBy === option.id ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>
                             {option.label}
@@ -1506,30 +1240,28 @@ export default function Dining() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Time Tab */}
                 {activeFilterTab === 'time' && (
                   <div className="space-y-4 mb-8">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Delivery Time</h3>
                     <div className="grid grid-cols-2 gap-3">
-                      <button 
+                      <button
                         onClick={() => toggleFilter('delivery-under-30')}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
-                          activeFilters.has('delivery-under-30') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('delivery-under-30')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-30') ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
                         <span className={`text-sm font-medium ${activeFilters.has('delivery-under-30') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Under 30 mins</span>
                       </button>
-                      <button 
+                      <button
                         onClick={() => toggleFilter('delivery-under-45')}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
-                          activeFilters.has('delivery-under-45') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('delivery-under-45')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <Timer className={`h-6 w-6 ${activeFilters.has('delivery-under-45') ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
                         <span className={`text-sm font-medium ${activeFilters.has('delivery-under-45') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Under 45 mins</span>
@@ -1537,41 +1269,38 @@ export default function Dining() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Rating Tab */}
                 {activeFilterTab === 'rating' && (
                   <div className="space-y-4 mb-8">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Restaurant Rating</h3>
                     <div className="grid grid-cols-2 gap-3">
-                      <button 
+                      <button
                         onClick={() => toggleFilter('rating-35-plus')}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
-                          activeFilters.has('rating-35-plus') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-35-plus')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <Star className={`h-6 w-6 ${activeFilters.has('rating-35-plus') ? 'text-green-600 dark:text-green-400 fill-green-600 dark:fill-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
                         <span className={`text-sm font-medium ${activeFilters.has('rating-35-plus') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Rated 3.5+</span>
                       </button>
-                      <button 
+                      <button
                         onClick={() => toggleFilter('rating-4-plus')}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
-                          activeFilters.has('rating-4-plus') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-4-plus')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <Star className={`h-6 w-6 ${activeFilters.has('rating-4-plus') ? 'text-green-600 dark:text-green-400 fill-green-600 dark:fill-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
                         <span className={`text-sm font-medium ${activeFilters.has('rating-4-plus') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Rated 4.0+</span>
                       </button>
-                      <button 
+                      <button
                         onClick={() => toggleFilter('rating-45-plus')}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
-                          activeFilters.has('rating-45-plus') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('rating-45-plus')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <Star className={`h-6 w-6 ${activeFilters.has('rating-45-plus') ? 'text-green-600 dark:text-green-400 fill-green-600 dark:fill-green-400' : 'text-gray-400 dark:text-gray-500'}`} />
                         <span className={`text-sm font-medium ${activeFilters.has('rating-45-plus') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Rated 4.5+</span>
@@ -1585,24 +1314,22 @@ export default function Dining() {
                   <div className="space-y-4 mb-8">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Distance</h3>
                     <div className="grid grid-cols-2 gap-3">
-                      <button 
+                      <button
                         onClick={() => toggleFilter('distance-under-1km')}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
-                          activeFilters.has('distance-under-1km') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('distance-under-1km')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-1km') ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
                         <span className={`text-sm font-medium ${activeFilters.has('distance-under-1km') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Under 1 km</span>
                       </button>
-                      <button 
+                      <button
                         onClick={() => toggleFilter('distance-under-2km')}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${
-                          activeFilters.has('distance-under-2km') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors ${activeFilters.has('distance-under-2km')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <MapPin className={`h-6 w-6 ${activeFilters.has('distance-under-2km') ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`} strokeWidth={1.5} />
                         <span className={`text-sm font-medium ${activeFilters.has('distance-under-2km') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Under 2 km</span>
@@ -1610,29 +1337,27 @@ export default function Dining() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Price Tab */}
                 {activeFilterTab === 'price' && (
                   <div className="space-y-4 mb-8">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Dish Price</h3>
                     <div className="flex flex-col gap-3">
-                      <button 
+                      <button
                         onClick={() => toggleFilter('price-under-200')}
-                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${
-                          activeFilters.has('price-under-200') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('price-under-200')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <span className={`text-sm font-medium ${activeFilters.has('price-under-200') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Under ₹200</span>
                       </button>
-                      <button 
+                      <button
                         onClick={() => toggleFilter('price-under-500')}
-                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${
-                          activeFilters.has('price-under-500') 
-                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                        }`}
+                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('price-under-500')
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                          }`}
                       >
                         <span className={`text-sm font-medium ${activeFilters.has('price-under-500') ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>Under ₹500</span>
                       </button>
@@ -1649,11 +1374,10 @@ export default function Dining() {
                         <button
                           key={cuisine}
                           onClick={() => setSelectedCuisine(selectedCuisine === cuisine ? null : cuisine)}
-                          className={`px-4 py-3 rounded-xl border text-center transition-colors ${
-                            selectedCuisine === cuisine
-                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
-                          }`}
+                          className={`px-4 py-3 rounded-xl border text-center transition-colors ${selectedCuisine === cuisine
+                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-green-500'
+                            }`}
                         >
                           <span className={`text-sm font-medium ${selectedCuisine === cuisine ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>
                             {cuisine}
@@ -1665,22 +1389,21 @@ export default function Dining() {
                 )}
               </div>
             </div>
-            
+
             {/* Footer */}
             <div className="flex items-center gap-4 md:gap-6 px-4 md:px-6 py-4 md:py-5 border-t dark:border-gray-800 bg-white dark:bg-[#1a1a1a]">
-              <button 
+              <button
                 onClick={() => setIsFilterOpen(false)}
                 className="flex-1 py-3 md:py-4 text-center font-semibold text-gray-700 dark:text-gray-300 text-sm md:text-base"
               >
                 Close
               </button>
-              <button 
+              <button
                 onClick={() => setIsFilterOpen(false)}
-                className={`flex-1 py-3 md:py-4 font-semibold rounded-xl transition-colors text-sm md:text-base ${
-                  activeFilters.size > 0 || sortBy || selectedCuisine
-                    ? 'bg-green-600 text-white hover:bg-green-700'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                }`}
+                className={`flex-1 py-3 md:py-4 font-semibold rounded-xl transition-colors text-sm md:text-base ${activeFilters.size > 0 || sortBy || selectedCuisine
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                  }`}
               >
                 {activeFilters.size > 0 || sortBy || selectedCuisine
                   ? `Show ${filteredRestaurants.length} results`
@@ -1704,13 +1427,13 @@ export default function Dining() {
               className="fixed inset-0 bg-black/50 z-[110]"
               onClick={() => setSelectedBankOffer(null)}
             />
-            
+
             {/* Modal */}
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ 
+              transition={{
                 type: 'spring',
                 damping: 25,
                 stiffness: 200

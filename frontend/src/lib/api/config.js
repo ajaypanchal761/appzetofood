@@ -20,7 +20,7 @@ if (import.meta.env.DEV) {
   console.log('🌐 Backend URL:', API_BASE_URL.replace('/api', ''));
   console.log('🌐 Frontend URL:', window.location.origin);
   console.log('🌐 Environment:', import.meta.env.MODE);
-  
+
   // Backend health check removed - errors handled by axios interceptor
   // Health check will be performed when actual API calls are made
 }
@@ -211,6 +211,15 @@ export const API_ENDPOINTS = {
     DELETE: '/hero-banners/:id',
     UPDATE_ORDER: '/hero-banners/:id/order',
     TOGGLE_STATUS: '/hero-banners/:id/status',
+  },
+  // Dining endpoints
+  DINING: {
+    RESTAURANTS: '/dining/restaurants',
+    RESTAURANT_DETAILS: '/dining/restaurants/:slug',
+    CATEGORIES: '/dining/categories',
+    LIMELIGHT: '/dining/limelight',
+    BANK_OFFERS: '/dining/bank-offers',
+    MUST_TRIES: '/dining/must-tries',
   },
 };
 

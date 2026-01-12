@@ -322,10 +322,10 @@ export const restaurantAPI = {
     // If data is FormData, set appropriate headers
     const config = data instanceof FormData
       ? {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
       : {};
     return apiClient.post(API_ENDPOINTS.RESTAURANT.STAFF, data, config);
   },
@@ -499,7 +499,7 @@ export const deliveryAPI = {
   getDashboard: () => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.DASHBOARD);
   },
-  
+
   // Wallet
   getWallet: () => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.WALLET);
@@ -594,6 +594,28 @@ export const deliveryAPI = {
   // Reverify (resubmit for approval)
   reverify: () => {
     return apiClient.post(API_ENDPOINTS.DELIVERY.REVERIFY);
+  },
+};
+
+// Export dining API helper functions
+export const diningAPI = {
+  getRestaurants: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.DINING.RESTAURANTS, { params });
+  },
+  getRestaurantBySlug: (slug) => {
+    return apiClient.get(API_ENDPOINTS.DINING.RESTAURANT_DETAILS.replace(':slug', slug));
+  },
+  getCategories: () => {
+    return apiClient.get(API_ENDPOINTS.DINING.CATEGORIES);
+  },
+  getLimelight: () => {
+    return apiClient.get(API_ENDPOINTS.DINING.LIMELIGHT);
+  },
+  getBankOffers: () => {
+    return apiClient.get(API_ENDPOINTS.DINING.BANK_OFFERS);
+  },
+  getMustTries: () => {
+    return apiClient.get(API_ENDPOINTS.DINING.MUST_TRIES);
   },
 };
 

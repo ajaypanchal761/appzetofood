@@ -37,6 +37,7 @@ import subscriptionRoutes from './modules/subscription/index.js';
 import uploadModuleRoutes from './modules/upload/index.js';
 import locationRoutes from './modules/location/index.js';
 import heroBannerRoutes from './modules/heroBanner/index.js';
+import diningRoutes from './modules/dining/index.js';
 
 
 // Validate required environment variables
@@ -45,22 +46,22 @@ const missingEnvVars = [];
 
 requiredEnvVars.forEach(varName => {
   let value = process.env[varName];
-  
+
   // Remove quotes if present (dotenv sometimes includes them)
   if (value && typeof value === 'string') {
     value = value.trim();
     // Remove surrounding quotes
-    if ((value.startsWith('"') && value.endsWith('"')) || 
-        (value.startsWith("'") && value.endsWith("'"))) {
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1).trim();
     }
   }
-  
+
   // Update the env var with cleaned value
   if (value) {
     process.env[varName] = value;
   }
-  
+
   // Check if valid
   if (!value || value === '' || (varName === 'JWT_SECRET' && value.includes('your-super-secret'))) {
     missingEnvVars.push(varName);
@@ -116,7 +117,7 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
@@ -178,6 +179,7 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api', uploadModuleRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api', heroBannerRoutes);
+app.use('/api/dining', diningRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -212,10 +214,10 @@ io.on('connection', (socket) => {
         heading: data.heading || 0,
         timestamp: Date.now()
       };
-      
+
       // Send to specific order room
       io.to(`order:${data.orderId}`).emit(`location-receive-${data.orderId}`, locationData);
-      
+
       console.log(`📍 Location broadcasted to order room ${data.orderId}:`, {
         lat: locationData.lat,
         lng: locationData.lng,
@@ -237,12 +239,12 @@ io.on('connection', (socket) => {
     if (orderId) {
       socket.join(`order:${orderId}`);
       console.log(`Customer joined order tracking: ${orderId}`);
-      
+
       // Send current location immediately when customer joins
       try {
         // Dynamic import to avoid circular dependencies
         const { default: Order } = await import('./modules/order/models/Order.js');
-        
+
         const order = await Order.findById(orderId)
           .populate({
             path: 'deliveryPartnerId',
@@ -252,7 +254,7 @@ io.on('connection', (socket) => {
             }
           })
           .lean();
-        
+
         if (order?.deliveryPartnerId?.availability?.currentLocation) {
           const coords = order.deliveryPartnerId.availability.currentLocation.coordinates;
           const locationData = {
@@ -262,7 +264,7 @@ io.on('connection', (socket) => {
             heading: 0,
             timestamp: Date.now()
           };
-          
+
           // Send current location immediately
           socket.emit(`current-location-${orderId}`, locationData);
           console.log(`📍 Sent current location to customer for order ${orderId}`);
@@ -276,18 +278,18 @@ io.on('connection', (socket) => {
   // Handle request for current location
   socket.on('request-current-location', async (orderId) => {
     if (!orderId) return;
-    
+
     try {
       // Dynamic import to avoid circular dependencies
       const { default: Order } = await import('./modules/order/models/Order.js');
-      
+
       const order = await Order.findById(orderId)
         .populate({
           path: 'deliveryPartnerId',
           select: 'availability'
         })
         .lean();
-      
+
       if (order?.deliveryPartnerId?.availability?.currentLocation) {
         const coords = order.deliveryPartnerId.availability.currentLocation.coordinates;
         const locationData = {
@@ -297,7 +299,7 @@ io.on('connection', (socket) => {
           heading: 0,
           timestamp: Date.now()
         };
-        
+
         // Send current location immediately
         socket.emit(`current-location-${orderId}`, locationData);
         console.log(`📍 Sent requested location for order ${orderId}`);
@@ -325,7 +327,7 @@ const PORT = process.env.PORT || 5000;
 
 httpServer.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-  
+
   // Initialize scheduled tasks after DB connection is established
   // Wait a bit for DB to connect, then start cron jobs
   setTimeout(() => {
@@ -348,7 +350,7 @@ function initializeScheduledTasks() {
         console.error('[Menu Schedule Cron] Error:', error);
       }
     });
-    
+
     console.log('✅ Menu item availability scheduler initialized (runs every minute)');
   }).catch((error) => {
     console.error('❌ Failed to initialize menu schedule service:', error);
