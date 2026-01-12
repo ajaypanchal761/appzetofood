@@ -38,9 +38,9 @@ export const sidebarMenuData = [
       },
       {
         type: "link",
-        label: "Cuisine",
-        path: "/admin/cuisine",
-        icon: "Link",
+        label: "Food Approval",
+        path: "/admin/food-approval",
+        icon: "CheckCircle2",
       },
       {
         type: "expandable",

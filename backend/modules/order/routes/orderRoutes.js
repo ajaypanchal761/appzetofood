@@ -10,11 +10,12 @@ import { authenticate } from '../../auth/middleware/auth.js';
 
 const router = express.Router();
 
-// All routes require authentication
-router.use(authenticate);
-
-// Calculate order pricing (must be before /:id route)
+// Calculate order pricing (public endpoint - no auth required for cart preview)
+// This must be before the authenticate middleware
 router.post('/calculate', calculateOrder);
+
+// All other routes require authentication
+router.use(authenticate);
 
 // Create order and initiate payment
 router.post('/', createOrder);

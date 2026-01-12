@@ -2,6 +2,7 @@ import Restaurant from '../models/Restaurant.js';
 import Menu from '../models/Menu.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../../../shared/utils/cloudinaryService.js';
+import { initializeCloudinary } from '../../../config/cloudinary.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import mongoose from 'mongoose';
 
@@ -325,6 +326,9 @@ export const uploadProfileImage = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, 'No image file provided');
     }
 
+    // Initialize Cloudinary if not already initialized
+    await initializeCloudinary();
+
     const restaurantId = req.restaurant._id;
     const restaurant = await Restaurant.findById(restaurantId);
 
@@ -369,12 +373,40 @@ export const uploadMenuImage = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, 'No image file provided');
     }
 
+    // Validate file buffer
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+      return errorResponse(res, 400, 'File buffer is empty or invalid');
+    }
+
+    // Validate file size (max 20MB)
+    const maxSize = 20 * 1024 * 1024; // 20MB
+    if (req.file.size > maxSize) {
+      return errorResponse(res, 400, `File size exceeds ${maxSize / (1024 * 1024)}MB limit`);
+    }
+
+    // Validate file type
+    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedMimeTypes.includes(req.file.mimetype)) {
+      return errorResponse(res, 400, `Invalid file type. Allowed types: ${allowedMimeTypes.join(', ')}`);
+    }
+
+    // Initialize Cloudinary if not already initialized
+    await initializeCloudinary();
+
     const restaurantId = req.restaurant._id;
     const restaurant = await Restaurant.findById(restaurantId);
 
     if (!restaurant) {
       return errorResponse(res, 404, 'Restaurant not found');
     }
+
+    console.log('📤 Uploading menu image to Cloudinary:', {
+      fileName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      bufferSize: req.file.buffer.length,
+      restaurantId: restaurantId.toString()
+    });
 
     // Upload to Cloudinary
     const folder = 'appzeto/restaurant/menu';
@@ -416,8 +448,27 @@ export const uploadMenuImage = asyncHandler(async (req, res) => {
       menuImages: restaurant.menuImages
     });
   } catch (error) {
-    console.error('Error uploading menu image:', error);
-    return errorResponse(res, 500, 'Failed to upload menu image');
+    console.error('❌ Error uploading menu image:', {
+      message: error.message,
+      stack: error.stack,
+      errorType: error.constructor.name,
+      hasFile: !!req.file,
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+      bufferSize: req.file?.buffer?.length,
+      restaurantId: req.restaurant?._id,
+      cloudinaryError: error.http_code || error.name === 'Error' ? error.message : null
+    });
+    
+    // Provide more specific error message
+    let errorMessage = 'Failed to upload menu image';
+    if (error.message) {
+      errorMessage += `: ${error.message}`;
+    } else if (error.http_code) {
+      errorMessage += `: Cloudinary error (${error.http_code})`;
+    }
+    
+    return errorResponse(res, 500, errorMessage);
   }
 });
 

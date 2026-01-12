@@ -74,6 +74,9 @@ export const API_ENDPOINTS = {
     MENU_ITEM_SCHEDULE: '/restaurant/menu/item/schedule',
     MENU_ITEM_SCHEDULE_BY_ID: '/restaurant/menu/item/schedule/:scheduleId',
     MENU_ITEM_SCHEDULE_BY_ITEM: '/restaurant/menu/item/schedule/:sectionId/:itemId',
+    ADDONS: '/restaurant/menu/addons',
+    ADDON: '/restaurant/menu/addon',
+    ADDON_BY_ID: '/restaurant/menu/addon/:id',
     CATEGORIES: '/restaurant/categories',
     CATEGORIES_ALL: '/restaurant/categories/all',
     CATEGORY_BY_ID: '/restaurant/categories/:id',
@@ -177,6 +180,9 @@ export const API_ENDPOINTS = {
     RESTAURANT_COMMISSION_BY_ID: '/admin/restaurant-commission/:id',
     RESTAURANT_COMMISSION_STATUS: '/admin/restaurant-commission/:id/status',
     RESTAURANT_COMMISSION_CALCULATE: '/admin/restaurant-commission/calculate',
+    FOOD_APPROVALS: '/admin/food-approvals',
+    FOOD_APPROVAL_APPROVE: '/admin/food-approvals/:id/approve',
+    FOOD_APPROVAL_REJECT: '/admin/food-approvals/:id/reject',
   },
   // Order endpoints
   ORDER: {

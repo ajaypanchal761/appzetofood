@@ -8,7 +8,7 @@ import AdminSettings from "../pages/AdminSettings";
 import SearchingDeliveryMan from "../pages/dispatch/SearchingDeliveryMan";
 import OngoingOrders from "../pages/dispatch/OngoingOrders";
 import NewRefundRequests from "../pages/refunds/NewRefundRequests";
-import Cuisine from "../pages/restaurant/Cuisine";
+import FoodApproval from "../pages/restaurant/FoodApproval";
 import OrdersPage from "../pages/orders/OrdersPage";
 import SubscriptionOrders from "../pages/SubscriptionOrders";
 import Category from "../pages/categories/Category";
@@ -156,7 +156,7 @@ export default function AdminRouter() {
 
         {/* RESTAURANT MANAGEMENT */}
         <Route path="zone-setup" element={<ZoneSetup />} />
-        <Route path="cuisine" element={<Cuisine />} />
+        <Route path="food-approval" element={<FoodApproval />} />
         {/* Restaurants */}
         <Route path="restaurants" element={<RestaurantsList />} />
         <Route path="restaurants/joining-request" element={<JoiningRequest />} />
