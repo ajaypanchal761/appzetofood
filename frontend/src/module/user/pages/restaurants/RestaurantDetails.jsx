@@ -3219,6 +3219,7 @@ export default function RestaurantDetails() {
       price: item.price,
       image: item.image,
       restaurant: restaurant?.name || "Unknown Restaurant",
+      restaurantId: restaurant?.restaurantId || restaurant?._id || restaurant?.id || null,
       description: item.description,
       originalPrice: item.originalPrice,
     }

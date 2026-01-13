@@ -395,6 +395,14 @@ export const restaurantAPI = {
   getRestaurantById: (id) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.BY_ID.replace(':id', id));
   },
+  // Get coupons for item (public - for user cart)
+  getCouponsByItemIdPublic: (restaurantId, itemId) => {
+    return apiClient.get(
+      API_ENDPOINTS.RESTAURANT.COUPONS_BY_ITEM_ID_PUBLIC
+        .replace(':restaurantId', restaurantId)
+        .replace(':itemId', itemId)
+    );
+  },
 
   // Get restaurant by owner (for restaurant module)
   getRestaurantByOwner: () => {
@@ -433,6 +441,9 @@ export const restaurantAPI = {
   },
   deleteAddon: (id) => {
     return apiClient.delete(API_ENDPOINTS.RESTAURANT.ADDON_BY_ID.replace(':id', id));
+  },
+  getAddonsByRestaurantId: (restaurantId) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.ADDONS_BY_RESTAURANT_ID.replace(':id', restaurantId));
   },
 
   getMenuByRestaurantId: (restaurantId) => {
@@ -483,6 +494,26 @@ export const restaurantAPI = {
   },
   getInventoryByRestaurantId: (restaurantId) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.INVENTORY_BY_RESTAURANT_ID.replace(':id', restaurantId));
+  },
+
+  // Offer operations (for restaurant module)
+  createOffer: (offerData) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.OFFERS, offerData);
+  },
+  getOffers: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.OFFERS, { params });
+  },
+  getOfferById: (id) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.OFFER_BY_ID.replace(':id', id));
+  },
+  updateOfferStatus: (id, status) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.OFFER_STATUS.replace(':id', id), { status });
+  },
+  deleteOffer: (id) => {
+    return apiClient.delete(API_ENDPOINTS.RESTAURANT.OFFER_BY_ID.replace(':id', id));
+  },
+  getCouponsByItemId: (itemId) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.COUPONS_BY_ITEM_ID.replace(':itemId', itemId));
   },
 };
 
@@ -712,6 +743,11 @@ export const adminAPI = {
     return apiClient.delete(API_ENDPOINTS.ADMIN.RESTAURANT_DELETE.replace(':id', id));
   },
 
+  // Get all offers (with restaurant and dish details)
+  getAllOffers: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.OFFERS, { params });
+  },
+
   // Restaurant Commission Management
   getRestaurantCommissions: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION, { params });
@@ -855,6 +891,31 @@ export const adminAPI = {
 
   updateCategoryPriority: (id, priority) => {
     return apiClient.patch(API_ENDPOINTS.ADMIN.CATEGORY_PRIORITY.replace(':id', id), { priority });
+  },
+
+  // Zone Management
+  getZones: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ZONES, { params });
+  },
+
+  getZoneById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ZONE_BY_ID.replace(':id', id));
+  },
+
+  createZone: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.ZONES, data);
+  },
+
+  updateZone: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.ZONE_BY_ID.replace(':id', id), data);
+  },
+
+  deleteZone: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.ZONE_BY_ID.replace(':id', id));
+  },
+
+  toggleZoneStatus: (id) => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.ZONE_STATUS.replace(':id', id));
   },
 
   // Earning Addon Management

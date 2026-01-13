@@ -10,9 +10,10 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
-    include: ['@emotion/react', '@emotion/styled', '@mui/material', '@mui/x-date-pickers'],
+    include: ['@emotion/react', '@emotion/styled', '@mui/material', '@mui/x-date-pickers', 'mapbox-gl', 'react-map-gl'],
   },
   server: {
     host: '0.0.0.0', // Allow access from network

@@ -141,7 +141,11 @@ export default function OutletInfo() {
           }
         }
       } catch (error) {
-        console.error("Error fetching restaurant data:", error)
+        // Only log error if it's not a network/timeout error (backend might be down/slow)
+        if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error("Error fetching restaurant data:", error)
+        }
+        // Continue with default values if fetch fails
       } finally {
         setLoading(false)
       }

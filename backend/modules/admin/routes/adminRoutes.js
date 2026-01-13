@@ -18,7 +18,8 @@ import {
   approveRestaurant,
   rejectRestaurant,
   reverifyRestaurant,
-  deleteRestaurant
+  deleteRestaurant,
+  getAllOffers
 } from '../controllers/adminController.js';
 import {
   getCategories,
@@ -88,6 +89,7 @@ import {
   approveFoodItem,
   rejectFoodItem
 } from '../controllers/foodApprovalController.js';
+import zoneRoutes from './zoneRoutes.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 
@@ -194,6 +196,12 @@ router.patch('/restaurant-commission/:id/status', toggleRestaurantCommissionStat
 router.get('/food-approvals', getPendingFoodApprovals);
 router.post('/food-approvals/:id/approve', approveFoodItem);
 router.post('/food-approvals/:id/reject', rejectFoodItem);
+
+// Offers Management
+router.get('/offers', getAllOffers);
+
+// Zone Management
+router.use('/zones', zoneRoutes);
 
 export default router;
 

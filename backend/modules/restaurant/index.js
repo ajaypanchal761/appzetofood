@@ -5,10 +5,11 @@ import { uploadMiddleware } from '../../shared/utils/cloudinaryService.js';
 import restaurantAuthRoutes from './routes/restaurantAuthRoutes.js';
 import { getOnboarding, upsertOnboarding, createRestaurantFromOnboardingManual } from './controllers/restaurantOnboardingController.js';
 import { getRestaurants, getRestaurantById, getRestaurantByOwner, updateRestaurantProfile, uploadProfileImage, uploadMenuImage, deleteRestaurantAccount, updateDeliveryStatus, getRestaurantsWithDishesUnder250 } from './controllers/restaurantController.js';
-import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection, addAddon, getAddons, updateAddon, deleteAddon } from './controllers/menuController.js';
+import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection, addAddon, getAddons, getAddonsByRestaurantId, updateAddon, deleteAddon } from './controllers/menuController.js';
 import { scheduleItemAvailability, cancelScheduledAvailability, getItemSchedule } from './controllers/menuScheduleController.js';
 import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
 import { addStaff, getStaff, getStaffById, updateStaff, deleteStaff } from './controllers/staffManagementController.js';
+import { createOffer, getOffers, getOfferById, updateOfferStatus, deleteOffer, getCouponsByItemId, getCouponsByItemIdPublic } from './controllers/offerController.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 
 const router = express.Router();
@@ -47,6 +48,14 @@ router.put('/inventory', authenticate, updateInventory);
 // Category routes (authenticated - for restaurant module)
 router.use('/categories', categoryRoutes);
 
+// Offer routes (authenticated - for restaurant module)
+router.post('/offers', authenticate, createOffer);
+router.get('/offers', authenticate, getOffers);
+router.get('/offers/item/:itemId/coupons', authenticate, getCouponsByItemId);
+router.get('/offers/:id', authenticate, getOfferById);
+router.put('/offers/:id/status', authenticate, updateOfferStatus);
+router.delete('/offers/:id', authenticate, deleteOffer);
+
 // Staff Management routes (authenticated - for restaurant module)
 // Must come before /:id to avoid route conflicts
 router.post('/staff', authenticate, uploadMiddleware.single('photo'), addStaff);
@@ -59,7 +68,9 @@ router.delete('/staff/:id', authenticate, deleteStaff);
 router.get('/list', getRestaurants);
 router.get('/under-250', getRestaurantsWithDishesUnder250);
 // Menu and inventory routes must come before /:id to avoid route conflicts
+router.get('/:restaurantId/offers/item/:itemId/coupons', getCouponsByItemIdPublic);
 router.get('/:id/menu', getMenuByRestaurantId);
+router.get('/:id/addons', getAddonsByRestaurantId);
 router.get('/:id/inventory', getInventoryByRestaurantId);
 router.get('/:id', getRestaurantById);
 

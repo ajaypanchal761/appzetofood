@@ -1,238 +1,661 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useNavigate, useParams, useLocation } from "react-router-dom"
-import { ArrowLeft, Info, Users, HandCoins, ChevronDown, Edit, Calendar, X, Check } from "lucide-react"
+import { useNavigate, useParams } from "react-router-dom"
+import { ArrowLeft, Search, Percent, ChevronDown, Check, X, Tag, Calendar, Edit, Trash2 } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
-
-const discountTypeTitles = {
-  percentage: "Create percentage discount",
-  flat: "Create flat discount",
-}
-
-const flatDiscountAmounts = ["100", "150", "200", "250", "300"]
+import { restaurantAPI } from "@/lib/api"
 
 export default function CreatePercentageDiscount() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { goalId, discountType } = useParams()
-  const savedState = location.state || {}
   
-  // Step 1: Customer target
-  const [customerGroup, setCustomerGroup] = useState(savedState.customerGroup || "all")
-  const [offerPreference, setOfferPreference] = useState(savedState.offerPreference || "all")
-  
-  // Step 2: Discount selection
-  const [discountPercentage, setDiscountPercentage] = useState(savedState.discountPercentage || "60")
-  const [maxLimit, setMaxLimit] = useState(savedState.maxLimit || "120")
-  const [minOrderValue, setMinOrderValue] = useState(savedState.minOrderValue || "none")
-  
-  // Step 3: Offer timings
-  const [offerDays, setOfferDays] = useState(savedState.offerDays || "all")
-  const [startDate, setStartDate] = useState(savedState.startDate || "18 Dec 2025")
-
-  const pageTitle = discountTypeTitles[discountType] || "Create discount"
-
-  const [infoModal, setInfoModal] = useState({ open: false, type: null })
-  const [discountModal, setDiscountModal] = useState({ open: false, type: null }) // 'percentage' or 'maxLimit'
+  // Menu data state
+  const [menuItems, setMenuItems] = useState([])
+  const [loadingMenu, setLoadingMenu] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  
+  // Selected items with discount percentage
+  const [selectedItems, setSelectedItems] = useState({}) // { itemId: { item, discountPercentage, couponCode } }
+  
+  // Discount percentage modal
+  const [discountModal, setDiscountModal] = useState({ open: false, itemId: null })
+  const [percentageSearchQuery, setPercentageSearchQuery] = useState("")
+  
+  // Loading state for activating offer
+  const [activatingOffer, setActivatingOffer] = useState(false)
 
-  const openInfo = (type) => {
-    setInfoModal({ open: true, type })
+  // Tab state
+  const [activeTab, setActiveTab] = useState("dish") // "dish" or "running-offer"
+
+  // Running offers state
+  const [runningOffers, setRunningOffers] = useState([])
+  const [loadingOffers, setLoadingOffers] = useState(false)
+  
+  // Coupons for dishes
+  const [itemCoupons, setItemCoupons] = useState({}) // { itemId: [coupons] }
+  const [loadingCoupons, setLoadingCoupons] = useState({}) // { itemId: true/false }
+
+  // Make Offer Modal state
+  const [makeOfferModal, setMakeOfferModal] = useState({ open: false, item: null, editingOffer: null })
+  const [offerFormData, setOfferFormData] = useState({
+    discountType: "percentage", // "percentage" or "flat"
+    percentage: "",
+    flatAmount: "", // For flat discount
+    couponCode: "",
+    startDate: "",
+    endDate: "",
+  })
+  const [deletingOfferId, setDeletingOfferId] = useState(null)
+  const [togglingOfferId, setTogglingOfferId] = useState(null)
+  
+  const percentageOptions = ["10", "20", "30", "40", "50", "60", "70", "80", "90"]
+
+  // Generate coupon code based on discount percentage and item price
+  const generateCouponCode = (discountValue, itemPrice, discountType = "percentage") => {
+    const roundedPrice = Math.round(itemPrice / 10) * 10 // Round to nearest 10
+    
+    if (discountType === "flat") {
+      // Format: FLATOFF{amount}ON{roundedPrice}
+      // Example: FLATOFF50ON250 (₹50 off on ₹250)
+      return `FLATOFF${discountValue}ON${roundedPrice}`
+    } else {
+      // Format: GETOFF{percentage}ON{roundedPrice}
+      // Example: GETOFF10ON250 (10% off on ₹250)
+      return `GETOFF${discountValue}ON${roundedPrice}`
+    }
   }
 
-  const closeInfo = () => {
-    setInfoModal({ open: false, type: null })
+  // Fetch menu items from backend
+  useEffect(() => {
+    const fetchMenuItems = async () => {
+      try {
+        setLoadingMenu(true)
+        const response = await restaurantAPI.getMenu()
+        
+        if (response?.data?.success && response?.data?.data?.menu) {
+          const sections = response.data.data.menu.sections || []
+          
+          // Extract all items from all sections and subsections
+          const allItems = []
+          sections.forEach(section => {
+            // Direct items in section
+            if (section.items && Array.isArray(section.items)) {
+              section.items.forEach(item => {
+                allItems.push({
+                  ...item,
+                  sectionName: section.name,
+                  sectionId: section.id
+                })
+              })
+            }
+            
+            // Items in subsections
+            if (section.subsections && Array.isArray(section.subsections)) {
+              section.subsections.forEach(subsection => {
+                if (subsection.items && Array.isArray(subsection.items)) {
+                  subsection.items.forEach(item => {
+                    allItems.push({
+                      ...item,
+                      sectionName: section.name,
+                      subsectionName: subsection.name,
+                      sectionId: section.id,
+                      subsectionId: subsection.id
+                    })
+                  })
+                }
+              })
+            }
+          })
+          
+          console.log(`[FRONTEND] Extracted ${allItems.length} menu items`)
+          allItems.forEach((item, idx) => {
+            console.log(`[FRONTEND] Menu item ${idx}: id=${item.id}, name=${item.name}`)
+          })
+          
+          setMenuItems(allItems)
+        }
+      } catch (error) {
+        console.error("Error fetching menu items:", error)
+        setMenuItems([])
+      } finally {
+        setLoadingMenu(false)
+      }
+    }
+
+    fetchMenuItems()
+  }, [])
+
+  // Fetch coupons for each menu item
+  useEffect(() => {
+    const fetchCouponsForItems = async () => {
+      console.log(`[COUPONS] useEffect triggered, menuItems.length: ${menuItems.length}`)
+      
+      if (menuItems.length === 0) {
+        console.log(`[COUPONS] No menu items, skipping coupon fetch`)
+        return
   }
 
-  const openDiscountModal = (type) => {
-    setDiscountModal({ open: true, type })
-    setSearchQuery("")
+      console.log(`[COUPONS] Fetching coupons for ${menuItems.length} items`)
+      console.log(`[COUPONS] Menu items:`, menuItems.map(item => ({ id: item.id, name: item.name })))
+      
+      const couponsMap = {}
+      
+      for (const item of menuItems) {
+        if (!item.id) {
+          console.log(`[COUPONS] ⚠️ Skipping item without id:`, item)
+          continue
+        }
+        
+        console.log(`[COUPONS] 🔍 Fetching coupons for itemId: "${item.id}", name: "${item.name}"`)
+        
+        try {
+          const url = `/restaurant/offers/item/${item.id}/coupons`
+          console.log(`[COUPONS] API URL: ${url}`)
+          
+          const response = await restaurantAPI.getCouponsByItemId(item.id)
+          console.log(`[COUPONS] 📦 Full response:`, response)
+          console.log(`[COUPONS] 📦 Response.data:`, response?.data)
+          console.log(`[COUPONS] 📦 Response.data.data:`, response?.data?.data)
+          console.log(`[COUPONS] 📦 Response.data.data.coupons:`, response?.data?.data?.coupons)
+          
+          if (response?.data?.success) {
+            const coupons = response?.data?.data?.coupons || []
+            couponsMap[item.id] = coupons
+            console.log(`[COUPONS] ✅ Found ${coupons.length} coupons for itemId "${item.id}":`, coupons)
+      } else {
+            couponsMap[item.id] = []
+            console.log(`[COUPONS] ❌ No coupons found for itemId "${item.id}". Response:`, response?.data)
+          }
+        } catch (error) {
+          console.error(`[COUPONS] ❌ Error fetching coupons for item "${item.id}":`, error)
+          console.error(`[COUPONS] Error response:`, error?.response)
+          console.error(`[COUPONS] Error response.data:`, error?.response?.data)
+          console.error(`[COUPONS] Error message:`, error?.message)
+          couponsMap[item.id] = []
+        }
+      }
+      
+      console.log(`[COUPONS] 🎯 Final coupons map:`, couponsMap)
+      console.log(`[COUPONS] 🎯 Setting itemCoupons state with ${Object.keys(couponsMap).length} items`)
+      setItemCoupons(couponsMap)
+    }
+    
+    fetchCouponsForItems()
+  }, [menuItems])
+
+  // Fetch running offers when "Running Offer" tab is active
+  useEffect(() => {
+    if (activeTab === "running-offer") {
+      const fetchRunningOffers = async () => {
+        try {
+          setLoadingOffers(true)
+          // Always fetch ALL offers (both percentage and flat-price) for running offers tab
+          // Don't filter by discountType - show all offers regardless of status
+          console.log(`[RUNNING-OFFERS] Fetching all offers...`)
+          const response = await restaurantAPI.getOffers({})
+          console.log(`[RUNNING-OFFERS] API Response:`, response?.data)
+          
+          if (response?.data?.success) {
+            const offers = response.data.data.offers || []
+            console.log(`[RUNNING-OFFERS] ✅ Fetched ${offers.length} offers`)
+            console.log(`[RUNNING-OFFERS] Offer details:`, offers.map(o => ({
+              id: o._id,
+              discountType: o.discountType,
+              status: o.status,
+              itemsCount: o.items?.length || 0,
+              couponCodes: o.items?.map(i => i.couponCode) || []
+            })))
+            setRunningOffers(offers)
+          } else {
+            console.error(`[RUNNING-OFFERS] ❌ API Error:`, response?.data)
+            setRunningOffers([])
+          }
+        } catch (error) {
+          console.error("[RUNNING-OFFERS] ❌ Error fetching running offers:", error)
+          console.error("[RUNNING-OFFERS] Error details:", error?.response?.data || error?.message)
+          setRunningOffers([])
+        } finally {
+          setLoadingOffers(false)
+        }
+      }
+      fetchRunningOffers()
+    }
+  }, [activeTab])
+
+  // Filter items based on search
+  const filteredItems = menuItems.filter(item => 
+    item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.category?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  // Toggle item selection
+  const toggleItemSelection = (item) => {
+    setSelectedItems(prev => {
+      const newSelected = { ...prev }
+      if (newSelected[item.id]) {
+        delete newSelected[item.id]
+      } else {
+        const defaultPercentage = "10"
+        const couponCode = generateCouponCode(defaultPercentage, item.price || 0)
+        newSelected[item.id] = {
+          item,
+          discountPercentage: defaultPercentage,
+          couponCode: couponCode
+        }
+      }
+      return newSelected
+    })
   }
 
+  // Update discount percentage for an item
+  const updateDiscountPercentage = (itemId, percentage) => {
+    setSelectedItems(prev => {
+      if (prev[itemId]) {
+        const item = prev[itemId].item
+        const couponCode = generateCouponCode(percentage, item.price || 0)
+        return {
+          ...prev,
+          [itemId]: {
+            ...prev[itemId],
+            discountPercentage: percentage,
+            couponCode: couponCode
+          }
+        }
+      }
+      return prev
+    })
+  }
+
+  // Open discount percentage modal
+  const openDiscountModal = (itemId) => {
+    setDiscountModal({ open: true, itemId })
+    setPercentageSearchQuery("")
+  }
+
+  // Close discount modal
   const closeDiscountModal = () => {
-    setDiscountModal({ open: false, type: null })
-    setSearchQuery("")
+    setDiscountModal({ open: false, itemId: null })
+    setPercentageSearchQuery("")
   }
 
-  const handleDiscountSelect = (value) => {
-    if (discountModal.type === "percentage") {
-      setDiscountPercentage(value)
-    } else if (discountModal.type === "maxLimit") {
-      setMaxLimit(value)
+  // Handle discount selection
+  const handleDiscountSelect = (percentage) => {
+    if (discountModal.itemId) {
+      updateDiscountPercentage(discountModal.itemId, percentage)
     }
     closeDiscountModal()
   }
 
-  const getDiscountOptions = () => {
-    if (discountModal.type === "percentage") {
-      return ["60", "50", "40", "30", "20", "10"]
-    } else if (discountModal.type === "maxLimit") {
-      if (discountType === "percentage") {
-        return ["120", "150", "180", "200"]
-      } else {
-        return flatDiscountAmounts
-      }
-    }
-    return []
+  // Filter percentage options
+  const filteredPercentages = percentageOptions.filter(opt => 
+    opt.includes(percentageSearchQuery)
+  )
+
+  // Get current selected percentage
+  const getCurrentPercentage = () => {
+    if (!discountModal.itemId) return ""
+    return selectedItems[discountModal.itemId]?.discountPercentage || ""
   }
 
-  const getFilteredOptions = () => {
-    const options = getDiscountOptions()
-    if (!searchQuery.trim()) return options
-    return options.filter(opt => opt.includes(searchQuery))
+  // Calculate discounted price
+  const getDiscountedPrice = (item, discountPercentage) => {
+    const price = item.price || 0
+    const discount = parseFloat(discountPercentage) || 0
+    const discountAmount = (price * discount) / 100
+    return Math.round(price - discountAmount)
   }
 
-  const getCurrentSelectedValue = () => {
-    if (discountModal.type === "percentage") {
-      return discountPercentage
-    } else if (discountModal.type === "maxLimit") {
-      return maxLimit
-    }
-    return ""
-  }
-
-  const getInfoModalContent = () => {
-    switch (infoModal.type) {
-      case "customerGroup":
-        return {
-          title: "Choose customer group",
-          body: (
-            <div className="space-y-4 text-sm text-gray-800">
-              <p>
-                Decide which set of customers this offer should be visible to, based on their
-                relationship with your restaurant.
-              </p>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">All customers</h3>
-                <p>Customers who have ordered from you before as well as new customers.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">New customers</h3>
-                <p>Customers who haven&apos;t ordered from your restaurant in the last 90 days.</p>
-              </div>
-            </div>
-          ),
-        }
-      case "offerPreference":
-        return {
-          title: "Choose offer preference type",
-          body: (
-            <div className="space-y-4 text-sm text-gray-800">
-              <p>
-                You have the flexibility to select the offer affinity type of customers based on
-                their inclination toward offers.
-              </p>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">All type</h3>
-                <p>Customers who have any level of affinity towards offers.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Offer sensitive</h3>
-                <p>Customers who are highly likely to order only from restaurants that offer discounts.</p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Premium</h3>
-                <p>
-                  Customers who prioritize quality over discounts, but offers can still influence
-                  their decision.
-                </p>
-              </div>
-            </div>
-          ),
-        }
-      case "discountValue":
-        return {
-          title: "Choose discount value",
-          body: (
-            <div className="space-y-4 text-sm text-gray-800">
-              <p>
-                Select the discount structure that best matches your business goals while keeping
-                profitability in mind.
-              </p>
-              <p>
-                Higher discounts can help you drive more orders, while moderate discounts are better
-                suited for sustainable growth.
-              </p>
-            </div>
-          ),
-        }
-      case "minOrder":
-        return {
-          title: "Select minimum order value",
-          body: (
-            <div className="space-y-4 text-sm text-gray-800">
-              <p>
-                Set a minimum cart value to ensure that the orders you receive with this offer
-                remain profitable for your restaurant.
-              </p>
-              <p>
-                A higher minimum order value can help increase your average order value, while a
-                lower value makes the offer more accessible.
-              </p>
-            </div>
-          ),
-        }
-      case "timings":
-        return {
-          title: "Offer timings",
-          body: (
-            <div className="space-y-4 text-sm text-gray-800">
-              <p>
-                Choose the days and start date for this offer to control when it is visible to
-                customers.
-              </p>
-              <p>
-                You can align offer timings with your peak hours, slow days, or special occasions to
-                maximise impact.
-              </p>
-            </div>
-          ),
-        }
-      default:
-        return {
-          title: "More information",
-          body: (
-            <p className="text-sm text-gray-800">
-              Get additional context about this setting to help you configure the offer in the best
-              possible way.
-            </p>
-          ),
-        }
+  // Open Make Offer Modal
+  const openMakeOfferModal = (item, editingOffer = null) => {
+    if (editingOffer) {
+      // Editing existing offer
+      const offerItem = editingOffer.items?.[0]
+      const startDate = editingOffer.startDate ? new Date(editingOffer.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+      const endDate = editingOffer.endDate ? new Date(editingOffer.endDate).toISOString().split('T')[0] : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      
+      // Convert "flat-price" to "flat" for frontend dropdown
+      const offerDiscountType = editingOffer.discountType || "percentage"
+      const frontendDiscountType = offerDiscountType === "flat-price" ? "flat" : offerDiscountType
+      const discountValue = offerItem?.discountPercentage?.toString() || "10"
+      const flatAmount = offerDiscountType === "flat-price" ? (offerItem?.originalPrice - offerItem?.discountedPrice)?.toString() || "" : ""
+      
+      setOfferFormData({
+        discountType: frontendDiscountType,
+        percentage: frontendDiscountType === "percentage" ? discountValue : "",
+        flatAmount: flatAmount,
+        couponCode: offerItem?.couponCode || "",
+        startDate: startDate,
+        endDate: endDate,
+      })
+      setMakeOfferModal({ open: true, item: item || offerItem, editingOffer })
+    } else {
+      // Creating new offer
+      const defaultPercentage = "10"
+      const defaultCouponCode = generateCouponCode(defaultPercentage, item.price || 0)
+      const today = new Date().toISOString().split('T')[0]
+      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      
+      setOfferFormData({
+        discountType: "percentage",
+        percentage: defaultPercentage,
+        flatAmount: "",
+        couponCode: defaultCouponCode,
+        startDate: today,
+        endDate: nextWeek,
+      })
+      setMakeOfferModal({ open: true, item, editingOffer: null })
     }
   }
 
-  // Check if all form fields are filled
-  const isFormValid = () => {
-    return (
-      customerGroup &&
-      offerPreference &&
-      discountPercentage &&
-      maxLimit &&
-      minOrderValue !== undefined &&
-      offerDays &&
-      startDate
-    )
-  }
-
-  const handlePreview = () => {
-    // Navigate to preview page
-    navigate(`/restaurant/hub-growth/create-offers/${goalId}/${discountType}/preview`, {
-      state: {
-        customerGroup,
-        offerPreference,
-        discountPercentage,
-        maxLimit,
-        minOrderValue,
-        offerDays,
-        startDate,
-        discountType,
-        goalId,
-      }
+  // Close Make Offer Modal
+  const closeMakeOfferModal = () => {
+    setMakeOfferModal({ open: false, item: null, editingOffer: null })
+    setOfferFormData({
+      discountType: "percentage",
+      percentage: "",
+      flatAmount: "",
+      couponCode: "",
+      startDate: "",
+      endDate: "",
     })
   }
 
+  // Handle form input changes
+  const handleOfferFormChange = (field, value) => {
+    if (field === "discountType") {
+      // Reset discount values when type changes
+      const itemPrice = makeOfferModal.item?.price || makeOfferModal.item?.originalPrice || 0
+      if (value === "percentage") {
+        const defaultPercentage = "10"
+        const couponCode = generateCouponCode(defaultPercentage, itemPrice, "percentage")
+        setOfferFormData(prev => ({
+          ...prev,
+          discountType: value,
+          percentage: defaultPercentage,
+          flatAmount: "",
+          couponCode: couponCode
+        }))
+      } else {
+        // Flat discount
+        const defaultFlat = "50"
+        const couponCode = generateCouponCode(defaultFlat, itemPrice, "flat")
+        setOfferFormData(prev => ({
+          ...prev,
+          discountType: value,
+          percentage: "",
+          flatAmount: defaultFlat,
+          couponCode: couponCode
+        }))
+      }
+    } else if (field === "percentage" && makeOfferModal.item) {
+      // Auto-generate coupon code when percentage changes
+      const itemPrice = makeOfferModal.item.price || makeOfferModal.item.originalPrice || 0
+      const couponCode = generateCouponCode(value, itemPrice, "percentage")
+      setOfferFormData(prev => ({
+        ...prev,
+        percentage: value,
+        couponCode: couponCode
+      }))
+    } else if (field === "flatAmount" && makeOfferModal.item) {
+      // Auto-generate coupon code when flat amount changes
+      const itemPrice = makeOfferModal.item.price || makeOfferModal.item.originalPrice || 0
+      const couponCode = generateCouponCode(value, itemPrice, "flat")
+      setOfferFormData(prev => ({
+        ...prev,
+        flatAmount: value,
+        couponCode: couponCode
+      }))
+    } else {
+      setOfferFormData(prev => ({
+        ...prev,
+        [field]: value
+      }))
+    }
+  }
+
+  // Calculate discounted price for flat discount
+  const getFlatDiscountedPrice = (item, flatAmount) => {
+    const price = item.price || item.originalPrice || 0
+    const discount = parseFloat(flatAmount) || 0
+    return Math.max(0, Math.round(price - discount))
+  }
+
+  // Handle single item offer activation/update
+  const handleActivateSingleOffer = async () => {
+    if (!makeOfferModal.item) return
+
+    const { discountType: formDiscountType, percentage, flatAmount, couponCode, startDate, endDate } = offerFormData
+
+    if (!couponCode || !startDate || !endDate) {
+      alert("Please fill all fields")
+      return
+    }
+
+    if (formDiscountType === "percentage") {
+      if (!percentage || parseInt(percentage) < 0 || parseInt(percentage) > 100) {
+        alert("Percentage must be between 0 and 100")
+        return
+      }
+    } else {
+      if (!flatAmount || parseFloat(flatAmount) < 0) {
+        alert("Flat discount amount must be greater than 0")
+        return
+      }
+      const itemPrice = makeOfferModal.item.price || makeOfferModal.item.originalPrice || 0
+      if (parseFloat(flatAmount) > itemPrice) {
+        alert("Flat discount cannot exceed item price")
+        return
+      }
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      alert("End date must be after start date")
+      return
+    }
+
+    try {
+      setActivatingOffer(true)
+
+      const itemPrice = makeOfferModal.item.price || makeOfferModal.item.originalPrice || 0
+      // Convert "flat" to "flat-price" for backend
+      const finalDiscountType = formDiscountType === "percentage" ? "percentage" : "flat-price"
+      const discountPercentage = formDiscountType === "percentage" 
+        ? parseInt(percentage) 
+        : Math.round((parseFloat(flatAmount) / itemPrice) * 100)
+      const discountedPrice = formDiscountType === "percentage" 
+        ? parseFloat(getDiscountedPrice(makeOfferModal.item, percentage))
+        : parseFloat(getFlatDiscountedPrice(makeOfferModal.item, flatAmount))
+
+      const offerData = {
+        goalId: goalId || 'grow-customers',
+        discountType: finalDiscountType,
+        items: [{
+          itemId: makeOfferModal.item.id || makeOfferModal.item.itemId,
+          itemName: makeOfferModal.item.name || makeOfferModal.item.itemName,
+          originalPrice: itemPrice,
+          discountPercentage: discountPercentage,
+          discountedPrice: discountedPrice,
+          couponCode: couponCode,
+          image: makeOfferModal.item.image || (makeOfferModal.item.images && makeOfferModal.item.images[0]) || '',
+          isVeg: makeOfferModal.item.foodType === 'Veg' || makeOfferModal.item.isVeg === true,
+        }],
+        customerGroup: 'all',
+        offerPreference: 'all',
+        offerDays: 'all',
+        targetMealtime: 'all',
+        minOrderValue: 0,
+        startDate: startDate,
+        endDate: endDate,
+        }
+      
+      console.log(`[OFFER-CREATE] Creating offer with data:`, {
+        discountType: finalDiscountType,
+        formDiscountType,
+        couponCode,
+        itemPrice,
+        discountPercentage,
+        discountedPrice
+      })
+
+      let response
+      if (makeOfferModal.editingOffer) {
+        // Update: Delete old offer and create new one
+        await restaurantAPI.deleteOffer(makeOfferModal.editingOffer._id)
+        response = await restaurantAPI.createOffer(offerData)
+      } else {
+        // Create new offer
+        response = await restaurantAPI.createOffer(offerData)
+      }
+
+      if (response?.data?.success) {
+        console.log(`[OFFER-CREATE] ✅ Offer created successfully:`, response?.data?.data?.offer)
+        console.log(`[OFFER-CREATE] Offer discountType:`, response?.data?.data?.offer?.discountType)
+        alert(makeOfferModal.editingOffer ? "Offer updated successfully!" : "Offer activated successfully!")
+        closeMakeOfferModal()
+        
+        // Always refresh running offers, regardless of current tab
+        console.log(`[OFFER-CREATE] Refreshing running offers...`)
+        try {
+          const refreshResponse = await restaurantAPI.getOffers({})
+          console.log(`[OFFER-CREATE] Refresh response:`, refreshResponse?.data)
+          if (refreshResponse?.data?.success) {
+            const refreshedOffers = refreshResponse.data.data.offers || []
+            console.log(`[OFFER-CREATE] ✅ Updated running offers: ${refreshedOffers.length} offers`)
+            console.log(`[OFFER-CREATE] Offer types in refresh:`, refreshedOffers.map(o => o.discountType))
+            setRunningOffers(refreshedOffers)
+          }
+        } catch (refreshError) {
+          console.error(`[OFFER-CREATE] Error refreshing offers:`, refreshError)
+        }
+      } else {
+        throw new Error(response?.data?.message || "Failed to save offer")
+      }
+    } catch (error) {
+      console.error("Error saving offer:", error)
+      alert(error?.response?.data?.message || error?.message || "Failed to save offer. Please try again.")
+    } finally {
+      setActivatingOffer(false)
+    }
+  }
+
+  // Handle delete offer
+  const handleDeleteOffer = async (offerId) => {
+    if (!window.confirm("Are you sure you want to delete this offer?")) {
+      return
+    }
+
+    try {
+      setDeletingOfferId(offerId)
+      const response = await restaurantAPI.deleteOffer(offerId)
+
+      if (response?.data?.success) {
+        alert("Offer deleted successfully!")
+        // Refresh running offers - fetch ALL offers
+        const refreshResponse = await restaurantAPI.getOffers({})
+        if (refreshResponse?.data?.success) {
+          setRunningOffers(refreshResponse.data.data.offers || [])
+        }
+      } else {
+        throw new Error(response?.data?.message || "Failed to delete offer")
+      }
+    } catch (error) {
+      console.error("Error deleting offer:", error)
+      alert(error?.response?.data?.message || error?.message || "Failed to delete offer. Please try again.")
+    } finally {
+      setDeletingOfferId(null)
+    }
+  }
+
+  // Handle toggle offer status (activate/deactivate)
+  const handleToggleOfferStatus = async (offer) => {
+    const newStatus = offer.status === 'active' ? 'paused' : 'active'
+    const action = newStatus === 'active' ? 'activate' : 'deactivate'
+    
+    if (!window.confirm(`Are you sure you want to ${action} this offer?`)) {
+      return
+    }
+
+    try {
+      setTogglingOfferId(offer._id)
+      const response = await restaurantAPI.updateOfferStatus(offer._id, newStatus)
+
+      if (response?.data?.success) {
+        alert(`Offer ${action}d successfully!`)
+        // Refresh running offers - fetch ALL offers
+        const refreshResponse = await restaurantAPI.getOffers({})
+        if (refreshResponse?.data?.success) {
+          setRunningOffers(refreshResponse.data.data.offers || [])
+        }
+      } else {
+        throw new Error(response?.data?.message || `Failed to ${action} offer`)
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing offer:`, error)
+      alert(error?.response?.data?.message || error?.message || `Failed to ${action} offer. Please try again.`)
+    } finally {
+      setTogglingOfferId(null)
+  }
+  }
+
+  // Handle activate offer
+  const handleActivateOffer = async () => {
+    const selectedItemsArray = Object.values(selectedItems)
+    if (selectedItemsArray.length === 0) {
+      alert("Please select at least one item")
+      return
+    }
+
+    // Validate all items have discount percentage
+    const itemsWithoutDiscount = selectedItemsArray.filter(item => !item.discountPercentage || item.discountPercentage === "")
+    if (itemsWithoutDiscount.length > 0) {
+      alert("Please set discount percentage for all selected items")
+      return
+    }
+
+    try {
+      setActivatingOffer(true)
+
+      // Prepare offer data
+      const offerData = {
+        goalId: goalId || 'grow-customers',
+        discountType: discountType || 'percentage',
+        items: selectedItemsArray.map(item => ({
+          itemId: item.item.id,
+          itemName: item.item.name,
+          originalPrice: item.item.price,
+          discountPercentage: parseInt(item.discountPercentage),
+          discountedPrice: parseFloat(getDiscountedPrice(item.item, item.discountPercentage)),
+          couponCode: item.couponCode,
+          image: item.item.image || (item.item.images && item.item.images[0]) || '',
+          isVeg: item.item.foodType === 'Veg',
+        })),
+        customerGroup: 'all',
+        offerPreference: 'all',
+        offerDays: 'all',
+        targetMealtime: 'all',
+        minOrderValue: 0,
+      }
+
+      // Call API to create and activate offer
+      const response = await restaurantAPI.createOffer(offerData)
+
+      if (response?.data?.success) {
+        alert("Offer activated successfully!")
+        navigate("/restaurant/hub-growth/create-offers")
+      } else {
+        throw new Error(response?.data?.message || "Failed to activate offer")
+      }
+    } catch (error) {
+      console.error("Error activating offer:", error)
+      alert(error?.response?.data?.message || error?.message || "Failed to activate offer. Please try again.")
+    } finally {
+      setActivatingOffer(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center gap-3">
@@ -242,418 +665,288 @@ export default function CreatePercentageDiscount() {
           >
             <ArrowLeft className="w-5 h-5 text-gray-700" />
           </button>
-          <h1 className="text-lg font-bold text-gray-900">{pageTitle}</h1>
+          <h1 className="text-lg font-bold text-gray-900">
+            {discountType === "percentage" ? "Create percentage discount" : "Create flat discount"}
+          </h1>
         </div>
       </div>
+
+      {/* Tabs */}
+      <div className="sticky top-[57px] z-30 bg-white border-b border-gray-200">
+        <div className="flex gap-1 px-4 py-2">
+                  <button
+            onClick={() => setActiveTab("dish")}
+            className={`flex-1 py-2.5 px-4 rounded-lg font-medium text-sm transition-colors ${
+              activeTab === "dish"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            Dish
+          </button>
+          <button
+            onClick={() => setActiveTab("running-offer")}
+            className={`flex-1 py-2.5 px-4 rounded-lg font-medium text-sm transition-colors ${
+              activeTab === "running-offer"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            Running Offer
+                  </button>
+                </div>
+                    </div>
+
+      {/* Search Bar (only show in Dish tab) */}
+      {activeTab === "dish" && (
+        <div className="sticky top-[113px] z-20 bg-white px-4 py-4 border-b border-gray-200">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+              type="text"
+              placeholder="Search food items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+                    </div>
+                </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 px-4 py-6 overflow-y-auto">
-        <div className="space-y-6">
-          {/* Step 1: Customer target */}
-          <div>
-            <div className="mb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-gray-200" />
-                <div className="text-center">
-                  <p className="text-lg font-bold text-gray-900 tracking-wider">Customer target</p>
-                  <p className="text-xs text-gray-500 tracking-wider">(STEP 1/3)</p>
-                </div>
-                <div className="flex-1 h-px bg-gray-200" />
-              </div>
-            </div>
-            <div className="space-y-4">
-              {/* Choose customer group */}
-              <div className="bg-white rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <Users className="w-5 h-5 text-blue-600" />
+        {activeTab === "dish" ? (
+          loadingMenu ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="text-sm text-gray-500 mt-4">Loading menu items...</p>
                     </div>
-                    <h3 className="text-base font-bold text-gray-900">Choose customer group</h3>
+        ) : filteredItems.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No items found</p>
                   </div>
-                  <button
-                    onClick={() => openInfo("customerGroup")}
-                    className="p-1 rounded-full hover:bg-gray-100"
-                  >
-                    <Info className="w-4 h-4 text-gray-500" />
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  <label className="flex items-start justify-between gap-3 cursor-pointer">
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900">All customers</span>
+        ) : (
+          <div className="space-y-3">
+            {filteredItems.map((item) => {
+              return (
+                <motion.div
+                  key={item.id}
+                  whileTap={{ scale: 0.98 }}
+                  className="bg-white rounded-lg p-4 border-2 border-gray-200 transition-all"
+                >
+                  <div className="flex items-start gap-4">
+                    {/* Item Image */}
+                    <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
+                      <img
+                        src={item.image || item.images?.[0] || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null
+                          e.target.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"
+                        }}
+                      />
+                      {/* Veg/Non-Veg Indicator */}
+                      <div className="absolute top-1 left-1">
+                        <div className={`w-4 h-4 border-2 rounded flex items-center justify-center ${
+                          item.foodType === "Veg" ? "border-green-600 bg-white" : "border-red-600 bg-white"
+                        }`}>
+                          <div className={`w-2 h-2 rounded-full ${
+                            item.foodType === "Veg" ? "bg-green-600" : "bg-red-600"
+                          }`} />
                     </div>
-                    <input
-                      type="radio"
-                      name="customerGroup"
-                      value="all"
-                      checked={customerGroup === "all"}
-                      onChange={(e) => setCustomerGroup(e.target.value)}
-                      className="mt-1 w-5 h-5 text-black border-gray-400 focus:ring-black"
-                      style={{ accentColor: "#000000" }}
-                    />
-                  </label>
-                  <label className="flex items-start justify-between gap-3 cursor-pointer">
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900">New customers</span>
-                      <p className="text-xs text-gray-500 mt-1">Customers who haven't ordered in the last 90 days</p>
-                    </div>
-                    <input
-                      type="radio"
-                      name="customerGroup"
-                      value="new"
-                      checked={customerGroup === "new"}
-                      onChange={(e) => setCustomerGroup(e.target.value)}
-                      className="mt-1 w-5 h-5 text-black border-gray-400 focus:ring-black"
-                      style={{ accentColor: "#000000" }}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* Choose offer preference type */}
-              <div className="bg-white rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <HandCoins className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <h3 className="text-base font-bold text-gray-900">Choose offer preference type</h3>
-                  </div>
-                  <button
-                    onClick={() => openInfo("offerPreference")}
-                    className="p-1 rounded-full hover:bg-gray-100"
-                  >
-                    <Info className="w-4 h-4 text-gray-500" />
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  <label className="flex items-start justify-between gap-3 cursor-pointer">
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900">All type</span>
-                    </div>
-                    <input
-                      type="radio"
-                      name="offerPreference"
-                      value="all"
-                      checked={offerPreference === "all"}
-                      onChange={(e) => setOfferPreference(e.target.value)}
-                      className="mt-1 w-5 h-5 text-black border-gray-400 focus:ring-black"
-                      style={{ accentColor: "#000000" }}
-                    />
-                  </label>
-                  <label className="flex items-start justify-between gap-3 cursor-pointer">
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900">Offer sensitive</span>
-                      <p className="text-xs text-gray-500 mt-1">Customers highly attracted towards offers</p>
-                    </div>
-                    <input
-                      type="radio"
-                      name="offerPreference"
-                      value="sensitive"
-                      checked={offerPreference === "sensitive"}
-                      onChange={(e) => setOfferPreference(e.target.value)}
-                      className="mt-1 w-5 h-5 text-black border-gray-400 focus:ring-black"
-                      style={{ accentColor: "#000000" }}
-                    />
-                  </label>
-                  <label className="flex items-start justify-between gap-3 cursor-pointer">
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-900">Premium</span>
-                      <p className="text-xs text-gray-500 mt-1">Customers less attracted towards offers</p>
-                    </div>
-                    <input
-                      type="radio"
-                      name="offerPreference"
-                      value="premium"
-                      checked={offerPreference === "premium"}
-                      onChange={(e) => setOfferPreference(e.target.value)}
-                      className="mt-1 w-5 h-5 text-black border-gray-400 focus:ring-black"
-                      style={{ accentColor: "#000000" }}
-                    />
-                  </label>
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* Step 2: Discount selection */}
-          <div>
-            <div className="mb-4">
+                    {/* Item Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-bold text-gray-900 mb-1 line-clamp-1">
+                            {item.name}
+                          </h3>
+                          {item.description && (
+                            <p className="text-xs text-gray-500 line-clamp-2 mb-2">
+                              {item.description}
+                            </p>
+                          )}
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-gray-200" />
-                <div className="text-center">
-                  <p className="text-lg font-bold text-gray-900 tracking-wider">Discount selection</p>
-                  <p className="text-xs text-gray-500 tracking-wider">(STEP 2/3)</p>
+                            <span className="text-sm font-semibold text-gray-900">
+                              ₹{item.price || 0}
+                            </span>
                 </div>
-                <div className="flex-1 h-px bg-gray-200" />
               </div>
             </div>
+
+
+                      {/* Make Offer Button */}
+                      <div className="-mt-13.5 pt-2">
+                  <button
+                          onClick={() => openMakeOfferModal(item)}
+                          className="ml-32 mb-2 w-30  py-1.5 px-3 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                          <Tag className="w-3.5 h-3.5" />
+                          Make Offer
+                  </button>
+                  </div>
+                </div>
+              </div>
+                </motion.div>
+              )
+            })}
+              </div>
+        )
+        ) : (
+          loadingOffers ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p className="text-sm text-gray-500 mt-4">Loading running offers...</p>
+            </div>
+          ) : runningOffers.length === 0 ? (
+            <div className="text-center py-12">
+              <Tag className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 font-medium">No running offers</p>
+              <p className="text-sm text-gray-400 mt-2">Create your first offer from the Dish tab</p>
+          </div>
+          ) : (
             <div className="space-y-4">
-              {/* Choose discount value */}
-              <div className="bg-white rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
+              {runningOffers.map((offer) => (
+                <motion.div
+                  key={offer._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white rounded-lg p-4 border border-gray-200"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        offer.status === 'active' ? 'bg-green-500' : 
+                        offer.status === 'paused' ? 'bg-orange-500' : 
+                        'bg-gray-400'
+                      }`}></div>
+                      <span className={`text-xs font-medium ${
+                        offer.status === 'active' ? 'text-green-600' : 
+                        offer.status === 'paused' ? 'text-orange-600' : 
+                        'text-gray-600'
+                      }`}>
+                        {offer.status === 'active' ? 'Active' : 
+                         offer.status === 'paused' ? 'Paused' : 
+                         offer.status || 'Inactive'}
+                      </span>
+                </div>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      {discountType === "percentage" ? (
-                        <span className="text-lg font-bold text-blue-600">%</span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(offer.createdAt).toLocaleDateString()}
+                      </span>
+                      {/* Edit and Delete Icons */}
+                    <button
+                        onClick={() => {
+                          const offerItem = offer.items?.[0]
+                          if (offerItem) {
+                            // Find the original menu item to edit
+                            const menuItem = menuItems.find(item => item.id === offerItem.itemId) || {
+                              id: offerItem.itemId,
+                              name: offerItem.itemName,
+                              price: offerItem.originalPrice,
+                              image: offerItem.image,
+                              foodType: offerItem.isVeg ? 'Veg' : 'Non-Veg',
+                            }
+                            openMakeOfferModal(menuItem, offer)
+                          }
+                        }}
+                        className="p-1.5 rounded-full hover:bg-blue-50 text-blue-600 transition-colors"
+                        title="Edit offer"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteOffer(offer._id)}
+                        disabled={deletingOfferId === offer._id}
+                        className="p-1.5 rounded-full hover:bg-red-50 text-red-600 transition-colors disabled:opacity-50"
+                        title="Delete offer"
+                      >
+                        {deletingOfferId === offer._id ? (
+                          <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                  </button>
+                    </div>
+                </div>
+
+                  {/* Toggle Button */}
+                  <div className="mb-3 pt-2 border-t border-gray-200">
+                      <button
+                      onClick={() => handleToggleOfferStatus(offer)}
+                      disabled={togglingOfferId === offer._id}
+                      className={`w-full py-2 px-4 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2 ${
+                        offer.status === 'active'
+                          ? "bg-orange-600 text-white hover:bg-orange-700"
+                          : "bg-green-600 text-white hover:bg-green-700"
+                      } disabled:opacity-50`}
+                    >
+                      {togglingOfferId === offer._id ? (
+                        <>
+                          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>{offer.status === 'active' ? 'Deactivating...' : 'Activating...'}</span>
+                        </>
                       ) : (
-                        <span className="text-lg font-bold text-blue-600">₹</span>
+                        <span>{offer.status === 'active' ? 'Deactivate Offer' : 'Activate Offer'}</span>
                       )}
-                    </div>
-                    <h3 className="text-base font-bold text-gray-900">Choose discount value</h3>
-                  </div>
-                  <button
-                    onClick={() => openInfo("discountValue")}
-                    className="p-1 rounded-full hover:bg-gray-100"
-                  >
-                    <Info className="w-4 h-4 text-gray-500" />
-                  </button>
-                </div>
-
-                {discountType === "percentage" ? (
-                  <>
-                    {/* Discount percentage */}
-                    <div className="mb-4">
-                      <h4 className="text-sm font-bold text-gray-900 mb-3">Discount percentage</h4>
-                      <button
-                        onClick={() => openDiscountModal("percentage")}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
-                      >
-                        <span>{discountPercentage}%</span>
-                        <ChevronDown className="w-4 h-4 text-gray-500" />
                       </button>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="border-t border-dashed border-gray-200 my-4" />
-
-                    {/* Max limit for discount */}
-                    <div>
-                      <h4 className="text-sm font-bold text-gray-900 mb-3">Max limit for discount</h4>
-                      <button
-                        onClick={() => openDiscountModal("maxLimit")}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
-                      >
-                        <span>₹{maxLimit}</span>
-                        <ChevronDown className="w-4 h-4 text-gray-500" />
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  /* Flat discount amount */
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-900 mb-3">Flat discount amount</h4>
-                    <button
-                      onClick={() => openDiscountModal("maxLimit")}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
-                    >
-                      <span>₹{maxLimit}</span>
-                      <ChevronDown className="w-4 h-4 text-gray-500" />
-                    </button>
                   </div>
-                )}
-              </div>
 
-              {/* Select minimum order value */}
-              <div className="bg-white rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-base font-bold text-gray-900">Select minimum order value</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm font-medium text-gray-700">
+                        {offer.items?.length || 0} item{offer.items?.length !== 1 ? 's' : ''} on offer
+                      </span>
+                </div>
+
+                    {offer.items && offer.items.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {offer.items.slice(0, 3).map((item, index) => (
+                          <div key={index} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
+                            <img
+                              src={item.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"}
+                              alt={item.itemName}
+                              className="w-12 h-12 rounded object-cover"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{item.itemName}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-gray-400 line-through">₹{item.originalPrice}</span>
+                                <span className="text-xs font-semibold text-green-600">₹{item.discountedPrice}</span>
+                                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded">
+                                  {offer.discountType === "flat-price" 
+                                    ? `₹${item.originalPrice - item.discountedPrice} OFF`
+                                    : `${item.discountPercentage}% OFF`}
+                                </span>
                   </div>
-                  <button
-                    onClick={() => openInfo("minOrder")}
-                    className="p-1 rounded-full hover:bg-gray-100"
-                  >
-                    <Info className="w-4 h-4 text-gray-500" />
-                  </button>
                 </div>
-                <div className="relative">
-                  <select
-                    value={minOrderValue}
-                    onChange={(e) => setMinOrderValue(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 appearance-none bg-white"
-                  >
-                    <option value="none">None</option>
-                    <option value="100">₹100</option>
-                    <option value="150">₹150</option>
-                    <option value="200">₹200</option>
-                    <option value="250">₹250</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Recommendation */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
-                <svg className="w-5 h-5 text-green-600 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
-                </svg>
-                <p className="text-sm text-green-800">
-                  To achieve your goal, we recommend you a minimum order value of ₹159
-                </p>
+                            <div className="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                              {item.couponCode}
               </div>
             </div>
+                        ))}
+                        {offer.items.length > 3 && (
+                          <p className="text-xs text-gray-500 text-center mt-2">
+                            +{offer.items.length - 3} more item{offer.items.length - 3 !== 1 ? 's' : ''}
+                          </p>
+                        )}
           </div>
-
-          {/* Step 3: Offer timings */}
-          <div>
-            <div className="mb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-gray-200" />
-                <div className="text-center">
-                  <p className="text-lg font-bold text-gray-900 tracking-wider">Offer timings</p>
-                  <p className="text-xs text-gray-500 tracking-wider">(STEP 3/3)</p>
-                </div>
-                <div className="flex-1 h-px bg-gray-200" />
-              </div>
-            </div>
-            <div>
-              {/* Select offer days & start date */}
-              <div className="bg-white rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <Calendar className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <h3 className="text-base font-bold text-gray-900">Select offer days & start date</h3>
-                  </div>
-                    <button
-                      onClick={() => openInfo("timings")}
-                      className="p-1 rounded-full hover:bg-gray-100"
-                    >
-                    <Info className="w-4 h-4 text-gray-500" />
-                  </button>
-                </div>
-
-                {/* Offer days selection */}
-                <div className="mb-4">
-                  <div className="flex gap-2">
-                    {[
-                      { id: "all", label: "All days" },
-                      { id: "mon-thu", label: "Mon - Thu" },
-                      { id: "fri-sun", label: "Fri - Sun" },
-                    ].map((option) => (
-                      <button
-                        key={option.id}
-                        onClick={() => setOfferDays(option.id)}
-                        className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors ${
-                          offerDays === option.id
-                            ? "bg-blue-600 text-white"
-                            : "bg-white text-gray-900 border border-gray-300"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Offer start date */}
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900 mb-2">Offer start date</h4>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={startDate}
-                      readOnly
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white"
-                    />
-                    <button className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <Edit className="w-4 h-4 text-gray-500" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    You can Stop this offer anytime on the Track Offers page
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+                    )}
         </div>
+                </motion.div>
+              ))}
       </div>
-
-      {/* Bottom Button */}
-      <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-4">
-        <button
-          onClick={handlePreview}
-          className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
-            isFormValid()
-              ? "bg-green-600 text-white hover:bg-green-700"
-              : "bg-gray-300 text-gray-900 hover:bg-gray-400"
-          }`}
-        >
-          Preview offer
-        </button>
-      </div>
-
-      {/* Info Bottom Sheet */}
-      <AnimatePresence>
-        {infoModal.open && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={closeInfo}
-              className="fixed inset-0 bg-black/50 z-[9999]"
-            />
-
-            {/* Bottom Sheet */}
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[9999] max-h-[80vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {(() => {
-                const content = getInfoModalContent()
-                return (
-                  <>
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 rounded-t-2xl">
-                      <h2 className="text-lg font-bold text-gray-900 tracking-wide">
-                        {content.title}
-                      </h2>
-                      <button
-                        onClick={closeInfo}
-                        className="p-1 rounded-full hover:bg-gray-100"
-                      >
-                        <X className="w-5 h-5 text-gray-600" />
-                      </button>
-                    </div>
-
-                    {/* Body */}
-                    <div className="flex-1 overflow-y-auto px-4 py-4">
-                      {content.body}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="px-4 py-4 border-t border-gray-200">
-                      <button
-                        onClick={closeInfo}
-                        className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
-                      >
-                        Okay
-                      </button>
-                    </div>
-                  </>
-                )
-              })()}
-            </motion.div>
-          </>
+          )
         )}
-      </AnimatePresence>
+      </div>
 
-      {/* Discount Selection Bottom Sheet */}
+
+      {/* Discount Percentage Selection Modal */}
       <AnimatePresence>
         {discountModal.open && (
           <>
@@ -678,41 +971,42 @@ export default function CreatePercentageDiscount() {
               {/* Header */}
               <div className="px-4 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-bold text-gray-900 text-center">
-                  {discountModal.type === "percentage" ? "Select discount percentage" : discountType === "percentage" ? "Select max limit" : "Select flat discount amount"}
+                  Select discount percentage
                 </h2>
               </div>
 
               {/* Search Bar */}
               <div className="px-4 py-3 border-b border-gray-200">
                 <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder={discountModal.type === "percentage" ? "Search percentage..." : "Search amount..."}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Search percentage..."
+                    value={percentageSearchQuery}
+                    onChange={(e) => setPercentageSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
 
               {/* List of Options */}
               <div className="flex-1 overflow-y-auto px-4 py-4">
-                {getFilteredOptions().length === 0 ? (
+                {filteredPercentages.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">No options found</div>
                 ) : (
                   <div className="space-y-3">
-                    {getFilteredOptions().map((option) => {
-                      const isSelected = getCurrentSelectedValue() === option
+                    {filteredPercentages.map((percentage) => {
+                      const isSelected = getCurrentPercentage() === percentage
                       return (
                         <div
-                          key={option}
-                          onClick={() => handleDiscountSelect(option)}
+                          key={percentage}
+                          onClick={() => handleDiscountSelect(percentage)}
                           className="flex items-center justify-between py-3 cursor-pointer hover:bg-gray-50 rounded-lg px-2 -mx-2"
                         >
                           <div className="flex items-center gap-3 flex-1">
                             <div className="flex-1">
                               <p className="text-sm font-medium text-gray-900">
-                                {discountModal.type === "percentage" ? `${option}%` : `₹${option}`}
+                                {percentage}% discount
                               </p>
                             </div>
                           </div>
@@ -720,7 +1014,7 @@ export default function CreatePercentageDiscount() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleDiscountSelect(option)
+                                handleDiscountSelect(percentage)
                               }}
                               className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
                                 isSelected
@@ -743,13 +1037,205 @@ export default function CreatePercentageDiscount() {
                 <button
                   onClick={closeDiscountModal}
                   className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
-                    getCurrentSelectedValue()
+                    getCurrentPercentage()
                       ? "bg-green-600 text-white hover:bg-green-700"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
-                  disabled={!getCurrentSelectedValue()}
+                  disabled={!getCurrentPercentage()}
                 >
                   Confirm
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Make Offer Modal */}
+      <AnimatePresence>
+        {makeOfferModal.open && makeOfferModal.item && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeMakeOfferModal}
+              className="fixed inset-0 bg-black/50 z-[9999]"
+            />
+
+            {/* Bottom Sheet */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[9999] max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-4 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900">
+                  {makeOfferModal.editingOffer ? "Edit Offer" : "Make Offer"} - {makeOfferModal.item.name || makeOfferModal.item.itemName}
+                </h2>
+                <button
+                  onClick={closeMakeOfferModal}
+                  className="p-1 rounded-full hover:bg-gray-100"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+
+              {/* Form Content */}
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                {/* Discount Type Dropdown */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Discount Type
+                  </label>
+                  <select
+                    value={offerFormData.discountType}
+                    onChange={(e) => handleOfferFormChange("discountType", e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="percentage">Percentage Discount</option>
+                    <option value="flat">Flat Discount</option>
+                  </select>
+                </div>
+
+                {/* Percentage Discount */}
+                {offerFormData.discountType === "percentage" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Discount Percentage (%)
+                    </label>
+                    <div className="relative">
+                      <Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={offerFormData.percentage}
+                        onChange={(e) => handleOfferFormChange("percentage", e.target.value)}
+                        placeholder="Enter discount percentage"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    {offerFormData.percentage && makeOfferModal.item && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Original: ₹{makeOfferModal.item.price || makeOfferModal.item.originalPrice} → Discounted: ₹{getDiscountedPrice(makeOfferModal.item, offerFormData.percentage)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Flat Discount */}
+                {offerFormData.discountType === "flat" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Flat Discount Amount (₹)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={makeOfferModal.item?.price || makeOfferModal.item?.originalPrice || 10000}
+                        value={offerFormData.flatAmount}
+                        onChange={(e) => handleOfferFormChange("flatAmount", e.target.value)}
+                        placeholder="Enter flat discount amount"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    {offerFormData.flatAmount && makeOfferModal.item && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Original: ₹{makeOfferModal.item.price || makeOfferModal.item.originalPrice} → Discounted: ₹{getFlatDiscountedPrice(makeOfferModal.item, offerFormData.flatAmount)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Coupon Code */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Coupon Code
+                  </label>
+                  <div className="relative">
+                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={offerFormData.couponCode}
+                      onChange={(e) => handleOfferFormChange("couponCode", e.target.value)}
+                      placeholder="Enter coupon code"
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {offerFormData.discountType === "percentage" 
+                      ? "Coupon code will be auto-generated based on percentage"
+                      : "Coupon code will be auto-generated based on flat discount amount"}
+                  </p>
+                </div>
+
+                {/* Start Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="date"
+                      value={offerFormData.startDate}
+                      onChange={(e) => handleOfferFormChange("startDate", e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* End Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    End Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="date"
+                      value={offerFormData.endDate}
+                      onChange={(e) => handleOfferFormChange("endDate", e.target.value)}
+                      min={offerFormData.startDate || new Date().toISOString().split('T')[0]}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-4 py-4 border-t border-gray-200">
+                <button
+                  onClick={handleActivateSingleOffer}
+                  disabled={
+                    activatingOffer || 
+                    !offerFormData.couponCode || 
+                    !offerFormData.startDate || 
+                    !offerFormData.endDate ||
+                    (offerFormData.discountType === "percentage" && !offerFormData.percentage) ||
+                    (offerFormData.discountType === "flat" && !offerFormData.flatAmount)
+                  }
+                  className={`w-full py-3 rounded-lg font-semibold text-sm transition-colors ${
+                    offerFormData.couponCode && 
+                    offerFormData.startDate && 
+                    offerFormData.endDate && 
+                    ((offerFormData.discountType === "percentage" && offerFormData.percentage) || 
+                     (offerFormData.discountType === "flat" && offerFormData.flatAmount)) &&
+                    !activatingOffer
+                      ? "bg-green-600 text-white hover:bg-green-700"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  {activatingOffer ? (makeOfferModal.editingOffer ? "Updating..." : "Activating...") : (makeOfferModal.editingOffer ? "Update Offer" : "Activate Offer")}
                 </button>
               </div>
             </motion.div>

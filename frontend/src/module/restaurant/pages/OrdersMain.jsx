@@ -169,33 +169,17 @@ export default function OrdersMain() {
     }
   }, [])
 
+  // DISABLED: Mock order popup - only show real orders from API
   // Check delivery status before showing new order popup
   useEffect(() => {
-    const checkDeliveryStatus = () => {
-      try {
-        const savedStatus = localStorage.getItem(STORAGE_KEY)
-        const isOnline = savedStatus ? JSON.parse(savedStatus) : false
-        
-        // Only show new order popup if delivery status is ON
-        if (isOnline) {
-          const timer = setTimeout(() => {
-            setShowNewOrderPopup(true)
-          }, 15000)
-          return () => clearTimeout(timer)
-        } else {
-          // If delivery status is off, don't show new order popup
-          setShowNewOrderPopup(false)
-        }
-      } catch (error) {
-        console.error("Error checking delivery status:", error)
-      }
-    }
-
-    checkDeliveryStatus()
+    // Disabled automatic mock order popup
+    // Real orders will come from API/WebSocket when available
+    setShowNewOrderPopup(false)
     
-    // Listen for delivery status changes
+    // Listen for delivery status changes (but don't auto-show mock orders)
     const handleStatusChange = () => {
-      checkDeliveryStatus()
+      // Don't auto-show mock orders, only show real orders from API
+      setShowNewOrderPopup(false)
     }
     
     window.addEventListener('restaurantStatusChanged', handleStatusChange)
@@ -1117,67 +1101,40 @@ function OrderCard({
 
 // Preparing Orders List
 function PreparingOrders({ onSelectOrder }) {
+  // TODO: Fetch real preparing orders from API
+  // For now, show empty state - mock orders removed
   return (
     <div className="pt-4 pb-6">
       <div className="flex items-baseline justify-between mb-3">
         <h2 className="text-base font-semibold text-black">
           Preparing orders
         </h2>
-        <span className="text-xs text-gray-500">2 active</span>
+        <span className="text-xs text-gray-500">0 active</span>
       </div>
-      <OrderCard
-        orderId="1047"
-        status="Preparing"
-        customerName="Rahul Mehta"
-        type="Dine-in"
-        tableOrToken="Table 6"
-        timePlaced="Placed 2 min ago"
-        eta="8–10 min"
-        itemsSummary="Paneer Butter Masala x1, Garlic Naan x2, Masala Coke x1"
-        photoUrl="https://images.pexels.com/photos/1117862/pexels-photo-1117862.jpeg?auto=compress&cs=tinysrgb&w=400"
-        photoAlt="North Indian thali with naan and curry"
-        onSelect={onSelectOrder}
-      />
-      <OrderCard
-        orderId="1048"
-        status="Preparing"
-        customerName="Sneha Singh"
-        type="Delivery"
-        tableOrToken="Token 21"
-        timePlaced="Placed 5 min ago"
-        eta="12–15 min"
-        itemsSummary="Veg Loaded Pizza (Medium) x1, Cheese Garlic Bread x1, Cold Coffee x1"
-        photoUrl="https://images.pexels.com/photos/825661/pexels-photo-825661.jpeg?auto=compress&cs=tinysrgb&w=400"
-        photoAlt="Pizza box with slices and dip"
-        onSelect={onSelectOrder}
-      />
+      {/* Mock orders removed - will show real orders from API */}
+      <div className="text-center py-8 text-gray-500 text-sm">
+        No orders in preparation
+      </div>
     </div>
   )
 }
 
 // Ready Orders List
 function ReadyOrders({ onSelectOrder }) {
+  // TODO: Fetch real ready orders from API
+  // For now, show empty state - mock orders removed
   return (
     <div className="pt-4 pb-6">
       <div className="flex items-baseline justify-between mb-3">
         <h2 className="text-base font-semibold text-black">
           Ready for pickup
         </h2>
-        <span className="text-xs text-gray-500">1 active</span>
+        <span className="text-xs text-gray-500">0 active</span>
       </div>
-      <OrderCard
-        orderId="1043"
-        status="Ready"
-        customerName="Amit Verma"
-        type="Delivery"
-        tableOrToken="Token 14"
-        timePlaced="Ready since 1 min"
-        eta="Hand over now"
-        itemsSummary="Chicken Biryani x1, Raita x1, Gulab Jamun x2"
-        photoUrl="https://images.pexels.com/photos/7245463/pexels-photo-7245463.jpeg?auto=compress&cs=tinysrgb&w=400"
-        photoAlt="Biryani bowl with raita on the side"
-        onSelect={onSelectOrder}
-      />
+      {/* Mock orders removed - will show real orders from API */}
+      <div className="text-center py-8 text-gray-500 text-sm">
+        No orders ready for pickup
+      </div>
     </div>
   )
 }

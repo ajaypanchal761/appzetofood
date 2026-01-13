@@ -797,19 +797,82 @@ export const getAddons = asyncHandler(async (req, res) => {
   });
 });
 
+// Get addons by restaurant ID (public - for user module)
+export const getAddonsByRestaurantId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`[ADDONS] Request received for ID: ${id}`);
+    console.log(`[ADDONS] ID type: ${typeof id}, length: ${id?.length}`);
+    
+    // Find restaurant by ID, slug, or restaurantId - don't filter by isActive
+    let restaurant = await Restaurant.findOne({
+      $or: [
+        { restaurantId: id },
+        { slug: id },
+        ...(mongoose.Types.ObjectId.isValid(id) && id.length === 24 
+          ? [{ _id: new mongoose.Types.ObjectId(id) }] 
+          : []),
+      ],
+    });
+
+    if (!restaurant) {
+      console.log(`[ADDONS] Restaurant not found for ID: ${id}`);
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    console.log(`[ADDONS] Restaurant found: ${restaurant._id}, name: ${restaurant.name}, isActive: ${restaurant.isActive}`);
+
+    console.log(`[ADDONS] Restaurant found: ${restaurant._id}, name: ${restaurant.name}`);
+
+    // Find menu - don't filter by isActive, just get the menu
+    const menu = await Menu.findOne({ 
+      restaurant: restaurant._id,
+    });
+
+    if (!menu) {
+      console.log(`[ADDONS] No menu found for restaurant: ${restaurant._id}`);
+      return successResponse(res, 200, 'No add-ons found', {
+        addons: [],
+      });
+    }
+
+    console.log(`[ADDONS] Menu found for restaurant: ${restaurant._id}`);
+    console.log(`[ADDONS] Menu isActive: ${menu.isActive}`);
+    console.log(`[ADDONS] Total addons in menu: ${(menu.addons || []).length}`);
+
+    // Show all addons - no filtering (as per user request to show addons "kaise bhi")
+    const allAddons = menu.addons || [];
+    
+    // Log all addons for debugging
+    console.log(`[ADDONS] Returning all addons: ${allAddons.length}`);
+    if (allAddons.length > 0) {
+      console.log(`[ADDONS] Addon details:`, allAddons.map(a => ({
+        id: a.id,
+        name: a.name,
+        isAvailable: a.isAvailable,
+        approvalStatus: a.approvalStatus,
+        price: a.price
+      })));
+    } else {
+      console.log(`[ADDONS] Menu.addons is:`, menu.addons);
+    }
+
+    return successResponse(res, 200, 'Add-ons retrieved successfully', {
+      addons: allAddons,
+    });
+  } catch (error) {
+    console.error('Error fetching addons by restaurant ID:', error);
+    console.error('Error stack:', error.stack);
+    return errorResponse(res, 500, 'Failed to fetch add-ons');
+  }
+};
+
 // Update an add-on
 export const updateAddon = asyncHandler(async (req, res) => {
   const restaurantId = req.restaurant._id;
   const { id } = req.params;
-  const { name, description, price, image, images } = req.body;
-
-  if (!name || !name.trim()) {
-    return errorResponse(res, 400, 'Add-on name is required');
-  }
-
-  if (price === undefined || price === null || price < 0) {
-    return errorResponse(res, 400, 'Add-on price is required and must be non-negative');
-  }
+  const { name, description, price, image, images, isAvailable } = req.body;
 
   // Find menu
   const menu = await Menu.findOne({ restaurant: restaurantId });
@@ -825,6 +888,31 @@ export const updateAddon = asyncHandler(async (req, res) => {
   }
 
   const addon = menu.addons[addonIndex];
+
+  // If isAvailable is provided, update it without requiring re-approval
+  if (typeof isAvailable === 'boolean') {
+    addon.isAvailable = isAvailable;
+    menu.markModified(`addons.${addonIndex}`);
+    menu.markModified('addons');
+    await menu.save();
+
+    return successResponse(res, 200, 'Add-on availability updated successfully', {
+      addon: menu.addons[addonIndex],
+      menu: {
+        addons: menu.addons,
+        isActive: menu.isActive,
+      },
+    });
+  }
+
+  // For other updates, require name and price
+  if (!name || !name.trim()) {
+    return errorResponse(res, 400, 'Add-on name is required');
+  }
+
+  if (price === undefined || price === null || price < 0) {
+    return errorResponse(res, 400, 'Add-on price is required and must be non-negative');
+  }
 
   // Normalize images array
   const normalizedImages = Array.isArray(images) && images.length > 0

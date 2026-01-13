@@ -1,6 +1,7 @@
 import Admin from '../models/Admin.js';
 import Order from '../../order/models/Order.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
+import Offer from '../../restaurant/models/Offer.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import winston from 'winston';
@@ -1252,6 +1253,108 @@ export const deleteRestaurant = asyncHandler(async (req, res) => {
   } catch (error) {
     logger.error(`Error deleting restaurant: ${error.message}`, { error: error.stack });
     return errorResponse(res, 500, 'Failed to delete restaurant');
+  }
+});
+
+/**
+ * Get All Offers with Restaurant and Dish Details
+ * GET /api/admin/offers
+ * Query params: page, limit, search, status, restaurantId
+ */
+export const getAllOffers = asyncHandler(async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 50,
+      search,
+      status,
+      restaurantId
+    } = req.query;
+
+    // Build query
+    const query = {};
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (restaurantId) {
+      query.restaurant = restaurantId;
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Fetch offers with restaurant details
+    const offers = await Offer.find(query)
+      .populate('restaurant', 'name restaurantId')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Get total count
+    const total = await Offer.countDocuments(query);
+
+    // Flatten offers to show each item separately
+    const offerItems = [];
+    offers.forEach((offer, offerIndex) => {
+      if (offer.items && offer.items.length > 0) {
+        offer.items.forEach((item, itemIndex) => {
+          // Apply search filter if provided
+          if (search) {
+            const searchLower = search.toLowerCase();
+            const matchesSearch = 
+              offer.restaurant?.name?.toLowerCase().includes(searchLower) ||
+              item.itemName?.toLowerCase().includes(searchLower) ||
+              item.couponCode?.toLowerCase().includes(searchLower);
+            
+            if (!matchesSearch) {
+              return; // Skip this item if it doesn't match search
+            }
+          }
+
+          offerItems.push({
+            sl: skip + offerItems.length + 1,
+            offerId: offer._id.toString(),
+            restaurantName: offer.restaurant?.name || 'Unknown Restaurant',
+            restaurantId: offer.restaurant?.restaurantId || offer.restaurant?._id?.toString() || 'N/A',
+            dishName: item.itemName || 'Unknown Dish',
+            dishId: item.itemId || 'N/A',
+            couponCode: item.couponCode || 'N/A',
+            discountType: offer.discountType || 'percentage',
+            discountPercentage: item.discountPercentage || 0,
+            originalPrice: item.originalPrice || 0,
+            discountedPrice: item.discountedPrice || 0,
+            status: offer.status || 'active',
+            startDate: offer.startDate || null,
+            endDate: offer.endDate || null,
+            createdAt: offer.createdAt || new Date(),
+          });
+        });
+      }
+    });
+
+    // If search was applied, we need to recalculate total
+    let filteredTotal = offerItems.length;
+    if (!search) {
+      // Count all items across all offers
+      const allOffers = await Offer.find(query).lean();
+      filteredTotal = allOffers.reduce((sum, offer) => sum + (offer.items?.length || 0), 0);
+    }
+
+    return successResponse(res, 200, 'Offers retrieved successfully', {
+      offers: offerItems,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: filteredTotal,
+        pages: Math.ceil(filteredTotal / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    logger.error(`Error fetching offers: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to fetch offers');
   }
 });
 

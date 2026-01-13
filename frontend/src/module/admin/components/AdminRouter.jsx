@@ -14,6 +14,8 @@ import SubscriptionOrders from "../pages/SubscriptionOrders";
 import Category from "../pages/categories/Category";
 // Restaurant Management
 import ZoneSetup from "../pages/restaurant/ZoneSetup";
+import AddZone from "../pages/restaurant/AddZone";
+import ViewZone from "../pages/restaurant/ViewZone";
 import RestaurantsList from "../pages/restaurant/RestaurantsList";
 import JoiningRequest from "../pages/restaurant/JoiningRequest";
 import RestaurantCommission from "../pages/restaurant/RestaurantCommission";
@@ -21,6 +23,7 @@ import RestaurantsBulkImport from "../pages/restaurant/RestaurantsBulkImport";
 import RestaurantsBulkExport from "../pages/restaurant/RestaurantsBulkExport";
 // Food Management
 import FoodsList from "../pages/foods/FoodsList";
+import AddonsList from "../pages/addons/AddonsList";
 // Promotions Management
 import BasicCampaign from "../pages/campaigns/BasicCampaign";
 import FoodCampaign from "../pages/campaigns/FoodCampaign";
@@ -156,6 +159,9 @@ export default function AdminRouter() {
 
         {/* RESTAURANT MANAGEMENT */}
         <Route path="zone-setup" element={<ZoneSetup />} />
+        <Route path="zone-setup/add" element={<AddZone />} />
+        <Route path="zone-setup/edit/:id" element={<AddZone />} />
+        <Route path="zone-setup/view/:id" element={<ViewZone />} />
         <Route path="food-approval" element={<FoodApproval />} />
         {/* Restaurants */}
         <Route path="restaurants" element={<RestaurantsList />} />
@@ -170,6 +176,8 @@ export default function AdminRouter() {
         {/* Foods */}
         <Route path="foods" element={<FoodsList />} />
         <Route path="food/list" element={<FoodsList />} />
+        {/* Addons */}
+        <Route path="addons" element={<AddonsList />} />
 
         {/* PROMOTIONS MANAGEMENT */}
         {/* Campaigns */}

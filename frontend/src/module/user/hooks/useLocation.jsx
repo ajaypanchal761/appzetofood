@@ -130,11 +130,22 @@ export function useLocation() {
         setTimeout(() => reject(new Error("Google Maps API timeout")), 15000)
       );
       
-      // ZOMATO-STYLE: Use Geocoding API with proper parameters
+      // Validate coordinates are in India range BEFORE fetching
+      // India: Latitude 6.5° to 37.1° N, Longitude 68.7° to 97.4° E
+      const isInIndiaRange = latitude >= 6.5 && latitude <= 37.1 && longitude >= 68.7 && longitude <= 97.4 && longitude > 0
+      
+      if (!isInIndiaRange || longitude < 0) {
+        console.error("❌ BLOCKED: Coordinates are OUTSIDE India range!")
+        console.error("❌ Coordinates: Lat", latitude, "Lng", longitude)
+        console.error("❌ India Range: Lat 6.5-37.1, Lng 68.7-97.4 (must be positive/East)")
+        throw new Error("Coordinates outside India range")
+      }
+      
+      // ZOMATO-STYLE: Use Geocoding API with proper parameters for EXACT location
       // language=en for English, region=in for India (helps with better results)
-      // result_type parameter can help get more specific results
+      // result_type: prioritize premise > street_address > establishment > point_of_interest for exact location
       const apiPromise = fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=street_address|premise|point_of_interest|establishment`
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=premise|street_address|establishment|point_of_interest|route|sublocality`
       ).then(res => res.json());
       
       const data = await Promise.race([apiPromise, timeoutPromise]);
@@ -188,36 +199,72 @@ export function useLocation() {
       }
       
       // ZOMATO-STYLE: Find the MOST PRECISE result with POI/premise
-      // Sometimes results[0] might not have POI, so check multiple results
+      // Filter India results first, then find most specific
       let exactResult = null;
       let bestResultIndex = 0;
       
-      // Priority: Find result with point_of_interest or premise
-      for (let i = 0; i < Math.min(5, data.results.length); i++) {
-        const result = data.results[i];
-        const hasPOI = result.address_components?.some(c => c.types.includes("point_of_interest"));
-        const hasPremise = result.address_components?.some(c => c.types.includes("premise"));
-        
-        if (hasPOI || hasPremise) {
-          exactResult = result;
-          bestResultIndex = i;
-          console.log(`✅✅✅ Found result with POI/premise at index ${i}`);
-          break;
-        }
-      }
+      // First, filter India results only
+      const indiaResults = data.results.filter(r => {
+        const addressComponents = r.address_components || []
+        return addressComponents.some(ac => 
+          ac.types.includes('country') && 
+          (ac.short_name === 'IN' || ac.long_name === 'India')
+        )
+      })
       
-      // If no POI/premise found, use results[0] (most precise by default)
-      if (!exactResult) {
-        exactResult = data.results[0];
-        console.log("⚠️ No POI/premise found in any result, using results[0]");
-        console.log("⚠️ This might mean:");
-        console.log("   1. Location is on a road/street without specific building");
-        console.log("   2. GPS coordinates are not accurate (network-based location)");
-        console.log("   3. Try on mobile device for better GPS accuracy");
+      if (indiaResults.length === 0) {
+        console.warn("⚠️ No India results found in geocoding response")
+        // Check if first result is foreign
+        const firstResult = data.results[0]
+        const addressComponents = firstResult.address_components || []
+        const countryComponent = addressComponents.find(ac => ac.types.includes('country'))
+        
+        if (countryComponent && countryComponent.short_name !== 'IN' && countryComponent.long_name !== 'India') {
+          console.error("❌ Address is from foreign country:", countryComponent.long_name)
+          throw new Error("Address outside India")
+        }
+        // If no country info, use first result but log warning
+        exactResult = data.results[0]
+      } else {
+        // Priority: Find result with premise/establishment/street_address (most specific)
+        for (let i = 0; i < Math.min(5, indiaResults.length); i++) {
+          const result = indiaResults[i];
+          const types = result.types || []
+          const hasPremise = types.includes("premise") || result.address_components?.some(c => c.types.includes("premise"))
+          const hasEstablishment = types.includes("establishment") || result.address_components?.some(c => c.types.includes("establishment"))
+          const hasStreetAddress = types.includes("street_address") || result.address_components?.some(c => c.types.includes("street_address"))
+          const hasPOI = types.includes("point_of_interest") || result.address_components?.some(c => c.types.includes("point_of_interest"))
+          
+          // Priority: premise > establishment > street_address > point_of_interest
+          if (hasPremise || hasEstablishment || hasStreetAddress || hasPOI) {
+            exactResult = result;
+            bestResultIndex = i;
+            console.log(`✅✅✅ Found India result with exact location at index ${i}`, {
+              hasPremise,
+              hasEstablishment,
+              hasStreetAddress,
+              hasPOI
+            });
+            break;
+          }
+        }
+        
+        // If no specific result found, use first India result
+        if (!exactResult) {
+          exactResult = indiaResults[0];
+          console.log("⚠️ No premise/establishment found, using first India result");
+        }
       }
       
       const addressComponents = exactResult.address_components || [];
       const formattedAddress = exactResult.formatted_address || "";
+      
+      // Validate address is not foreign (additional check)
+      const foreignPattern = /\b(USA|United States|Los Angeles|California|CA \d{5}|New York|NY|UK|United Kingdom|London|Canada|Australia|Singapore|Dubai)\b/i
+      if (foreignPattern.test(formattedAddress)) {
+        console.error("❌ REJECTED: Address is from foreign country:", formattedAddress)
+        throw new Error("Foreign address detected")
+      }
       
       // Log detailed information about the selected result
       console.log(`📦 Using results[${bestResultIndex}] (Most Precise - Zomato Style):`, {
@@ -1440,8 +1487,8 @@ export function useLocation() {
     // If forceFresh is true, don't use cached location (maximumAge: 0)
     // Otherwise, allow cached location for faster response
     return getPositionWithRetry({ 
-      enableHighAccuracy: true,  // Use GPS for exact location
-      timeout: 10000,            // 10 seconds timeout (gives GPS time to get accurate fix)
+      enableHighAccuracy: true,  // Use GPS for exact location (highest accuracy)
+      timeout: 15000,            // 15 seconds timeout (gives GPS more time to get accurate fix)
       maximumAge: forceFresh ? 0 : 60000  // If forceFresh, get fresh location. Otherwise allow 1 minute cache
     })
   }
@@ -1566,6 +1613,28 @@ export function useLocation() {
               accuracy: accuracy || null,
               address: displayAddress, // Locality parts for navbar display (NEVER coordinates)
               formattedAddress: completeFormattedAddress // Complete detailed address (NEVER coordinates)
+            }
+            
+            // STABILITY: Only update if location changed significantly (>10m) OR address improved
+            const currentLoc = location
+            if (currentLoc && currentLoc.latitude && currentLoc.longitude) {
+              // Calculate distance in meters (Haversine formula simplified for small distances)
+              const latDiff = latitude - currentLoc.latitude
+              const lngDiff = longitude - currentLoc.longitude
+              const distanceMeters = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 111320 // ~111320m per degree
+              
+              // Check if address is better (more parts = more complete)
+              const currentParts = (currentLoc.formattedAddress || "").split(',').filter(p => p.trim()).length
+              const newParts = completeFormattedAddress.split(',').filter(p => p.trim()).length
+              const addressImproved = newParts > currentParts
+              
+              // Only update if moved >10 meters OR address significantly improved
+              if (distanceMeters <= 10 && !addressImproved) {
+                console.log(`📍 Location unchanged (${distanceMeters.toFixed(1)}m change), keeping stable address`)
+                return // Don't update - keep current stable address
+              }
+              
+              console.log(`📍 Location updated: ${distanceMeters.toFixed(1)}m change, address parts: ${currentParts} → ${newParts}`)
             }
             
             // Final validation - ensure formattedAddress is never coordinates

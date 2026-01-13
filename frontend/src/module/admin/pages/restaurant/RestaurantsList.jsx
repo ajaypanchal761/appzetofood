@@ -20,6 +20,47 @@ export default function RestaurantsList() {
   const [deleteConfirmDialog, setDeleteConfirmDialog] = useState(null) // { restaurant }
   const [deleting, setDeleting] = useState(false)
 
+  // Format Restaurant ID to REST format (e.g., REST422829)
+  const formatRestaurantId = (id) => {
+    if (!id) return "REST000000"
+    
+    const idString = String(id)
+    // Extract last 6 digits from the ID
+    // Handle formats like "REST-1768045396242-2829" or "1768045396242-2829"
+    const parts = idString.split(/[-.]/)
+    let lastDigits = ""
+    
+    // Get the last part and extract digits
+    if (parts.length > 0) {
+      const lastPart = parts[parts.length - 1]
+      // Extract only digits from the last part
+      const digits = lastPart.match(/\d+/g)
+      if (digits && digits.length > 0) {
+        // Get last 6 digits from all digits found
+        const allDigits = digits.join("")
+        lastDigits = allDigits.slice(-6).padStart(6, "0")
+      } else {
+        // If no digits in last part, look for digits in all parts
+        const allParts = parts.join("")
+        const allDigits = allParts.match(/\d+/g)
+        if (allDigits && allDigits.length > 0) {
+          const combinedDigits = allDigits.join("")
+          lastDigits = combinedDigits.slice(-6).padStart(6, "0")
+        }
+      }
+    }
+    
+    // If no digits found, use a hash of the ID
+    if (!lastDigits) {
+      const hash = idString.split("").reduce((acc, char) => {
+        return ((acc << 5) - acc) + char.charCodeAt(0) | 0
+      }, 0)
+      lastDigits = Math.abs(hash).toString().slice(-6).padStart(6, "0")
+    }
+    
+    return `REST${lastDigits}`
+  }
+
   // Fetch restaurants from backend API
   useEffect(() => {
     const fetchRestaurants = async () => {
@@ -346,64 +387,6 @@ export default function RestaurantsList() {
               <h1 className="text-2xl font-bold text-slate-900">Restaurants List</h1>
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="relative">
-                <select
-                  value={filters.all}
-                  onChange={(e) => setFilters(prev => ({ ...prev, all: e.target.value }))}
-                  className="px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="All">All</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-              </div>
-
-              <div className="relative">
-                <select
-                  value={filters.businessModel}
-                  onChange={(e) => setFilters(prev => ({ ...prev, businessModel: e.target.value }))}
-                  className="px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Business model</option>
-                  <option value="commission">Commission</option>
-                  <option value="subscription">Subscription</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-              </div>
-
-              <div className="relative">
-                <select
-                  value={filters.cuisine}
-                  onChange={(e) => setFilters(prev => ({ ...prev, cuisine: e.target.value }))}
-                  className="px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Cuisine</option>
-                  {uniqueCuisines.map((cuisine) => (
-                    <option key={cuisine} value={cuisine}>
-                      {cuisine}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-              </div>
-
-              <div className="relative">
-                <select
-                  value={filters.zone}
-                  onChange={(e) => setFilters(prev => ({ ...prev, zone: e.target.value }))}
-                  className="px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select zone</option>
-                  <option value="All over the World">All over the World</option>
-                  <option value="Zone 1">Zone 1</option>
-                  <option value="Zone 2">Zone 2</option>
-                  <option value="Zone 3">Zone 3</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-              </div>
-            </div>
           </div>
         </div>
 
@@ -566,6 +549,7 @@ export default function RestaurantsList() {
                             </div>
                             <div className="flex flex-col">
                               <span className="text-sm font-medium text-slate-900">{restaurant.name}</span>
+                              <span className="text-xs text-slate-500">ID #{formatRestaurantId(restaurant.originalData?.restaurantId || restaurant.originalData?._id || restaurant._id || restaurant.id)}</span>
                               <span className="text-xs text-slate-500">{renderStars(restaurant.rating)}</span>
                             </div>
                           </div>
@@ -687,7 +671,7 @@ export default function RestaurantsList() {
                         )}
                         <div className="flex items-center gap-1 text-slate-600">
                           <Building2 className="w-4 h-4" />
-                          <span className="text-sm">{restaurantDetails?.restaurantId || restaurantDetails?._id || selectedRestaurant?.id || selectedRestaurant?._id || "N/A"}</span>
+                          <span className="text-sm">{formatRestaurantId(restaurantDetails?.restaurantId || restaurantDetails?._id || selectedRestaurant?.id || selectedRestaurant?._id)}</span>
                         </div>
                       </div>
                     </div>
@@ -873,7 +857,7 @@ export default function RestaurantsList() {
                         {restaurantDetails.restaurantId && (
                           <div>
                             <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
-                            <p className="font-medium text-slate-900">{restaurantDetails.restaurantId}</p>
+                            <p className="font-medium text-slate-900">{formatRestaurantId(restaurantDetails.restaurantId)}</p>
                           </div>
                         )}
                         {restaurantDetails.slug && (
@@ -1242,7 +1226,7 @@ export default function RestaurantsList() {
                         {restaurantDetails?.restaurantId && (
                           <div>
                             <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
-                            <p className="font-medium text-slate-900">{restaurantDetails.restaurantId}</p>
+                            <p className="font-medium text-slate-900">{formatRestaurantId(restaurantDetails.restaurantId)}</p>
                           </div>
                         )}
                         {restaurantDetails?.phoneVerified !== undefined && (

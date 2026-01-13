@@ -1,12 +1,10 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useLocation, useNavigate } from "react-router-dom"
 import { ArrowLeft, ChevronDown, ChevronRight, Filter, Info, X } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
+import { restaurantAPI } from "@/lib/api"
 import growCustomerBaseIcon from "@/assets/hub/icons/growyourcustomerbase.png"
-import increaseOrderValueIcon from "@/assets/hub/icons/increaseyourordervalue.png"
-import getMealtimeOrdersIcon from "@/assets/hub/icons/getmoremeantimeorders.png"
-import delightCustomersIcon from "@/assets/hub/icons/deliteyourcustomer.png"
 
 export default function CreateOffers() {
   const navigate = useNavigate()
@@ -19,6 +17,33 @@ export default function CreateOffers() {
   const [dateFormat, setDateFormat] = useState("weekly")
   const [dateRange, setDateRange] = useState("Weekly (15 - 17 Dec)")
   const [comparisonDate, setComparisonDate] = useState("previous week (8 - 10 Dec)")
+  
+  // Restaurant data state
+  const [restaurant, setRestaurant] = useState(null)
+  const [loadingRestaurant, setLoadingRestaurant] = useState(true)
+
+  // Fetch restaurant data from backend
+  useEffect(() => {
+    const fetchRestaurant = async () => {
+      try {
+        setLoadingRestaurant(true)
+        const response = await restaurantAPI.getCurrentRestaurant()
+        if (response?.data?.success && response?.data?.data?.restaurant) {
+          setRestaurant(response.data.data.restaurant)
+        }
+      } catch (error) {
+        // Only log error if it's not a network/timeout error (backend might be down/slow)
+        if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error("Error fetching restaurant data:", error)
+        }
+        // Continue with default values if fetch fails
+      } finally {
+        setLoadingRestaurant(false)
+      }
+    }
+
+    fetchRestaurant()
+  }, [])
 
   const offerGoals = [
     {
@@ -26,24 +51,6 @@ export default function CreateOffers() {
       title: "Grow your customer base",
       description: "Offers to increase your customers and orders",
       icon: growCustomerBaseIcon,
-    },
-    {
-      id: "increase-value",
-      title: "Increase your order value",
-      description: "Offers to encourage high-value orders and attract party orders",
-      icon: increaseOrderValueIcon,
-    },
-    {
-      id: "mealtime-orders",
-      title: "Get more mealtime orders",
-      description: "Offers to boost orders during a specific mealtime",
-      icon: getMealtimeOrdersIcon,
-    },
-    {
-      id: "delight-customers",
-      title: "Delight your customers",
-      description: "Offers such as freebies, BOGO, and more to boost menu to cart conversions",
-      icon: delightCustomersIcon,
     },
   ]
 
@@ -61,10 +68,24 @@ export default function CreateOffers() {
             </button>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-gray-900">Kadhai Chammach Restaurant</h1>
+                <h1 className="text-lg font-bold text-gray-900">
+                  {loadingRestaurant ? "Loading..." : (restaurant?.name || "Restaurant")}
+                </h1>
                 <ChevronDown className="w-4 h-4 text-gray-500" />
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">By Pass Road (South), Indore</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {loadingRestaurant 
+                  ? "Loading..." 
+                  : restaurant?.location 
+                    ? [
+                        restaurant.location.addressLine1,
+                        restaurant.location.addressLine2,
+                        restaurant.location.area,
+                        restaurant.location.city
+                      ].filter(Boolean).join(", ") || "Location not available"
+                    : "Location not available"
+                }
+              </p>
             </div>
           </div>
         </div>
@@ -142,18 +163,12 @@ export default function CreateOffers() {
 
               {/* Offer Goal Cards */}
               <div className="">
-                {offerGoals.map((goal, index) => (
+                {offerGoals.map((goal) => (
                   <motion.div
                     key={goal.id}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => {
-                      // First 3 cards navigate to discount type selection
-                      if (index < 3) {
-                        navigate(`/restaurant/hub-growth/create-offers/${goal.id}`)
-                      } else if (goal.id === "delight-customers") {
-                        // 4th card navigates to menu discount type selection
-                        navigate(`/restaurant/hub-growth/create-offers/delight-customers`)
-                      }
+                      navigate(`/restaurant/hub-growth/create-offers/${goal.id}`)
                     }}
                     className="bg-white rounded-lg p-4 flex items-center gap-4 border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
                   >

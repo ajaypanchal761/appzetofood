@@ -5,6 +5,7 @@ import Restaurant from '../../restaurant/models/Restaurant.js';
 import mongoose from 'mongoose';
 import winston from 'winston';
 import { calculateOrderPricing } from '../services/orderCalculationService.js';
+import { getRazorpayCredentials } from '../../../shared/utils/envService.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -93,6 +94,11 @@ export const createOrder = async (req, res) => {
     const random = Math.floor(Math.random() * 1000);
     const generatedOrderId = `ORD-${timestamp}-${random}`;
 
+    // Ensure couponCode is included in pricing
+    if (!pricing.couponCode && pricing.appliedCoupon?.code) {
+      pricing.couponCode = pricing.appliedCoupon.code;
+    }
+
     // Create order in database with pending status
     const order = new Order({
       orderId: generatedOrderId,
@@ -101,7 +107,10 @@ export const createOrder = async (req, res) => {
       restaurantName: restaurantName || 'Unknown Restaurant',
       items,
       address,
-      pricing,
+      pricing: {
+        ...pricing,
+        couponCode: pricing.couponCode || null
+      },
       deliveryFleet: deliveryFleet || 'standard',
       note: note || '',
       sendCutlery: sendCutlery !== false,
@@ -146,6 +155,18 @@ export const createOrder = async (req, res) => {
       razorpayOrderId: razorpayOrder?.id
     });
 
+    // Get Razorpay key ID from env service
+    let razorpayKeyId = null;
+    if (razorpayOrder) {
+      try {
+        const credentials = await getRazorpayCredentials();
+        razorpayKeyId = credentials.keyId || process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_API_KEY;
+      } catch (error) {
+        logger.warn(`Failed to get Razorpay key ID from env service: ${error.message}`);
+        razorpayKeyId = process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_API_KEY;
+      }
+    }
+
     res.status(201).json({
       success: true,
       data: {
@@ -159,7 +180,7 @@ export const createOrder = async (req, res) => {
           orderId: razorpayOrder.id,
           amount: razorpayOrder.amount,
           currency: razorpayOrder.currency,
-          key: process.env.RAZORPAY_KEY_ID
+          key: razorpayKeyId
         } : null
       }
     });
@@ -229,7 +250,7 @@ export const verifyOrderPayment = async (req, res) => {
     }
 
     // Verify payment signature
-    const isValid = verifyPayment(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+    const isValid = await verifyPayment(razorpayOrderId, razorpayPaymentId, razorpaySignature);
 
     if (!isValid) {
       // Update order payment status to failed

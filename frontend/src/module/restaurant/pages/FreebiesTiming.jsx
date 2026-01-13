@@ -43,19 +43,22 @@ export default function FreebiesTiming() {
   const handlePreview = () => {
     if (!isFormValid) return
 
-    navigate("/restaurant/hub-growth/create-offers/delight-customers/freebies/preview", {
-      state: {
-        customerGroup,
-        offerPreference: "all",
-        discountType: "freebies",
-        goalId: "delight-customers",
-        offerDays,
-        startDate,
-        targetMealtime,
-        minOrderValue: selectedMinOrderValue,
-        freebieItems: selectedFreebies,
-      },
+    // TODO: Save offer to backend here
+    console.log("Offer data:", {
+      customerGroup,
+      offerPreference: "all",
+      discountType: "freebies",
+      goalId: "delight-customers",
+      offerDays,
+      startDate,
+      targetMealtime,
+      minOrderValue: selectedMinOrderValue,
+      freebieItems: selectedFreebies,
     })
+    
+    // Navigate back to create offers page
+    alert("Offer created successfully!")
+    navigate("/restaurant/hub-growth/create-offers")
   }
 
   return (

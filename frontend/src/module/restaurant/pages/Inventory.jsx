@@ -638,6 +638,8 @@ export default function Inventory() {
   const mouseEndX = useRef(0)
   const isMouseDown = useRef(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [addons, setAddons] = useState([])
+  const [loadingAddons, setLoadingAddons] = useState(false)
 
   // Inventory tabs
   const inventoryTabs = ["all-items", "add-ons"]
@@ -727,12 +729,13 @@ export default function Inventory() {
           setExpandedCategories([])
         }
       } catch (error) {
+        // Only log and show toast if it's not a network/timeout error
+        if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
         console.error('Error fetching menu data:', error)
-        // Check if it's a network error (backend not running)
-        if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-          toast.error('Cannot connect to server. Please check if backend is running.')
-        } else {
           toast.error('Failed to load menu data')
+        } else if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+          // Silently handle network errors - backend is not running
+          // The axios interceptor already handles these with proper error messages
         }
         setCategories([])
         setExpandedCategories([])
@@ -747,6 +750,50 @@ export default function Inventory() {
   // Note: Menu items are now displayed from menu API
   // Stock status updates should be managed through the menu API, not inventory API
   // Auto-save disabled since we're displaying menu data, not inventory data
+
+  // Fetch add-ons when add-ons tab is active
+  const fetchAddons = async (showLoading = true) => {
+    try {
+      if (showLoading) setLoadingAddons(true)
+      const response = await restaurantAPI.getAddons()
+      const data = response?.data?.data?.addons || response?.data?.addons || []
+      // Filter to show only approved add-ons
+      const approvedAddons = data.filter(addon => addon.approvalStatus === 'approved')
+      setAddons(approvedAddons)
+    } catch (error) {
+      console.error('Error fetching add-ons:', error)
+      toast.error('Failed to load add-ons')
+      setAddons([])
+    } finally {
+      if (showLoading) setLoadingAddons(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "add-ons") {
+      fetchAddons(true)
+    }
+  }, [activeTab])
+
+  // Handle addon toggle
+  const handleAddonToggle = async (addonId, isAvailable) => {
+    try {
+      // Update addon availability via API
+      await restaurantAPI.updateAddon(addonId, {
+        isAvailable: isAvailable
+      })
+
+      // Update local state
+      setAddons(prev => prev.map(a => 
+        a.id === addonId ? { ...a, isAvailable } : a
+      ))
+
+      toast.success(`Add-on ${isAvailable ? 'enabled' : 'disabled'} successfully`)
+    } catch (error) {
+      console.error('Error toggling addon:', error)
+      toast.error('Failed to update add-on availability')
+    }
+  }
 
   // Handle swipe gestures
   const handleTouchStart = (e) => {
@@ -1371,9 +1418,65 @@ export default function Inventory() {
         {/* Categories Accordions */}
         <div className="space-y-3 mb-6">
           {activeTab === "add-ons" && (
-            <div className="text-center text-sm text-gray-500 py-8">
-              No add-ons available.
-            </div>
+            <>
+              {loadingAddons ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                </div>
+              ) : addons.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 px-4">
+                  <div className="text-center">
+                    <p className="text-lg font-medium text-gray-500">No add-ons available</p>
+                    <p className="text-sm text-gray-400 mt-2">Approved add-ons will appear here</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {addons.map((addon) => (
+                    <div
+                      key={addon.id}
+                      className="bg-white rounded-lg border border-gray-200 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-base font-semibold text-gray-900">{addon.name}</h3>
+                            {addon.approvalStatus === 'approved' && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded">Approved</span>
+                            )}
+                          </div>
+                          {addon.description && (
+                            <p className="text-sm text-gray-600 mb-2">{addon.description}</p>
+                          )}
+                          <p className="text-base font-bold text-gray-900">₹{addon.price}</p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          {addon.images && addon.images.length > 0 && addon.images[0] && (
+                            <img
+                              src={addon.images[0]}
+                              alt={addon.name}
+                              className="w-20 h-20 object-cover rounded-lg"
+                              onError={(e) => {
+                                e.target.style.display = 'none'
+                              }}
+                            />
+                          )}
+                          <div className="flex items-center">
+                            <Switch
+                              checked={addon.isAvailable !== false}
+                              onCheckedChange={(checked) =>
+                                handleAddonToggle(addon.id, checked)
+                              }
+                              className="data-[state=checked]:bg-green-600"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
           {listToRender.map((category, index) => {
             const isExpanded = expandedCategories.includes(category.id)

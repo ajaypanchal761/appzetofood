@@ -4,11 +4,25 @@ import bcrypt from 'bcryptjs';
 const locationSchema = new mongoose.Schema({
   latitude: Number,
   longitude: Number,
+  // GeoJSON coordinates [longitude, latitude] for spatial queries
+  coordinates: {
+    type: [Number],
+    default: undefined
+  },
+  // Live address from Google Maps reverse geocoding
+  formattedAddress: String,
+  // Stored address fields
+  address: String, // Full address string
   addressLine1: String,
   addressLine2: String,
   area: String,
   city: String,
+  state: String,
   landmark: String,
+  zipCode: String,
+  pincode: String,
+  postalCode: String,
+  street: String,
 });
 
 const deliveryTimingsSchema = new mongoose.Schema({

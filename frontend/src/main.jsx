@@ -12,7 +12,7 @@ import { getGoogleMapsApiKey } from './lib/utils/googleMapsApiKey.js'
     const googleMapsApiKey = await getGoogleMapsApiKey()
     if (googleMapsApiKey && !window.google) {
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry,drawing`
       script.async = true
       script.defer = true
       document.head.appendChild(script)
@@ -23,7 +23,7 @@ import { getGoogleMapsApiKey } from './lib/utils/googleMapsApiKey.js'
     const fallbackKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
     if (fallbackKey && !window.google) {
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${fallbackKey}&libraries=places,geometry`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${fallbackKey}&libraries=places,geometry,drawing`
       script.async = true
       script.defer = true
       document.head.appendChild(script)

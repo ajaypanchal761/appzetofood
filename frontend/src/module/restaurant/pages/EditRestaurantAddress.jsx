@@ -70,7 +70,10 @@ export default function EditRestaurantAddress() {
           }
         }
       } catch (error) {
-        console.error("Error fetching restaurant data:", error)
+        // Only log error if it's not a network/timeout error (backend might be down/slow)
+        if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error("Error fetching restaurant data:", error)
+        }
         // Fallback to localStorage
         try {
           const savedAddress = localStorage.getItem(ADDRESS_STORAGE_KEY)
@@ -148,25 +151,55 @@ export default function EditRestaurantAddress() {
         return
       } else {
         // Minor correction - update location coordinates
-        // Note: This is a simplified version. In production, you'd want to let the user
-        // drag the pin on the map and then save the new coordinates
-        const updatedLocation = {
-          ...location,
-          latitude: lat,
-          longitude: lng,
-        }
-        
-        const response = await restaurantAPI.updateProfile({ location: updatedLocation })
-        
-        if (response?.data?.data?.restaurant) {
-          // Update local state
-          setLocation(updatedLocation)
-          // Dispatch event to notify other components
-          window.dispatchEvent(new Event("addressUpdated"))
-          setShowSelectOptionDialog(false)
-          navigate(-1)
-        } else {
-          throw new Error("Invalid response from server")
+        // Fetch live address from coordinates using Google Maps API
+        try {
+          // Get Google Maps API key
+          const { getGoogleMapsApiKey } = await import('@/lib/utils/googleMapsApiKey.js')
+          const GOOGLE_MAPS_API_KEY = await getGoogleMapsApiKey()
+          
+          let formattedAddress = location?.formattedAddress || ""
+          
+          // Fetch formattedAddress from coordinates if API key available
+          if (GOOGLE_MAPS_API_KEY && lat && lng) {
+            try {
+              const response = await fetch(
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=street_address|premise|point_of_interest|establishment`
+              )
+              const data = await response.json()
+              
+              if (data.status === 'OK' && data.results && data.results.length > 0) {
+                formattedAddress = data.results[0].formatted_address
+                console.log("✅ Fetched formattedAddress from coordinates:", formattedAddress)
+              }
+            } catch (error) {
+              console.warn("⚠️ Failed to fetch formattedAddress, using existing:", error)
+            }
+          }
+          
+          // Update location with coordinates array and formattedAddress
+          const updatedLocation = {
+            ...location,
+            latitude: lat,
+            longitude: lng,
+            coordinates: [lng, lat], // GeoJSON format: [longitude, latitude]
+            formattedAddress: formattedAddress || location?.formattedAddress || ""
+          }
+          
+          const response = await restaurantAPI.updateProfile({ location: updatedLocation })
+          
+          if (response?.data?.data?.restaurant) {
+            // Update local state
+            setLocation(updatedLocation)
+            // Dispatch event to notify other components
+            window.dispatchEvent(new Event("addressUpdated"))
+            setShowSelectOptionDialog(false)
+            navigate(-1)
+          } else {
+            throw new Error("Invalid response from server")
+          }
+        } catch (updateError) {
+          console.error("Error updating address:", updateError)
+          alert(`Failed to update address: ${updateError.response?.data?.message || updateError.message || "Please try again."}`)
         }
       }
     } catch (error) {

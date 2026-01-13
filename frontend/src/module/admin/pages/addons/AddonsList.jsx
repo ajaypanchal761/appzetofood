@@ -4,15 +4,15 @@ import { adminAPI, restaurantAPI } from "@/lib/api"
 import apiClient from "@/lib/api"
 import { toast } from "sonner"
 
-export default function FoodsList() {
+export default function AddonsList() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [foods, setFoods] = useState([])
+  const [addons, setAddons] = useState([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
 
-  // Fetch all foods from all restaurants
+  // Fetch all addons from all restaurants
   useEffect(() => {
-    const fetchAllFoods = async () => {
+    const fetchAllAddons = async () => {
       try {
         setLoading(true)
         
@@ -23,97 +23,64 @@ export default function FoodsList() {
                           []
         
         if (restaurants.length === 0) {
-          setFoods([])
+          setAddons([])
           setLoading(false)
           return
         }
 
-        // Fetch menu for each restaurant and extract all food items
-        const allFoods = []
+        // Fetch addons for each restaurant
+        const allAddons = []
         
         for (const restaurant of restaurants) {
           try {
             const restaurantId = restaurant._id || restaurant.id
-            const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurantId)
-            const menu = menuResponse?.data?.data?.menu || menuResponse?.data?.menu
+            const addonsResponse = await restaurantAPI.getAddonsByRestaurantId(restaurantId)
+            const restaurantAddons = addonsResponse?.data?.data?.addons || 
+                                    addonsResponse?.data?.addons || 
+                                    []
             
-            if (menu && menu.sections) {
-              // Extract items from sections and subsections
-              menu.sections.forEach((section) => {
-                // Items directly in section
-                if (section.items && Array.isArray(section.items)) {
-                  section.items.forEach((item) => {
-                    allFoods.push({
-                      id: item.id || `${restaurantId}-${section.id}-${item.name}`,
-                      _id: item._id,
-                      name: item.name || "Unnamed Item",
-                      image: item.image || item.images?.[0] || "https://via.placeholder.com/40",
-                      priority: "Normal", // Default priority
-                      status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
-                      restaurantId: restaurantId,
-                      restaurantName: restaurant.name || "Unknown Restaurant",
-                      sectionName: section.name || "Unknown Section",
-                      price: item.price || 0,
-                      foodType: item.foodType || "Non-Veg",
-                      approvalStatus: item.approvalStatus || 'pending',
-                      originalItem: item // Keep original item data
-                    })
-                  })
-                }
-                
-                // Items in subsections
-                if (section.subsections && Array.isArray(section.subsections)) {
-                  section.subsections.forEach((subsection) => {
-                    if (subsection.items && Array.isArray(subsection.items)) {
-                      subsection.items.forEach((item) => {
-                        allFoods.push({
-                          id: item.id || `${restaurantId}-${section.id}-${subsection.id}-${item.name}`,
-                          _id: item._id,
-                          name: item.name || "Unnamed Item",
-                          image: item.image || item.images?.[0] || "https://via.placeholder.com/40",
-                          priority: "Normal", // Default priority
-                          status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
-                          restaurantId: restaurantId,
-                          restaurantName: restaurant.name || "Unknown Restaurant",
-                          sectionName: section.name || "Unknown Section",
-                          subsectionName: subsection.name || "Unknown Subsection",
-                          price: item.price || 0,
-                          foodType: item.foodType || "Non-Veg",
-                          approvalStatus: item.approvalStatus || 'pending',
-                          originalItem: item // Keep original item data
-                        })
-                      })
-                    }
-                  })
-                }
+            // Map addons with restaurant information
+            restaurantAddons.forEach((addon) => {
+              allAddons.push({
+                id: addon.id || `${restaurantId}-${addon.name}`,
+                _id: addon._id,
+                name: addon.name || "Unnamed Addon",
+                image: addon.image || addon.images?.[0] || "https://via.placeholder.com/40",
+                price: addon.price || 0,
+                description: addon.description || "",
+                isAvailable: addon.isAvailable !== false,
+                approvalStatus: addon.approvalStatus || 'pending',
+                restaurantId: restaurantId,
+                restaurantName: restaurant.name || "Unknown Restaurant",
+                originalAddon: addon // Keep original addon data
               })
-            }
+            })
           } catch (error) {
-            // Silently skip restaurants that don't have menus or have errors
-            console.warn(`Failed to fetch menu for restaurant ${restaurant._id || restaurant.id}:`, error.message)
+            // Silently skip restaurants that don't have addons or have errors
+            console.warn(`Failed to fetch addons for restaurant ${restaurant._id || restaurant.id}:`, error.message)
           }
         }
         
-        setFoods(allFoods)
+        setAddons(allAddons)
       } catch (error) {
-        console.error("Error fetching foods:", error)
-        toast.error("Failed to load foods from restaurants")
-        setFoods([])
+        console.error("Error fetching addons:", error)
+        toast.error("Failed to load addons from restaurants")
+        setAddons([])
       } finally {
         setLoading(false)
       }
     }
 
-    fetchAllFoods()
+    fetchAllAddons()
   }, [])
 
-  // Format ID to FOOD format (e.g., FOOD519399)
-  const formatFoodId = (id) => {
-    if (!id) return "FOOD000000"
+  // Format ID to ADDON format (e.g., ADDON606927)
+  const formatAddonId = (id) => {
+    if (!id) return "ADDON000000"
     
     const idString = String(id)
     // Extract last 6 digits from the ID
-    // Handle formats like "1768285554154-0.703896654519399" or "item-1768285554154-0.703896654519399"
+    // Handle formats like "addon-1768285606927-r7kwd45t8" or "1768285606927-r7kwd45t8"
     const parts = idString.split(/[-.]/)
     let lastDigits = ""
     
@@ -126,6 +93,14 @@ export default function FoodsList() {
         // Get last 6 digits from all digits found
         const allDigits = digits.join("")
         lastDigits = allDigits.slice(-6).padStart(6, "0")
+      } else {
+        // If no digits in last part, look for digits in all parts
+        const allParts = parts.join("")
+        const allDigits = allParts.match(/\d+/g)
+        if (allDigits && allDigits.length > 0) {
+          const combinedDigits = allDigits.join("")
+          lastDigits = combinedDigits.slice(-6).padStart(6, "0")
+        }
       }
     }
     
@@ -137,101 +112,70 @@ export default function FoodsList() {
       lastDigits = Math.abs(hash).toString().slice(-6).padStart(6, "0")
     }
     
-    return `FOOD${lastDigits}`
+    return `ADDON${lastDigits}`
   }
 
-  const filteredFoods = useMemo(() => {
-    let result = [...foods]
+  const filteredAddons = useMemo(() => {
+    let result = [...addons]
     
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
-      result = result.filter(food =>
-        food.name.toLowerCase().includes(query) ||
-        food.id.toString().includes(query) ||
-        food.restaurantName?.toLowerCase().includes(query)
+      result = result.filter(addon =>
+        addon.name.toLowerCase().includes(query) ||
+        addon.id.toString().includes(query) ||
+        addon.restaurantName?.toLowerCase().includes(query)
       )
     }
 
     return result
-  }, [foods, searchQuery])
+  }, [addons, searchQuery])
 
   const handleDelete = async (id) => {
-    const food = foods.find(f => f.id === id)
-    if (!food) return
+    const addon = addons.find(a => a.id === id)
+    if (!addon) return
 
-    if (!window.confirm(`Are you sure you want to delete "${food.name}"? This action cannot be undone.`)) {
+    if (!window.confirm(`Are you sure you want to delete "${addon.name}"? This action cannot be undone.`)) {
       return
     }
 
     try {
       setDeleting(true)
       
-      // Get the restaurant's menu
-      const menuResponse = await restaurantAPI.getMenuByRestaurantId(food.restaurantId)
+      // Get the restaurant's menu to find and remove the addon
+      const menuResponse = await restaurantAPI.getMenuByRestaurantId(addon.restaurantId)
       const menu = menuResponse?.data?.data?.menu || menuResponse?.data?.menu
       
-      if (!menu || !menu.sections) {
+      if (!menu) {
         throw new Error("Menu not found")
       }
 
-      // Find and remove the item from the menu structure
-      let itemRemoved = false
-      const updatedSections = menu.sections.map(section => {
-        // Check items in section
-        if (section.items && Array.isArray(section.items)) {
-          const itemIndex = section.items.findIndex(item => 
-            String(item.id) === String(food.id) || 
-            String(item.id) === String(food.originalItem?.id)
-          )
-          if (itemIndex !== -1) {
-            section.items.splice(itemIndex, 1)
-            itemRemoved = true
-          }
-        }
-        
-        // Check items in subsections
-        if (section.subsections && Array.isArray(section.subsections)) {
-          section.subsections = section.subsections.map(subsection => {
-            if (subsection.items && Array.isArray(subsection.items)) {
-              const itemIndex = subsection.items.findIndex(item => 
-                String(item.id) === String(food.id) || 
-                String(item.id) === String(food.originalItem?.id)
-              )
-              if (itemIndex !== -1) {
-                subsection.items.splice(itemIndex, 1)
-                itemRemoved = true
-              }
-            }
-            return subsection
-          })
-        }
-        
-        return section
-      })
+      // Find and remove the addon from the menu
+      const addonIndex = menu.addons?.findIndex(a => 
+        String(a.id) === String(addon.id) || 
+        String(a.id) === String(addon.originalAddon?.id)
+      )
 
-      if (!itemRemoved) {
-        throw new Error("Item not found in menu")
+      if (addonIndex === -1 || !menu.addons) {
+        throw new Error("Addon not found in menu")
       }
 
+      // Remove addon from array
+      menu.addons.splice(addonIndex, 1)
+
       // Update menu in backend
-      // Note: Since we're admin, we need to use a workaround
-      // The restaurant menu update endpoint requires restaurant authentication
-      // For now, we'll try using the restaurant endpoint directly
-      // TODO: Create admin endpoint: PUT /api/admin/restaurants/:id/menu
       try {
-        // Try using restaurant menu update endpoint
-        // This might fail if backend doesn't allow admin to update restaurant menus
         const response = await apiClient.put(
           `/restaurant/menu`,
-          { sections: updatedSections }
+          { 
+            sections: menu.sections || [],
+            addons: menu.addons
+          }
         )
         
         if (!response.data || !response.data.success) {
           throw new Error(response.data?.message || "Failed to update menu")
         }
       } catch (apiError) {
-        // If direct API call fails, we need an admin endpoint
-        // For now, show a helpful error message
         if (apiError.response?.status === 401 || apiError.response?.status === 403) {
           throw new Error("Admin cannot directly update restaurant menus. Please contact developer to add admin menu update endpoint.")
         }
@@ -239,11 +183,11 @@ export default function FoodsList() {
       }
 
       // Remove from local state
-      setFoods(foods.filter(f => f.id !== id))
-      toast.success("Food item deleted successfully")
+      setAddons(addons.filter(a => a.id !== id))
+      toast.success("Addon deleted successfully")
     } catch (error) {
-      console.error("Error deleting food:", error)
-      toast.error(error?.response?.data?.message || "Failed to delete food item")
+      console.error("Error deleting addon:", error)
+      toast.error(error?.response?.data?.message || error?.message || "Failed to delete addon")
     } finally {
       setDeleting(false)
     }
@@ -262,14 +206,14 @@ export default function FoodsList() {
               <div className="w-2 h-2 bg-white rounded-sm"></div>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Food</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Addon</h1>
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-slate-900">Food List</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Addon List</h2>
             <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
-              {filteredFoods.length}
+              {filteredAddons.length}
             </span>
           </div>
 
@@ -277,7 +221,7 @@ export default function FoodsList() {
             <div className="relative flex-1 sm:flex-initial min-w-[200px]">
               <input
                 type="text"
-                placeholder="Ex : Foods"
+                placeholder="Ex : Addons"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
@@ -301,7 +245,10 @@ export default function FoodsList() {
                   Image
                 </th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                  Title
+                  Name
+                </th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  Price
                 </th>
                 <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Action
@@ -311,26 +258,26 @@ export default function FoodsList() {
             <tbody className="bg-white divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-20 text-center">
+                  <td colSpan={5} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
-                      <p className="text-sm text-slate-500">Loading foods from restaurants...</p>
+                      <p className="text-sm text-slate-500">Loading addons from restaurants...</p>
                     </div>
                   </td>
                 </tr>
-              ) : filteredFoods.length === 0 ? (
+              ) : filteredAddons.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-20 text-center">
+                  <td colSpan={5} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
-                      <p className="text-sm text-slate-500">No food items match your search</p>
+                      <p className="text-sm text-slate-500">No addons match your search</p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredFoods.map((food, index) => (
+                filteredAddons.map((addon, index) => (
                   <tr
-                    key={food.id}
+                    key={addon.id}
                     className="hover:bg-slate-50 transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -339,8 +286,8 @@ export default function FoodsList() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center">
                         <img
-                          src={food.image}
-                          alt={food.name}
+                          src={addon.image}
+                          alt={addon.name}
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             e.target.src = "https://via.placeholder.com/40"
@@ -350,18 +297,28 @@ export default function FoodsList() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-slate-900">{food.name}</span>
-                        <span className="text-xs text-slate-500">ID #{formatFoodId(food.id)}</span>
-                        {food.restaurantName && (
+                        <span className="text-sm font-medium text-slate-900">{addon.name}</span>
+                        <span className="text-xs text-slate-500">ID #{formatAddonId(addon.id)}</span>
+                        {addon.restaurantName && (
                           <span className="text-xs text-slate-400 mt-0.5">
-                            {food.restaurantName}
+                            {addon.restaurantName}
+                          </span>
+                        )}
+                        {addon.description && (
+                          <span className="text-xs text-slate-500 mt-0.5">
+                            {addon.description}
                           </span>
                         )}
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm font-medium text-slate-900">
+                        ₹{addon.price.toFixed(2)}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <button
-                        onClick={() => handleDelete(food.id)}
+                        onClick={() => handleDelete(addon.id)}
                         disabled={deleting}
                         className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Delete"
@@ -383,3 +340,4 @@ export default function FoodsList() {
     </div>
   )
 }
+
