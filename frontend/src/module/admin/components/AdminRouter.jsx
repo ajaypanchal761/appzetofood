@@ -16,6 +16,7 @@ import Category from "../pages/categories/Category";
 import ZoneSetup from "../pages/restaurant/ZoneSetup";
 import AddZone from "../pages/restaurant/AddZone";
 import ViewZone from "../pages/restaurant/ViewZone";
+import AllZonesMap from "../pages/restaurant/AllZonesMap";
 import RestaurantsList from "../pages/restaurant/RestaurantsList";
 import JoiningRequest from "../pages/restaurant/JoiningRequest";
 import RestaurantCommission from "../pages/restaurant/RestaurantCommission";
@@ -159,6 +160,7 @@ export default function AdminRouter() {
 
         {/* RESTAURANT MANAGEMENT */}
         <Route path="zone-setup" element={<ZoneSetup />} />
+        <Route path="zone-setup/map" element={<AllZonesMap />} />
         <Route path="zone-setup/add" element={<AddZone />} />
         <Route path="zone-setup/edit/:id" element={<AddZone />} />
         <Route path="zone-setup/view/:id" element={<ViewZone />} />

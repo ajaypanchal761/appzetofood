@@ -41,6 +41,9 @@ import { formatCurrency } from "../../restaurant/utils/currency"
 import { getAllDeliveryOrders } from "../utils/deliveryOrderStatus"
 import { getUnreadDeliveryNotificationCount } from "../utils/deliveryNotifications"
 import { deliveryAPI } from "@/lib/api"
+import { useDeliveryNotifications } from "../hooks/useDeliveryNotifications"
+import { getGoogleMapsApiKey } from "@/lib/utils/googleMapsApiKey"
+import { Loader } from "@googlemaps/js-api-loader"
 import referralBonusBg from "../../../assets/referralbonuscardbg.png"
 import dropLocationBanner from "../../../assets/droplocationbanner.png"
 import alertSound from "../../../assets/audio/alert.mp3"
@@ -150,6 +153,10 @@ export default function DeliveryHome() {
     return stored ? JSON.parse(stored) : null
   })
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(() => getUnreadDeliveryNotificationCount())
+  
+  // Delivery notifications hook
+  const { newOrder, clearNewOrder, isConnected } = useDeliveryNotifications()
+  
   // Default location - Indore, India (based on image)
   const [riderLocation, setRiderLocation] = useState([22.7196, 75.8577]) // Indore coordinates
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false)
@@ -164,9 +171,12 @@ export default function DeliveryHome() {
   const watchPositionIdRef = useRef(null) // Store watchPosition ID for cleanup
   const lastLocationRef = useRef(null) // Store last location for heading calculation
   const bikeMarkerRef = useRef(null) // Store bike marker instance
+  const isUserPanningRef = useRef(false) // Track if user manually panned the map
   const routePolylineRef = useRef(null) // Store route polyline instance
   const routeHistoryRef = useRef([]) // Store route history for traveled path
   const isOnlineRef = useRef(false) // Store online status for use in callbacks
+  const zonesPolygonsRef = useRef([]) // Store zone polygons
+  const [zones, setZones] = useState([]) // Store nearby zones
   const [mapLoading, setMapLoading] = useState(false)
   const [directionsMapLoading, setDirectionsMapLoading] = useState(false)
   const isInitializingMapRef = useRef(false)
@@ -332,7 +342,7 @@ export default function DeliveryHome() {
   const [customerRating, setCustomerRating] = useState(0)
   const [customerReviewText, setCustomerReviewText] = useState("")
   const [routePolyline, setRoutePolyline] = useState([])
-  const [showRoutePath, setShowRoutePath] = useState(true) // Toggle to show/hide route path
+  const [showRoutePath, setShowRoutePath] = useState(false) // Toggle to show/hide route path - disabled by default
   const [reachedPickupButtonProgress, setreachedPickupButtonProgress] = useState(0)
   const [reachedPickupIsAnimatingToComplete, setreachedPickupIsAnimatingToComplete] = useState(false)
   const reachedPickupButtonRef = useRef(null)
@@ -596,13 +606,18 @@ export default function DeliveryHome() {
           setActiveEarningAddon(null)
         }
       } catch (error) {
+        // Suppress network errors - backend might be down or endpoint not available
+        if (error.code === 'ERR_NETWORK') {
+          // Silently handle network errors - backend might not be running
+          setActiveEarningAddon(null)
+          return
+        }
+        
         // Skip logging timeout errors (handled by axios interceptor)
         if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
-          console.error('Error fetching active earning addons:', error)
-          if (error.code === 'ERR_NETWORK') {
-            console.warn('Network error - make sure backend server is running and route is registered')
-          } else {
-            console.error('Error details:', error.response?.data || error.message)
+          // Only log non-network errors
+          if (error.response) {
+            console.error('Error fetching active earning addons:', error.response?.data || error.message)
           }
         }
         setActiveEarningAddon(null)
@@ -809,103 +824,8 @@ export default function DeliveryHome() {
     }
   }
 
-  // Auto-show bottom sheet after 5 seconds when online on delivery home
-  useEffect(() => {
-    // Only trigger on delivery home page
-    const isOnDeliveryHome = location.pathname === '/delivery' || location.pathname === '/delivery/'
-    
-    console.log('[AutoShow] Effect triggered:', { 
-      isOnline, 
-      isOnDeliveryHome, 
-      pathname: location.pathname,
-      hasAutoShown,
-      bookedGigs: bookedGigs.length 
-    })
-    
-    // Clear any existing timer first
-    if (autoShowTimerRef.current) {
-      clearTimeout(autoShowTimerRef.current)
-      autoShowTimerRef.current = null
-    }
-    
-    // Reset auto-show state when going offline or leaving page
-    if (!isOnline || !isOnDeliveryHome) {
-      if (hasAutoShown) {
-        setHasAutoShown(false)
-      }
-      return
-    }
-    
-    // Start timer if: online, on delivery home, and hasn't auto-shown yet
-    // Note: We show the bottom sheet even without booked gigs (it will show mock restaurants)
-    if (isOnDeliveryHome && isOnline && !hasAutoShown) {
-      console.log('[AutoShow] ✅ Starting 5-second timer...')
-      
-      // Set timer for 5 seconds
-      autoShowTimerRef.current = setTimeout(async () => {
-        console.log('[AutoShow] ⏰ Timer fired after 5 seconds!')
-        
-        // Double-check conditions before showing (user might have gone offline)
-        const currentIsOnline = (() => {
-          try {
-            const raw = localStorage.getItem(LS_KEY)
-            const result = raw ? JSON.parse(raw) === true : false
-            console.log('[AutoShow] Current online status from localStorage:', result)
-            return result
-          } catch {
-            return false
-          }
-        })()
-        
-        const stillOnDeliveryHome = location.pathname === '/delivery' || location.pathname === '/delivery/'
-        
-        console.log('[AutoShow] Final conditions check:', { 
-          currentIsOnline, 
-          stillOnDeliveryHome,
-          pathname: location.pathname,
-          mockRestaurants: mockRestaurants.length,
-          selectedRestaurant: !!selectedRestaurant
-        })
-        
-        if (currentIsOnline && stillOnDeliveryHome) {
-          console.log('[AutoShow] 🎉 All conditions met! Showing bottom sheet...')
-          
-          // Show new order popup with first restaurant
-          if (mockRestaurants.length > 0) {
-            setSelectedRestaurant(mockRestaurants[0])
-            setShowNewOrderPopup(true)
-            setCountdownSeconds(300) // Reset countdown to 30 seconds
-            
-            // Audio will be played by the dedicated useEffect when showNewOrderPopup becomes true
-            console.log('[AutoShow] 🍽️ Showing new order popup for:', mockRestaurants[0].name)
-          }
-          
-          setHasAutoShown(true)
-          console.log('[AutoShow] ✅ New order popup shown and marked as shown')
-        } else {
-          console.log('[AutoShow] ❌ Conditions not met, not showing')
-        }
-        
-        autoShowTimerRef.current = null
-      }, 5000)
-      
-      console.log('[AutoShow] ⏱️ Timer set for 5 seconds, ID:', autoShowTimerRef.current)
-    } else {
-      console.log('[AutoShow] ⏸️ Timer not started:', { 
-        isOnDeliveryHome, 
-        isOnline, 
-        hasAutoShown 
-      })
-    }
-    
-    return () => {
-      if (autoShowTimerRef.current) {
-        console.log('[AutoShow] 🧹 Cleaning up timer')
-        clearTimeout(autoShowTimerRef.current)
-        autoShowTimerRef.current = null
-      }
-    }
-  }, [isOnline, hasAutoShown, selectedRestaurant, location.pathname])
+  // Auto-show disabled - Only real orders from Socket.IO will show
+  // Removed mock restaurant auto-show logic
 
   // Countdown timer for new order popup
   useEffect(() => {
@@ -944,9 +864,9 @@ export default function DeliveryHome() {
     }
   }, [showNewOrderPopup, countdownSeconds])
 
-  // Play audio when New Order popup appears
+  // Play audio when New Order popup appears (only for real orders from Socket.IO)
   useEffect(() => {
-    if (showNewOrderPopup && selectedRestaurant) {
+    if (showNewOrderPopup && (newOrder || selectedRestaurant)) {
       // Stop any existing audio first
       if (alertAudioRef.current) {
         alertAudioRef.current.pause()
@@ -1187,8 +1107,8 @@ export default function DeliveryHome() {
           // Update bike marker if map is initialized and user is online
           if (window.deliveryMapInstance) {
             if (isOnlineRef.current) {
-              // Online है तो bike icon show करें
-              createOrUpdateBikeMarker(latitude, longitude, heading)
+              // Online है तो bike icon show करें - center map on exact location
+              createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
               updateRoutePolyline()
             }
             // Offline है तो marker hide रहेगा (blue dot नहीं दिखेगा)
@@ -1280,7 +1200,8 @@ export default function DeliveryHome() {
           if (window.deliveryMapInstance) {
             if (isOnlineRef.current) {
               // Online है तो bike icon show करें (blue dot नहीं)
-              createOrUpdateBikeMarker(latitude, longitude, heading)
+              // Always center map on bike location (Zomato style) unless user is panning
+              createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
             } else {
               // Offline है तो marker hide करें
               if (bikeMarkerRef.current) {
@@ -1955,6 +1876,48 @@ export default function DeliveryHome() {
     }
   }, [])
 
+  // Helper function to calculate time away from distance
+  const calculateTimeAway = useCallback((distanceStr) => {
+    if (!distanceStr) return '0 mins'
+    const distance = parseFloat(distanceStr.replace(' km', ''))
+    if (isNaN(distance)) return '0 mins'
+    // Assume average speed of 30 km/h for delivery
+    const minutes = Math.ceil((distance / 30) * 60)
+    return `${minutes} mins`
+  }, [])
+
+  // Show new order popup when order is received from Socket.IO
+  useEffect(() => {
+    if (newOrder) {
+      console.log('📦 New order received from Socket.IO:', newOrder)
+      
+      // Transform newOrder data to match selectedRestaurant format
+      const restaurantData = {
+        id: newOrder.orderMongoId || newOrder.orderId,
+        orderId: newOrder.orderId,
+        name: newOrder.restaurantName,
+        address: newOrder.restaurantLocation?.address || 'Restaurant address',
+        lat: newOrder.restaurantLocation?.latitude,
+        lng: newOrder.restaurantLocation?.longitude,
+        distance: newOrder.pickupDistance || '0 km',
+        timeAway: calculateTimeAway(newOrder.pickupDistance),
+        dropDistance: newOrder.deliveryDistance || '0 km',
+        pickupDistance: newOrder.pickupDistance || '0 km',
+        estimatedEarnings: newOrder.estimatedEarnings || 0,
+        customerName: newOrder.customerName,
+        customerAddress: newOrder.customerLocation?.address || 'Customer address',
+        customerLat: newOrder.customerLocation?.latitude,
+        customerLng: newOrder.customerLocation?.longitude,
+        items: newOrder.items || [],
+        total: newOrder.total || 0
+      }
+      
+      setSelectedRestaurant(restaurantData)
+      setShowNewOrderPopup(true)
+      setCountdownSeconds(300) // Reset countdown to 5 minutes
+    }
+  }, [newOrder, calculateTimeAway])
+
   // Handle online toggle - check for booked gigs
   const handleToggleOnline = () => {
     if (isOnline) {
@@ -2316,27 +2279,55 @@ export default function DeliveryHome() {
 
     console.log('📍 Starting map initialization...');
 
-    // Wait for Google Maps to load
-    if (!window.google || !window.google.maps) {
-      console.log('📍 Waiting for Google Maps API to load...');
-      let attempts = 0;
-      const maxAttempts = 50; // 5 seconds max wait
-      const checkInterval = setInterval(() => {
-        attempts++;
-        if (window.google && window.google.maps) {
-          clearInterval(checkInterval);
-          console.log('✅ Google Maps API loaded, initializing map...');
-          initializeGoogleMap();
-        } else if (attempts >= maxAttempts) {
-          clearInterval(checkInterval);
-          console.error('❌ Google Maps API failed to load after 5 seconds');
-          setMapLoading(false);
+    // Load Google Maps if not already loaded
+    const loadGoogleMapsIfNeeded = async () => {
+      // Wait for Google Maps to load from main.jsx first
+      if (!window.google || !window.google.maps) {
+        console.log('📍 Waiting for Google Maps API to load...');
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max wait
+        
+        while (!window.google && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
         }
-      }, 100);
-      return () => clearInterval(checkInterval);
-    }
 
-    initializeGoogleMap();
+        // If still not loaded, try loading it ourselves
+        if (!window.google || !window.google.maps) {
+          console.log('📍 Google Maps not loaded from main.jsx, loading manually...');
+          try {
+            const apiKey = await getGoogleMapsApiKey();
+            if (apiKey) {
+              const loader = new Loader({
+                apiKey: apiKey,
+                version: "weekly",
+                libraries: ["places", "geometry", "drawing"]
+              });
+              await loader.load();
+              console.log('✅ Google Maps loaded manually');
+            } else {
+              console.error('❌ No Google Maps API key found');
+              setMapLoading(false);
+              return;
+            }
+          } catch (error) {
+            console.error('❌ Error loading Google Maps:', error);
+            setMapLoading(false);
+            return;
+          }
+        }
+      }
+
+      // Initialize map once Google Maps is loaded
+      if (window.google && window.google.maps) {
+        initializeGoogleMap();
+      } else {
+        console.error('❌ Google Maps API still not available');
+        setMapLoading(false);
+      }
+    };
+
+    loadGoogleMapsIfNeeded();
 
     function initializeGoogleMap() {
       try {
@@ -2375,6 +2366,35 @@ export default function DeliveryHome() {
         window.deliveryMapInstance = map;
         console.log('✅ Map instance created and stored');
 
+        // Track user panning to disable auto-center when user manually moves map
+        let isUserPanning = false;
+        let panTimeout = null;
+        
+        map.addListener('dragstart', () => {
+          isUserPanning = true;
+          isUserPanningRef.current = true;
+          if (panTimeout) clearTimeout(panTimeout);
+        });
+        
+        map.addListener('dragend', () => {
+          // Re-enable auto-center after 5 seconds of no panning
+          panTimeout = setTimeout(() => {
+            isUserPanning = false;
+            isUserPanningRef.current = false;
+          }, 5000);
+        });
+        
+        // Also track zoom changes as user interaction
+        map.addListener('zoom_changed', () => {
+          isUserPanning = true;
+          isUserPanningRef.current = true;
+          if (panTimeout) clearTimeout(panTimeout);
+          panTimeout = setTimeout(() => {
+            isUserPanning = false;
+            isUserPanningRef.current = false;
+          }, 5000);
+        });
+
         // Restore preserved state if coming back from navigation
         if (preservedState) {
           if (preservedState.center && preservedState.zoom) {
@@ -2389,7 +2409,8 @@ export default function DeliveryHome() {
             createOrUpdateBikeMarker(
               preservedState.bikeMarkerPosition.lat, 
               preservedState.bikeMarkerPosition.lng, 
-              preservedState.bikeMarkerHeading
+              preservedState.bikeMarkerHeading,
+              false // Don't center when restoring from navigation
             );
           }
           
@@ -2411,7 +2432,7 @@ export default function DeliveryHome() {
             // Use ref to get latest online status
             if (isOnlineRef.current) {
               console.log('📍 Creating bike marker on map init - user is online');
-              createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null);
+              createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, true);
             } else {
               console.log('📍 Skipping bike marker - user is offline');
             }
@@ -2429,6 +2450,10 @@ export default function DeliveryHome() {
               }
             }, 500);
           }
+          // Load and draw nearby zones after map is ready
+          setTimeout(() => {
+            fetchAndDrawNearbyZones();
+          }, 1000);
         });
 
         console.log('✅ Google Map initialized');
@@ -2488,7 +2513,7 @@ export default function DeliveryHome() {
       console.log('✅ User went ONLINE - creating/updating bike marker immediately at:', riderLocation);
 
       // Create or update bike marker IMMEDIATELY (blue dot की जगह bike icon)
-      createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], heading);
+      createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], heading, true);
       
       // Center map on bike location smoothly
       window.deliveryMapInstance.panTo({
@@ -2516,11 +2541,7 @@ export default function DeliveryHome() {
           const parsed = JSON.parse(savedLocation)
           if (parsed && Array.isArray(parsed) && parsed.length === 2) {
             console.log('📍 Using saved location from localStorage:', parsed)
-            createOrUpdateBikeMarker(parsed[0], parsed[1], null)
-            window.deliveryMapInstance.panTo({
-              lat: parsed[0],
-              lng: parsed[1]
-            })
+            createOrUpdateBikeMarker(parsed[0], parsed[1], null, true)
           }
         } catch (e) {
           console.warn('⚠️ Error using saved location:', e)
@@ -2542,12 +2563,12 @@ export default function DeliveryHome() {
           const markerMap = bikeMarkerRef.current.getMap();
           if (markerMap === null) {
             console.warn('⚠️ Bike marker lost map reference, re-adding...');
-            createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null);
+            createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, false);
           }
         } else {
           // Marker doesn't exist, create it
           console.warn('⚠️ Bike marker missing, creating...');
-          createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null);
+          createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, false);
         }
       }
     }, 2000); // Check every 2 seconds
@@ -2587,8 +2608,8 @@ export default function DeliveryHome() {
     return heading
   }
 
-  // Google Maps marker functions
-  const createOrUpdateBikeMarker = (latitude, longitude, heading = null) => {
+  // Google Maps marker functions - Zomato style exact location tracking
+  const createOrUpdateBikeMarker = (latitude, longitude, heading = null, shouldCenterMap = true) => {
     if (!window.google || !window.google.maps || !window.deliveryMapInstance) {
       console.warn("⚠️ Google Maps not available");
       return;
@@ -2597,16 +2618,8 @@ export default function DeliveryHome() {
     const position = new window.google.maps.LatLng(latitude, longitude);
     const map = window.deliveryMapInstance;
 
-    console.log('🚲 Creating/updating bike marker:', { 
-      latitude, 
-      longitude, 
-      heading,
-      markerExists: !!bikeMarkerRef.current,
-      isOnline: isOnlineRef.current
-    });
-
     if (!bikeMarkerRef.current) {
-      // Create bike marker with custom icon
+      // Create bike marker with custom icon - exact position
       const bikeIcon = {
         url: bikeLogo,
         scaledSize: new window.google.maps.Size(60, 60), // Larger size for better visibility
@@ -2618,14 +2631,15 @@ export default function DeliveryHome() {
         position: position,
         map: map,
         icon: bikeIcon,
-        optimized: false,
+        optimized: false, // Disable optimization for exact positioning
         animation: window.google.maps.Animation.DROP // Drop animation on first appearance
       });
       
-      console.log('✅ Bike marker created successfully:', {
-        position: bikeMarkerRef.current.getPosition()?.toString(),
-        map: !!bikeMarkerRef.current.getMap()
-      });
+      // Center map on bike location initially
+      if (shouldCenterMap) {
+        map.setCenter(position);
+        map.setZoom(15); // Good zoom level for tracking
+      }
       
       // Remove animation after drop completes
       setTimeout(() => {
@@ -2637,88 +2651,40 @@ export default function DeliveryHome() {
       // ALWAYS ensure marker is on the map (prevent it from disappearing)
       if (bikeMarkerRef.current.getMap() === null) {
         bikeMarkerRef.current.setMap(map);
-        console.log('✅ Bike marker re-added to map (was missing)');
       }
       
-      // Smooth update position and rotation
-      const currentPosition = bikeMarkerRef.current.getPosition();
-      if (currentPosition) {
-        // Update position first
-        bikeMarkerRef.current.setPosition(position);
-        // Then pan map smoothly
-        map.panTo(position);
-      } else {
-        bikeMarkerRef.current.setPosition(position);
-      }
+      // Update position EXACTLY - use setPosition for precise location
+      bikeMarkerRef.current.setPosition(position);
       
-      // Update icon with rotation
+      // Update icon with rotation for smooth movement
       const bikeIcon = {
         url: bikeLogo,
         scaledSize: new window.google.maps.Size(60, 60),
         anchor: new window.google.maps.Point(30, 30),
-        rotation: heading !== null && heading !== undefined ? heading : 0
+        rotation: heading !== null && heading !== undefined ? heading : (bikeMarkerRef.current.getIcon()?.rotation || 0)
       };
       bikeMarkerRef.current.setIcon(bikeIcon);
       
-      // Double-check marker is still on map after update
-      if (bikeMarkerRef.current.getMap() === null) {
-        console.warn('⚠️ Bike marker lost map reference, re-adding...');
-        bikeMarkerRef.current.setMap(map);
+      // Auto-center map on bike location (like Zomato) - only if user hasn't manually panned
+      if (shouldCenterMap && !isUserPanningRef.current) {
+        // Smooth pan to bike location
+        map.panTo(position);
       }
       
-      console.log('✅ Bike marker updated:', { 
-        latitude, 
-        longitude, 
-        heading,
-        position: bikeMarkerRef.current.getPosition()?.toString(),
-        map: !!bikeMarkerRef.current.getMap(),
-        isOnMap: bikeMarkerRef.current.getMap() !== null
-      });
+      // Double-check marker is still on map after update
+      if (bikeMarkerRef.current.getMap() === null) {
+        bikeMarkerRef.current.setMap(map);
+      }
     }
   }
 
-  // Create or update route polyline (blue line showing traveled path)
+  // Create or update route polyline (blue line showing traveled path) - DISABLED
   const updateRoutePolyline = () => {
-    if (!window.google || !window.google.maps || !window.deliveryMapInstance) {
-      return;
+    // Route polyline is disabled - always hide it
+    if (routePolylineRef.current) {
+      routePolylineRef.current.setMap(null);
     }
-
-    if (!showRoutePath) {
-      // Hide polyline if showRoutePath is false
-      if (routePolylineRef.current) {
-        routePolylineRef.current.setMap(null);
-      }
-      return;
-    }
-
-    const map = window.deliveryMapInstance;
-    const routeHistory = routeHistoryRef.current;
-
-    if (routeHistory.length < 2) {
-      return; // Need at least 2 points to draw a line
-    }
-
-    // Convert route history to Google Maps LatLng array
-    const path = routeHistory.map(point => ({
-      lat: point.lat,
-      lng: point.lng
-    }));
-
-    if (!routePolylineRef.current) {
-      // Create new polyline
-      routePolylineRef.current = new window.google.maps.Polyline({
-        path: path,
-        geodesic: true,
-        strokeColor: '#4285F4', // Google Blue color
-        strokeOpacity: 1.0,
-        strokeWeight: 6, // Line thickness
-        map: map
-      });
-    } else {
-      // Update existing polyline path
-      routePolylineRef.current.setPath(path);
-      routePolylineRef.current.setMap(map); // Ensure it's visible
-    }
+    return;
   }
 
   const createOrUpdateBlueDotMarker = (latitude, longitude) => {
@@ -3175,6 +3141,117 @@ export default function DeliveryHome() {
 
   const nextSlot = getNextAvailableSlot()
 
+  // Fetch zones within 70km radius from backend
+  const fetchAndDrawNearbyZones = async () => {
+    if (!riderLocation || riderLocation.length !== 2 || !window.google || !window.deliveryMapInstance) {
+      return
+    }
+
+    try {
+      const [riderLat, riderLng] = riderLocation
+      const response = await deliveryAPI.getZonesInRadius(riderLat, riderLng, 70)
+      
+      if (response.data?.success && response.data.data?.zones) {
+        const nearbyZones = response.data.data.zones
+        setZones(nearbyZones)
+        drawZonesOnMap(nearbyZones)
+      }
+    } catch (error) {
+      // Suppress network errors - backend might be down or endpoint not available
+      if (error.code === 'ERR_NETWORK') {
+        // Silently handle network errors - backend might not be running
+        return
+      }
+      // Only log non-network errors
+      if (error.response) {
+        console.error("Error fetching zones:", error.response?.data || error.message)
+      }
+    }
+  }
+
+  // Draw zones on map
+  const drawZonesOnMap = (zonesToDraw) => {
+    if (!window.google || !window.deliveryMapInstance || !zonesToDraw || zonesToDraw.length === 0) {
+      return
+    }
+
+    // Clear previous zones
+    zonesPolygonsRef.current.forEach(polygon => {
+      if (polygon) polygon.setMap(null)
+    })
+    zonesPolygonsRef.current = []
+
+    const map = window.deliveryMapInstance
+    // Light orange color for all zones
+    const lightOrangeColor = "#FFB84D" // Light orange
+    const strokeColor = "#FF9500" // Slightly darker orange for border
+
+    zonesToDraw.forEach((zone, index) => {
+      if (!zone.coordinates || zone.coordinates.length < 3) return
+
+      // Convert coordinates to LatLng array
+      const path = zone.coordinates.map(coord => {
+        const lat = typeof coord === 'object' ? (coord.latitude || coord.lat) : null
+        const lng = typeof coord === 'object' ? (coord.longitude || coord.lng) : null
+        if (lat === null || lng === null) return null
+        return new window.google.maps.LatLng(lat, lng)
+      }).filter(Boolean)
+
+      if (path.length < 3) return
+
+      const restaurantName = zone.restaurantId && typeof zone.restaurantId === 'object' 
+        ? zone.restaurantId.name 
+        : 'Unknown Restaurant'
+
+      // Create polygon with light orange fill
+      const polygon = new window.google.maps.Polygon({
+        paths: path,
+        strokeColor: strokeColor,
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: lightOrangeColor,
+        fillOpacity: 0.3, // Light fill opacity for better visibility
+        editable: false,
+        draggable: false,
+        clickable: true,
+        zIndex: 1
+      })
+
+      polygon.setMap(map)
+      zonesPolygonsRef.current.push(polygon)
+
+      // Add info window
+      const infoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 12px; min-width: 200px;">
+            <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #1e293b;">
+              ${zone.name || 'Unnamed Zone'}
+            </h3>
+            <div style="font-size: 13px; color: #64748b; line-height: 1.6;">
+              <div style="margin-bottom: 4px;">
+                <strong>Restaurant:</strong> ${restaurantName}
+              </div>
+              <div style="margin-bottom: 4px;">
+                <strong>Location:</strong> ${zone.serviceLocation || 'N/A'}
+              </div>
+            </div>
+          </div>
+        `
+      })
+
+      polygon.addListener('click', () => {
+        infoWindow.setPosition(path[0])
+        infoWindow.open(map)
+      })
+    })
+  }
+
+  // Fetch zones when map is ready and location changes
+  useEffect(() => {
+    if (!mapLoading && window.deliveryMapInstance && riderLocation && riderLocation.length === 2) {
+      fetchAndDrawNearbyZones()
+    }
+  }, [mapLoading, riderLocation])
 
   // Render normal feed view when offline or no gig booked
   return (
@@ -3481,14 +3558,9 @@ export default function DeliveryHome() {
                     // Update bike marker (only if online - blue dot नहीं, bike icon)
                     if (window.deliveryMapInstance) {
                       if (isOnlineRef.current) {
-                        createOrUpdateBikeMarker(latitude, longitude, heading)
+                        // Center map automatically (Zomato style) unless user is panning
+                        createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
                         updateRoutePolyline()
-                        
-                        // Center map on location
-                        window.deliveryMapInstance.panTo({
-                          lat: latitude,
-                          lng: longitude
-                        })
                       } else {
                         // Offline है तो marker hide करें
                         if (bikeMarkerRef.current) {
@@ -4204,7 +4276,7 @@ export default function DeliveryHome() {
 
       {/* New Order Popup with Countdown Timer - Custom Implementation */}
       <AnimatePresence>
-        {showNewOrderPopup && selectedRestaurant && isOnline && (
+        {showNewOrderPopup && (newOrder || selectedRestaurant) && isOnline && (
           <>
             {/* Backdrop */}
             <motion.div
@@ -4322,10 +4394,10 @@ export default function DeliveryHome() {
                   <div className="mb-5">
                     <p className="text-gray-500 text-sm mb-1">Estimated earnings</p>
                     <p className="text-4xl font-bold text-gray-900 mb-2">
-                      ₹{selectedRestaurant?.estimatedEarnings?.toFixed(2) || '0.00'}
+                      ₹{(newOrder?.estimatedEarnings || selectedRestaurant?.estimatedEarnings || 0).toFixed(2)}
                     </p>
                     <p className="text-gray-400 text-xs">
-                      Pickup: {selectedRestaurant?.pickupDistance || '0 km'} | Drop: {selectedRestaurant?.dropDistance || '0 km'}
+                      Pickup: {newOrder?.pickupDistance || selectedRestaurant?.pickupDistance || '0 km'} | Drop: {newOrder?.deliveryDistance || selectedRestaurant?.dropDistance || '0 km'}
                     </p>
                   </div>
 
@@ -4333,7 +4405,7 @@ export default function DeliveryHome() {
                   <div className="mb-4">
                     <p className="text-gray-500 text-xs mb-1">Order ID</p>
                     <p className="text-base font-semibold text-gray-900">
-                      {selectedRestaurant?.orderId || 'ORD1234567890'}
+                      {newOrder?.orderId || selectedRestaurant?.orderId || 'ORD1234567890'}
                     </p>
                   </div>
 
@@ -4346,20 +4418,20 @@ export default function DeliveryHome() {
                     </div>
                     
                     <h3 className="text-lg font-bold text-gray-900 mb-1">
-                      {selectedRestaurant?.name || 'Restaurant'}
+                      {newOrder?.restaurantName || selectedRestaurant?.name || 'Restaurant'}
                     </h3>
                     <p className="text-sm text-gray-600 mb-3 leading-relaxed">
-                      {selectedRestaurant?.address || 'Address'}
+                      {newOrder?.restaurantLocation?.address || selectedRestaurant?.address || 'Address'}
                     </p>
                     
                     <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-2">
                       <Clock className="w-4 h-4" />
-                      <span>{selectedRestaurant?.timeAway || '0 mins'} away</span>
+                      <span>{selectedRestaurant?.timeAway || (newOrder?.pickupDistance ? calculateTimeAway(newOrder.pickupDistance) : '0 mins')} away</span>
                     </div>
                     
                     <div className="flex items-center gap-1.5 text-gray-500 text-sm">
                       <MapPin className="w-4 h-4" />
-                      <span>{selectedRestaurant?.distance || '0 km'} away</span>
+                      <span>{newOrder?.pickupDistance || selectedRestaurant?.distance || '0 km'} away</span>
                     </div>
                   </div>
 

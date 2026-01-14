@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import Lenis from "lenis"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
+import { restaurantAPI } from "@/lib/api"
 import {
   ArrowLeft,
   Printer,
@@ -13,10 +14,11 @@ import {
   MapPin,
   CheckCircle,
   XCircle,
+  Loader2,
 } from "lucide-react"
 
-// Mock order data - in real app, this would come from API
-const getOrderData = (orderId) => {
+// Mock order data - fallback for testing
+const getMockOrderData = (orderId) => {
   // Match data from AllOrdersPage mock orders
   const orders = {
     "7593519447": {
@@ -106,18 +108,96 @@ const getOrderData = (orderId) => {
     }
   }
   
-  return orders[orderId] || orders["7593519447"]
+  return orders[orderId] || null
 }
 
 export default function OrderDetails() {
   const navigate = useNavigate()
   const { orderId } = useParams()
-  const orderData = getOrderData(orderId)
+  
+  // State for order data
+  const [orderData, setOrderData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   
   // Toast state
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState("")
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
+
+  // Fetch order data from API
+  useEffect(() => {
+    const fetchOrder = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        
+        const response = await restaurantAPI.getOrderById(orderId)
+        
+        if (response.data?.success && response.data.data?.order) {
+          const order = response.data.data.order
+          
+          // Transform API order data to match component structure
+          const transformedOrder = {
+            id: order.orderId || order._id,
+            status: order.status?.toUpperCase() || 'PENDING',
+            date: new Date(order.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+            time: new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+            restaurant: order.restaurantName || 'Restaurant',
+            address: order.address?.street || order.address?.city || 'Address not available',
+            customer: {
+              name: order.userId?.name || 'Customer',
+              orderCount: 1,
+              location: `${order.address?.city || ''}, ${order.address?.state || ''}`.trim(),
+              distance: 'N/A'
+            },
+            items: order.items?.map(item => ({
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+              type: item.isVeg ? 'Veg' : 'Non-Veg'
+            })) || [],
+            billing: {
+              itemSubtotal: order.pricing?.subtotal || 0,
+              taxes: order.pricing?.tax || 0,
+              total: order.pricing?.total || 0,
+              paymentStatus: order.payment?.status === 'completed' ? 'PAID' : 'PENDING'
+            },
+            reason: order.cancellationReason || '',
+            timeline: [
+              { event: 'Order placed', timestamp: new Date(order.createdAt).toLocaleString('en-GB'), status: 'completed' },
+              ...(order.status === 'confirmed' ? [{ event: 'Order confirmed', timestamp: order.tracking?.confirmed?.timestamp ? new Date(order.tracking.confirmed.timestamp).toLocaleString('en-GB') : '', status: 'completed' }] : []),
+              ...(order.status === 'preparing' ? [{ event: 'Preparing', timestamp: order.tracking?.preparing?.timestamp ? new Date(order.tracking.preparing.timestamp).toLocaleString('en-GB') : '', status: 'completed' }] : []),
+              ...(order.status === 'ready' ? [{ event: 'Ready for pickup', timestamp: order.tracking?.ready?.timestamp ? new Date(order.tracking.ready.timestamp).toLocaleString('en-GB') : '', status: 'completed' }] : []),
+              ...(order.status === 'out_for_delivery' ? [{ event: 'Out for delivery', timestamp: order.tracking?.outForDelivery?.timestamp ? new Date(order.tracking.outForDelivery.timestamp).toLocaleString('en-GB') : '', status: 'completed' }] : []),
+              ...(order.status === 'delivered' ? [{ event: 'Delivered', timestamp: order.tracking?.delivered?.timestamp ? new Date(order.tracking.delivered.timestamp).toLocaleString('en-GB') : '', status: 'completed' }] : []),
+              ...(order.status === 'cancelled' ? [{ event: 'Cancelled', timestamp: order.cancelledAt ? new Date(order.cancelledAt).toLocaleString('en-GB') : '', status: 'rejected', reason: order.cancellationReason }] : [])
+            ]
+          }
+          
+          setOrderData(transformedOrder)
+        } else {
+          throw new Error('Order not found')
+        }
+      } catch (err) {
+        console.error('Error fetching order:', err)
+        setError(err.response?.data?.message || err.message || 'Failed to fetch order')
+        
+        // Try fallback to mock data for testing
+        const mockData = getMockOrderData(orderId)
+        if (mockData) {
+          setOrderData(mockData)
+          setError(null)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (orderId) {
+      fetchOrder()
+    }
+  }, [orderId])
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -140,6 +220,7 @@ export default function OrderDetails() {
   }, [])
 
   const handleCopyOrderId = () => {
+    if (!orderData?.id) return
     navigator.clipboard.writeText(orderData.id)
     setToastMessage("Order ID copied to clipboard")
     setShowToast(true)
@@ -418,6 +499,56 @@ export default function OrderDetails() {
     }
   }
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading order details...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error && !orderData) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full mx-4 text-center">
+          <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Not Found</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <button
+            onClick={() => navigate('/restaurant/orders')}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-6 rounded-lg transition-colors"
+          >
+            Back to Orders
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // No order data
+  if (!orderData) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full mx-4 text-center">
+          <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Not Found</h2>
+          <p className="text-gray-600 mb-6">The order you're looking for doesn't exist.</p>
+          <button
+            onClick={() => navigate('/restaurant/orders')}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-6 rounded-lg transition-colors"
+          >
+            Back to Orders
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
@@ -433,7 +564,7 @@ export default function OrderDetails() {
           <div className="flex-1 min-w-0">
             <h1 className="text-base font-bold text-gray-900">Order details</h1>
             <p className="text-xs text-gray-600 truncate">
-              ID: {orderData.id}, {orderData.restaurant.substring(0, 20)}...
+              ID: {orderData.id}, {orderData.restaurant?.substring(0, 20) || 'Restaurant'}...
             </p>
           </div>
           <div className="flex items-center gap-2">

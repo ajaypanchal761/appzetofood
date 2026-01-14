@@ -11,6 +11,7 @@ import { getInventory, updateInventory, getInventoryByRestaurantId } from './con
 import { addStaff, getStaff, getStaffById, updateStaff, deleteStaff } from './controllers/staffManagementController.js';
 import { createOffer, getOffers, getOfferById, updateOfferStatus, deleteOffer, getCouponsByItemId, getCouponsByItemIdPublic } from './controllers/offerController.js';
 import categoryRoutes from './routes/categoryRoutes.js';
+import restaurantOrderRoutes from './routes/restaurantOrderRoutes.js';
 
 const router = express.Router();
 
@@ -63,6 +64,10 @@ router.get('/staff', authenticate, getStaff);
 router.get('/staff/:id', authenticate, getStaffById);
 router.put('/staff/:id', authenticate, updateStaff);
 router.delete('/staff/:id', authenticate, deleteStaff);
+
+// Order routes (authenticated - for restaurant module)
+// Must come BEFORE /:id route to avoid route conflicts (/:id would match /orders)
+router.use('/', restaurantOrderRoutes);
 
 // Restaurant routes (public - for user module)
 router.get('/list', getRestaurants);

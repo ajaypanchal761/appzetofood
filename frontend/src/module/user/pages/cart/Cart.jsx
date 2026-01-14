@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { useCart } from "../../context/CartContext"
 import { useProfile } from "../../context/ProfileContext"
 import { useOrders } from "../../context/OrdersContext"
+import { useLocation as useUserLocation } from "../../hooks/useLocation"
 import { orderAPI, restaurantAPI, API_ENDPOINTS } from "@/lib/api"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
@@ -18,18 +19,35 @@ import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
 /**
  * Format full address string from address object
- * @param {Object} address - Address object with street, additionalDetails, city, state, zipCode
+ * @param {Object} address - Address object with street, additionalDetails, city, state, zipCode, or formattedAddress
  * @returns {String} Formatted address string
  */
 const formatFullAddress = (address) => {
   if (!address) return ""
+  
+  // Priority 1: Use formattedAddress if available (for live location addresses)
+  if (address.formattedAddress && address.formattedAddress !== "Select location") {
+    return address.formattedAddress
+  }
+  
+  // Priority 2: Build address from parts
   const addressParts = []
   if (address.street) addressParts.push(address.street)
   if (address.additionalDetails) addressParts.push(address.additionalDetails)
   if (address.city) addressParts.push(address.city)
   if (address.state) addressParts.push(address.state)
   if (address.zipCode) addressParts.push(address.zipCode)
-  return addressParts.length > 0 ? addressParts.join(', ') : ""
+  
+  if (addressParts.length > 0) {
+    return addressParts.join(', ')
+  }
+  
+  // Priority 3: Use address field if available
+  if (address.address && address.address !== "Select location") {
+    return address.address
+  }
+  
+  return ""
 }
 
 export default function Cart() {
@@ -37,6 +55,7 @@ export default function Cart() {
   const { cart, updateQuantity, addToCart, getCartCount, clearCart } = useCart()
   const { getDefaultAddress, getDefaultPaymentMethod, addresses, paymentMethods, userProfile } = useProfile()
   const { createOrder } = useOrders()
+  const { location: currentLocation } = useUserLocation() // Get live location address
   
   const [showCoupons, setShowCoupons] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState(null)
@@ -69,7 +88,23 @@ export default function Cart() {
   
 
   const cartCount = getCartCount()
-  const defaultAddress = getDefaultAddress()
+  const savedAddress = getDefaultAddress()
+  // Priority: Use live location if available, otherwise use saved address
+  const defaultAddress = currentLocation?.formattedAddress && currentLocation.formattedAddress !== "Select location" 
+    ? {
+        ...savedAddress,
+        formattedAddress: currentLocation.formattedAddress,
+        address: currentLocation.address || currentLocation.formattedAddress,
+        street: currentLocation.street || currentLocation.address,
+        city: currentLocation.city,
+        state: currentLocation.state,
+        zipCode: currentLocation.postalCode,
+        area: currentLocation.area,
+        location: currentLocation.latitude && currentLocation.longitude ? {
+          coordinates: [currentLocation.longitude, currentLocation.latitude]
+        } : savedAddress?.location
+      }
+    : savedAddress
   const defaultPayment = getDefaultPaymentMethod()
   
   // Get restaurant ID from cart or restaurant data
@@ -804,8 +839,8 @@ export default function Cart() {
               <div className="min-w-0">
                 <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">{restaurantName}</p>
                 <p className="text-sm md:text-base font-medium text-gray-800 dark:text-white truncate">
-                  {restaurantData?.estimatedDeliveryTime || "10-15 mins"} to <span className="font-semibold">{defaultAddress?.label || "Home"}</span>
-                  <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs md:text-sm">{defaultAddress?.city || defaultAddress?.area || "Select address"}</span>
+                  {restaurantData?.estimatedDeliveryTime || "10-15 mins"} to <span className="font-semibold">Location</span>
+                  <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs md:text-sm">{defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || defaultAddress?.city || "Select address") : "Select address"}</span>
                 </p>
               </div>
             </div>
@@ -1142,10 +1177,10 @@ export default function Cart() {
                     <MapPin className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
                     <div>
                       <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">
-                        Delivery at <span className="font-semibold">{defaultAddress?.isDefault ? "Home" : "Address"}</span>
+                        Delivery at <span className="font-semibold">Location</span>
                       </p>
-                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
-                        {defaultAddress ? (formatFullAddress(defaultAddress) || "Add delivery address") : "Add delivery address"}
+                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+                        {defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || "Add delivery address") : "Add delivery address"}
                       </p>
                       <button className="text-xs md:text-sm text-gray-500 dark:text-gray-400 border-b border-dashed border-gray-400 dark:border-gray-600">Add instructions for delivery partner</button>
                     </div>
@@ -1333,7 +1368,10 @@ export default function Cart() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900">Delivering to Home</p>
+                  <p className="text-lg font-semibold text-gray-900">Delivering to Location</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || "Address") : "Add address"}
+                  </p>
                   <p className="text-sm text-gray-500">
                     {defaultAddress ? (formatFullAddress(defaultAddress) || "Address") : "Address"}
                   </p>
@@ -1464,7 +1502,7 @@ export default function Cart() {
                 </h2>
               </div>
               <p className="text-gray-500 text-base">
-                {defaultAddress ? (formatFullAddress(defaultAddress) || "Delivery Address") : "Delivery Address"}
+                {defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || "Delivery Address") : "Delivery Address"}
               </p>
             </div>
 

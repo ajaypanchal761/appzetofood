@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import winston from 'winston';
 import { calculateOrderPricing } from '../services/orderCalculationService.js';
 import { getRazorpayCredentials } from '../../../shared/utils/envService.js';
+import { notifyRestaurantNewOrder } from '../services/restaurantNotificationService.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -57,37 +58,55 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // Check if restaurant is accepting orders
-    if (restaurantId) {
-      let restaurant = null;
-      // Try to find restaurant by restaurantId, _id, or slug
-      if (mongoose.Types.ObjectId.isValid(restaurantId) && restaurantId.length === 24) {
-        restaurant = await Restaurant.findById(restaurantId);
-      }
-      if (!restaurant) {
-        restaurant = await Restaurant.findOne({
-          $or: [
-            { restaurantId: restaurantId },
-            { slug: restaurantId }
-          ]
-        });
-      }
-
-      if (restaurant) {
-        if (!restaurant.isAcceptingOrders) {
-          return res.status(403).json({
-            success: false,
-            message: 'Restaurant is currently not accepting orders'
-          });
-        }
-        if (!restaurant.isActive) {
-          return res.status(403).json({
-            success: false,
-            message: 'Restaurant is currently inactive'
-          });
-        }
-      }
+    // Validate and assign restaurant - order goes to the restaurant whose food was ordered
+    if (!restaurantId || restaurantId === 'unknown') {
+      return res.status(400).json({
+        success: false,
+        message: 'Restaurant ID is required. Please select a restaurant.'
+      });
     }
+
+    let assignedRestaurantId = restaurantId;
+    let assignedRestaurantName = restaurantName;
+
+    // Find and validate the restaurant
+    let restaurant = null;
+    // Try to find restaurant by restaurantId, _id, or slug
+    if (mongoose.Types.ObjectId.isValid(restaurantId) && restaurantId.length === 24) {
+      restaurant = await Restaurant.findById(restaurantId);
+    }
+    if (!restaurant) {
+      restaurant = await Restaurant.findOne({
+        $or: [
+          { restaurantId: restaurantId },
+          { slug: restaurantId }
+        ]
+      });
+    }
+
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Restaurant not found'
+      });
+    }
+
+    if (!restaurant.isAcceptingOrders) {
+      return res.status(403).json({
+        success: false,
+        message: 'Restaurant is currently not accepting orders'
+      });
+    }
+
+    if (!restaurant.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'Restaurant is currently inactive'
+      });
+    }
+
+    assignedRestaurantId = restaurant._id?.toString() || restaurant.restaurantId;
+    assignedRestaurantName = restaurant.name;
 
     // Generate order ID before creating order
     const timestamp = Date.now();
@@ -103,8 +122,8 @@ export const createOrder = async (req, res) => {
     const order = new Order({
       orderId: generatedOrderId,
       userId,
-      restaurantId: restaurantId || 'unknown',
-      restaurantName: restaurantName || 'Unknown Restaurant',
+      restaurantId: assignedRestaurantId,
+      restaurantName: assignedRestaurantName,
       items,
       address,
       pricing: {
@@ -122,6 +141,9 @@ export const createOrder = async (req, res) => {
     });
 
     await order.save();
+
+    // Note: Restaurant notification will be sent after payment verification in verifyOrderPayment
+    // This ensures restaurant only receives orders after successful payment
 
     // Create Razorpay order
     let razorpayOrder = null;
@@ -299,7 +321,18 @@ export const verifyOrderPayment = async (req, res) => {
     order.payment.razorpaySignature = razorpaySignature;
     order.payment.transactionId = razorpayPaymentId;
     order.status = 'confirmed';
+    order.tracking.confirmed = { status: true, timestamp: new Date() };
     await order.save();
+
+    // Notify restaurant about confirmed order (payment verified)
+    try {
+      const restaurantId = order.restaurantId?.toString() || order.restaurantId;
+      await notifyRestaurantNewOrder(order, restaurantId);
+      logger.info(`Notified restaurant ${restaurantId} about confirmed order ${order.orderId}`);
+    } catch (notificationError) {
+      logger.error(`Error notifying restaurant after payment verification: ${notificationError.message}`);
+      // Don't fail payment verification if notification fails
+    }
 
     logger.info(`Order payment verified: ${order.orderId}`, {
       orderId: order.orderId,
@@ -388,10 +421,28 @@ export const getOrderDetails = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params;
 
-    const order = await Order.findOne({
-      _id: id,
-      userId
-    }).lean();
+    // Try to find order by MongoDB _id or orderId (custom order ID)
+    let order = null;
+    
+    // First try MongoDB _id if it's a valid ObjectId
+    if (mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
+      order = await Order.findOne({
+        _id: id,
+        userId
+      })
+        .populate('deliveryPartnerId', 'name email phone')
+        .lean();
+    }
+    
+    // If not found, try by orderId (custom order ID like "ORD-123456-789")
+    if (!order) {
+      order = await Order.findOne({
+        orderId: id,
+        userId
+      })
+        .populate('deliveryPartnerId', 'name email phone')
+        .lean();
+    }
 
     if (!order) {
       return res.status(404).json({

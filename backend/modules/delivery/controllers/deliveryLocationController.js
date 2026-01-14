@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import Delivery from '../models/Delivery.js';
+import Zone from '../../admin/models/Zone.js';
 import { validate } from '../../../shared/middleware/validate.js';
 import Joi from 'joi';
 import winston from 'winston';
@@ -138,6 +139,90 @@ export const getLocation = asyncHandler(async (req, res) => {
   } catch (error) {
     logger.error(`Error fetching delivery location: ${error.message}`);
     return errorResponse(res, 500, 'Failed to fetch location');
+  }
+});
+
+/**
+ * Get zones within a radius of delivery boy's location
+ * GET /api/delivery/zones/in-radius
+ * Query params: latitude, longitude, radius (in km, default 70)
+ */
+export const getZonesInRadius = asyncHandler(async (req, res) => {
+  try {
+    const { latitude, longitude, radius = 70 } = req.query;
+
+    // Validate required parameters
+    if (!latitude || !longitude) {
+      return errorResponse(res, 400, 'Latitude and longitude are required');
+    }
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    const radiusKm = parseFloat(radius);
+
+    // Validate coordinates
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return errorResponse(res, 400, 'Invalid latitude or longitude');
+    }
+
+    // Validate radius
+    if (isNaN(radiusKm) || radiusKm <= 0) {
+      return errorResponse(res, 400, 'Radius must be a positive number');
+    }
+
+    // Fetch all active zones
+    const zones = await Zone.find({ isActive: true })
+      .populate('restaurantId', 'name email phone')
+      .lean();
+
+    // Calculate distance from delivery boy's location to each zone center
+    const calculateDistance = (lat1, lng1, lat2, lng2) => {
+      const R = 6371; // Earth's radius in kilometers
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c; // Distance in kilometers
+    };
+
+    // Calculate zone center from coordinates
+    const getZoneCenter = (coordinates) => {
+      if (!coordinates || coordinates.length === 0) return null;
+      let sumLat = 0, sumLng = 0;
+      let count = 0;
+      coordinates.forEach(coord => {
+        const coordLat = typeof coord === 'object' ? (coord.latitude || coord.lat) : null;
+        const coordLng = typeof coord === 'object' ? (coord.longitude || coord.lng) : null;
+        if (coordLat !== null && coordLng !== null) {
+          sumLat += coordLat;
+          sumLng += coordLng;
+          count++;
+        }
+      });
+      return count > 0 ? { lat: sumLat / count, lng: sumLng / count } : null;
+    };
+
+    // Filter zones within radius
+    const nearbyZones = zones.filter(zone => {
+      if (!zone.coordinates || zone.coordinates.length < 3) return false;
+      const center = getZoneCenter(zone.coordinates);
+      if (!center) return false;
+      const distance = calculateDistance(lat, lng, center.lat, center.lng);
+      return distance <= radiusKm;
+    });
+
+    return successResponse(res, 200, 'Zones retrieved successfully', {
+      zones: nearbyZones,
+      count: nearbyZones.length,
+      radius: radiusKm,
+      location: { latitude: lat, longitude: lng }
+    });
+  } catch (error) {
+    logger.error(`Error fetching zones in radius: ${error.message}`);
+    return errorResponse(res, 500, 'Failed to fetch zones');
   }
 });
 

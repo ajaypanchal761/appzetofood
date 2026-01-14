@@ -371,6 +371,35 @@ export const restaurantAPI = {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.ORDERS, { params });
   },
 
+  // Get order by ID
+  getOrderById: (id) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.ORDER_BY_ID.replace(':id', id));
+  },
+
+  // Accept order
+  acceptOrder: (id, preparationTime = null) => {
+    return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_ACCEPT.replace(':id', id), {
+      preparationTime
+    });
+  },
+
+  // Reject order
+  rejectOrder: (id, reason = '') => {
+    return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_REJECT.replace(':id', id), {
+      reason
+    });
+  },
+
+  // Mark order as preparing
+  markOrderPreparing: (id) => {
+    return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_PREPARING.replace(':id', id));
+  },
+
+  // Mark order as ready
+  markOrderReady: (id) => {
+    return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_READY.replace(':id', id));
+  },
+
   // Get wallet
   getWallet: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.WALLET);
@@ -640,6 +669,13 @@ export const deliveryAPI = {
   // Reverify (resubmit for approval)
   reverify: () => {
     return apiClient.post(API_ENDPOINTS.DELIVERY.REVERIFY);
+  },
+
+  // Get zones within radius (for delivery boy to see nearby zones)
+  getZonesInRadius: (latitude, longitude, radius = 70) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.ZONES_IN_RADIUS, {
+      params: { latitude, longitude, radius }
+    });
   },
 };
 

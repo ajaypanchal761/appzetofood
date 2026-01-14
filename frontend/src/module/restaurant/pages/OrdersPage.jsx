@@ -3,26 +3,36 @@ import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
 import BottomNavbar from "../components/BottomNavbar"
 import MenuOverlay from "../components/MenuOverlay"
+import NewOrderNotification from "../components/NewOrderNotification"
+import { useRestaurantNotifications } from "../hooks/useRestaurantNotifications"
 import { 
   Home,
   ShoppingBag,
   Store,
   Wallet,
   Menu,
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { useNavigate } from "react-router-dom"
 import { getOrderStatus, normalizeStatus, matchesOrdersPageFilter, ORDER_STATUS } from "../utils/orderStatus"
 import { getTransactionsByType, getOrderPaymentAmount } from "../utils/walletState"
 import { formatCurrency, usdToInr } from "../utils/currency"
+import { restaurantAPI } from "@/lib/api"
 
 export default function OrdersPage() {
   const navigate = useNavigate()
   const [activeMainTab, setActiveMainTab] = useState("regular")
-  // Always default to "history" filter to show only delivered and refunded orders (past orders)
-  const [activeFilterTab, setActiveFilterTab] = useState("history")
+  // Default to "all" to show all orders (active + history)
+  const [activeFilterTab, setActiveFilterTab] = useState("all")
   const [showMenu, setShowMenu] = useState(false)
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Restaurant notifications hook
+  const { newOrder, clearNewOrder, isConnected } = useRestaurantNotifications()
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -102,196 +112,261 @@ export default function OrdersPage() {
   
   const summaryCards = calculateSummaryCards()
 
-  // Base orders data (static order information)
-  const baseOrders = [
-    {
-      id: 100162,
-      items: 2,
-      timeAgo: "2 days ago",
-      deliveryType: "Home Delivery",
-      amount: 1400.86
-    },
-    {
-      id: 100161,
-      items: 1,
-      timeAgo: "1 week ago",
-      deliveryType: "Home Delivery",
-      amount: 1543.86
-    },
-    {
-      id: 100160,
-      items: 3,
-      timeAgo: "2 weeks ago",
-      deliveryType: "Pickup",
-      amount: 2399.99
-    },
-    {
-      id: 100159,
-      items: 1,
-      timeAgo: "3 weeks ago",
-      deliveryType: "Home Delivery",
-      amount: 850.50
-    },
-    {
-      id: 100158,
-      items: 2,
-      timeAgo: "1 month ago",
-      deliveryType: "Home Delivery",
-      amount: 1200.00
-    },
-    {
-      id: 100157,
-      items: 1,
-      timeAgo: "2 months ago",
-      deliveryType: "Pickup",
-      amount: 650.25
-    },
-    {
-      id: 100156,
-      items: 4,
-      timeAgo: "3 months ago",
-      deliveryType: "Home Delivery",
-      amount: 1850.75
-    },
-    {
-      id: 100155,
-      items: 1,
-      timeAgo: "4 months ago",
-      deliveryType: "Home Delivery",
-      amount: 450.00
-    },
-    {
-      id: 100154,
-      items: 2,
-      timeAgo: "5 months ago",
-      deliveryType: "Pickup",
-      amount: 950.50
-    },
-    {
-      id: 100153,
-      items: 1,
-      timeAgo: "6 months ago",
-      deliveryType: "Home Delivery",
-      amount: 750.25
-    }
-  ]
-
-  // Enrich orders with actual status and amount from localStorage/wallet
-  const [orders, setOrders] = useState(() => {
-    return baseOrders.map(order => {
-      const actualStatus = getOrderStatus(order.id)
-      // Get payment amount from wallet if order is paid
-      const paymentAmount = getOrderPaymentAmount(order.id)
-      return {
-        ...order,
-        status: actualStatus,
-        // Use payment amount if available, otherwise use base amount
-        amount: paymentAmount !== null ? paymentAmount : order.amount
-      }
-    })
-  })
-
-  // Initialize test data and refresh orders when component mounts or when order status is updated
+  // Fetch orders from API
   useEffect(() => {
-    // Set default statuses for test orders if not already set
-    const defaultStatuses = {
-      100162: "Delivered",    // Recent delivered order
-      100161: "Delivered",    // Delivered order
-      100160: "Refunded",     // Refunded order
-      100159: "Delivered",    // Delivered order
-      100158: "Refunded",     // Refunded order
-      100157: "Delivered",    // Delivered order
-      100156: "Delivered",    // Delivered order
-      100155: "Refunded",     // Refunded order
-      100154: "Delivered",    // Delivered order
-      100153: "Delivered"     // Delivered order
-    }
-
-    // Only set if status doesn't exist (don't overwrite user changes)
-    let dataInitialized = false
-    Object.entries(defaultStatuses).forEach(([orderId, status]) => {
-      const key = `order_status_${orderId}`
-      if (!localStorage.getItem(key)) {
-        localStorage.setItem(key, status)
-        dataInitialized = true
-      }
-    })
-
-    const refreshOrders = () => {
-      setOrders(baseOrders.map(order => {
-        const actualStatus = getOrderStatus(order.id)
-        // Get payment amount from wallet if order is paid
-        const paymentAmount = getOrderPaymentAmount(order.id)
-        return {
-          ...order,
-          status: actualStatus,
-          // Use payment amount if available, otherwise use base amount
-          amount: paymentAmount !== null ? paymentAmount : order.amount
+    const fetchOrders = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        
+        const response = await restaurantAPI.getOrders()
+        
+        if (response.data?.success && response.data.data?.orders) {
+          // Transform API orders to match component structure
+          const transformedOrders = response.data.data.orders.map(order => {
+            const createdAt = new Date(order.createdAt)
+            const now = new Date()
+            const diffMs = now - createdAt
+            const diffMins = Math.floor(diffMs / 60000)
+            const diffHours = Math.floor(diffMs / 3600000)
+            const diffDays = Math.floor(diffMs / 86400000)
+            
+            let timeAgo = ""
+            if (diffMins < 1) {
+              timeAgo = "Just now"
+            } else if (diffMins < 60) {
+              timeAgo = `${diffMins} min${diffMins > 1 ? 's' : ''} ago`
+            } else if (diffHours < 24) {
+              timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+            } else if (diffDays < 7) {
+              timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+            } else {
+              const weeks = Math.floor(diffDays / 7)
+              timeAgo = `${weeks} week${weeks > 1 ? 's' : ''} ago`
+            }
+            
+            return {
+              id: order.orderId || order._id,
+              mongoId: order._id,
+              items: order.items?.length || 0,
+              timeAgo: timeAgo,
+              deliveryType: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
+              amount: order.pricing?.total || 0,
+              status: order.status || 'pending',
+              createdAt: order.createdAt,
+              customerName: order.userId?.name || 'Customer',
+              customerPhone: order.userId?.phone || '',
+              address: order.address
+            }
+          })
+          
+          setOrders(transformedOrders)
+        } else {
+          setOrders([])
         }
-      }))
-    }
-
-    // Refresh orders after initializing test data (or on mount)
-    refreshOrders()
-
-    // Listen for storage changes (when order status is updated in OrderDetails)
-    const handleStorageChange = (e) => {
-      if (e.key && e.key.startsWith('order_status_')) {
-        refreshOrders()
+      } catch (err) {
+        console.error('Error fetching orders:', err)
+        setError(err.response?.data?.message || 'Failed to fetch orders')
+        setOrders([])
+      } finally {
+        setLoading(false)
       }
     }
 
-    // Listen for wallet state updates (when payments are added)
-    const handleWalletUpdate = () => {
-      refreshOrders()
-    }
+    fetchOrders()
 
-    window.addEventListener('storage', handleStorageChange)
-    window.addEventListener('orderStatusUpdated', refreshOrders)
-    window.addEventListener('walletStateUpdated', handleWalletUpdate)
+    // Set up interval to refresh orders every 10 seconds (fallback if Socket.IO fails)
+    const refreshInterval = setInterval(() => {
+      fetchOrders()
+    }, 10000)
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('orderStatusUpdated', refreshOrders)
-      window.removeEventListener('walletStateUpdated', handleWalletUpdate)
+      clearInterval(refreshInterval)
     }
   }, [])
 
-  // Calculate filter tab counts dynamically from actual orders (after orders state is defined)
-  // History page only shows history-related filters (no "All" tab)
+  // Refresh orders when new order notification is received
+  useEffect(() => {
+    if (newOrder) {
+      console.log('🔄 New order notification received, refreshing orders list')
+      const fetchOrders = async () => {
+        try {
+          const response = await restaurantAPI.getOrders()
+          if (response.data?.success && response.data.data?.orders) {
+            const transformedOrders = response.data.data.orders.map(order => {
+              const createdAt = new Date(order.createdAt)
+              const now = new Date()
+              const diffMs = now - createdAt
+              const diffMins = Math.floor(diffMs / 60000)
+              const diffHours = Math.floor(diffMs / 3600000)
+              const diffDays = Math.floor(diffMs / 86400000)
+              
+              let timeAgo = ""
+              if (diffMins < 1) {
+                timeAgo = "Just now"
+              } else if (diffMins < 60) {
+                timeAgo = `${diffMins} min${diffMins > 1 ? 's' : ''} ago`
+              } else if (diffHours < 24) {
+                timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+              } else if (diffDays < 7) {
+                timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+              } else {
+                const weeks = Math.floor(diffDays / 7)
+                timeAgo = `${weeks} week${weeks > 1 ? 's' : ''} ago`
+              }
+              
+              return {
+                id: order.orderId || order._id,
+                mongoId: order._id,
+                items: order.items?.length || 0,
+                timeAgo: timeAgo,
+                deliveryType: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
+                amount: order.pricing?.total || 0,
+                status: order.status || 'pending',
+                createdAt: order.createdAt,
+                customerName: order.userId?.name || 'Customer',
+                customerPhone: order.userId?.phone || '',
+                address: order.address
+              }
+            })
+            setOrders(transformedOrders)
+          }
+        } catch (err) {
+          console.error('Error refreshing orders:', err)
+        }
+      }
+      fetchOrders()
+    }
+  }, [newOrder])
+
+  // Refresh orders when new order notification is cleared
+  useEffect(() => {
+    if (!newOrder) {
+      const fetchOrders = async () => {
+        try {
+          const response = await restaurantAPI.getOrders()
+          if (response.data?.success && response.data.data?.orders) {
+            const transformedOrders = response.data.data.orders.map(order => {
+              const createdAt = new Date(order.createdAt)
+              const now = new Date()
+              const diffMs = now - createdAt
+              const diffMins = Math.floor(diffMs / 60000)
+              const diffHours = Math.floor(diffMs / 3600000)
+              const diffDays = Math.floor(diffMs / 86400000)
+              
+              let timeAgo = ""
+              if (diffMins < 1) {
+                timeAgo = "Just now"
+              } else if (diffMins < 60) {
+                timeAgo = `${diffMins} min${diffMins > 1 ? 's' : ''} ago`
+              } else if (diffHours < 24) {
+                timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+              } else if (diffDays < 7) {
+                timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+              } else {
+                const weeks = Math.floor(diffDays / 7)
+                timeAgo = `${weeks} week${weeks > 1 ? 's' : ''} ago`
+              }
+              
+              return {
+                id: order.orderId || order._id,
+                mongoId: order._id,
+                items: order.items?.length || 0,
+                timeAgo: timeAgo,
+                deliveryType: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
+                amount: order.pricing?.total || 0,
+                status: order.status || 'pending',
+                createdAt: order.createdAt,
+                customerName: order.userId?.name || 'Customer',
+                customerPhone: order.userId?.phone || '',
+                address: order.address
+              }
+            })
+            setOrders(transformedOrders)
+          }
+        } catch (err) {
+          console.error('Error refreshing orders:', err)
+        }
+      }
+      fetchOrders()
+    }
+  }, [newOrder])
+
+  // Calculate filter tab counts dynamically from actual orders
+  // Show active orders (pending, confirmed, preparing, ready) and history orders (delivered, cancelled)
   const filterTabs = [
     { 
-      id: "history", 
-      label: "History", 
-      count: orders.filter(o => matchesOrdersPageFilter(o.status, "history")).length 
+      id: "all", 
+      label: "All", 
+      count: orders.length 
+    },
+    { 
+      id: "pending", 
+      label: "Pending", 
+      count: orders.filter(o => o.status === 'pending').length 
+    },
+    { 
+      id: "confirmed", 
+      label: "Confirmed", 
+      count: orders.filter(o => o.status === 'confirmed').length 
+    },
+    { 
+      id: "preparing", 
+      label: "Preparing", 
+      count: orders.filter(o => o.status === 'preparing').length 
+    },
+    { 
+      id: "ready", 
+      label: "Ready", 
+      count: orders.filter(o => o.status === 'ready').length 
     },
     { 
       id: "delivered", 
       label: "Delivered", 
-      count: orders.filter(o => matchesOrdersPageFilter(o.status, "delivered")).length 
+      count: orders.filter(o => o.status === 'delivered').length 
     },
     { 
-      id: "refunded", 
-      label: "Refunded", 
-      count: orders.filter(o => matchesOrdersPageFilter(o.status, "refunded")).length 
+      id: "cancelled", 
+      label: "Cancelled", 
+      count: orders.filter(o => o.status === 'cancelled').length 
     }
   ]
 
   // Filter orders based on active filter tab
   const filteredOrders = orders.filter(order => {
-    return matchesOrdersPageFilter(order.status, activeFilterTab)
+    if (activeFilterTab === 'all') {
+      return true
+    }
+    return order.status === activeFilterTab
   })
 
   // Get status badge color based on order status
   const getStatusBadgeColor = (status) => {
-    const normalized = normalizeStatus(status)
-    if (normalized === ORDER_STATUS.DELIVERED) {
-      return "bg-green-100 text-green-700"
-    } else if (normalized === ORDER_STATUS.REFUNDED) {
-      return "bg-red-100 text-red-700"
-    } else {
-      return "bg-green-100 text-green-700" // Default green for other statuses
+    switch (status?.toLowerCase()) {
+      case 'pending':
+      case 'confirmed':
+        return "bg-yellow-100 text-yellow-700"
+      case 'preparing':
+        return "bg-blue-100 text-blue-700"
+      case 'ready':
+        return "bg-purple-100 text-purple-700"
+      case 'out_for_delivery':
+        return "bg-indigo-100 text-indigo-700"
+      case 'delivered':
+        return "bg-green-100 text-green-700"
+      case 'cancelled':
+        return "bg-red-100 text-red-700"
+      default:
+        return "bg-gray-100 text-gray-700"
     }
+  }
+
+  // Format status for display
+  const formatStatus = (status) => {
+    if (!status) return 'Unknown'
+    return status.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ')
   }
 
   return (
@@ -300,7 +375,7 @@ export default function OrdersPage() {
       <div className="max-w-7xl mx-auto px-4 py-6 pb-24 md:pb-6">
         {/* Title */}
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6 text-center md:text-left">
-          Order History
+          Orders
         </h1>
 
         {/* Main Navigation Tabs */}
@@ -403,39 +478,58 @@ export default function OrdersPage() {
 
         {/* Orders List */}
         <div className="space-y-3 md:space-y-4">
-          {filteredOrders.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <Loader2 className="w-16 h-16 text-gray-400 mx-auto mb-4 animate-spin" />
+              <p className="text-gray-600 text-base md:text-lg">Loading orders...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-red-600 text-base md:text-lg mb-2">Error: {error}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="text-blue-600 hover:underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : filteredOrders.length === 0 ? (
             <div className="text-center py-12">
               <CheckCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600 text-base md:text-lg">No orders found in this category</p>
+              <p className="text-gray-600 text-base md:text-lg">
+                {activeFilterTab === 'all' 
+                  ? 'No orders found' 
+                  : `No ${activeFilterTab} orders found`}
+              </p>
             </div>
           ) : (
             filteredOrders.map((order, index) => (
             <motion.div
-              key={order.id}
+              key={order.id || order.mongoId}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.4 + index * 0.1, ease: [0.4, 0, 0.2, 1] }}
+              transition={{ duration: 0.4, delay: index * 0.1, ease: [0.4, 0, 0.2, 1] }}
               whileHover={{ y: -4, scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
             >
               <Card 
                 className="bg-white shadow-sm border-0 hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => navigate(`/restaurant/orders/${order.id}`)}
+                onClick={() => navigate(`/restaurant/orders/${order.mongoId || order.id}`)}
               >
                 <CardContent className="p-3 md:p-5 py-0 gap-0">
                   {/* Header Row */}
                   <div className="flex items-start justify-between mb-2 md:mb-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-gray-900 font-bold text-sm md:text-base mb-1 leading-tight">
-                        Order # {order.id}
+                        Order #{order.id}
                       </p>
                       <p className="text-gray-500 text-xs md:text-sm mb-1.5">
-                        {order.items} Item{order.items > 1 ? 's' : ''}
+                        {order.items} Item{order.items !== 1 ? 's' : ''} • {order.customerName}
                       </p>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`inline-flex items-center gap-1 ${getStatusBadgeColor(order.status)} text-[10px] md:text-xs font-medium px-2 py-0.5 rounded-full`}>
                           <CheckCircle className="w-2.5 h-2.5 md:w-3 md:h-3" />
-                          {normalizeStatus(order.status)}
+                          {formatStatus(order.status)}
                         </span>
                         <span className="text-gray-500 text-[10px] md:text-xs">
                           {order.timeAgo}
@@ -452,7 +546,7 @@ export default function OrdersPage() {
                     <div className="text-right">
                       <p className="text-gray-500 text-[10px] md:text-xs mb-0.5">Amount</p>
                       <p className="text-gray-900 font-bold text-sm md:text-base">
-                        {formatCurrency(order.amount)}
+                        ₹{order.amount?.toFixed(2) || '0.00'}
                       </p>
                     </div>
                   </div>
@@ -469,6 +563,15 @@ export default function OrdersPage() {
       
       {/* Menu Overlay */}
       <MenuOverlay showMenu={showMenu} setShowMenu={setShowMenu} />
+
+      {/* New Order Notification */}
+      <NewOrderNotification
+        order={newOrder}
+        onClose={clearNewOrder}
+        onViewOrder={(order) => {
+          navigate(`/restaurant/orders/${order.orderMongoId || order.orderId}`)
+        }}
+      />
     </div>
   )
 }

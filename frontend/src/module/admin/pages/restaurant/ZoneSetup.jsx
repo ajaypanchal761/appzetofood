@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { MapPin, Plus, Search, Edit, Trash2, Eye } from "lucide-react"
+import { MapPin, Plus, Search, Edit, Trash2, Eye, Map } from "lucide-react"
 import { adminAPI } from "@/lib/api"
 
 export default function ZoneSetup() {
@@ -70,17 +70,26 @@ export default function ZoneSetup() {
               <MapPin className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Zone Setup</h1>
+              <h1 className="text-2xl font-bold text-slate-900">Zone Setup Restaurant</h1>
               <p className="text-sm text-slate-600">Manage delivery zones for restaurants</p>
             </div>
           </div>
-          <button
-            onClick={() => navigate("/admin/zone-setup/add")}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Zone</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate("/admin/zone-setup/map")}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Map className="w-5 h-5" />
+              <span>View Map</span>
+            </button>
+            <button
+              onClick={() => navigate("/admin/zone-setup/add")}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add Zone</span>
+            </button>
+          </div>
         </div>
 
         {/* Search Bar */}

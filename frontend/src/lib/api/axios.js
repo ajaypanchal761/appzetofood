@@ -52,8 +52,9 @@ function getTokenForCurrentRoute() {
   
   if (path.startsWith('/admin')) {
     return localStorage.getItem('admin_accessToken');
-  } else if (path.startsWith('/restaurant-panel') || (path.startsWith('/restaurant') && !path.startsWith('/restaurants'))) {
+  } else if (path.startsWith('/restaurant-panel') || (path.startsWith('/restaurant') && !path.startsWith('/restaurants') && !path.startsWith('/restaurant/list') && !path.startsWith('/restaurant/under-250'))) {
     // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
+    // Exclude public routes like /restaurant/list and /restaurant/under-250
     return localStorage.getItem('restaurant_accessToken');
   } else if (path.startsWith('/delivery')) {
     return localStorage.getItem('delivery_accessToken');
@@ -98,7 +99,32 @@ apiClient.interceptors.request.use(
 
     // Determine if this is an authenticated route
     const path = window.location.pathname;
-    const isAuthenticatedRoute = path.startsWith('/admin') || path.startsWith('/restaurant') || path.startsWith('/delivery');
+    const requestUrl = config.url || '';
+    
+    // Check if this is a public restaurant route (should not require authentication)
+    const isPublicRestaurantRoute = requestUrl.includes('/restaurant/list') || 
+                                    requestUrl.includes('/restaurant/under-250') ||
+                                    (requestUrl.includes('/restaurant/') && 
+                                     !requestUrl.includes('/restaurant/orders') &&
+                                     !requestUrl.includes('/restaurant/auth') &&
+                                     !requestUrl.includes('/restaurant/menu') &&
+                                     !requestUrl.includes('/restaurant/profile') &&
+                                     !requestUrl.includes('/restaurant/staff') &&
+                                     !requestUrl.includes('/restaurant/offers') &&
+                                     !requestUrl.includes('/restaurant/inventory') &&
+                                     !requestUrl.includes('/restaurant/categories') &&
+                                     !requestUrl.includes('/restaurant/onboarding') &&
+                                     !requestUrl.includes('/restaurant/delivery-status') &&
+                                     (requestUrl.match(/\/restaurant\/[^/]+$/) || 
+                                      requestUrl.match(/\/restaurant\/[^/]+\/menu/) ||
+                                      requestUrl.match(/\/restaurant\/[^/]+\/addons/) ||
+                                      requestUrl.match(/\/restaurant\/[^/]+\/inventory/) ||
+                                      requestUrl.match(/\/restaurant\/[^/]+\/offers/)));
+    
+    const isAuthenticatedRoute = (path.startsWith('/admin') || 
+                                  path.startsWith('/restaurant-panel') || 
+                                  (path.startsWith('/restaurant') && !path.startsWith('/restaurants') && !isPublicRestaurantRoute) || 
+                                  path.startsWith('/delivery')) && !isPublicRestaurantRoute;
     
     // For authenticated routes, ALWAYS ensure Authorization header is set if we have a token
     // This ensures FormData requests and other requests always have the token
@@ -131,8 +157,13 @@ apiClient.interceptors.request.use(
         }
       }
     } else {
-      // For non-authenticated routes, only add token if no Authorization header is set
-      if (!config.headers.Authorization && accessToken && accessToken.trim() !== '' && accessToken !== 'null' && accessToken !== 'undefined') {
+      // For non-authenticated routes (including public restaurant routes), don't add token
+      // Public routes like /restaurant/list should work without authentication
+      if (isPublicRestaurantRoute) {
+        // Remove any existing Authorization header for public routes
+        delete config.headers.Authorization;
+      } else if (!config.headers.Authorization && accessToken && accessToken.trim() !== '' && accessToken !== 'null' && accessToken !== 'undefined') {
+        // For other non-authenticated routes, add token if available (for optional auth)
         config.headers.Authorization = `Bearer ${accessToken.trim()}`;
       }
     }

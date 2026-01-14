@@ -30,9 +30,15 @@ export default function AddZone() {
   
   const [coordinates, setCoordinates] = useState([])
   const [isDrawing, setIsDrawing] = useState(false)
+  const [locationSearch, setLocationSearch] = useState("")
+  const [existingZones, setExistingZones] = useState([])
+  const autocompleteInputRef = useRef(null)
+  const autocompleteRef = useRef(null)
+  const existingZonesPolygonsRef = useRef([])
 
   useEffect(() => {
     fetchRestaurants()
+    fetchExistingZones()
     loadGoogleMaps()
     if (isEditMode && id) {
       fetchZone()
@@ -47,6 +53,30 @@ export default function AddZone() {
       mapInstanceRef.current.setZoom(5)
     }
   }, [formData.serviceLocation])
+
+  // Initialize Places Autocomplete when map is loaded
+  useEffect(() => {
+    if (!mapLoading && mapInstanceRef.current && autocompleteInputRef.current && window.google?.maps?.places && !autocompleteRef.current) {
+      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' } // Restrict to India
+      })
+      
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace()
+        if (place.geometry && place.geometry.location && mapInstanceRef.current) {
+          const location = place.geometry.location
+          mapInstanceRef.current.setCenter(location)
+          mapInstanceRef.current.setZoom(15) // Zoom in when location is selected
+          
+          // Set the search input value
+          setLocationSearch(place.formatted_address || place.name || "")
+        }
+      })
+      
+      autocompleteRef.current = autocomplete
+    }
+  }, [mapLoading])
 
   // Draw existing polygon when in edit mode and coordinates are loaded
   useEffect(() => {
@@ -74,6 +104,28 @@ export default function AddZone() {
       }
     } catch (error) {
       console.error("Error fetching restaurants:", error)
+      // Check if it's a network error
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error' || !error.response) {
+        console.error("Network error: Backend server might not be running")
+      } else {
+        console.error("API error:", error.response?.data || error.message)
+      }
+    }
+  }
+
+  const fetchExistingZones = async () => {
+    try {
+      const response = await adminAPI.getZones({ limit: 1000 })
+      if (response.data?.success && response.data.data?.zones) {
+        // Filter out the current zone if in edit mode
+        const zones = isEditMode && id 
+          ? response.data.data.zones.filter(zone => zone._id !== id)
+          : response.data.data.zones
+        setExistingZones(zones)
+      }
+    } catch (error) {
+      console.error("Error fetching existing zones:", error)
+      setExistingZones([])
     }
   }
 
@@ -316,6 +368,8 @@ export default function AddZone() {
 
     setMapLoading(false)
 
+    // Existing zones will be drawn by useEffect when data is ready
+
     // If in edit mode and coordinates are already loaded, draw the polygon
     if (isEditMode && coordinates.length >= 3) {
       setTimeout(() => {
@@ -325,6 +379,76 @@ export default function AddZone() {
       }, 500) // Small delay to ensure map is fully loaded
     }
   }
+
+  // Draw existing zones on the map
+  const drawExistingZonesOnMap = (google, map) => {
+    if (!existingZones || existingZones.length === 0) return
+
+    // Clear previous existing zone polygons
+    existingZonesPolygonsRef.current.forEach(polygon => {
+      if (polygon) polygon.setMap(null)
+    })
+    existingZonesPolygonsRef.current = []
+
+    existingZones.forEach((zone, index) => {
+      if (!zone.coordinates || zone.coordinates.length < 3) return
+
+      // Convert coordinates to LatLng array
+      const path = zone.coordinates.map(coord => {
+        const lat = typeof coord === 'object' ? (coord.latitude || coord.lat) : null
+        const lng = typeof coord === 'object' ? (coord.longitude || coord.lng) : null
+        if (lat === null || lng === null) return null
+        return new google.maps.LatLng(lat, lng)
+      }).filter(Boolean)
+
+      if (path.length < 3) return
+
+      // Get restaurant name for the zone
+      const restaurantName = zone.restaurantId && typeof zone.restaurantId === 'object' 
+        ? zone.restaurantId.name 
+        : restaurants.find(r => r._id === zone.restaurantId)?.name || 'Unknown Restaurant'
+
+      // Create polygon for existing zone with different color (gray/blue)
+      const polygon = new google.maps.Polygon({
+        paths: path,
+        strokeColor: "#3b82f6", // Blue color for existing zones
+        strokeOpacity: 0.6,
+        strokeWeight: 2,
+        fillColor: "#3b82f6",
+        fillOpacity: 0.15, // Lighter opacity so new zone stands out
+        editable: false, // Not editable
+        draggable: false,
+        clickable: true,
+        zIndex: 0 // Lower z-index so new zone appears on top
+      })
+
+      polygon.setMap(map)
+      existingZonesPolygonsRef.current.push(polygon)
+
+      // Add info window on click
+      const infoWindow = new google.maps.InfoWindow({
+        content: `
+          <div style="padding: 8px;">
+            <strong>${zone.name || 'Unnamed Zone'}</strong><br/>
+            <small>Restaurant: ${restaurantName}</small><br/>
+            <small>Location: ${zone.serviceLocation || 'N/A'}</small>
+          </div>
+        `
+      })
+
+      polygon.addListener('click', () => {
+        infoWindow.setPosition(polygon.getPath().getAt(0))
+        infoWindow.open(map)
+      })
+    })
+  }
+
+  // Redraw existing zones when zones data changes or map is ready
+  useEffect(() => {
+    if (!mapLoading && mapInstanceRef.current && existingZones.length > 0 && window.google && restaurants.length > 0) {
+      drawExistingZonesOnMap(window.google, mapInstanceRef.current)
+    }
+  }, [existingZones, mapLoading, restaurants])
 
   const updateCoordinatesFromPolygon = (polygon) => {
     const path = polygon.getPath()
@@ -571,9 +695,27 @@ export default function AddZone() {
       navigate("/admin/zone-setup")
     } catch (error) {
       console.error("Error creating zone:", error)
-      console.error("Error response:", error.response?.data)
-      console.error("Error status:", error.response?.status)
-      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Failed to create zone. Please try again."
+      
+      // Handle different types of errors
+      let errorMessage = "Failed to create zone. Please try again."
+      
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error' || !error.response) {
+        // Network error - backend not running or CORS issue
+        errorMessage = "Cannot connect to server. Please make sure the backend server is running."
+        console.error("Network error: Backend server might not be running")
+      } else if (error.response) {
+        // API error with response
+        errorMessage = error.response.data?.message || 
+                      error.response.data?.error || 
+                      error.message || 
+                      `Server error: ${error.response.status}`
+        console.error("API error:", error.response.data)
+        console.error("Error status:", error.response.status)
+      } else {
+        // Other errors
+        errorMessage = error.message || errorMessage
+      }
+      
       alert(errorMessage)
     } finally {
       setLoading(false)
@@ -699,12 +841,20 @@ export default function AddZone() {
                 </div>
               </div>
 
-              <div className="mb-4 bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <p className="text-xs text-slate-700 mb-2">
-                  <strong>Instructions:</strong> Click "Start Drawing" then click on the map to create points. Connect at least 3 points to form a zone. The zone will appear in purple color.
-                </p>
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    ref={autocompleteInputRef}
+                    type="text"
+                    placeholder="Search location on map..."
+                    value={locationSearch}
+                    onChange={(e) => setLocationSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
                 {coordinates.length > 0 && (
-                  <p className="text-xs text-slate-600">
+                  <p className="text-xs text-slate-600 mt-2">
                     Points drawn: <strong>{coordinates.length}</strong>
                     {coordinates.length < 3 && (
                       <span className="text-red-600 ml-2">(Minimum 3 points required)</span>

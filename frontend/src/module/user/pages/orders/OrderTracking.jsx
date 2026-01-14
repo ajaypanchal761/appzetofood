@@ -16,14 +16,17 @@ import {
   Shield,
   ChefHat,
   Receipt,
-  CircleSlash
+  CircleSlash,
+  Loader2
 } from "lucide-react"
 import AnimatedPage from "../../components/AnimatedPage"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useOrders } from "../../context/OrdersContext"
 import { useProfile } from "../../context/ProfileContext"
+import { useLocation as useUserLocation } from "../../hooks/useLocation"
 import DeliveryTrackingMap from "../../components/DeliveryTrackingMap"
+import { orderAPI } from "@/lib/api"
 
 // Animated checkmark component
 const AnimatedCheckmark = ({ delay = 0 }) => (
@@ -60,8 +63,10 @@ const AnimatedCheckmark = ({ delay = 0 }) => (
   </motion.svg>
 )
 
-// Real Delivery Map Component
+// Real Delivery Map Component with User Live Location
 const DeliveryMap = ({ orderId, order, isVisible }) => {
+  const { location: userLocation } = useUserLocation() // Get user's live location
+  
   // Get coordinates from order or use defaults (Indore)
   const getRestaurantCoords = () => {
     if (order?.restaurantLocation?.coordinates) {
@@ -75,18 +80,30 @@ const DeliveryMap = ({ orderId, order, isVisible }) => {
   };
 
   const getCustomerCoords = () => {
-    if (order?.deliveryAddress?.coordinates) {
+    if (order?.address?.coordinates) {
       return {
-        lat: order.deliveryAddress.coordinates[1],
-        lng: order.deliveryAddress.coordinates[0]
+        lat: order.address.coordinates[1],
+        lng: order.address.coordinates[0]
       };
     }
     // Default Indore coordinates
     return { lat: 22.7196, lng: 75.8577 };
   };
 
+  // Get user's live location coordinates
+  const getUserLiveCoords = () => {
+    if (userLocation?.latitude && userLocation?.longitude) {
+      return {
+        lat: userLocation.latitude,
+        lng: userLocation.longitude
+      };
+    }
+    return null;
+  };
+
   const restaurantCoords = getRestaurantCoords();
   const customerCoords = getCustomerCoords();
+  const userLiveCoords = getUserLiveCoords();
 
   // Delivery boy data
   const deliveryBoyData = order?.deliveryPartner ? {
@@ -94,7 +111,7 @@ const DeliveryMap = ({ orderId, order, isVisible }) => {
     avatar: order.deliveryPartner.avatar || null
   } : null;
 
-  if (!isVisible || !orderId) {
+  if (!isVisible || !orderId || !order) {
     return (
       <motion.div 
         className="relative h-64 bg-gradient-to-b from-gray-100 to-gray-200"
@@ -116,99 +133,12 @@ const DeliveryMap = ({ orderId, order, isVisible }) => {
         orderId={orderId}
         restaurantCoords={restaurantCoords}
         customerCoords={customerCoords}
+        userLiveCoords={userLiveCoords}
+        userLocationAccuracy={userLocation?.accuracy}
         deliveryBoyData={deliveryBoyData}
       />
     </motion.div>
   );
-}
-
-// Promotional banner carousel
-const PromoCarousel = () => {
-  const [currentSlide, setCurrentSlide] = useState(0)
-  const promos = [
-    { 
-      bank: "HDFC BANK", 
-      offer: "10% cashback on all orders",
-      subtext: "Extraordinary Rewards | Zero Joining Fee | T&C apply",
-      color: "from-blue-50 to-indigo-50"
-    },
-    { 
-      bank: "ICICI BANK", 
-      offer: "15% instant discount",
-      subtext: "Valid on orders above ₹299 | Use code ICICI15",
-      color: "from-orange-50 to-red-50"
-    },
-    { 
-      bank: "SBI CARD", 
-      offer: "Flat ₹75 off",
-      subtext: "On all orders | No minimum order value",
-      color: "from-purple-50 to-pink-50"
-    },
-    { 
-      bank: "AXIS BANK", 
-      offer: "20% cashback up to ₹100",
-      subtext: "Valid on first order | T&C apply",
-      color: "from-teal-50 to-cyan-50"
-    }
-  ]
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % promos.length)
-    }, 4000)
-    return () => clearInterval(timer)
-  }, [])
-
-  return (
-    <motion.div 
-      className="bg-white rounded-xl p-4 shadow-sm"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.4 }}
-    >
-      <div className="overflow-hidden relative">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentSlide}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            transition={{ duration: 0.3 }}
-            className={`flex items-center gap-4 p-3 rounded-lg bg-gradient-to-r ${promos[currentSlide].color}`}
-          >
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold bg-blue-900 text-white px-2 py-0.5 rounded">
-                  {promos[currentSlide].bank}
-                </span>
-              </div>
-              <p className="font-semibold text-gray-900">{promos[currentSlide].offer}</p>
-              <p className="text-xs text-gray-600 mt-1">{promos[currentSlide].subtext}</p>
-              <button className="text-green-700 font-medium text-sm mt-2 flex items-center gap-1">
-                Apply now <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">💳</span>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-      
-      {/* Dots indicator */}
-      <div className="flex justify-center gap-2 mt-3">
-        {promos.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => setCurrentSlide(index)}
-            className={`w-2 h-2 rounded-full transition-all duration-300 ${
-              index === currentSlide ? 'bg-green-600 w-4' : 'bg-gray-300'
-            }`}
-          />
-        ))}
-      </div>
-    </motion.div>
-  )
 }
 
 // Tip selection component
@@ -306,7 +236,11 @@ export default function OrderTracking() {
   const confirmed = searchParams.get("confirmed") === "true"
   const { getOrderById } = useOrders()
   const { profile, getDefaultAddress } = useProfile()
-  const order = getOrderById(orderId)
+  
+  // State for order data
+  const [order, setOrder] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   
   const [showConfirmation, setShowConfirmation] = useState(confirmed)
   const [orderStatus, setOrderStatus] = useState('placed')
@@ -314,6 +248,78 @@ export default function OrderTracking() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const defaultAddress = getDefaultAddress()
+
+  // Fetch order from API if not found in context
+  useEffect(() => {
+    const fetchOrder = async () => {
+      // First try to get from context (localStorage)
+      const contextOrder = getOrderById(orderId)
+      if (contextOrder) {
+        setOrder(contextOrder)
+        setLoading(false)
+        return
+      }
+
+      // If not in context, fetch from API
+      try {
+        setLoading(true)
+        setError(null)
+        
+        const response = await orderAPI.getOrderDetails(orderId)
+        
+        if (response.data?.success && response.data.data?.order) {
+          const apiOrder = response.data.data.order
+          
+          // Transform API order to match component structure
+          const transformedOrder = {
+            id: apiOrder.orderId || apiOrder._id,
+            restaurant: apiOrder.restaurantName || 'Restaurant',
+            userId: apiOrder.userId || null, // Include user data for phone number
+            address: {
+              street: apiOrder.address?.street || '',
+              city: apiOrder.address?.city || '',
+              state: apiOrder.address?.state || '',
+              zipCode: apiOrder.address?.zipCode || '',
+              additionalDetails: apiOrder.address?.additionalDetails || '',
+              formattedAddress: apiOrder.address?.formattedAddress || 
+                (apiOrder.address?.street && apiOrder.address?.city 
+                  ? `${apiOrder.address.street}${apiOrder.address.additionalDetails ? `, ${apiOrder.address.additionalDetails}` : ''}, ${apiOrder.address.city}${apiOrder.address.state ? `, ${apiOrder.address.state}` : ''}${apiOrder.address.zipCode ? ` ${apiOrder.address.zipCode}` : ''}`
+                  : apiOrder.address?.city || ''),
+              coordinates: apiOrder.address?.location?.coordinates || null
+            },
+            restaurantLocation: {
+              coordinates: null // Will be populated from restaurant data if needed
+            },
+            items: apiOrder.items?.map(item => ({
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price
+            })) || [],
+            total: apiOrder.pricing?.total || 0,
+            status: apiOrder.status || 'pending',
+            deliveryPartner: apiOrder.deliveryPartnerId ? {
+              name: apiOrder.deliveryPartnerId.name || 'Delivery Partner',
+              avatar: null
+            } : null,
+            tracking: apiOrder.tracking || {}
+          }
+          
+          setOrder(transformedOrder)
+        } else {
+          throw new Error('Order not found')
+        }
+      } catch (err) {
+        console.error('Error fetching order:', err)
+        setError(err.response?.data?.message || err.message || 'Failed to fetch order')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (orderId) {
+      fetchOrder()
+    }
+  }, [orderId, getOrderById])
 
   // Simulate order status progression
   useEffect(() => {
@@ -334,16 +340,83 @@ export default function OrderTracking() {
     return () => clearInterval(timer)
   }, [])
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true)
-    setTimeout(() => setIsRefreshing(false), 1000)
+    try {
+      const response = await orderAPI.getOrderDetails(orderId)
+      if (response.data?.success && response.data.data?.order) {
+        const apiOrder = response.data.data.order
+        const transformedOrder = {
+          id: apiOrder.orderId || apiOrder._id,
+          restaurant: apiOrder.restaurantName || 'Restaurant',
+          userId: apiOrder.userId || null, // Include user data for phone number
+          address: {
+            street: apiOrder.address?.street || '',
+            city: apiOrder.address?.city || '',
+            state: apiOrder.address?.state || '',
+            zipCode: apiOrder.address?.zipCode || '',
+            additionalDetails: apiOrder.address?.additionalDetails || '',
+            formattedAddress: apiOrder.address?.formattedAddress || 
+              (apiOrder.address?.street && apiOrder.address?.city 
+                ? `${apiOrder.address.street}${apiOrder.address.additionalDetails ? `, ${apiOrder.address.additionalDetails}` : ''}, ${apiOrder.address.city}${apiOrder.address.state ? `, ${apiOrder.address.state}` : ''}${apiOrder.address.zipCode ? ` ${apiOrder.address.zipCode}` : ''}`
+                : apiOrder.address?.city || ''),
+            coordinates: apiOrder.address?.location?.coordinates || null
+          },
+          restaurantLocation: {
+            coordinates: null
+          },
+          items: apiOrder.items?.map(item => ({
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price
+          })) || [],
+          total: apiOrder.pricing?.total || 0,
+          status: apiOrder.status || 'pending',
+          deliveryPartner: apiOrder.deliveryPartnerId ? {
+            name: apiOrder.deliveryPartnerId.name || 'Delivery Partner',
+            avatar: null
+          } : null,
+          tracking: apiOrder.tracking || {}
+        }
+        setOrder(transformedOrder)
+        
+        // Update order status for UI
+        if (apiOrder.status === 'preparing') {
+          setOrderStatus('preparing')
+        } else if (apiOrder.status === 'ready') {
+          setOrderStatus('pickup')
+        } else if (apiOrder.status === 'out_for_delivery') {
+          setOrderStatus('pickup')
+        } else if (apiOrder.status === 'delivered') {
+          setOrderStatus('delivered')
+        }
+      }
+    } catch (err) {
+      console.error('Error refreshing order:', err)
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
-  if (!order) {
+  // Loading state
+  if (loading) {
+    return (
+      <AnimatedPage className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-lg mx-auto text-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading order details...</p>
+        </div>
+      </AnimatedPage>
+    )
+  }
+
+  // Error state
+  if (error || !order) {
     return (
       <AnimatedPage className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-lg mx-auto text-center py-20">
           <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-4">Order Not Found</h1>
+          <p className="text-gray-600 mb-6">{error || 'The order you\'re looking for doesn\'t exist.'}</p>
           <Link to="/user/orders">
             <Button>Back to Orders</Button>
           </Link>
@@ -491,36 +564,11 @@ export default function OrderTracking() {
       <DeliveryMap 
         orderId={orderId} 
         order={order}
-        isVisible={!showConfirmation && orderStatus !== 'placed'} 
+        isVisible={!showConfirmation && order !== null} 
       />
 
       {/* Scrollable Content */}
       <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 space-y-4 md:space-y-6 pb-24 md:pb-32">
-        {/* Payment Pending */}
-        <motion.div 
-          className="bg-white rounded-xl p-4 shadow-sm"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-gray-900">
-                Payment of ₹{order.total?.toFixed(0) || '0'} pending
-              </p>
-              <p className="text-sm text-gray-500 mt-1">
-                Pay now, or pay to the delivery partner using Cash/UPI
-              </p>
-            </div>
-            <Button className="bg-gray-900 hover:bg-gray-800 text-white rounded-full px-6">
-              Pay now <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          </div>
-        </motion.div>
-
-        {/* Promo Carousel */}
-        <PromoCarousel />
-
         {/* Delivery Partner Assignment */}
         <motion.div 
           className="bg-white rounded-xl p-4 shadow-sm"
@@ -575,7 +623,7 @@ export default function OrderTracking() {
         >
           <SectionItem 
             icon={Phone}
-            title={`${profile?.fullName || 'Customer'}, ${profile?.phone || '9XXXXXXXX'}`}
+            title={`${profile?.fullName || profile?.name || 'Customer'}, ${profile?.phone || order?.userId?.phone || defaultAddress?.phone || 'Phone number not available'}`}
             subtitle="Delivery partner may call this number"
             rightContent={
               <span className="text-green-600 font-medium text-sm">Edit</span>
@@ -583,11 +631,46 @@ export default function OrderTracking() {
           />
           <SectionItem 
             icon={HomeIcon}
-            title="Delivery at Home"
-            subtitle={defaultAddress ? 
-              `${defaultAddress.street}, ${defaultAddress.city}` : 
-              'Add delivery address'
-            }
+            title="Delivery at Location"
+            subtitle={(() => {
+              // Priority 1: Use order address formattedAddress (live location address)
+              if (order?.address?.formattedAddress && order.address.formattedAddress !== "Select location") {
+                return order.address.formattedAddress
+              }
+              
+              // Priority 2: Build full address from order address parts
+              if (order?.address) {
+                const orderAddressParts = []
+                if (order.address.street) orderAddressParts.push(order.address.street)
+                if (order.address.additionalDetails) orderAddressParts.push(order.address.additionalDetails)
+                if (order.address.city) orderAddressParts.push(order.address.city)
+                if (order.address.state) orderAddressParts.push(order.address.state)
+                if (order.address.zipCode) orderAddressParts.push(order.address.zipCode)
+                if (orderAddressParts.length > 0) {
+                  return orderAddressParts.join(', ')
+                }
+              }
+              
+              // Priority 3: Use defaultAddress formattedAddress (live location address)
+              if (defaultAddress?.formattedAddress && defaultAddress.formattedAddress !== "Select location") {
+                return defaultAddress.formattedAddress
+              }
+              
+              // Priority 4: Build full address from defaultAddress parts
+              if (defaultAddress) {
+                const defaultAddressParts = []
+                if (defaultAddress.street) defaultAddressParts.push(defaultAddress.street)
+                if (defaultAddress.additionalDetails) defaultAddressParts.push(defaultAddress.additionalDetails)
+                if (defaultAddress.city) defaultAddressParts.push(defaultAddress.city)
+                if (defaultAddress.state) defaultAddressParts.push(defaultAddress.state)
+                if (defaultAddress.zipCode) defaultAddressParts.push(defaultAddress.zipCode)
+                if (defaultAddressParts.length > 0) {
+                  return defaultAddressParts.join(', ')
+                }
+              }
+              
+              return 'Add delivery address'
+            })()}
             rightContent={
               <span className="text-green-600 font-medium text-sm">Edit</span>
             }
@@ -627,9 +710,9 @@ export default function OrderTracking() {
             <div className="flex items-start gap-3">
               <Receipt className="w-5 h-5 text-gray-500 mt-0.5" />
               <div className="flex-1">
-                <p className="font-medium text-gray-900">Order #{order.id}</p>
+                <p className="font-medium text-gray-900">Order #{order?.id || order?.orderId || 'N/A'}</p>
                 <div className="mt-2 space-y-1">
-                  {order.items?.map((item, index) => (
+                  {order?.items?.map((item, index) => (
                     <div key={index} className="flex items-center gap-2 text-sm text-gray-600">
                       <span className="w-4 h-4 rounded border border-green-600 flex items-center justify-center">
                         <span className="w-2 h-2 rounded-full bg-green-600" />

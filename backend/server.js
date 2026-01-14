@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cron from 'node-cron';
+import mongoose from 'mongoose';
 
 // Load environment variables
 dotenv.config();
@@ -81,12 +82,147 @@ if (missingEnvVars.length > 0) {
 const app = express();
 const httpServer = createServer(app);
 
-// Initialize Socket.IO
+// Initialize Socket.IO with proper CORS configuration
+const allowedSocketOrigins = [
+  process.env.CORS_ORIGIN,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000'
+].filter(Boolean); // Remove undefined values
+
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000' || 'http://localhost:5173',
-    methods: ['GET', 'POST']
-  }
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or Postman)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      // Check if origin is in allowed list
+      if (allowedSocketOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        // In development, allow all localhost origins
+        if (process.env.NODE_ENV !== 'production') {
+          if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+            return callback(null, true);
+          }
+          // Allow all origins in development for easier debugging
+          console.log(`⚠️ Allowing Socket.IO connection from: ${origin} (development mode)`);
+          return callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      }
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
+  },
+  transports: ['polling', 'websocket'], // Polling first, then upgrade to websocket
+  allowEIO3: true // Allow Engine.IO v3 clients for compatibility
+});
+
+// Export getIO function for use in other modules
+export function getIO() {
+  return io;
+}
+
+// Restaurant namespace for order notifications
+const restaurantNamespace = io.of('/restaurant');
+
+restaurantNamespace.on('connection', (socket) => {
+  console.log('🍽️ Restaurant client connected:', socket.id);
+  console.log('🍽️ Socket auth:', socket.handshake.auth);
+
+  // Restaurant joins their room
+  socket.on('join-restaurant', (restaurantId) => {
+    if (restaurantId) {
+      // Normalize restaurantId to string (handle both ObjectId and string)
+      const normalizedRestaurantId = restaurantId?.toString() || restaurantId;
+      const room = `restaurant:${normalizedRestaurantId}`;
+      
+      socket.join(room);
+      console.log(`🍽️ Restaurant ${normalizedRestaurantId} joined room: ${room}`);
+      console.log(`🍽️ Total sockets in room ${room}:`, restaurantNamespace.adapter.rooms.get(room)?.size || 0);
+      
+      // Also join with ObjectId format if it's a valid ObjectId (for compatibility)
+      if (mongoose.Types.ObjectId.isValid(normalizedRestaurantId)) {
+        const objectIdRoom = `restaurant:${new mongoose.Types.ObjectId(normalizedRestaurantId).toString()}`;
+        if (objectIdRoom !== room) {
+          socket.join(objectIdRoom);
+          console.log(`🍽️ Restaurant also joined ObjectId room: ${objectIdRoom}`);
+        }
+      }
+      
+      // Send confirmation back to client
+      socket.emit('restaurant-room-joined', {
+        restaurantId: normalizedRestaurantId,
+        room: room,
+        socketId: socket.id
+      });
+    } else {
+      console.warn('⚠️ Restaurant tried to join without restaurantId');
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('🍽️ Restaurant client disconnected:', socket.id);
+  });
+
+  // Handle connection errors
+  socket.on('error', (error) => {
+    console.error('🍽️ Restaurant socket error:', error);
+  });
+});
+
+// Delivery namespace for order assignments
+const deliveryNamespace = io.of('/delivery');
+
+deliveryNamespace.on('connection', (socket) => {
+  console.log('🚴 Delivery client connected:', socket.id);
+  console.log('🚴 Socket auth:', socket.handshake.auth);
+
+  // Delivery boy joins their room
+  socket.on('join-delivery', (deliveryId) => {
+    if (deliveryId) {
+      // Normalize deliveryId to string (handle both ObjectId and string)
+      const normalizedDeliveryId = deliveryId?.toString() || deliveryId;
+      const room = `delivery:${normalizedDeliveryId}`;
+      
+      socket.join(room);
+      console.log(`🚴 Delivery partner ${normalizedDeliveryId} joined room: ${room}`);
+      console.log(`🚴 Total sockets in room ${room}:`, deliveryNamespace.adapter.rooms.get(room)?.size || 0);
+      
+      // Also join with ObjectId format if it's a valid ObjectId (for compatibility)
+      if (mongoose.Types.ObjectId.isValid(normalizedDeliveryId)) {
+        const objectIdRoom = `delivery:${new mongoose.Types.ObjectId(normalizedDeliveryId).toString()}`;
+        if (objectIdRoom !== room) {
+          socket.join(objectIdRoom);
+          console.log(`🚴 Delivery partner also joined ObjectId room: ${objectIdRoom}`);
+        }
+      }
+      
+      // Send confirmation back to client
+      socket.emit('delivery-room-joined', {
+        deliveryId: normalizedDeliveryId,
+        room: room,
+        socketId: socket.id
+      });
+    } else {
+      console.warn('⚠️ Delivery partner tried to join without deliveryId');
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('🚴 Delivery client disconnected:', socket.id);
+  });
+
+  // Handle connection errors
+  socket.on('error', (error) => {
+    console.error('🚴 Delivery socket error:', error);
+  });
 });
 
 // Make io available to routes

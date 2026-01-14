@@ -71,6 +71,7 @@ const orderSchema = new mongoose.Schema({
     city: String,
     state: String,
     zipCode: String,
+    formattedAddress: String, // Complete formatted address from live location
     location: {
       type: {
         type: String,
@@ -179,7 +180,7 @@ const orderSchema = new mongoose.Schema({
   },
   deliveryPartnerId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'Delivery'
   },
   estimatedDeliveryTime: {
     type: Number, // in minutes
@@ -193,6 +194,16 @@ const orderSchema = new mongoose.Schema({
   },
   cancellationReason: {
     type: String
+  },
+  assignmentInfo: {
+    restaurantId: String,
+    distance: Number, // Distance in km
+    assignedBy: {
+      type: String,
+      enum: ['zone_match', 'nearest_distance', 'manual']
+    },
+    zoneId: String,
+    zoneName: String
   }
 }, {
   timestamps: true
