@@ -96,32 +96,40 @@ const io = new Server(httpServer, {
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or Postman)
       if (!origin) {
+        console.log('✅ Socket.IO: Allowing connection with no origin');
         return callback(null, true);
       }
       
       // Check if origin is in allowed list
       if (allowedSocketOrigins.includes(origin)) {
+        console.log(`✅ Socket.IO: Allowing connection from: ${origin}`);
         callback(null, true);
       } else {
         // In development, allow all localhost origins
         if (process.env.NODE_ENV !== 'production') {
           if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+            console.log(`✅ Socket.IO: Allowing localhost connection from: ${origin}`);
             return callback(null, true);
           }
           // Allow all origins in development for easier debugging
-          console.log(`⚠️ Allowing Socket.IO connection from: ${origin} (development mode)`);
+          console.log(`⚠️ Socket.IO: Allowing connection from: ${origin} (development mode)`);
           return callback(null, true);
         } else {
+          console.error(`❌ Socket.IO: Blocking connection from: ${origin} (not in allowed list)`);
           callback(new Error('Not allowed by CORS'));
         }
       }
     },
     methods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
   },
   transports: ['polling', 'websocket'], // Polling first, then upgrade to websocket
-  allowEIO3: true // Allow Engine.IO v3 clients for compatibility
+  allowEIO3: true, // Allow Engine.IO v3 clients for compatibility
+  path: '/socket.io/', // Explicitly set Socket.IO path
+  connectTimeout: 45000, // Increase connection timeout
+  pingTimeout: 20000,
+  pingInterval: 25000
 });
 
 // Export getIO function for use in other modules
@@ -132,9 +140,33 @@ export function getIO() {
 // Restaurant namespace for order notifications
 const restaurantNamespace = io.of('/restaurant');
 
+// Add connection error handling before connection event
+restaurantNamespace.use((socket, next) => {
+  try {
+    // Log connection attempt
+    console.log('🍽️ Restaurant connection attempt:', {
+      socketId: socket.id,
+      auth: socket.handshake.auth,
+      query: socket.handshake.query,
+      origin: socket.handshake.headers.origin,
+      userAgent: socket.handshake.headers['user-agent']
+    });
+    
+    // Allow all connections - authentication can be handled later if needed
+    // The token is passed in auth.token but we don't validate it here
+    // to avoid blocking connections unnecessarily
+    next();
+  } catch (error) {
+    console.error('❌ Error in restaurant namespace middleware:', error);
+    next(error);
+  }
+});
+
 restaurantNamespace.on('connection', (socket) => {
   console.log('🍽️ Restaurant client connected:', socket.id);
   console.log('🍽️ Socket auth:', socket.handshake.auth);
+  console.log('🍽️ Socket query:', socket.handshake.query);
+  console.log('🍽️ Socket headers:', socket.handshake.headers);
 
   // Restaurant joins their room
   socket.on('join-restaurant', (restaurantId) => {
@@ -315,8 +347,13 @@ app.use('/api', uploadModuleRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api', heroBannerRoutes);
 
-// 404 handler
-app.use((req, res) => {
+// 404 handler - but skip Socket.IO paths
+app.use((req, res, next) => {
+  // Skip Socket.IO paths - Socket.IO handles its own routing
+  if (req.path.startsWith('/socket.io/') || req.path.startsWith('/restaurant') || req.path.startsWith('/delivery')) {
+    return next();
+  }
+  
   res.status(404).json({
     success: false,
     message: 'Route not found'
@@ -488,6 +525,25 @@ function initializeScheduledTasks() {
     console.log('✅ Menu item availability scheduler initialized (runs every minute)');
   }).catch((error) => {
     console.error('❌ Failed to initialize menu schedule service:', error);
+  });
+
+  // Import auto-ready service
+  import('./modules/order/services/autoReadyService.js').then(({ processAutoReadyOrders }) => {
+    // Run every 30 seconds to check for orders that should be marked as ready
+    cron.schedule('*/30 * * * * *', async () => {
+      try {
+        const result = await processAutoReadyOrders();
+        if (result.processed > 0) {
+          console.log(`[Auto Ready Cron] ${result.message}`);
+        }
+      } catch (error) {
+        console.error('[Auto Ready Cron] Error:', error);
+      }
+    });
+    
+    console.log('✅ Auto-ready order scheduler initialized (runs every 30 seconds)');
+  }).catch((error) => {
+    console.error('❌ Failed to initialize auto-ready service:', error);
   });
 }
 

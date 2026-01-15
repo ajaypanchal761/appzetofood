@@ -130,13 +130,71 @@ export default function DeliveryHome() {
   const [animationKey, setAnimationKey] = useState(0)
 
   // Helper function to safely call preventDefault (handles passive event listeners)
+  // React's synthetic touch events are passive by default, so we check cancelable first
   const safePreventDefault = (e) => {
-    if (e && e.cancelable !== false && typeof e.preventDefault === 'function') {
+    if (!e) return;
+    
+    // Early return if event is not cancelable (passive listener)
+    // This prevents the browser warning about calling preventDefault on passive listeners
+    if (e.cancelable === false) {
+      return; // Event listener is passive, cannot and should not call preventDefault
+    }
+    
+    // For touch events, check if CSS touch-action is handling it
+    // If touch-action is set, we don't need preventDefault
+    const eventType = e.type || '';
+    if (eventType.includes('touch')) {
+      const target = e.target || e.currentTarget;
+      if (target) {
+        try {
+          const computedStyle = window.getComputedStyle(target);
+          const touchAction = computedStyle.touchAction;
+          // If touch-action is set (not 'auto'), CSS is handling it, skip preventDefault
+          if (touchAction && touchAction !== 'auto' && touchAction !== '') {
+            return; // CSS touch-action is handling scrolling prevention
+          }
+        } catch (styleError) {
+          // If getComputedStyle fails, continue with preventDefault check
+        }
+      }
+    }
+    
+    // For React synthetic events, check the native event's cancelable property
+    // React synthetic events may have cancelable: true but the underlying listener is passive
+    const nativeEvent = e.nativeEvent;
+    if (nativeEvent) {
+      // Check native event's cancelable property - this is the most reliable check
+      if (nativeEvent.cancelable === false) {
+        return; // Native event listener is passive
+      }
+      
+      // Additional check: if defaultPrevented is already true, no need to call again
+      if (nativeEvent.defaultPrevented === true) {
+        return;
+      }
+    }
+    
+    // Only call preventDefault if event is cancelable AND we have a function
+    // Wrap in try-catch to completely suppress passive listener errors
+    if (e.cancelable !== false && typeof e.preventDefault === 'function') {
       try {
-        e.preventDefault()
+        // Final check: ensure native event is still cancelable
+        if (nativeEvent && nativeEvent.cancelable === false) {
+          return;
+        }
+        // Suppress console errors temporarily while calling preventDefault
+        const originalError = console.error;
+        console.error = () => {}; // Temporarily suppress console.error
+        try {
+          e.preventDefault();
+        } finally {
+          console.error = originalError; // Restore console.error
+        }
       } catch (err) {
-        // Silently ignore if preventDefault fails (passive listener)
-        // This prevents console errors
+        // Silently ignore - this shouldn't happen if cancelable is true
+        // But some browsers may still throw if the listener is passive
+        // Don't log the error to avoid console spam
+        return;
       }
     }
   }
@@ -155,7 +213,7 @@ export default function DeliveryHome() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(() => getUnreadDeliveryNotificationCount())
   
   // Delivery notifications hook
-  const { newOrder, clearNewOrder, isConnected } = useDeliveryNotifications()
+  const { newOrder, clearNewOrder, orderReady, clearOrderReady, isConnected } = useDeliveryNotifications()
   
   // Default location - Indore, India (based on image)
   const [riderLocation, setRiderLocation] = useState([22.7196, 75.8577]) // Indore coordinates
@@ -172,10 +230,18 @@ export default function DeliveryHome() {
   const lastLocationRef = useRef(null) // Store last location for heading calculation
   const bikeMarkerRef = useRef(null) // Store bike marker instance
   const isUserPanningRef = useRef(false) // Track if user manually panned the map
-  const routePolylineRef = useRef(null) // Store route polyline instance
+  const routePolylineRef = useRef(null) // Store route polyline instance (legacy - for fallback)
   const routeHistoryRef = useRef([]) // Store route history for traveled path
   const isOnlineRef = useRef(false) // Store online status for use in callbacks
   const zonesPolygonsRef = useRef([]) // Store zone polygons
+  // Google Maps Directions API refs
+  const directionsServiceRef = useRef(null) // Directions Service instance
+  const directionsRendererRef = useRef(null) // Directions Renderer instance
+  const directionsMapInstanceRef = useRef(null) // Directions map instance
+  const restaurantMarkerRef = useRef(null) // Restaurant marker on directions map
+  const directionsBikeMarkerRef = useRef(null) // Bike marker on directions map
+  const lastRouteRecalculationRef = useRef(null) // Track last route recalculation time (API cost optimization)
+  const lastBikePositionRef = useRef(null) // Track last bike position for deviation detection
   const [zones, setZones] = useState([]) // Store nearby zones
   const [mapLoading, setMapLoading] = useState(false)
   const [directionsMapLoading, setDirectionsMapLoading] = useState(false)
@@ -342,7 +408,8 @@ export default function DeliveryHome() {
   const [customerRating, setCustomerRating] = useState(0)
   const [customerReviewText, setCustomerReviewText] = useState("")
   const [routePolyline, setRoutePolyline] = useState([])
-  const [showRoutePath, setShowRoutePath] = useState(false) // Toggle to show/hide route path - disabled by default
+   const [showRoutePath, setShowRoutePath] = useState(false) // Toggle to show/hide route path - disabled by default
+   const [directionsResponse, setDirectionsResponse] = useState(null) // Directions API response for road-based routing
   const [reachedPickupButtonProgress, setreachedPickupButtonProgress] = useState(0)
   const [reachedPickupIsAnimatingToComplete, setreachedPickupIsAnimatingToComplete] = useState(false)
   const reachedPickupButtonRef = useRef(null)
@@ -1220,6 +1287,47 @@ export default function DeliveryHome() {
             isOnline: isOnlineRef.current,
             timestamp: new Date().toISOString()
           })
+          
+          // Send location to backend if user is online (throttle to every 10 seconds)
+          if (isOnlineRef.current) {
+            const now = Date.now();
+            const lastSentTime = window.lastLocationSentTime || 0;
+            const timeSinceLastSend = now - lastSentTime;
+            
+            // Simple distance check using Haversine formula
+            const calculateDistance = (lat1, lng1, lat2, lng2) => {
+              const R = 6371; // Earth's radius in km
+              const dLat = (lat2 - lat1) * Math.PI / 180;
+              const dLng = (lng2 - lng1) * Math.PI / 180;
+              const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+              return R * c;
+            };
+            
+            // Send location every 10 seconds or if location changed significantly (>100m)
+            const shouldSend = timeSinceLastSend >= 10000 || 
+              (lastLocationRef.current && 
+               calculateDistance(lastLocationRef.current[0], lastLocationRef.current[1], latitude, longitude) > 0.1);
+            
+            if (shouldSend) {
+              deliveryAPI.updateLocation(latitude, longitude, true)
+                .then(() => {
+                  window.lastLocationSentTime = now;
+                  console.log('✅ Location sent to backend:', { latitude, longitude });
+                })
+                .catch(error => {
+                  // Only log non-network errors (backend might be down, which is expected in dev)
+                  if (error.code !== 'ERR_NETWORK' && error.message !== 'Network Error') {
+                    console.error('❌ Error sending location to backend:', error);
+                  } else {
+                    // Silently handle network errors - backend might not be running
+                    // Socket.IO will handle reconnection automatically
+                  }
+                });
+            }
+          }
         },
         (error) => {
           console.warn("⚠️ Error watching location:", error)
@@ -1261,7 +1369,8 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       newOrderAcceptButtonIsSwiping.current = true
-      safePreventDefault(e)
+      // Don't call preventDefault - CSS touch-action handles scrolling prevention
+      // safePreventDefault(e) // Removed to avoid passive listener error
 
       // Calculate max swipe distance
       const buttonWidth = newOrderAcceptButtonRef.current?.offsetWidth || 300
@@ -1300,52 +1409,377 @@ export default function DeliveryHome() {
       setNewOrderIsAnimatingToComplete(true)
       setNewOrderAcceptButtonProgress(1)
 
-      // Close popup with animation, then show map with directions
-      setTimeout(() => {
-        setShowNewOrderPopup(false)
-        
-        // Fetch route for directions
-        if (selectedRestaurant && riderLocation) {
-          const fetchRoute = async () => {
-            try {
-              const url = `https://router.project-osrm.org/route/v1/driving/${riderLocation[1]},${riderLocation[0]};${selectedRestaurant.lng},${selectedRestaurant.lat}?overview=full&geometries=geojson`
-              const response = await fetch(url)
-              const data = await response.json()
-              
-              if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-                const coordinates = data.routes[0].geometry.coordinates.map((coord) => [coord[1], coord[0]])
-                setRoutePolyline(coordinates)
-              } else {
-                // Fallback: straight line
-                setRoutePolyline([riderLocation, [selectedRestaurant.lat, selectedRestaurant.lng]])
-              }
-            } catch (error) {
-              console.error('Error fetching route:', error)
-              // Fallback: straight line
-              setRoutePolyline([riderLocation, [selectedRestaurant.lat, selectedRestaurant.lng]])
-            }
+      // Accept order via backend API and get route
+      const acceptOrderAndShowRoute = async () => {
+        try {
+          // Get order ID from selectedRestaurant or newOrder
+          const orderId = selectedRestaurant?.id || newOrder?.orderMongoId || newOrder?.orderId
+          
+          console.log('🔍 Order ID lookup:', {
+            selectedRestaurantId: selectedRestaurant?.id,
+            newOrderMongoId: newOrder?.orderMongoId,
+            newOrderId: newOrder?.orderId,
+            finalOrderId: orderId
+          })
+          
+          if (!orderId) {
+            console.error('❌ No order ID found to accept')
+            toast.error('Order ID not found. Please try again.')
+            return
+          }
+
+          // Get current LIVE location (prioritize riderLocation which is updated in real-time)
+          let currentLocation = riderLocation
+          
+          // If riderLocation is not available, try to get from lastLocationRef
+          if (!currentLocation || currentLocation.length !== 2) {
+            currentLocation = lastLocationRef.current
           }
           
-          fetchRoute()
-        }
-        
-        // Show map with directions
-        setTimeout(() => {
-          setShowDirectionsMap(true)
-          
-          // After 5 seconds, hide map and show Reached Pickup popup
-          setTimeout(() => {
-            setShowDirectionsMap(false)
-            setShowreachedPickupPopup(true)
-          }, 5000)
-        }, 300) // Wait for popup close animation
+          // If still not available, try to get current position
+          if (!currentLocation || currentLocation.length !== 2) {
+            try {
+              const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => resolve([pos.coords.latitude, pos.coords.longitude]),
+                  reject,
+                  { timeout: 5000, enableHighAccuracy: true }
+                )
+              })
+              currentLocation = position
+              console.log('📍 Got fresh location from geolocation API')
+            } catch (geoError) {
+              console.error('❌ Could not get current location:', geoError)
+              toast.error('Location not available. Please enable location services.')
+              return
+            }
+          }
 
-        // Reset after animation
-        setTimeout(() => {
-          setNewOrderAcceptButtonProgress(0)
-          setNewOrderIsAnimatingToComplete(false)
-        }, 500)
-      }, 200)
+          console.log('📦 Accepting order:', orderId)
+          console.log('📍 Current LIVE location:', currentLocation)
+          console.log('📋 Order details:', {
+            orderId: orderId,
+            restaurantName: selectedRestaurant?.name || newOrder?.restaurantName,
+            orderStatus: newOrder?.status
+          })
+
+          // Call backend API to accept order
+          // Backend expects currentLat and currentLng
+          const response = await deliveryAPI.acceptOrder(orderId, {
+            lat: currentLocation[0], // latitude
+            lng: currentLocation[1]  // longitude
+          })
+          
+          console.log('📡 API Response:', response.data)
+
+          if (response.data?.success && response.data.data) {
+            const orderData = response.data.data
+            const order = orderData.order || orderData // Backend returns { order, route }
+            const routeData = response.data.data.route
+
+            console.log('✅ Order accepted successfully')
+            console.log('📍 Route data:', routeData)
+            console.log('📋 Full order data from backend:', JSON.stringify(order, null, 2))
+            console.log('🏪 Restaurant name from backend:', {
+              restaurantName: order.restaurantName,
+              restaurantIdName: order.restaurantId?.name,
+              restaurantIdType: typeof order.restaurantId,
+              restaurantId: order.restaurantId
+            })
+
+            // Update selectedRestaurant with correct data from backend
+            let restaurantInfo = null;
+            if (order) {
+              // Extract restaurant location (GeoJSON format: [longitude, latitude])
+              const restaurantCoords = order.restaurantId?.location?.coordinates || []
+              const restaurantLat = restaurantCoords[1] // Latitude is second element
+              const restaurantLng = restaurantCoords[0] // Longitude is first element
+              
+              // Format restaurant address - check multiple possible locations
+              let restaurantAddress = 'Restaurant Address'
+              const restaurantLocation = order.restaurantId?.location
+              if (restaurantLocation?.formattedAddress) {
+                restaurantAddress = restaurantLocation.formattedAddress
+              } else if (restaurantLocation?.address) {
+                restaurantAddress = restaurantLocation.address
+              } else if (restaurantLocation?.street) {
+                // Build address from components
+                const addressParts = [
+                  restaurantLocation.street,
+                  restaurantLocation.area,
+                  restaurantLocation.city,
+                  restaurantLocation.state,
+                  restaurantLocation.zipCode || restaurantLocation.pincode || restaurantLocation.postalCode
+                ].filter(Boolean)
+                restaurantAddress = addressParts.join(', ')
+              } else if (restaurantLocation?.addressLine1) {
+                const addressParts = [
+                  restaurantLocation.addressLine1,
+                  restaurantLocation.addressLine2,
+                  restaurantLocation.city,
+                  restaurantLocation.state
+                ].filter(Boolean)
+                restaurantAddress = addressParts.join(', ')
+              } else if (restaurantLat && restaurantLng) {
+                // Fallback: use coordinates if address not available
+                restaurantAddress = `${restaurantLat}, ${restaurantLng}`
+              }
+              
+              // Extract restaurant name - priority: restaurantName field > restaurantId.name > fallback
+              // Backend returns restaurantName as a direct field on order, and restaurantId is populated with name
+              let restaurantName = null
+              
+              // Priority 1: Direct restaurantName field from order (stored in Order model)
+              if (order.restaurantName && typeof order.restaurantName === 'string' && order.restaurantName.trim()) {
+                restaurantName = order.restaurantName.trim()
+                console.log('✅ Using restaurantName from order:', restaurantName)
+              } 
+              // Priority 2: Name from populated restaurantId object
+              else if (order.restaurantId && typeof order.restaurantId === 'object' && order.restaurantId.name) {
+                restaurantName = order.restaurantId.name.trim()
+                console.log('✅ Using restaurantId.name:', restaurantName)
+              }
+              // Priority 3: Fallback to existing selectedRestaurant name
+              else if (selectedRestaurant?.name) {
+                restaurantName = selectedRestaurant.name
+                console.warn('⚠️ Restaurant name not found in order, using selectedRestaurant.name:', restaurantName)
+              }
+              // Final fallback
+              else {
+                restaurantName = 'Restaurant'
+                console.error('❌ Restaurant name not found anywhere, using default:', restaurantName)
+              }
+              
+              console.log('🏪 Final extracted restaurant name:', restaurantName)
+              
+              restaurantInfo = {
+                id: order._id || order.orderId,
+                orderId: order.orderId, // Correct order ID from backend
+                name: restaurantName, // Restaurant name from backend (priority: restaurantName > restaurantId.name)
+                address: restaurantAddress, // Restaurant address from backend
+                lat: restaurantLat || selectedRestaurant?.lat,
+                lng: restaurantLng || selectedRestaurant?.lng,
+                distance: selectedRestaurant?.distance || '0 km',
+                timeAway: selectedRestaurant?.timeAway || '0 mins',
+                dropDistance: selectedRestaurant?.dropDistance || '0 km',
+                pickupDistance: selectedRestaurant?.pickupDistance || '0 km',
+                estimatedEarnings: selectedRestaurant?.estimatedEarnings || 0,
+                customerName: order.userId?.name || selectedRestaurant?.customerName,
+                customerAddress: order.address?.formattedAddress || 
+                                (order.address?.street ? `${order.address.street}, ${order.address.city || ''}, ${order.address.state || ''}`.trim() : '') ||
+                                selectedRestaurant?.customerAddress,
+                customerLat: order.address?.location?.coordinates?.[1],
+                customerLng: order.address?.location?.coordinates?.[0],
+                items: order.items || [],
+                total: order.pricing?.total || 0,
+                phone: order.restaurantId?.phone || null // Restaurant phone number
+              }
+              
+              console.log('🏪 Updated restaurant info from backend:', restaurantInfo)
+              // Update state immediately
+              setSelectedRestaurant(restaurantInfo)
+            }
+
+            // Ensure we have restaurantInfo before proceeding
+            if (!restaurantInfo) {
+              console.error('❌ Restaurant info not available, cannot proceed');
+              return;
+            }
+
+            let routeCoordinates = null;
+            let directionsResultForMap = null; // Store directions result for main map rendering
+
+            // Use route from backend if available (for fallback/polyline)
+            if (routeData && routeData.coordinates && routeData.coordinates.length > 0) {
+              // Backend returns coordinates as [[lat, lng], ...]
+              routeCoordinates = routeData.coordinates;
+              setRoutePolyline(routeCoordinates);
+              console.log('✅ Route set from backend:', routeCoordinates.length, 'points');
+            }
+            
+            // Calculate route using Google Maps Directions API (Zomato-style road-based routing)
+            // Use LIVE location from delivery boy to restaurant
+            // Use restaurantInfo directly (not selectedRestaurant) since state update is async
+            if (restaurantInfo && restaurantInfo.lat && restaurantInfo.lng && currentLocation) {
+              console.log('🗺️ Calculating route with Google Maps Directions API...');
+              console.log('📍 From (Delivery Boy Live Location):', currentLocation);
+              console.log('📍 To (Restaurant):', { lat: restaurantInfo.lat, lng: restaurantInfo.lng });
+              
+              try {
+                // Calculate route immediately with current live location
+                const directionsResult = await calculateRouteWithDirectionsAPI(
+                  currentLocation, // Delivery boy's current live location
+                  { lat: restaurantInfo.lat, lng: restaurantInfo.lng } // Restaurant location
+                );
+                
+                if (directionsResult) {
+                  console.log('✅ Route calculated with Directions API from live location');
+                  console.log('📍 Route distance:', directionsResult.routes[0]?.legs[0]?.distance?.text);
+                  console.log('📍 Route duration:', directionsResult.routes[0]?.legs[0]?.duration?.text);
+                  // Store directions result for rendering on main map
+                  setDirectionsResponse(directionsResult);
+                  directionsResultForMap = directionsResult; // Store for use in setTimeout
+                } else {
+                  // Fallback: Use backend route or OSRM
+                  console.log('⚠️ Directions API failed, using fallback...');
+                  if (!routeCoordinates || routeCoordinates.length === 0) {
+                    try {
+                      const url = `https://router.project-osrm.org/route/v1/driving/${currentLocation[1]},${currentLocation[0]};${restaurantInfo.lng},${restaurantInfo.lat}?overview=full&geometries=geojson`;
+                      const osrmResponse = await fetch(url);
+                      const osrmData = await osrmResponse.json();
+                      
+                      if (osrmData.code === 'Ok' && osrmData.routes && osrmData.routes.length > 0) {
+                        routeCoordinates = osrmData.routes[0].geometry.coordinates.map((coord) => [coord[1], coord[0]]);
+                        setRoutePolyline(routeCoordinates);
+                        console.log('✅ Route calculated with OSRM:', routeCoordinates.length, 'points');
+                      } else {
+                        // Final fallback: straight line
+                        routeCoordinates = [currentLocation, [restaurantInfo.lat, restaurantInfo.lng]];
+                        setRoutePolyline(routeCoordinates);
+                        console.log('⚠️ Using straight line as fallback');
+                      }
+                    } catch (osrmError) {
+                      console.error('❌ Error calculating route with OSRM:', osrmError);
+                      // Final fallback: straight line
+                      routeCoordinates = [currentLocation, [restaurantInfo.lat, restaurantInfo.lng]];
+                      setRoutePolyline(routeCoordinates);
+                    }
+                  }
+                }
+              } catch (directionsError) {
+                console.error('❌ Error calculating route with Directions API:', directionsError);
+                // Fallback to OSRM or backend route
+                if (!routeCoordinates || routeCoordinates.length === 0) {
+                  routeCoordinates = [currentLocation, [restaurantInfo.lat, restaurantInfo.lng]];
+                  setRoutePolyline(routeCoordinates);
+                }
+              }
+            } else {
+              console.error('❌ Cannot calculate route: missing restaurant info or location', {
+                restaurantInfo: !!restaurantInfo,
+                restaurantLat: restaurantInfo?.lat,
+                restaurantLng: restaurantInfo?.lng,
+                currentLocation: !!currentLocation
+              });
+            }
+
+            // Close popup and show route on main map (not full-screen directions map)
+            setShowNewOrderPopup(false);
+            
+            // Show route on main map instead of opening full-screen directions map
+            setTimeout(() => {
+              console.log('✅ Showing route on main map from live location to restaurant');
+              
+              // Show route on main map using DirectionsRenderer or polyline
+              if (window.deliveryMapInstance && restaurantInfo) {
+                // Use DirectionsRenderer on main map if we have directions result
+                // directionsResultForMap is captured from the outer scope
+                if (directionsResultForMap && directionsResultForMap.routes && directionsResultForMap.routes.length > 0) {
+                  // Initialize DirectionsRenderer for main map if not exists
+                  if (!directionsRendererRef.current) {
+                    directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
+                      map: window.deliveryMapInstance,
+                      suppressMarkers: true, // Hide default A/B markers - we'll use custom markers
+                      polylineOptions: {
+                        strokeColor: '#4285F4', // Zomato-style blue
+                        strokeWeight: 6,
+                        strokeOpacity: 0.8
+                      },
+                      preserveViewport: false // Auto-fit bounds to route
+                    });
+                  } else {
+                    directionsRendererRef.current.setMap(window.deliveryMapInstance);
+                  }
+                  
+                  // Set directions response to renderer
+                  directionsRendererRef.current.setDirections(directionsResultForMap);
+                  
+                  // Fit bounds to show entire route
+                  const bounds = directionsResultForMap.routes[0].bounds;
+                  if (bounds) {
+                    window.deliveryMapInstance.fitBounds(bounds, { padding: 100 });
+                  }
+                  
+                  console.log('✅ Route displayed on main map using DirectionsRenderer');
+                } else if (routeCoordinates && routeCoordinates.length > 0) {
+                  // Fallback: Use polyline if Directions API result not available
+                  setRoutePolyline(routeCoordinates);
+                  updateRoutePolyline(routeCoordinates);
+                  console.log('✅ Route displayed on main map using polyline');
+                }
+                
+                // Add restaurant marker to main map
+                if (restaurantInfo.lat && restaurantInfo.lng) {
+                  const restaurantLocation = {
+                    lat: restaurantInfo.lat,
+                    lng: restaurantInfo.lng
+                  };
+                  
+                  // Remove old restaurant marker if exists
+                  if (restaurantMarkerRef.current) {
+                    restaurantMarkerRef.current.setMap(null);
+                  }
+                  
+                  // Create restaurant marker on main map
+                  restaurantMarkerRef.current = new window.google.maps.Marker({
+                    position: restaurantLocation,
+                    map: window.deliveryMapInstance,
+                    icon: {
+                      url: 'https://cdn-icons-png.flaticon.com/512/3176/3176295.png', // Restaurant icon
+                      scaledSize: new window.google.maps.Size(40, 40),
+                      anchor: new window.google.maps.Point(20, 40)
+                    },
+                    title: restaurantInfo.name || 'Restaurant',
+                    animation: window.google.maps.Animation.DROP,
+                    zIndex: 10
+                  });
+                  
+                  console.log('✅ Restaurant marker added to main map');
+                }
+              } else {
+                console.warn('⚠️ Main map not ready, will show route when map loads');
+              }
+              
+              // Don't show Reached Pickup popup here - it will be shown when order becomes ready via WebSocket
+              // The popup will be triggered by orderReady event from backend
+            }, 300); // Wait for popup close animation
+
+          } else {
+            console.error('❌ Failed to accept order:', response.data)
+            // Show error message to user
+            toast.error(response.data?.message || 'Failed to accept order. Please try again.')
+            // Still close popup
+            setShowNewOrderPopup(false)
+          }
+        } catch (error) {
+          console.error('❌ Error accepting order:', error)
+          console.error('❌ Error details:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status,
+            orderId: orderId,
+            currentLocation: currentLocation
+          })
+          
+          // Show user-friendly error message
+          const errorMessage = error.response?.data?.message || 
+                              error.message || 
+                              'Failed to accept order. Please try again.'
+          toast.error(errorMessage)
+          
+          // Close popup even on error
+          setShowNewOrderPopup(false)
+        } finally {
+          // Reset after animation
+          setTimeout(() => {
+            setNewOrderAcceptButtonProgress(0)
+            setNewOrderIsAnimatingToComplete(false)
+          }, 500)
+        }
+      }
+
+      // Start accepting order
+      acceptOrderAndShowRoute()
     } else {
       // Reset smoothly
       setNewOrderAcceptButtonProgress(0)
@@ -1379,7 +1813,8 @@ export default function DeliveryHome() {
     const deltaY = e.touches[0].clientY - newOrderSwipeStartY.current
 
     if (deltaY > 0) {
-      safePreventDefault(e)
+      // Don't call preventDefault - CSS touch-action handles scrolling prevention
+      // safePreventDefault(e) // Removed to avoid passive listener error
       e.stopPropagation()
       setNewOrderDragY(deltaY)
     }
@@ -1425,7 +1860,8 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       reachedPickupIsSwiping.current = true
-      safePreventDefault(e)
+      // Don't call preventDefault - CSS touch-action handles scrolling prevention
+      // safePreventDefault(e) // Removed to avoid passive listener error
 
       // Calculate max swipe distance
       const buttonWidth = reachedPickupButtonRef.current?.offsetWidth || 300
@@ -1494,7 +1930,8 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       reachedDropIsSwiping.current = true
-      safePreventDefault(e)
+      // Don't call preventDefault - CSS touch-action handles scrolling prevention
+      // safePreventDefault(e) // Removed to avoid passive listener error
 
       // Calculate max swipe distance
       const buttonWidth = reachedDropButtonRef.current?.offsetWidth || 300
@@ -1556,7 +1993,8 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       orderIdConfirmIsSwiping.current = true
-      safePreventDefault(e)
+      // Don't call preventDefault - CSS touch-action handles scrolling prevention
+      // safePreventDefault(e) // Removed to avoid passive listener error
 
       // Calculate max swipe distance
       const buttonWidth = orderIdConfirmButtonRef.current?.offsetWidth || 300
@@ -1656,7 +2094,8 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       orderDeliveredIsSwiping.current = true
-      safePreventDefault(e)
+      // Don't call preventDefault - CSS touch-action handles scrolling prevention
+      // safePreventDefault(e) // Removed to avoid passive listener error
 
       // Calculate max swipe distance
       const buttonWidth = orderDeliveredButtonRef.current?.offsetWidth || 300
@@ -1724,7 +2163,8 @@ export default function DeliveryHome() {
     // Only handle horizontal swipes (swipe right)
     if (Math.abs(deltaX) > 5 && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
       acceptButtonIsSwiping.current = true
-      safePreventDefault(e)
+      // Don't call preventDefault - CSS touch-action handles scrolling prevention
+      // safePreventDefault(e) // Removed to avoid passive listener error
 
       // Calculate max swipe distance
       const buttonWidth = acceptButtonRef.current?.offsetWidth || 300
@@ -1808,12 +2248,14 @@ export default function DeliveryHome() {
 
       // Swipe up to expand
       if (deltaY > 0 && !bottomSheetExpanded && bottomSheetRef.current) {
-        safePreventDefault(e)
+        // Don't call preventDefault - CSS touch-action handles scrolling prevention
+        // safePreventDefault(e) // Removed to avoid passive listener error
         bottomSheetRef.current.style.transform = `translateY(${-deltaY}px)`
       }
       // Swipe down to collapse
       else if (deltaY < 0 && bottomSheetExpanded && bottomSheetRef.current) {
-        safePreventDefault(e)
+        // Don't call preventDefault - CSS touch-action handles scrolling prevention
+        // safePreventDefault(e) // Removed to avoid passive listener error
         bottomSheetRef.current.style.transform = `translateY(${-deltaY}px)`
       }
     }
@@ -2292,37 +2734,74 @@ export default function DeliveryHome() {
           attempts++;
         }
 
-        // If still not loaded, try loading it ourselves
+        // If still not loaded, wait a bit more for script tag to load
+        // Don't use Loader if main.jsx is already loading it via script tag
         if (!window.google || !window.google.maps) {
-          console.log('📍 Google Maps not loaded from main.jsx, loading manually...');
-          try {
-            const apiKey = await getGoogleMapsApiKey();
-            if (apiKey) {
-              const loader = new Loader({
-                apiKey: apiKey,
-                version: "weekly",
-                libraries: ["places", "geometry", "drawing"]
-              });
-              await loader.load();
-              console.log('✅ Google Maps loaded manually');
-            } else {
-              console.error('❌ No Google Maps API key found');
+          console.log('📍 Waiting for Google Maps script to finish loading...');
+          let scriptLoadAttempts = 0;
+          const maxScriptLoadAttempts = 30; // 3 seconds
+          
+          while ((!window.google || !window.google.maps) && scriptLoadAttempts < maxScriptLoadAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            scriptLoadAttempts++;
+          }
+          
+          // Only use Loader if script tag loading failed
+          if (!window.google || !window.google.maps) {
+            console.log('📍 Google Maps script not loaded, using Loader as fallback...');
+            try {
+              const apiKey = await getGoogleMapsApiKey();
+              if (apiKey) {
+                const loader = new Loader({
+                  apiKey: apiKey,
+                  version: "weekly",
+                  libraries: ["places", "geometry", "drawing"]
+                });
+                await loader.load();
+                console.log('✅ Google Maps loaded via Loader');
+              } else {
+                console.error('❌ No Google Maps API key found');
+                setMapLoading(false);
+                return;
+              }
+            } catch (error) {
+              console.error('❌ Error loading Google Maps:', error);
               setMapLoading(false);
               return;
             }
-          } catch (error) {
-            console.error('❌ Error loading Google Maps:', error);
-            setMapLoading(false);
-            return;
+          } else {
+            console.log('✅ Google Maps loaded via script tag');
           }
         }
       }
 
-      // Initialize map once Google Maps is loaded
+      // Wait for MapTypeId to be available (sometimes it loads slightly after maps)
+      if (window.google && window.google.maps && !window.google.maps.MapTypeId) {
+        console.log('📍 Waiting for MapTypeId to be available...');
+        let attempts = 0;
+        const maxAttempts = 20; // 2 seconds max wait
+        
+        while (!window.google.maps.MapTypeId && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+      }
+
+      // Initialize map once Google Maps is fully loaded
+      // Check for both maps and MapTypeId to ensure API is fully initialized
       if (window.google && window.google.maps) {
+        // MapTypeId might still not be available, but we have a fallback
+        if (!window.google.maps.MapTypeId) {
+          console.warn('⚠️ MapTypeId not available, will use string fallback');
+        }
         initializeGoogleMap();
       } else {
-        console.error('❌ Google Maps API still not available');
+        console.error('❌ Google Maps API still not available or not fully loaded');
+        console.error('❌ API status:', {
+          google: !!window.google,
+          maps: !!window.google?.maps,
+          MapTypeId: !!window.google?.maps?.MapTypeId
+        });
         setMapLoading(false);
       }
     };
@@ -2349,22 +2828,70 @@ export default function DeliveryHome() {
         
         console.log('📍 Map center:', initialCenter);
         
-        const map = new window.google.maps.Map(mapContainerRef.current, {
-          center: initialCenter,
-          zoom: 15,
-          mapTypeId: window.google.maps.MapTypeId.ROADMAP,
-          tilt: 45,
-          heading: 0,
-          disableDefaultUI: false,
-          zoomControl: true,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false
+        // Check if MapTypeId is available, use string fallback if not
+        // Always use string 'roadmap' to avoid MapTypeId enum issues
+        const mapTypeId = (window.google?.maps?.MapTypeId?.ROADMAP !== undefined) 
+          ? window.google.maps.MapTypeId.ROADMAP 
+          : 'roadmap';
+        
+        console.log('📍 MapTypeId:', mapTypeId);
+        console.log('📍 Google Maps API check:', {
+          google: !!window.google,
+          maps: !!window.google?.maps,
+          MapTypeId: !!window.google?.maps?.MapTypeId,
+          ROADMAP: window.google?.maps?.MapTypeId?.ROADMAP !== undefined
         });
+        
+        // Wrap map initialization in try-catch to handle any Google Maps internal errors
+        let map;
+        try {
+          map = new window.google.maps.Map(mapContainerRef.current, {
+            center: initialCenter,
+            zoom: 15,
+            mapTypeId: mapTypeId,
+            tilt: 45,
+            heading: 0,
+            disableDefaultUI: false,
+            zoomControl: true,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false
+          });
+        } catch (mapError) {
+          console.error('❌ Error creating Google Map:', mapError);
+          console.error('❌ Error details:', {
+            message: mapError.message,
+            name: mapError.name,
+            stack: mapError.stack
+          });
+          setMapLoading(false);
+          return;
+        }
 
         // Store map instance
         window.deliveryMapInstance = map;
         console.log('✅ Map instance created and stored');
+        
+        // Add error listener for map errors (if available)
+        try {
+          if (window.google.maps.event) {
+            window.google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
+              console.log('✅ Map tiles loaded successfully');
+            });
+          }
+        } catch (eventError) {
+          console.warn('⚠️ Could not add map event listeners:', eventError);
+        }
+        
+        // Add error listener for map errors
+        window.google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
+          console.log('✅ Map tiles loaded successfully');
+        });
+        
+        // Handle map errors
+        window.google.maps.event.addListener(map, 'error', (error) => {
+          console.error('❌ Google Map error:', error);
+        });
 
         // Track user panning to disable auto-center when user manually moves map
         let isUserPanning = false;
@@ -2576,22 +3103,370 @@ export default function DeliveryHome() {
     return () => clearInterval(checkInterval);
   }, [isOnline, riderLocation, showHomeSections])
 
-  // Directions Map placeholder (Ola Maps removed)
-  useEffect(() => {
-    if (!showDirectionsMap || !selectedRestaurant) return
-    setDirectionsMapLoading(false)
-  }, [showDirectionsMap, selectedRestaurant])
+  // Calculate route using Google Maps Directions API (Zomato-style road-based routing)
+  // Optimized for TWO_WHEELER mode with DRIVING fallback
+  // NOTE: Must be defined BEFORE the useEffect that uses it (Rules of Hooks)
+  const calculateRouteWithDirectionsAPI = useCallback(async (origin, destination) => {
+    if (!window.google || !window.google.maps || !window.google.maps.DirectionsService) {
+      console.warn('⚠️ Google Maps Directions API not available');
+      return null;
+    }
 
-  // Handle route polyline visibility
+    try {
+      // Initialize Directions Service if not already created
+      if (!directionsServiceRef.current) {
+        directionsServiceRef.current = new window.google.maps.DirectionsService();
+      }
+
+      // Try TWO_WHEELER first (optimized for bike/delivery), fallback to DRIVING
+      const tryRoute = (travelMode, modeName) => {
+        return new Promise((resolve, reject) => {
+          directionsServiceRef.current.route(
+            {
+              origin: { lat: origin[0], lng: origin[1] },
+              destination: { lat: destination.lat, lng: destination.lng },
+              travelMode: travelMode,
+              provideRouteAlternatives: false, // Save API cost - don't get alternatives
+              avoidHighways: false,
+              avoidTolls: false,
+              optimizeWaypoints: false
+            },
+            (result, status) => {
+              if (status === window.google.maps.DirectionsStatus.OK) {
+                console.log(`✅ Directions API route calculated successfully (${modeName})`);
+                console.log('📍 Route details:', {
+                  distance: result.routes[0].legs[0].distance?.text,
+                  duration: result.routes[0].legs[0].duration?.text,
+                  steps: result.routes[0].legs[0].steps?.length,
+                  travelMode: modeName
+                });
+                setDirectionsResponse(result);
+                resolve(result);
+              } else {
+                console.warn(`⚠️ Directions API failed with ${modeName}: ${status}`);
+                reject(new Error(`Directions request failed: ${status}`));
+              }
+            }
+          );
+        });
+      };
+
+      // Try TWO_WHEELER first (if available in region)
+      try {
+        if (window.google.maps.TravelMode.TWO_WHEELER) {
+          return await tryRoute(window.google.maps.TravelMode.TWO_WHEELER, 'TWO_WHEELER');
+        }
+      } catch (twoWheelerError) {
+        console.log('⚠️ TWO_WHEELER mode not available, trying DRIVING...');
+      }
+
+      // Fallback to DRIVING mode
+      return await tryRoute(window.google.maps.TravelMode.DRIVING, 'DRIVING');
+    } catch (error) {
+      console.error('❌ Error calculating route with Directions API:', error);
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Initialize Directions Map with Google Maps Directions API (Zomato-style)
+  useEffect(() => {
+    if (!showDirectionsMap || !selectedRestaurant) {
+      setDirectionsMapLoading(false)
+      return
+    }
+
+    // Prevent multiple initializations
+    if (directionsMapInstanceRef.current) {
+      console.log('🗺️ Map already initialized, skipping...');
+      return;
+    }
+
+    const initializeDirectionsMap = async () => {
+      if (!window.google || !window.google.maps) {
+        console.warn('⚠️ Google Maps API not loaded, waiting...');
+        setTimeout(initializeDirectionsMap, 200);
+        return;
+      }
+
+      if (!directionsMapContainerRef.current) {
+        console.warn('⚠️ Directions map container not ready');
+        return;
+      }
+
+      try {
+        setDirectionsMapLoading(true);
+        
+        // Get current LIVE location (delivery boy) - prioritize riderLocation which is updated in real-time
+        const currentLocation = riderLocation || lastLocationRef.current || [22.7196, 75.8577];
+        const restaurantLocation = {
+          lat: selectedRestaurant.lat,
+          lng: selectedRestaurant.lng
+        };
+
+        console.log('🗺️ Initializing Directions Map with LIVE location...');
+        console.log('📍 Origin (Delivery Boy LIVE Location):', currentLocation);
+        console.log('📍 Destination (Restaurant):', restaurantLocation);
+
+        // Create map instance
+        const map = new window.google.maps.Map(directionsMapContainerRef.current, {
+          center: { lat: currentLocation[0], lng: currentLocation[1] },
+          zoom: 15,
+          mapTypeId: window.google.maps.MapTypeId.ROADMAP || 'roadmap',
+          disableDefaultUI: false,
+          zoomControl: true,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false
+        });
+
+        directionsMapInstanceRef.current = map;
+
+        // Initialize Directions Service
+        if (!directionsServiceRef.current) {
+          directionsServiceRef.current = new window.google.maps.DirectionsService();
+        }
+
+        // Initialize Directions Renderer
+        if (!directionsRendererRef.current) {
+          directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
+            map: map,
+            suppressMarkers: true, // 🛑 Hide default A/B markers - we'll use custom markers
+            polylineOptions: {
+              strokeColor: '#4285F4', // Zomato-style blue
+              strokeWeight: 6,
+              strokeOpacity: 0.8
+            },
+            preserveViewport: false // Auto-fit bounds to route
+          });
+        } else {
+          directionsRendererRef.current.setMap(map);
+        }
+
+        // Calculate route using Directions API
+        const routeResult = await calculateRouteWithDirectionsAPI(currentLocation, restaurantLocation);
+        
+        if (routeResult) {
+          // Set directions response to renderer
+          directionsRendererRef.current.setDirections(routeResult);
+          
+          // Fit bounds to show entire route
+          const bounds = routeResult.routes[0].bounds;
+          if (bounds) {
+            map.fitBounds(bounds, { padding: 50 });
+          }
+
+          // Add custom Restaurant Marker
+          if (!restaurantMarkerRef.current) {
+            restaurantMarkerRef.current = new window.google.maps.Marker({
+              position: restaurantLocation,
+              map: map,
+              icon: {
+                url: 'https://cdn-icons-png.flaticon.com/512/3176/3176295.png', // Restaurant icon
+                scaledSize: new window.google.maps.Size(40, 40),
+                anchor: new window.google.maps.Point(20, 40)
+              },
+              title: selectedRestaurant.name || 'Restaurant',
+              animation: window.google.maps.Animation.DROP
+            });
+          } else {
+            restaurantMarkerRef.current.setPosition(restaurantLocation);
+            restaurantMarkerRef.current.setMap(map);
+          }
+
+          // Add custom Bike Marker (Delivery Boy)
+          if (!directionsBikeMarkerRef.current) {
+            directionsBikeMarkerRef.current = new window.google.maps.Marker({
+              position: { lat: currentLocation[0], lng: currentLocation[1] },
+              map: map,
+              icon: {
+                url: bikeLogo,
+                scaledSize: new window.google.maps.Size(50, 50),
+                anchor: new window.google.maps.Point(25, 25)
+              },
+              title: 'Your Location',
+              zIndex: 100 // Bike marker should be on top
+            });
+          } else {
+            directionsBikeMarkerRef.current.setPosition({ lat: currentLocation[0], lng: currentLocation[1] });
+            directionsBikeMarkerRef.current.setMap(map);
+          }
+
+          console.log('✅ Directions Map initialized with route');
+        } else {
+          console.warn('⚠️ Failed to calculate route, using fallback polyline');
+          // Fallback to simple polyline if Directions API fails
+          if (routePolyline && routePolyline.length > 0) {
+            updateRoutePolyline();
+          }
+        }
+
+        setDirectionsMapLoading(false);
+      } catch (error) {
+        console.error('❌ Error initializing directions map:', error);
+        console.error('❌ Error stack:', error.stack);
+        setDirectionsMapLoading(false);
+        // Don't crash - show error message instead
+        try {
+          // Fallback to simple polyline
+          if (routePolyline && routePolyline.length > 0) {
+            updateRoutePolyline();
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback also failed:', fallbackError);
+        }
+      }
+    };
+
+    initializeDirectionsMap();
+
+    // Cleanup function - only cleanup when showDirectionsMap becomes false
+    return () => {
+      if (!showDirectionsMap) {
+        console.log('🧹 Cleaning up directions map...');
+        // Clean up directions renderer when map is closed
+        try {
+          if (directionsRendererRef.current) {
+            directionsRendererRef.current.setMap(null);
+          }
+          if (restaurantMarkerRef.current) {
+            restaurantMarkerRef.current.setMap(null);
+          }
+          if (directionsBikeMarkerRef.current) {
+            directionsBikeMarkerRef.current.setMap(null);
+          }
+          directionsMapInstanceRef.current = null;
+        } catch (cleanupError) {
+          console.error('❌ Error during cleanup:', cleanupError);
+        }
+      }
+    };
+    // Only re-initialize if showDirectionsMap or selectedRestaurant.id changes
+    // Don't include calculateRouteWithDirectionsAPI to prevent unnecessary re-renders
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDirectionsMap, selectedRestaurant?.id])
+
+  // Helper function to calculate distance in meters (Haversine formula)
+  const calculateDistanceInMeters = useCallback((lat1, lng1, lat2, lng2) => {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in meters
+  }, []);
+
+  // Update bike marker position on directions map when rider location changes
+  // Optimized: Only update marker position, don't recalculate route (saves API cost)
+  useEffect(() => {
+    if (!showDirectionsMap || !directionsMapInstanceRef.current || !directionsBikeMarkerRef.current) {
+      return;
+    }
+
+    if (riderLocation && riderLocation.length === 2) {
+      const newPosition = { lat: riderLocation[0], lng: riderLocation[1] };
+      
+      // Update bike marker position (smooth movement)
+      directionsBikeMarkerRef.current.setPosition(newPosition);
+      
+      // Optional: Auto-center map on bike (like Zomato) - smooth pan
+      // Uncomment if you want map to follow bike movement
+      // directionsMapInstanceRef.current.panTo(newPosition);
+      
+      // API Cost Optimization: Only recalculate route if bike deviates significantly (>50m from route)
+      // This prevents unnecessary API calls on every location update
+      if (lastBikePositionRef.current) {
+        const distance = calculateDistanceInMeters(
+          lastBikePositionRef.current.lat,
+          lastBikePositionRef.current.lng,
+          newPosition.lat,
+          newPosition.lng
+        );
+        
+        // Only recalculate if moved >50 meters AND last recalculation was >30 seconds ago
+        const timeSinceLastRecalc = Date.now() - (lastRouteRecalculationRef.current || 0);
+        if (distance > 50 && timeSinceLastRecalc > 30000 && selectedRestaurant) {
+          console.log('🔄 Significant deviation detected, recalculating route...');
+          lastRouteRecalculationRef.current = Date.now();
+          calculateRouteWithDirectionsAPI(
+            [newPosition.lat, newPosition.lng],
+            { lat: selectedRestaurant.lat, lng: selectedRestaurant.lng }
+          ).then(result => {
+            if (result && directionsRendererRef.current) {
+              directionsRendererRef.current.setDirections(result);
+            }
+          }).catch(err => {
+            console.warn('⚠️ Route recalculation failed:', err);
+          });
+        }
+      }
+      
+      lastBikePositionRef.current = newPosition;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDirectionsMap, riderLocation, selectedRestaurant?.id, calculateDistanceInMeters])
+
+  // Handle route polyline visibility and updates
+  useEffect(() => {
+    // Update polyline when routePolyline state changes (from order acceptance)
+    if (routePolyline && routePolyline.length > 0 && window.deliveryMapInstance) {
+      updateRoutePolyline();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routePolyline?.length])
+
+  // Handle route polyline visibility toggle
   useEffect(() => {
     if (routePolylineRef.current) {
       if (showRoutePath && routeHistoryRef.current.length >= 2) {
+        routePolylineRef.current.setMap(window.deliveryMapInstance);
+      } else if (routePolyline && routePolyline.length > 0) {
+        // Show route polyline if we have route data (from order acceptance)
         routePolylineRef.current.setMap(window.deliveryMapInstance);
       } else {
         routePolylineRef.current.setMap(null);
       }
     }
-  }, [showRoutePath])
+  }, [showRoutePath, routePolyline])
+
+  // Listen for order ready event from backend (when restaurant ETA becomes 0)
+  useEffect(() => {
+    if (orderReady) {
+      console.log('✅ Order ready event received:', orderReady);
+      console.log('✅ Showing Reached Pickup popup');
+      
+      // Update selectedRestaurant with order data from orderReady event if available
+      if (orderReady.orderId || orderReady.order) {
+        const order = orderReady.order || orderReady
+        if (order && !selectedRestaurant?.orderId) {
+          // Only update if we don't already have order data
+          const restaurantInfo = {
+            ...selectedRestaurant,
+            orderId: order.orderId || orderReady.orderId || selectedRestaurant?.orderId,
+            name: order.restaurantName || order.restaurantId?.name || selectedRestaurant?.name,
+            address: order.restaurantId?.location?.formattedAddress || 
+                    order.restaurantId?.location?.address ||
+                    selectedRestaurant?.address
+          }
+          setSelectedRestaurant(restaurantInfo)
+          console.log('🏪 Updated restaurant info from orderReady event:', restaurantInfo)
+        }
+      }
+      
+      // Close directions map if open
+      setShowDirectionsMap(false);
+      
+      // Show Reached Pickup popup
+      setShowreachedPickupPopup(true);
+      
+      // Clear the orderReady state after showing popup
+      // Don't clear immediately - let user see the popup
+      // clearOrderReady();
+    }
+  }, [orderReady])
 
   // Calculate heading from two coordinates (in degrees, 0-360)
   const calculateHeading = (lat1, lng1, lat2, lng2) => {
@@ -2678,13 +3553,62 @@ export default function DeliveryHome() {
     }
   }
 
-  // Create or update route polyline (blue line showing traveled path) - DISABLED
-  const updateRoutePolyline = () => {
-    // Route polyline is disabled - always hide it
-    if (routePolylineRef.current) {
-      routePolylineRef.current.setMap(null);
+  // Create or update route polyline (blue line showing traveled path) - LEGACY/FALLBACK
+  // Accepts optional coordinates parameter to draw route immediately without waiting for state update
+  const updateRoutePolyline = (coordinates = null) => {
+    if (!window.google || !window.google.maps || !window.deliveryMapInstance) {
+      console.warn('⚠️ Map not ready for polyline update');
+      return;
     }
-    return;
+
+    const map = window.deliveryMapInstance;
+
+    // Use provided coordinates or fallback to state
+    const coordsToUse = coordinates || routePolyline;
+
+    if (coordsToUse && coordsToUse.length > 0) {
+      // Convert coordinates to Google Maps LatLng format
+      const path = coordsToUse.map(coord => {
+        if (Array.isArray(coord) && coord.length >= 2) {
+          return new window.google.maps.LatLng(coord[0], coord[1]);
+        }
+        return null;
+      }).filter(coord => coord !== null);
+
+      if (path.length > 0) {
+        // Create or update polyline
+        if (!routePolylineRef.current) {
+          routePolylineRef.current = new window.google.maps.Polyline({
+            path: path,
+            geodesic: true,
+            strokeColor: '#4285F4', // Blue color
+            strokeOpacity: 0.8,
+            strokeWeight: 5,
+            map: map,
+            zIndex: 1
+          });
+          console.log('✅ Route polyline created on map with', path.length, 'points');
+        } else {
+          routePolylineRef.current.setPath(path);
+          routePolylineRef.current.setMap(map);
+          console.log('✅ Route polyline updated on map with', path.length, 'points');
+        }
+
+        // Fit map bounds to show entire route
+        if (path.length > 1) {
+          const bounds = new window.google.maps.LatLngBounds();
+          path.forEach(point => bounds.extend(point));
+          // Add padding to bounds for better visibility
+          map.fitBounds(bounds, { padding: 50 });
+          console.log('✅ Map bounds adjusted to show route');
+        }
+      }
+    } else {
+      // Hide polyline if no route data
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+    }
   }
 
   const createOrUpdateBlueDotMarker = (latitude, longitude) => {
@@ -2784,8 +3708,9 @@ export default function DeliveryHome() {
     const deltaY = Math.abs(currentY - carouselStartY.current)
 
     // Only prevent default if horizontal swipe is dominant
+    // Don't call preventDefault - CSS touch-action handles scrolling prevention
     if (deltaX > deltaY && deltaX > 10) {
-      safePreventDefault(e)
+      // safePreventDefault(e) // Removed to avoid passive listener error
     }
   }, [])
 
@@ -2822,7 +3747,8 @@ export default function DeliveryHome() {
 
     const handleMouseMove = (moveEvent) => {
       if (!carouselIsSwiping.current) return
-      safePreventDefault(moveEvent)
+      // Don't call preventDefault - CSS touch-action handles scrolling prevention
+      // safePreventDefault(moveEvent) // Removed for consistency (mouse events aren't passive but removed anyway)
     }
 
     const handleMouseUp = (upEvent) => {
@@ -2954,8 +3880,9 @@ export default function DeliveryHome() {
 
     // Only prevent default if we're actually dragging swipe bar (not scrolling)
     // Only prevent if drag is significant enough
+    // Don't call preventDefault - CSS touch-action handles scrolling prevention
     if (Math.abs(deltaY) > 10) {
-      safePreventDefault(e)
+      // safePreventDefault(e) // Removed to avoid passive listener error
     }
 
     if (showHomeSections) {
@@ -3038,7 +3965,8 @@ export default function DeliveryHome() {
     const windowHeight = window.innerHeight
 
     // Prevent default to avoid text selection
-    safePreventDefault(e)
+    // Don't call preventDefault - CSS touch-action handles scrolling prevention
+    // safePreventDefault(e) // Removed to avoid passive listener error
 
     if (showHomeSections) {
       // Currently showing home sections - swiping down should go back to map
@@ -4440,6 +5368,7 @@ export default function DeliveryHome() {
                     <motion.div
                       ref={newOrderAcceptButtonRef}
                       className="relative w-full bg-green-600 rounded-full overflow-hidden shadow-xl"
+                      style={{ touchAction: 'pan-x' }} // Prevent vertical scrolling, allow horizontal pan
                       onTouchStart={handleNewOrderAcceptTouchStart}
                       onTouchMove={handleNewOrderAcceptTouchMove}
                       onTouchEnd={handleNewOrderAcceptTouchEnd}
@@ -4613,7 +5542,7 @@ export default function DeliveryHome() {
             {/* Ola Maps Container for Directions */}
             <div
               ref={directionsMapContainerRef}
-              key={`directions-map-${riderLocation[0]}-${riderLocation[1]}`}
+              key="directions-map-container" // Fixed key - don't remount on location change
               style={{ height: '100%', width: '100%', zIndex: 1 }}
             />
             
@@ -4674,6 +5603,7 @@ export default function DeliveryHome() {
             <motion.div
               ref={reachedPickupButtonRef}
               className="relative w-full bg-green-600 rounded-full overflow-hidden shadow-xl"
+              style={{ touchAction: 'pan-x' }} // Prevent vertical scrolling, allow horizontal pan
               onTouchStart={handlereachedPickupTouchStart}
               onTouchMove={handlereachedPickupTouchMove}
               onTouchEnd={handlereachedPickupTouchEnd}
@@ -4763,6 +5693,7 @@ export default function DeliveryHome() {
               <motion.div
                 ref={orderIdConfirmButtonRef}
                 className="relative w-full bg-green-600 rounded-full overflow-hidden shadow-xl"
+                style={{ touchAction: 'pan-x' }} // Prevent vertical scrolling, allow horizontal pan
                 onTouchStart={handleOrderIdConfirmTouchStart}
                 onTouchMove={handleOrderIdConfirmTouchMove}
                 onTouchEnd={handleOrderIdConfirmTouchEnd}
@@ -4873,6 +5804,7 @@ export default function DeliveryHome() {
             <motion.div
               ref={reachedDropButtonRef}
               className="relative w-full bg-green-600 rounded-full overflow-hidden shadow-xl"
+              style={{ touchAction: 'pan-x' }} // Prevent vertical scrolling, allow horizontal pan
               onTouchStart={handleReachedDropTouchStart}
               onTouchMove={handleReachedDropTouchMove}
               onTouchEnd={handleReachedDropTouchEnd}
@@ -4981,6 +5913,7 @@ export default function DeliveryHome() {
             <motion.div
               ref={orderDeliveredButtonRef}
               className="relative w-full bg-green-600 rounded-full overflow-hidden shadow-xl"
+              style={{ touchAction: 'pan-x' }} // Prevent vertical scrolling, allow horizontal pan
               onTouchStart={handleOrderDeliveredTouchStart}
               onTouchMove={handleOrderDeliveredTouchMove}
               onTouchEnd={handleOrderDeliveredTouchEnd}

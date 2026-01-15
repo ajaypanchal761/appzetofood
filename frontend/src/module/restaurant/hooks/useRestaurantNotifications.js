@@ -48,6 +48,7 @@ export const useRestaurantNotifications = () => {
     // Initialize socket connection to restaurant namespace
     // Use polling first as it's more reliable, websocket will upgrade automatically
     socketRef.current = io(socketUrl, {
+      path: '/socket.io/', // Explicitly set Socket.IO path
       transports: ['polling'], // Start with polling only - more reliable
       upgrade: true, // Allow upgrade to websocket if available
       reconnection: true,
@@ -59,6 +60,10 @@ export const useRestaurantNotifications = () => {
       autoConnect: true,
       auth: {
         token: localStorage.getItem('restaurant_accessToken') || localStorage.getItem('accessToken')
+      },
+      // Add query parameters if needed
+      query: {
+        transport: 'polling'
       }
     });
 

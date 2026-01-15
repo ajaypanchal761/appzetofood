@@ -125,11 +125,6 @@ export function useLocation() {
         lng: longitude.toFixed(8) 
       });
       
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Google Maps API timeout")), 15000)
-      );
-      
       // Validate coordinates are in India range BEFORE fetching
       // India: Latitude 6.5° to 37.1° N, Longitude 68.7° to 97.4° E
       const isInIndiaRange = latitude >= 6.5 && latitude <= 37.1 && longitude >= 68.7 && longitude <= 97.4 && longitude > 0
@@ -141,14 +136,37 @@ export function useLocation() {
         throw new Error("Coordinates outside India range")
       }
       
-      // ZOMATO-STYLE: Use Geocoding API with proper parameters for EXACT location
-      // language=en for English, region=in for India (helps with better results)
-      // result_type: prioritize premise > street_address > establishment > point_of_interest for exact location
-      const apiPromise = fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=premise|street_address|establishment|point_of_interest|route|sublocality`
-      ).then(res => res.json());
+      // Use AbortController for proper timeout handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 20000); // 20 seconds timeout (increased from 15)
       
-      const data = await Promise.race([apiPromise, timeoutPromise]);
+      let data;
+      try {
+        // ZOMATO-STYLE: Use Geocoding API with proper parameters for EXACT location
+        // language=en for English, region=in for India (helps with better results)
+        // result_type: prioritize premise > street_address > establishment > point_of_interest for exact location
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}&language=en&region=in&result_type=premise|street_address|establishment|point_of_interest|route|sublocality`,
+          { signal: controller.signal }
+        );
+        
+        clearTimeout(timeoutId); // Clear timeout if request completes
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        data = await response.json();
+      } catch (error) {
+        clearTimeout(timeoutId); // Clear timeout on error
+        if (error.name === 'AbortError') {
+          console.error("❌ Google Maps API request was aborted due to timeout");
+          throw new Error("Google Maps API timeout");
+        }
+        throw error;
+      }
       
       // Check if response is valid
       if (!data) {
@@ -427,7 +445,27 @@ export function useLocation() {
         // Step 1: Use Nearby Search to find the closest place
         console.log("🔍 Using Google Places Nearby Search for detailed information...");
         const nearbySearchUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&radius=50&key=${apiKey}&language=en`;
-        const nearbyResponse = await fetch(nearbySearchUrl).then(res => res.json());
+        
+        // Add timeout for Nearby Search
+        const nearbyController = new AbortController();
+        const nearbyTimeoutId = setTimeout(() => nearbyController.abort(), 15000); // 15 seconds
+        
+        let nearbyResponse;
+        try {
+          const nearbyRes = await fetch(nearbySearchUrl, { signal: nearbyController.signal });
+          clearTimeout(nearbyTimeoutId);
+          if (!nearbyRes.ok) {
+            throw new Error(`HTTP error! status: ${nearbyRes.status}`);
+          }
+          nearbyResponse = await nearbyRes.json();
+        } catch (error) {
+          clearTimeout(nearbyTimeoutId);
+          if (error.name === 'AbortError') {
+            console.warn("⚠️ Google Places Nearby Search timeout, skipping Places API");
+            throw new Error("Google Places Nearby Search timeout");
+          }
+          throw error;
+        }
         
         if (nearbyResponse.status === "OK" && nearbyResponse.results && nearbyResponse.results.length > 0) {
           // Find the closest place (first result is usually the closest)
@@ -446,7 +484,27 @@ export function useLocation() {
           if (placeId) {
             console.log("🔍 Fetching detailed place information...");
             const placeDetailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,formatted_phone_number,website,rating,opening_hours,photos,address_components,geometry,types&key=${apiKey}&language=en`;
-            const detailsResponse = await fetch(placeDetailsUrl).then(res => res.json());
+            
+            // Add timeout for Place Details
+            const detailsController = new AbortController();
+            const detailsTimeoutId = setTimeout(() => detailsController.abort(), 15000); // 15 seconds
+            
+            let detailsResponse;
+            try {
+              const detailsRes = await fetch(placeDetailsUrl, { signal: detailsController.signal });
+              clearTimeout(detailsTimeoutId);
+              if (!detailsRes.ok) {
+                throw new Error(`HTTP error! status: ${detailsRes.status}`);
+              }
+              detailsResponse = await detailsRes.json();
+            } catch (error) {
+              clearTimeout(detailsTimeoutId);
+              if (error.name === 'AbortError') {
+                console.warn("⚠️ Google Places Details timeout, using geocoding results only");
+                throw new Error("Google Places Details timeout");
+              }
+              throw error;
+            }
             
             if (detailsResponse.status === "OK" && detailsResponse.result) {
               placeDetails = detailsResponse.result;

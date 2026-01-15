@@ -55,8 +55,11 @@ export default function BottomNavigation() {
           }
         }
       } catch (error) {
-        // Skip logging timeout errors (handled by axios interceptor)
-        if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+        // Skip logging network and timeout errors (handled by axios interceptor)
+        if (error.code !== 'ECONNABORTED' && 
+            error.code !== 'ERR_NETWORK' && 
+            error.message !== 'Network Error' &&
+            !error.message?.includes('timeout')) {
           console.error("Error fetching profile image for navigation:", error)
         }
       }

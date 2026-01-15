@@ -391,8 +391,13 @@ export const restaurantAPI = {
   },
 
   // Mark order as preparing
-  markOrderPreparing: (id) => {
-    return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_PREPARING.replace(':id', id));
+  markOrderPreparing: (id, options = {}) => {
+    const url = API_ENDPOINTS.RESTAURANT.ORDER_PREPARING.replace(':id', id);
+    // Add resend query parameter if provided
+    if (options.resend) {
+      return apiClient.patch(`${url}?resend=true`);
+    }
+    return apiClient.patch(url);
   },
 
   // Mark order as ready
@@ -618,6 +623,29 @@ export const deliveryAPI = {
   // Get orders
   getOrders: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.ORDERS, { params });
+  },
+  getOrderDetails: (orderId) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.ORDER_BY_ID.replace(':orderId', orderId));
+  },
+  acceptOrder: (orderId, currentLocation = {}) => {
+    const payload = {};
+    if (currentLocation.lat !== undefined && currentLocation.lat !== null) {
+      payload.currentLat = currentLocation.lat;
+    }
+    if (currentLocation.lng !== undefined && currentLocation.lng !== null) {
+      payload.currentLng = currentLocation.lng;
+    }
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_ACCEPT.replace(':orderId', orderId), payload);
+  },
+  confirmReachedPickup: (orderId) => {
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_REACHED_PICKUP.replace(':orderId', orderId));
+  },
+  confirmOrderId: (orderId, confirmedOrderId, currentLocation = {}) => {
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_CONFIRM_ID.replace(':orderId', orderId), {
+      confirmedOrderId,
+      currentLat: currentLocation.lat,
+      currentLng: currentLocation.lng
+    });
   },
 
   // Get trip history

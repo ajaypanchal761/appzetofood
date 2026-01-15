@@ -15,6 +15,43 @@ async function getIOInstance() {
 }
 
 /**
+ * Check if delivery partner is connected to socket
+ * @param {string} deliveryPartnerId - Delivery partner ID
+ * @returns {Promise<{connected: boolean, room: string|null, socketCount: number}>}
+ */
+async function checkDeliveryPartnerConnection(deliveryPartnerId) {
+  try {
+    const io = await getIOInstance();
+    if (!io) {
+      return { connected: false, room: null, socketCount: 0 };
+    }
+
+    const deliveryNamespace = io.of('/delivery');
+    const normalizedId = deliveryPartnerId?.toString() || deliveryPartnerId;
+    
+    const roomVariations = [
+      `delivery:${normalizedId}`,
+      `delivery:${deliveryPartnerId}`,
+      ...(mongoose.Types.ObjectId.isValid(normalizedId) 
+        ? [`delivery:${new mongoose.Types.ObjectId(normalizedId).toString()}`]
+        : [])
+    ];
+
+    for (const room of roomVariations) {
+      const sockets = await deliveryNamespace.in(room).fetchSockets();
+      if (sockets.length > 0) {
+        return { connected: true, room, socketCount: sockets.length };
+      }
+    }
+
+    return { connected: false, room: null, socketCount: 0 };
+  } catch (error) {
+    console.error('Error checking delivery partner connection:', error);
+    return { connected: false, room: null, socketCount: 0 };
+  }
+}
+
+/**
  * Notify delivery boy about new order assignment via Socket.IO
  * @param {Object} order - Order document
  * @param {string} deliveryPartnerId - Delivery partner ID
@@ -43,12 +80,47 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
 
     // Get delivery partner details
     const deliveryPartner = await Delivery.findById(deliveryPartnerId)
-      .select('name phone availability.currentLocation')
+      .select('name phone availability.currentLocation availability.isOnline status isActive')
       .lean();
 
     if (!deliveryPartner) {
       console.error(`❌ Delivery partner not found: ${deliveryPartnerId}`);
       return;
+    }
+
+    // Verify delivery partner is online and active
+    if (!deliveryPartner.availability?.isOnline) {
+      console.warn(`⚠️ Delivery partner ${deliveryPartnerId} (${deliveryPartner.name}) is not online. Notification may not be received.`);
+    }
+
+    if (!deliveryPartner.isActive) {
+      console.warn(`⚠️ Delivery partner ${deliveryPartnerId} (${deliveryPartner.name}) is not active.`);
+    }
+
+    if (!deliveryPartner.availability?.currentLocation?.coordinates || 
+        deliveryPartner.availability.currentLocation.coordinates[0] === 0 && 
+        deliveryPartner.availability.currentLocation.coordinates[1] === 0) {
+      console.warn(`⚠️ Delivery partner ${deliveryPartnerId} (${deliveryPartner.name}) has no valid location.`);
+    }
+
+    console.log(`📋 Delivery partner details:`, {
+      id: deliveryPartnerId,
+      name: deliveryPartner.name,
+      isOnline: deliveryPartner.availability?.isOnline,
+      isActive: deliveryPartner.isActive,
+      status: deliveryPartner.status,
+      hasLocation: !!deliveryPartner.availability?.currentLocation?.coordinates
+    });
+
+    // Check if delivery partner is connected to socket BEFORE trying to notify
+    const connectionStatus = await checkDeliveryPartnerConnection(deliveryPartnerId);
+    console.log(`🔌 Delivery partner socket connection status:`, connectionStatus);
+    
+    if (!connectionStatus.connected) {
+      console.warn(`⚠️ Delivery partner ${deliveryPartnerId} (${deliveryPartner.name}) is NOT connected to socket!`);
+      console.warn(`⚠️ Notification will be sent but may not be received until they reconnect.`);
+    } else {
+      console.log(`✅ Delivery partner ${deliveryPartnerId} is connected via socket in room: ${connectionStatus.room}`);
     }
 
     // Get restaurant details for pickup location
@@ -120,30 +192,110 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
     // Normalize deliveryPartnerId to string
     const normalizedDeliveryPartnerId = deliveryPartnerId?.toString() || deliveryPartnerId;
     
+    // Try multiple room formats to ensure we find the delivery partner
+    const roomVariations = [
+      `delivery:${normalizedDeliveryPartnerId}`,
+      `delivery:${deliveryPartnerId}`,
+      ...(mongoose.Types.ObjectId.isValid(normalizedDeliveryPartnerId) 
+        ? [`delivery:${new mongoose.Types.ObjectId(normalizedDeliveryPartnerId).toString()}`]
+        : [])
+    ];
+    
     // Get all connected sockets in the delivery partner room
-    const room = `delivery:${normalizedDeliveryPartnerId}`;
-    const socketsInRoom = await deliveryNamespace.in(room).fetchSockets();
+    let socketsInRoom = [];
+    let foundRoom = null;
+    
+    // First, get all connected sockets in delivery namespace for debugging
+    const allSockets = await deliveryNamespace.fetchSockets();
+    console.log(`📊 Total connected delivery sockets: ${allSockets.length}`);
+    
+    // Check each room variation
+    for (const room of roomVariations) {
+      const sockets = await deliveryNamespace.in(room).fetchSockets();
+      if (sockets.length > 0) {
+        socketsInRoom = sockets;
+        foundRoom = room;
+        console.log(`📢 Found ${sockets.length} socket(s) in room: ${room}`);
+        console.log(`📢 Socket IDs in room:`, sockets.map(s => s.id));
+        break;
+      } else {
+        // Check room size using adapter (alternative method)
+        const roomSize = deliveryNamespace.adapter.rooms.get(room)?.size || 0;
+        if (roomSize > 0) {
+          console.log(`📢 Room ${room} has ${roomSize} socket(s) (checked via adapter)`);
+        }
+      }
+    }
+    
+    const primaryRoom = roomVariations[0];
     
     console.log(`📢 Attempting to notify delivery partner ${normalizedDeliveryPartnerId} about order ${order.orderId}`);
-    console.log(`📢 Connected sockets in room ${room}:`, socketsInRoom.length);
+    console.log(`📢 Delivery partner name: ${deliveryPartner.name}`);
+    console.log(`📢 Room variations to try:`, roomVariations);
+    console.log(`📢 Connected sockets in primary room ${primaryRoom}:`, socketsInRoom.length);
+    console.log(`📢 Found room:`, foundRoom || 'none');
     
-    // Emit new order notification to delivery partner room
-    deliveryNamespace.to(room).emit('new_order', orderNotification);
-    
-    // Emit sound notification event
-    deliveryNamespace.to(room).emit('play_notification_sound', {
-      type: 'new_order',
-      orderId: order.orderId,
-      message: `New order assigned: ${order.orderId}`
+    // Emit new order notification to all room variations (even if no sockets found, in case they connect)
+    let notificationSent = false;
+    roomVariations.forEach(room => {
+      deliveryNamespace.to(room).emit('new_order', orderNotification);
+      deliveryNamespace.to(room).emit('play_notification_sound', {
+        type: 'new_order',
+        orderId: order.orderId,
+        message: `New order assigned: ${order.orderId}`
+      });
+      notificationSent = true;
+      console.log(`📤 Emitted notification to room: ${room}`);
     });
 
-    // Also emit to all sockets in the delivery namespace (fallback)
+    // Also emit to all sockets in the delivery namespace (fallback if no specific room found)
     if (socketsInRoom.length === 0) {
-      console.warn(`⚠️ No sockets connected in room ${room}, broadcasting to all delivery sockets`);
+      console.warn(`⚠️ No sockets connected in any delivery room for partner ${normalizedDeliveryPartnerId}`);
+      console.warn(`⚠️ Delivery partner details:`, {
+        id: normalizedDeliveryPartnerId,
+        name: deliveryPartner.name,
+        isOnline: deliveryPartner.availability?.isOnline,
+        isActive: deliveryPartner.isActive,
+        status: deliveryPartner.status
+      });
+      console.warn(`⚠️ This means the delivery partner is not currently connected to the app`);
+      console.warn(`⚠️ Possible reasons:`);
+      console.warn(`  1. Delivery partner app is closed or not running`);
+      console.warn(`  2. Delivery partner is not logged in`);
+      console.warn(`  3. Socket connection failed`);
+      console.warn(`  4. Delivery partner needs to refresh their app`);
+      console.warn(`  5. Delivery partner ID mismatch (check if ID used to join room matches ${normalizedDeliveryPartnerId})`);
+      
+      if (allSockets.length > 0) {
+        console.log(`📊 Connected delivery socket IDs:`, allSockets.map(s => s.id));
+        console.log(`📊 Checking all delivery rooms to see which partners are connected...`);
+        
+        // List all rooms in delivery namespace
+        const allRooms = deliveryNamespace.adapter.rooms;
+        console.log(`📊 All delivery rooms:`, Array.from(allRooms.keys()).filter(room => room.startsWith('delivery:')));
+      } else {
+        console.warn(`⚠️ No delivery partners are currently connected to the app!`);
+      }
+      
+      // Still broadcast to all delivery sockets as fallback
+      console.warn(`⚠️ Broadcasting to all delivery sockets as fallback (in case they connect later)`);
       deliveryNamespace.emit('new_order', orderNotification);
+      deliveryNamespace.emit('play_notification_sound', {
+        type: 'new_order',
+        orderId: order.orderId,
+        message: `New order assigned: ${order.orderId}`
+      });
+      notificationSent = true;
+    } else {
+      console.log(`✅ Successfully found ${socketsInRoom.length} connected socket(s) for delivery partner ${normalizedDeliveryPartnerId}`);
+      console.log(`✅ Notification sent to room: ${foundRoom}`);
     }
 
-    console.log(`✅ Notified delivery partner ${normalizedDeliveryPartnerId} about new order ${order.orderId}`);
+    if (notificationSent) {
+      console.log(`✅ Notification emitted for order ${order.orderId} to delivery partner ${normalizedDeliveryPartnerId}`);
+    } else {
+      console.error(`❌ Failed to send notification - no sockets found and broadcast failed`);
+    }
     
     return {
       success: true,
@@ -152,6 +304,79 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
     };
   } catch (error) {
     console.error('Error notifying delivery boy:', error);
+    throw error;
+  }
+}
+
+/**
+ * Notify delivery boy that order is ready for pickup
+ * @param {Object} order - Order document
+ * @param {string} deliveryPartnerId - Delivery partner ID
+ */
+export async function notifyDeliveryBoyOrderReady(order, deliveryPartnerId) {
+  try {
+    const io = await getIOInstance();
+    
+    if (!io) {
+      console.warn('Socket.IO not initialized, skipping delivery boy notification');
+      return;
+    }
+
+    const deliveryNamespace = io.of('/delivery');
+    const normalizedDeliveryPartnerId = deliveryPartnerId?.toString() || deliveryPartnerId;
+
+    // Prepare order ready notification
+    const orderReadyNotification = {
+      orderId: order.orderId || order._id,
+      mongoId: order._id?.toString(),
+      status: 'ready',
+      restaurantName: order.restaurantName || order.restaurantId?.name,
+      restaurantAddress: order.restaurantId?.address || order.restaurantId?.location?.address,
+      message: `Order ${order.orderId} is ready for pickup`,
+      timestamp: new Date().toISOString()
+    };
+
+    // Try to find delivery partner's room
+    const roomVariations = [
+      `delivery:${normalizedDeliveryPartnerId}`,
+      `delivery:${deliveryPartnerId}`,
+      ...(mongoose.Types.ObjectId.isValid(normalizedDeliveryPartnerId) 
+        ? [`delivery:${new mongoose.Types.ObjectId(normalizedDeliveryPartnerId).toString()}`]
+        : [])
+    ];
+
+    let notificationSent = false;
+    let foundRoom = null;
+    let socketsInRoom = [];
+
+    for (const room of roomVariations) {
+      const sockets = await deliveryNamespace.in(room).fetchSockets();
+      if (sockets.length > 0) {
+        foundRoom = room;
+        socketsInRoom = sockets;
+        break;
+      }
+    }
+
+    if (foundRoom && socketsInRoom.length > 0) {
+      // Send to specific delivery partner room
+      deliveryNamespace.to(foundRoom).emit('order_ready', orderReadyNotification);
+      notificationSent = true;
+      console.log(`✅ Order ready notification sent to delivery partner ${normalizedDeliveryPartnerId} in room ${foundRoom}`);
+    } else {
+      // Fallback: broadcast to all delivery sockets
+      console.warn(`⚠️ Delivery partner ${normalizedDeliveryPartnerId} not found in any room, broadcasting to all`);
+      deliveryNamespace.emit('order_ready', orderReadyNotification);
+      notificationSent = true;
+    }
+
+    return {
+      success: notificationSent,
+      deliveryPartnerId: normalizedDeliveryPartnerId,
+      orderId: order.orderId
+    };
+  } catch (error) {
+    console.error('Error notifying delivery boy about order ready:', error);
     throw error;
   }
 }

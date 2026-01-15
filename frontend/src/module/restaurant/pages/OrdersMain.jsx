@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
 import { Printer, Volume2, VolumeX, ChevronDown, ChevronUp, Minus, Plus, X, AlertCircle, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import BottomNavOrders from "../components/BottomNavOrders"
 import RestaurantNavbar from "../components/RestaurantNavbar"
 import notificationSound from "@/assets/audio/alert.mp3"
@@ -1147,7 +1148,10 @@ export default function OrdersMain() {
               </div>
 
               <div className="flex items-center justify-between text-[11px] text-gray-500 mb-4">
-                <span>ETA: <span className="font-medium text-black">{selectedOrder.eta}</span></span>
+                {/* Hide ETA for ready orders */}
+                {selectedOrder.status !== 'ready' && selectedOrder.eta && (
+                  <span>ETA: <span className="font-medium text-black">{selectedOrder.eta}</span></span>
+                )}
                 <span>Payment: <span className="font-medium text-black">Paid online</span></span>
               </div>
 
@@ -1171,6 +1175,7 @@ export default function OrdersMain() {
 // Order Card Component
 function OrderCard({
   orderId,
+  mongoId,
   status,
   customerName,
   type,
@@ -1180,27 +1185,48 @@ function OrderCard({
   itemsSummary,
   photoUrl,
   photoAlt,
+  deliveryPartnerId,
   onSelect,
+  onResendRequest,
 }) {
   const isReady = status === "Ready"
+  const [isResending, setIsResending] = useState(false)
+  // Show resend button for all preparing orders (assigned or not)
+  // If assigned, it will resend to existing partner; if not, it will find nearest partner
+  const showResendButton = status === 'preparing'
+
+  const handleResendRequest = async (e) => {
+    e.stopPropagation() // Prevent triggering order selection
+    if (!mongoId || isResending) return
+
+    try {
+      setIsResending(true)
+      await onResendRequest?.(mongoId, orderId)
+    } catch (error) {
+      console.error('Error resending delivery request:', error)
+    } finally {
+      setIsResending(false)
+    }
+  }
 
   return (
-    <button
-      type="button"
-      onClick={() =>
-        onSelect?.({
-          orderId,
-          status,
-          customerName,
-          type,
-          tableOrToken,
-          timePlaced,
-          eta,
-          itemsSummary,
-        })
-      }
-      className="w-full text-left bg-white rounded-2xl p-4 mb-3 border border-gray-200 flex gap-3 items-stretch hover:border-gray-400 transition-colors"
-    >
+    <div className="w-full bg-white rounded-2xl p-4 mb-3 border border-gray-200 hover:border-gray-400 transition-colors relative">
+      <button
+        type="button"
+        onClick={() =>
+          onSelect?.({
+            orderId,
+            status,
+            customerName,
+            type,
+            tableOrToken,
+            timePlaced,
+            eta,
+            itemsSummary,
+          })
+        }
+        className="w-full text-left flex gap-3 items-stretch"
+      >
       {/* Photo */}
       <div className="h-20 w-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 my-auto">
         {photoUrl ? (
@@ -1261,19 +1287,71 @@ function OrderCard({
 
         {/* Bottom row */}
         <div className="mt-2 flex items-end justify-between gap-2">
-          <p className="text-[11px] text-gray-500">
-            {type}
-            {tableOrToken ? ` • ${tableOrToken}` : ""}
-          </p>
-          <div className="flex items-baseline gap-1">
-            <span className="text-[11px] text-gray-500">ETA</span>
-            <span className="text-xs font-medium text-black">
-              {eta}
-            </span>
+          <div className="flex flex-col gap-1">
+            <p className="text-[11px] text-gray-500">
+              {type}
+              {tableOrToken ? ` • ${tableOrToken}` : ""}
+            </p>
+            {/* Delivery Assignment Status - Only show for preparing orders */}
+            {status === 'preparing' && (
+              <div className="flex items-center gap-1.5">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                  deliveryPartnerId 
+                    ? 'bg-green-100 text-green-700 border border-green-300' 
+                    : 'bg-orange-100 text-orange-700 border border-orange-300'
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    deliveryPartnerId ? 'bg-green-500' : 'bg-orange-500'
+                  }`} />
+                  {deliveryPartnerId ? 'Assigned' : 'Not Assigned'}
+                </span>
+              </div>
+            )}
           </div>
+          {/* Hide ETA for ready orders */}
+          {status !== 'ready' && eta && (
+            <div className="flex items-baseline gap-1">
+              <span className="text-[11px] text-gray-500">ETA</span>
+              <span className="text-xs font-medium text-black">
+                {eta}
+              </span>
+            </div>
+          )}
         </div>
       </div>
-    </button>
+
+      </button>
+
+      {/* Resend Request Button - Show for all preparing orders */}
+      {showResendButton && (
+        <button
+          type="button"
+          onClick={handleResendRequest}
+          disabled={isResending}
+          className="absolute top-2 right-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-[10px] font-medium px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 z-10"
+          title={deliveryPartnerId 
+            ? "Resend delivery request to assigned delivery partner" 
+            : "Send delivery request to nearest delivery partner"}
+        >
+          {isResending ? (
+            <>
+              <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Sending...
+            </>
+          ) : (
+            <>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {deliveryPartnerId ? 'Resend Request' : 'Send Request'}
+            </>
+          )}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -1282,6 +1360,71 @@ function PreparingOrders({ onSelectOrder }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentTime, setCurrentTime] = useState(new Date())
+  
+  const handleResendRequest = async (mongoId, orderId) => {
+    try {
+      // Call the markOrderPreparing API with resend flag to resend delivery assignment
+      // Pass resend=true as query parameter to indicate this is a resend request
+      const response = await restaurantAPI.markOrderPreparing(mongoId, { resend: true })
+      
+      if (response.data?.success) {
+        // Show success message
+        toast.success('Delivery request sent successfully!', {
+          duration: 3000,
+        })
+        
+        // Refresh orders immediately to get updated delivery partner status
+        setTimeout(() => {
+          // Trigger a manual refetch
+          const fetchOrders = async () => {
+            try {
+              const response = await restaurantAPI.getOrders()
+              if (response.data?.success && response.data.data?.orders) {
+                const preparingOrders = response.data.data.orders.filter(
+                  order => order.status === 'preparing'
+                )
+                const transformedOrders = preparingOrders.map(order => {
+                  const initialETA = order.estimatedDeliveryTime || 30
+                  const preparingTimestamp = order.tracking?.preparing?.timestamp 
+                    ? new Date(order.tracking.preparing.timestamp)
+                    : new Date(order.createdAt)
+                  
+                  return {
+                    orderId: order.orderId || order._id,
+                    mongoId: order._id,
+                    status: order.status || 'preparing',
+                    customerName: order.userId?.name || 'Customer',
+                    type: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
+                    tableOrToken: null,
+                    timePlaced: new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                    initialETA,
+                    preparingTimestamp,
+                    itemsSummary: order.items?.map(item => `${item.quantity}x ${item.name}`).join(', ') || 'No items',
+                    photoUrl: order.items?.[0]?.image || null,
+                    photoAlt: order.items?.[0]?.name || 'Order',
+                    deliveryPartnerId: order.deliveryPartnerId || null
+                  }
+                })
+                setOrders(transformedOrders)
+              }
+            } catch (error) {
+              console.error('Error refreshing orders:', error)
+            }
+          }
+          fetchOrders()
+        }, 500)
+      } else {
+        throw new Error(response.data?.message || 'Failed to resend request')
+      }
+    } catch (error) {
+      console.error('Error resending delivery request:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to resend delivery request'
+      toast.error(errorMessage, {
+        duration: 4000,
+      })
+      throw error
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -1319,7 +1462,8 @@ function PreparingOrders({ onSelectOrder }) {
               preparingTimestamp, // Store when order started preparing
               itemsSummary: order.items?.map(item => `${item.quantity}x ${item.name}`).join(', ') || 'No items',
               photoUrl: order.items?.[0]?.image || null,
-              photoAlt: order.items?.[0]?.name || 'Order'
+              photoAlt: order.items?.[0]?.name || 'Order',
+              deliveryPartnerId: order.deliveryPartnerId || null // Track if delivery partner is assigned
             }
           })
           
@@ -1424,6 +1568,7 @@ function PreparingOrders({ onSelectOrder }) {
               <OrderCard
                 key={order.orderId || order.mongoId}
                 orderId={order.orderId}
+                mongoId={order.mongoId}
                 status={order.status}
                 customerName={order.customerName}
                 type={order.type}
@@ -1433,7 +1578,9 @@ function PreparingOrders({ onSelectOrder }) {
                 itemsSummary={order.itemsSummary}
                 photoUrl={order.photoUrl}
                 photoAlt={order.photoAlt}
+                deliveryPartnerId={order.deliveryPartnerId}
                 onSelect={onSelectOrder}
+                onResendRequest={handleResendRequest}
               />
             )
           })}
@@ -1473,7 +1620,7 @@ function ReadyOrders({ onSelectOrder }) {
             type: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
             tableOrToken: null,
             timePlaced: new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-            eta: `${order.estimatedDeliveryTime || 30} mins`,
+            eta: null, // Don't show ETA for ready orders
             itemsSummary: order.items?.map(item => `${item.quantity}x ${item.name}`).join(', ') || 'No items',
             photoUrl: order.items?.[0]?.image || null,
             photoAlt: order.items?.[0]?.name || 'Order'

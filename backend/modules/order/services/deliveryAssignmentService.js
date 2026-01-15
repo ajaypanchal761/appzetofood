@@ -30,6 +30,8 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
  */
 export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, maxDistance = 50) {
   try {
+    console.log(`🔍 Searching for nearest delivery partner near restaurant: ${restaurantLat}, ${restaurantLng}`);
+    
     // Find all online delivery partners
     const deliveryPartners = await Delivery.find({
       'availability.isOnline': true,
@@ -40,11 +42,25 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, maxDi
         $ne: [0, 0] // Exclude default/null coordinates
       }
     })
-      .select('_id name phone availability.currentLocation availability.lastLocationUpdate')
+      .select('_id name phone availability.currentLocation availability.lastLocationUpdate status isActive')
       .lean();
+
+    console.log(`📊 Found ${deliveryPartners?.length || 0} online delivery partners in database`);
 
     if (!deliveryPartners || deliveryPartners.length === 0) {
       console.log('⚠️ No online delivery partners found');
+      console.log('⚠️ Checking all delivery partners to see why...');
+      
+      // Debug: Check all delivery partners to see their status
+      const allPartners = await Delivery.find({})
+        .select('_id name availability.isOnline status isActive availability.currentLocation')
+        .lean();
+      
+      console.log(`📊 Total delivery partners in database: ${allPartners.length}`);
+      allPartners.forEach(partner => {
+        console.log(`  - ${partner.name} (${partner._id}): online=${partner.availability?.isOnline}, status=${partner.status}, active=${partner.isActive}, hasLocation=${!!partner.availability?.currentLocation?.coordinates}`);
+      });
+      
       return null;
     }
 
@@ -83,7 +99,10 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, maxDi
     // Get the nearest delivery partner
     const nearestPartner = deliveryPartnersWithDistance[0];
     
-    console.log(`✅ Found nearest delivery partner: ${nearestPartner.name} (${nearestPartner.distance.toFixed(2)}km away)`);
+    console.log(`✅ Found nearest delivery partner: ${nearestPartner.name} (ID: ${nearestPartner._id})`);
+    console.log(`✅ Distance: ${nearestPartner.distance.toFixed(2)}km away`);
+    console.log(`✅ Location: ${nearestPartner.latitude}, ${nearestPartner.longitude}`);
+    console.log(`✅ Phone: ${nearestPartner.phone}`);
 
     return {
       deliveryPartnerId: nearestPartner._id.toString(),
