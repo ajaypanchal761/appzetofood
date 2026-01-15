@@ -82,7 +82,6 @@ import CreateOffers from "@/module/restaurant/pages/CreateOffers"
 import ChooseDiscountType from "@/module/restaurant/pages/ChooseDiscountType"
 import ChooseMenuDiscountType from "@/module/restaurant/pages/ChooseMenuDiscountType"
 import CreatePercentageDiscount from "@/module/restaurant/pages/CreatePercentageDiscount"
-import PreviewOffer from "@/module/restaurant/pages/PreviewOffer"
 import CreateFreebies from "@/module/restaurant/pages/CreateFreebies"
 import FreebiesTiming from "@/module/restaurant/pages/FreebiesTiming"
 import CreatePercentageMenuDiscount from "@/module/restaurant/pages/CreatePercentageMenuDiscount"
@@ -98,6 +97,7 @@ import DownloadReport from "@/module/restaurant/pages/DownloadReport"
 import ToHub from "@/module/restaurant/pages/ToHub"
 import ManageOutlets from "@/module/restaurant/pages/ManageOutlets"
 import UpdateBankDetails from "@/module/restaurant/pages/UpdateBankDetails"
+import ZoneSetup from "@/module/restaurant/pages/ZoneSetup"
 
 import AdminRouter from "@/module/admin/components/AdminRouter"
 import AdminLogin from "@/module/admin/pages/auth/AdminLogin"
@@ -636,14 +636,6 @@ export default function App() {
         } 
       />
       <Route 
-        path="/restaurant/hub-growth/create-offers/delight-customers/percentage/preview" 
-        element={
-          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
-            <PreviewOffer />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
         path="/restaurant/hub-growth/create-offers/delight-customers/flat-price" 
         element={
           <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
@@ -656,14 +648,6 @@ export default function App() {
         element={
           <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
             <MenuDiscountTiming />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/restaurant/hub-growth/create-offers/delight-customers/flat-price/preview" 
-        element={
-          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
-            <PreviewOffer />
           </ProtectedRoute>
         } 
       />
@@ -684,26 +668,10 @@ export default function App() {
         } 
       />
       <Route 
-        path="/restaurant/hub-growth/create-offers/delight-customers/bogo/preview" 
-        element={
-          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
-            <PreviewOffer />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
         path="/restaurant/hub-growth/create-offers/:goalId/:discountType/create" 
         element={
           <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
             <CreatePercentageDiscount />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/restaurant/hub-growth/create-offers/:goalId/:discountType/preview" 
-        element={
-          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
-            <PreviewOffer />
           </ProtectedRoute>
         } 
       />
@@ -787,7 +755,14 @@ export default function App() {
           </ProtectedRoute>
         } 
       />
-
+      <Route 
+        path="/restaurant/zone-setup" 
+        element={
+          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
+            <ZoneSetup />
+          </ProtectedRoute>
+        } 
+      />
       {/* Delivery Public Routes */}
       <Route path="/delivery/sign-in" element={<DeliverySignIn />} />
       <Route path="/delivery/signup" element={<DeliverySignup />} />

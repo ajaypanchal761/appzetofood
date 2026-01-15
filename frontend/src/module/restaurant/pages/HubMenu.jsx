@@ -164,7 +164,11 @@ export default function HubMenu() {
           setRestaurantData(data)
         }
       } catch (error) {
+        // Only log error if it's not a network/timeout error (backend might be down/slow)
+        if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
         console.error('Error fetching restaurant data:', error)
+        }
+        // Continue with default values if fetch fails
       }
     }
     
@@ -189,12 +193,13 @@ export default function HubMenu() {
         setMenuData([])
       }
     } catch (error) {
+      // Only log and show toast if it's not a network/timeout error
+      if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
       console.error('Error fetching menu:', error)
-      // Check if it's a network error (backend not running)
-      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        toast.error('Cannot connect to server. Please check if backend is running.')
-      } else {
         toast.error('Failed to load menu')
+      } else if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        // Silently handle network errors - backend is not running
+        // The axios interceptor already handles these with proper error messages
       }
       setMenuData([])
     } finally {
@@ -359,7 +364,9 @@ export default function HubMenu() {
       if (showLoading) setLoadingAddons(true)
       const response = await restaurantAPI.getAddons()
       const data = response?.data?.data?.addons || response?.data?.addons || []
-      setAddons(data)
+      // Filter to show only approved add-ons
+      const approvedAddons = data.filter(addon => addon.approvalStatus === 'approved')
+      setAddons(approvedAddons)
     } catch (error) {
       console.error('Error fetching add-ons:', error)
       toast.error('Failed to load add-ons')

@@ -1,411 +1,211 @@
-import { useState, useMemo } from "react"
-import { MapPin, Hand, Shapes } from "lucide-react"
-import ZonesTopbar from "../../components/zones/ZonesTopbar"
-import ZonesTable from "../../components/zones/ZonesTable"
-import ZoneFilterPanel from "../../components/zones/ZoneFilterPanel"
-import EditZoneDialog from "../../components/zones/EditZoneDialog"
-import ViewZoneDialog from "../../components/zones/ViewZoneDialog"
-import SettingsDialog from "../../components/orders/SettingsDialog"
-import { exportZonesToCSV, exportZonesToExcel, exportZonesToPDF, exportZonesToJSON } from "../../components/zones/zonesExportUtils"
-
-const languageTabs = [
-  { key: "default", label: "Default" },
-  { key: "en", label: "English(EN)" },
-  { key: "bn", label: "Bengali - বাংলা(BN)" },
-  { key: "ar", label: "Arabic - العربية (AR)" },
-  { key: "es", label: "Spanish - español(ES)" }
-]
-
-const zonesData = [
-  {
-    id: 1,
-    zoneId: 1,
-    name: "All over the World",
-    displayName: "All over the World",
-    restaurants: 16,
-    deliverymen: 8,
-    isDefault: false,
-    status: true
-  }
-]
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import { MapPin, Plus, Search, Edit, Trash2, Eye, Map } from "lucide-react"
+import { adminAPI } from "@/lib/api"
 
 export default function ZoneSetup() {
-  const [activeLanguage, setActiveLanguage] = useState("default")
-  const [zoneName, setZoneName] = useState("")
-  const [zoneDisplayName, setZoneDisplayName] = useState("")
-  const [zones, setZones] = useState(zonesData)
+  const navigate = useNavigate()
+  const [zones, setZones] = useState([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [isEditZoneOpen, setIsEditZoneOpen] = useState(false)
-  const [isViewZoneOpen, setIsViewZoneOpen] = useState(false)
-  const [selectedZone, setSelectedZone] = useState(null)
-  const [filters, setFilters] = useState({
-    status: "",
-    isDefault: "",
-    minRestaurants: "",
-    maxRestaurants: "",
-    minDeliverymen: "",
-    maxDeliverymen: "",
-  })
-  const [visibleColumns, setVisibleColumns] = useState({
-    si: true,
-    zoneId: true,
-    name: true,
-    displayName: true,
-    restaurants: true,
-    deliverymen: true,
-    defaultStatus: true,
-    status: true,
-    actions: true,
-  })
+  const [restaurants, setRestaurants] = useState([])
 
-  const handleStatusToggle = (id) => {
-    setZones(prev => prev.map(zone => 
-      zone.id === id ? { ...zone, status: !zone.status } : zone
-    ))
-  }
+  useEffect(() => {
+    fetchZones()
+    fetchRestaurants()
+  }, [])
 
-  const handleMakeDefault = (id) => {
-    setZones(prev => prev.map(zone => ({
-      ...zone,
-      isDefault: zone.id === id
-    })))
-  }
-
-  const handleReset = () => {
-    setZoneName("")
-    setZoneDisplayName("")
-  }
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (zoneName && zoneDisplayName) {
-      const newZone = {
-        id: zones.length + 1,
-        zoneId: zones.length + 1,
-        name: zoneName,
-        displayName: zoneDisplayName,
-        restaurants: 0,
-        deliverymen: 0,
-        isDefault: false,
-        status: true
+  const fetchZones = async () => {
+    try {
+      setLoading(true)
+      const response = await adminAPI.getZones()
+      if (response.data?.success && response.data.data?.zones) {
+        setZones(response.data.data.zones)
       }
-      setZones(prev => [...prev, newZone])
-      handleReset()
+    } catch (error) {
+      console.error("Error fetching zones:", error)
+      setZones([])
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleEditZone = (zone) => {
-    setSelectedZone(zone)
-    setIsEditZoneOpen(true)
-  }
-
-  const handleViewZone = (zone) => {
-    setSelectedZone(zone)
-    setIsViewZoneOpen(true)
-  }
-
-  const handleSaveZone = (updatedZone) => {
-    setZones(prev => prev.map(zone => 
-      zone.id === updatedZone.id ? updatedZone : zone
-    ))
-  }
-
-  // Apply search and filters
-  const filteredZones = useMemo(() => {
-    let result = [...zones]
-
-    // Apply search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      result = result.filter(zone =>
-        zone.name.toLowerCase().includes(query) ||
-        zone.displayName.toLowerCase().includes(query) ||
-        zone.zoneId.toString().includes(query)
-      )
-    }
-
-    // Apply filters
-    if (filters.status) {
-      result = result.filter(zone => {
-        if (filters.status === "Active") return zone.status === true
-        if (filters.status === "Inactive") return zone.status === false
-        return true
-      })
-    }
-
-    if (filters.isDefault) {
-      result = result.filter(zone => {
-        if (filters.isDefault === "yes") return zone.isDefault === true
-        if (filters.isDefault === "no") return zone.isDefault === false
-        return true
-      })
-    }
-
-    if (filters.minRestaurants) {
-      result = result.filter(zone => zone.restaurants >= parseInt(filters.minRestaurants))
-    }
-
-    if (filters.maxRestaurants) {
-      result = result.filter(zone => zone.restaurants <= parseInt(filters.maxRestaurants))
-    }
-
-    if (filters.minDeliverymen) {
-      result = result.filter(zone => zone.deliverymen >= parseInt(filters.minDeliverymen))
-    }
-
-    if (filters.maxDeliverymen) {
-      result = result.filter(zone => zone.deliverymen <= parseInt(filters.maxDeliverymen))
-    }
-
-    return result
-  }, [zones, searchQuery, filters])
-
-  // Count active filters
-  const activeFiltersCount = useMemo(() => {
-    return Object.values(filters).filter(value => value !== "" && value !== null && value !== undefined).length
-  }, [filters])
-
-  const handleApplyFilters = () => {
-    setIsFilterOpen(false)
-  }
-
-  const handleResetFilters = () => {
-    setFilters({
-      status: "",
-      isDefault: "",
-      minRestaurants: "",
-      maxRestaurants: "",
-      minDeliverymen: "",
-      maxDeliverymen: "",
-    })
-  }
-
-  const handleExport = (format) => {
-    const filename = "zones"
-    switch (format) {
-      case "csv":
-        exportZonesToCSV(filteredZones, filename)
-        break
-      case "excel":
-        exportZonesToExcel(filteredZones, filename)
-        break
-      case "pdf":
-        exportZonesToPDF(filteredZones, filename)
-        break
-      case "json":
-        exportZonesToJSON(filteredZones, filename)
-        break
-      default:
-        break
+  const fetchRestaurants = async () => {
+    try {
+      const response = await adminAPI.getRestaurants({ limit: 100 })
+      if (response.data?.success && response.data.data?.restaurants) {
+        setRestaurants(response.data.data.restaurants)
+      }
+    } catch (error) {
+      console.error("Error fetching restaurants:", error)
     }
   }
 
-  const toggleColumn = (key) => {
-    setVisibleColumns(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }))
+  const handleDeleteZone = async (zoneId) => {
+    if (!window.confirm("Are you sure you want to delete this zone?")) {
+      return
+    }
+    try {
+      await adminAPI.deleteZone(zoneId)
+      alert("Zone deleted successfully!")
+      fetchZones()
+    } catch (error) {
+      console.error("Error deleting zone:", error)
+      alert(error.response?.data?.message || "Failed to delete zone")
+    }
   }
 
-  const resetColumns = () => {
-    setVisibleColumns({
-      si: true,
-      zoneId: true,
-      name: true,
-      displayName: true,
-      restaurants: true,
-      deliverymen: true,
-      defaultStatus: true,
-      status: true,
-      actions: true,
-    })
-  }
-
-  const columnConfig = {
-    si: "Serial Number",
-    zoneId: "Zone ID",
-    name: "Zone Name",
-    displayName: "Display Name",
-    restaurants: "Restaurants",
-    deliverymen: "Deliverymen",
-    defaultStatus: "Default Status",
-    status: "Status",
-    actions: "Actions",
-  }
+  const filteredZones = zones.filter(zone =>
+    zone.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    zone.serviceLocation?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   return (
     <div className="p-2 lg:p-3 bg-slate-50 min-h-screen">
       <div className="w-full mx-auto max-w-7xl">
-        {/* Add New Business Zone Section */}
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-3">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-7 h-7 rounded-lg bg-red-500 flex items-center justify-center">
-              <MapPin className="w-3.5 h-3.5 text-white" />
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+          <div className="flex items-center gap-3 mb-4 md:mb-0">
+            <div className="w-10 h-10 rounded-lg bg-red-500 flex items-center justify-center">
+              <MapPin className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-lg font-bold text-slate-900">Add New Business Zone</h1>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Zone Setup Restaurant</h1>
+              <p className="text-sm text-slate-600">Manage delivery zones for restaurants</p>
+            </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate("/admin/zone-setup/map")}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Map className="w-5 h-5" />
+              <span>View Map</span>
+            </button>
+            <button
+              onClick={() => navigate("/admin/zone-setup/add")}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add Zone</span>
+            </button>
+          </div>
+        </div>
 
-          {/* Instructions */}
-          <div className="bg-slate-50 rounded-lg p-3 mb-4 border border-slate-200">
-            <h2 className="text-xs font-semibold text-slate-900 mb-2">Instructions</h2>
-            <p className="text-xs text-slate-600 mb-3">
-              Create & connect dots in a specific area on the map to add a new business zone.
+        {/* Search Bar */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search zones by name or location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* Zones List */}
+        {loading ? (
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-slate-600">Loading zones...</p>
+          </div>
+        ) : filteredZones.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-12 text-center">
+            <MapPin className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">No zones found</h3>
+            <p className="text-slate-600 mb-6">
+              {searchQuery ? "Try adjusting your search query" : "Create your first delivery zone to get started"}
             </p>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded bg-blue-100 flex items-center justify-center">
-                  <Hand className="w-3 h-3 text-blue-600" />
-                </div>
-                <span className="text-xs text-slate-700">
-                  Use this 'Hand Tool' to find your target zone.
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded bg-blue-100 flex items-center justify-center">
-                  <Shapes className="w-3 h-3 text-blue-600" />
-                </div>
-                <span className="text-xs text-slate-700">
-                  Use this 'Shape Tool' to point out the areas and connect the dots. A minimum of 3 points/dots is required.
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Language Tabs */}
-          <div className="flex items-center gap-2 border-b border-slate-200 mb-4 overflow-x-auto">
-            {languageTabs.map((tab) => (
+            {!searchQuery && (
               <button
-                key={tab.key}
-                onClick={() => setActiveLanguage(tab.key)}
-                className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  activeLanguage === tab.key
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                }`}
+                onClick={() => navigate("/admin/zone-setup/add")}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                {tab.label}
+                <Plus className="w-5 h-5" />
+                <span>Add Zone</span>
               </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredZones.map((zone) => (
+              <div
+                key={zone._id || zone.id}
+                className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-1">{zone.name || "Unnamed Zone"}</h3>
+                    <p className="text-sm text-slate-600">{zone.serviceLocation || "N/A"}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => navigate(`/admin/zone-setup/view/${zone._id || zone.id}`)}
+                      className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="View"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => navigate(`/admin/zone-setup/edit/${zone._id || zone.id}`)}
+                      className="p-2 text-slate-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      title="Edit"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteZone(zone._id || zone.id)}
+                      className="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Restaurant:</span>
+                    <span className="font-medium text-slate-900">
+                      {(() => {
+                        // If restaurantId is populated (object with name), use it directly
+                        if (zone.restaurantId && typeof zone.restaurantId === 'object' && zone.restaurantId.name) {
+                          return zone.restaurantId.name
+                        }
+                        // Otherwise, find in restaurants array
+                        const restaurant = restaurants.find(r => {
+                          const zoneRestId = typeof zone.restaurantId === 'object' ? zone.restaurantId?._id : zone.restaurantId
+                          return r._id?.toString() === zoneRestId?.toString() || r._id === zoneRestId
+                        })
+                        return restaurant?.name || "N/A"
+                      })()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Unit:</span>
+                    <span className="font-medium text-slate-900">{zone.unit || "km"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Status:</span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      zone.isActive ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-800"
+                    }`}>
+                      {zone.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  {zone.coordinates && zone.coordinates.length > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Points:</span>
+                      <span className="font-medium text-slate-900">{zone.coordinates.length}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
-
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Business Zone Name ({activeLanguage === "default" ? "Default" : languageTabs.find(t => t.key === activeLanguage)?.label})
-                </label>
-                <input
-                  type="text"
-                  value={zoneName}
-                  onChange={(e) => setZoneName(e.target.value)}
-                  placeholder="Type new zone name here"
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Zone Display Name ({activeLanguage === "default" ? "Default" : languageTabs.find(t => t.key === activeLanguage)?.label})
-                </label>
-                <input
-                  type="text"
-                  value={zoneDisplayName}
-                  onChange={(e) => setZoneDisplayName(e.target.value)}
-                  placeholder="Write a New Display Zone Name"
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            {/* Map Placeholder */}
-            <div className="mb-4">
-              <div className="w-full h-96 bg-slate-100 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center">
-                <div className="text-center">
-                  <MapPin className="w-12 h-12 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500">Map will be integrated here</p>
-                  <p className="text-xs text-slate-400 mt-1">Interactive map with zone drawing tools</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="px-4 py-2 text-xs font-medium bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                Reset
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Submit
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* Zone List Section */}
-        <div>
-          <ZonesTopbar
-            title="Zone List"
-            count={filteredZones.length}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            onFilterClick={() => setIsFilterOpen(true)}
-            activeFiltersCount={activeFiltersCount}
-            onExport={handleExport}
-            onSettingsClick={() => setIsSettingsOpen(true)}
-          />
-
-          <ZonesTable
-            zones={filteredZones}
-            visibleColumns={visibleColumns}
-            onEditZone={handleEditZone}
-            onViewZone={handleViewZone}
-            onStatusToggle={handleStatusToggle}
-            onMakeDefault={handleMakeDefault}
-          />
-        </div>
-
-        {/* Filter Panel */}
-        <ZoneFilterPanel
-          isOpen={isFilterOpen}
-          onClose={() => setIsFilterOpen(false)}
-          filters={filters}
-          setFilters={setFilters}
-          onApply={handleApplyFilters}
-          onReset={handleResetFilters}
-        />
-
-        {/* Settings Dialog */}
-        <SettingsDialog
-          isOpen={isSettingsOpen}
-          onOpenChange={setIsSettingsOpen}
-          visibleColumns={visibleColumns}
-          toggleColumn={toggleColumn}
-          resetColumns={resetColumns}
-          columnsConfig={columnConfig}
-        />
-
-        {/* Edit Zone Dialog */}
-        <EditZoneDialog
-          isOpen={isEditZoneOpen}
-          onOpenChange={setIsEditZoneOpen}
-          zone={selectedZone}
-          onSave={handleSaveZone}
-        />
-
-        {/* View Zone Dialog */}
-        <ViewZoneDialog
-          isOpen={isViewZoneOpen}
-          onOpenChange={setIsViewZoneOpen}
-          zone={selectedZone}
-        />
+        )}
       </div>
     </div>
   )

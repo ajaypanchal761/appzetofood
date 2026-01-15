@@ -29,6 +29,7 @@ import {
   X,
   CheckCircle,
   Calendar,
+  MapPin,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateRangeCalendar } from "@/components/ui/date-range-calendar"
@@ -370,7 +371,11 @@ export default function ExploreMore() {
           setRestaurantData(data)
         }
       } catch (error) {
-        console.error("Error fetching restaurant data:", error)
+        // Only log error if it's not a network/timeout error (backend might be down/slow)
+        if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+          console.error("Error fetching restaurant data:", error)
+        }
+        // Continue with default values if fetch fails
       } finally {
         setLoadingRestaurant(false)
       }
@@ -678,8 +683,9 @@ export default function ExploreMore() {
 
   const settingsItems = [
     { id: 3, label: "Delivery settings", icon: Truck, route: "/restaurant/delivery-settings" },
-    { id: 4, label: "Rush hour", icon: Hourglass, route: "/restaurant/rush-hour", badge: rushHourStatus ? null : "OFF" },
-    { id: 5, label: "Schedule off", icon: Clock, route: "/restaurant/schedule-off" },
+    { id: 4, label: "Zone Setup", icon: MapPin, route: "/restaurant/zone-setup" },
+    { id: 5, label: "Rush hour", icon: Hourglass, route: "/restaurant/rush-hour", badge: rushHourStatus ? null : "OFF" },
+    { id: 6, label: "Schedule off", icon: Clock, route: "/restaurant/schedule-off" },
   ]
 
   const ordersItems = [

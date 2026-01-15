@@ -8,10 +8,14 @@ const DeliveryTrackingMap = ({
   orderId, 
   restaurantCoords, 
   customerCoords,
+  userLiveCoords = null,
+  userLocationAccuracy = null,
   deliveryBoyData = null 
 }) => {
   const mapRef = useRef(null);
   const bikeMarkerRef = useRef(null);
+  const userLocationMarkerRef = useRef(null);
+  const userLocationCircleRef = useRef(null);
   const mapInstance = useRef(null);
   const socketRef = useRef(null);
   const directionsServiceRef = useRef(null);
@@ -182,20 +186,53 @@ const DeliveryTrackingMap = ({
   useEffect(() => {
     if (!mapRef.current || !restaurantCoords || !customerCoords) return;
 
-    // Wait for Google Maps to load
-    if (!window.google || !window.google.maps) {
-      console.log('⏳ Waiting for Google Maps to load...');
-      const checkInterval = setInterval(() => {
-        if (window.google && window.google.maps) {
-          clearInterval(checkInterval);
-          initializeMap();
+    const loadGoogleMapsIfNeeded = async () => {
+      // Wait for Google Maps to load from main.jsx first
+      if (!window.google || !window.google.maps) {
+        console.log('⏳ Waiting for Google Maps API to load...');
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max wait
+        
+        while (!window.google && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
         }
-      }, 100);
 
-      return () => clearInterval(checkInterval);
-    }
+        // If still not loaded, try loading it ourselves
+        if (!window.google || !window.google.maps) {
+          console.log('⏳ Google Maps not loaded from main.jsx, loading manually...');
+          try {
+            const { getGoogleMapsApiKey } = await import('@/lib/utils/googleMapsApiKey.js');
+            const { Loader } = await import('@googlemaps/js-api-loader');
+            const apiKey = await getGoogleMapsApiKey();
+            if (apiKey) {
+              const loader = new Loader({
+                apiKey: apiKey,
+                version: "weekly",
+                libraries: ["places", "geometry", "drawing"]
+              });
+              await loader.load();
+              console.log('✅ Google Maps loaded manually');
+            } else {
+              console.error('❌ No Google Maps API key found');
+              return;
+            }
+          } catch (error) {
+            console.error('❌ Error loading Google Maps:', error);
+            return;
+          }
+        }
+      }
 
-    initializeMap();
+      // Initialize map once Google Maps is loaded
+      if (window.google && window.google.maps) {
+        initializeMap();
+      } else {
+        console.error('❌ Google Maps API still not available');
+      }
+    };
+
+    loadGoogleMapsIfNeeded();
 
     function initializeMap() {
       try {
@@ -244,25 +281,88 @@ const DeliveryTrackingMap = ({
           }
         });
 
-        // Add customer marker
-        new window.google.maps.Marker({
+        // Add customer marker with home icon (pin style)
+        const customerMarker = new window.google.maps.Marker({
           position: { lat: customerCoords.lat, lng: customerCoords.lng },
           map: mapInstance.current,
           icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: '#ef4444',
+            path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+            scale: 5,
+            fillColor: '#000000', // Black pin
             fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 2
+            strokeColor: '#000000',
+            strokeWeight: 1,
+            rotation: 180, // Point downward
+            anchor: new window.google.maps.Point(0, 0)
           },
-          label: {
-            text: 'C',
-            color: 'white',
-            fontSize: '12px',
-            fontWeight: 'bold'
-          }
+          zIndex: window.google.maps.Marker.MAX_ZINDEX + 1
         });
+
+        // Add home icon inside the pin using a custom SVG
+        const homeIconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+            <path d="M9 22V12h6v10"></path>
+          </svg>
+        `;
+        
+        // Create an info window with home icon to overlay on marker
+        const homeIconUrl = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50">
+            <!-- Pin shape -->
+            <path d="M20 0 C9 0 0 9 0 20 C0 35 20 50 20 50 C20 50 40 35 40 20 C40 9 31 0 20 0 Z" fill="#000000" stroke="#000000" stroke-width="1"/>
+            <!-- Home icon -->
+            <path d="M20 12 L12 18 L12 28 L16 28 L16 24 L24 24 L24 28 L28 28 L28 18 Z" fill="white" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 24 L16 20 L20 17 L24 20 L24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        `);
+
+        // Update customer marker with custom home icon
+        customerMarker.setIcon({
+          url: homeIconUrl,
+          scaledSize: new window.google.maps.Size(40, 50),
+          anchor: new window.google.maps.Point(20, 50),
+          origin: new window.google.maps.Point(0, 0)
+        });
+
+        // Add user's live location marker (blue dot) and radius circle if available
+        if (userLiveCoords && userLiveCoords.lat && userLiveCoords.lng) {
+          // Create blue dot marker for user's live location
+          userLocationMarkerRef.current = new window.google.maps.Marker({
+            position: { lat: userLiveCoords.lat, lng: userLiveCoords.lng },
+            map: mapInstance.current,
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 12,
+              fillColor: '#4285F4', // Google blue
+              fillOpacity: 1,
+              strokeColor: '#FFFFFF',
+              strokeWeight: 3
+            },
+            zIndex: window.google.maps.Marker.MAX_ZINDEX + 2,
+            optimized: false,
+            title: "Your live location"
+          });
+
+          // Create radius circle around user's location
+          const radiusMeters = Math.max(userLocationAccuracy || 50, 20); // Minimum 20m
+          userLocationCircleRef.current = new window.google.maps.Circle({
+            strokeColor: '#4285F4',
+            strokeOpacity: 0.4,
+            strokeWeight: 2,
+            fillColor: '#4285F4',
+            fillOpacity: 0.15, // Light transparent blue
+            map: mapInstance.current,
+            center: { lat: userLiveCoords.lat, lng: userLiveCoords.lng },
+            radius: radiusMeters, // Meters
+            zIndex: window.google.maps.Marker.MAX_ZINDEX + 1
+          });
+
+          console.log('✅ User live location marker and radius circle added:', {
+            position: userLiveCoords,
+            radius: radiusMeters
+          });
+        }
 
         // Draw route
         mapInstance.current.addListener('tilesloaded', () => {
@@ -283,6 +383,53 @@ const DeliveryTrackingMap = ({
       moveBikeSmoothly(currentLocation.lat, currentLocation.lng, currentLocation.heading || 0);
     }
   }, [isMapLoaded, currentLocation, moveBikeSmoothly]);
+
+  // Update user's live location marker and circle when location changes
+  useEffect(() => {
+    if (isMapLoaded && userLiveCoords && userLiveCoords.lat && userLiveCoords.lng && mapInstance.current) {
+      const userPos = { lat: userLiveCoords.lat, lng: userLiveCoords.lng };
+      const radiusMeters = Math.max(userLocationAccuracy || 50, 20);
+
+      // Update or create user location marker
+      if (userLocationMarkerRef.current) {
+        userLocationMarkerRef.current.setPosition(userPos);
+      } else {
+        userLocationMarkerRef.current = new window.google.maps.Marker({
+          position: userPos,
+          map: mapInstance.current,
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: 12,
+            fillColor: '#4285F4',
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 3
+          },
+          zIndex: window.google.maps.Marker.MAX_ZINDEX + 2,
+          optimized: false,
+          title: "Your live location"
+        });
+      }
+
+      // Update or create radius circle
+      if (userLocationCircleRef.current) {
+        userLocationCircleRef.current.setCenter(userPos);
+        userLocationCircleRef.current.setRadius(radiusMeters);
+      } else {
+        userLocationCircleRef.current = new window.google.maps.Circle({
+          strokeColor: '#4285F4',
+          strokeOpacity: 0.4,
+          strokeWeight: 2,
+          fillColor: '#4285F4',
+          fillOpacity: 0.15,
+          map: mapInstance.current,
+          center: userPos,
+          radius: radiusMeters,
+          zIndex: window.google.maps.Marker.MAX_ZINDEX + 1
+        });
+      }
+    }
+  }, [isMapLoaded, userLiveCoords, userLocationAccuracy]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>

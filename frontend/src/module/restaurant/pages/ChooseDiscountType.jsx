@@ -21,17 +21,6 @@ const discountTypes = [
       </div>
     ),
   },
-  {
-    id: "flat",
-    title: "Flat discount",
-    description: "Create absolute flat discounts like 'Flat ₹100 OFF'",
-    indicator: (
-      <div className="flex flex-col items-center justify-center">
-        <span className="text-lg font-bold text-blue-500 leading-none">₹100</span>
-        <span className="text-xs font-semibold text-blue-500 leading-tight">OFF</span>
-      </div>
-    ), 
-  },
 ]
 
 export default function ChooseDiscountType() {

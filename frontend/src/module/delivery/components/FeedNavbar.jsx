@@ -117,10 +117,49 @@ export default function FeedNavbar({ className = "" }) {
     setIsOnline(next);
     showSingleToast(next);
 
-    // Update backend
+    // Update backend with location if available
     try {
-      await deliveryAPI.updateOnlineStatus(next);
-      console.log('✅ Online status updated in backend:', next);
+      // Try to get current location from localStorage or geolocation
+      let latitude = null;
+      let longitude = null;
+      
+      // Check localStorage first
+      try {
+        const savedLocation = localStorage.getItem('deliveryBoyLastLocation');
+        if (savedLocation) {
+          const location = JSON.parse(savedLocation);
+          if (Array.isArray(location) && location.length === 2) {
+            [latitude, longitude] = location;
+          }
+        }
+      } catch (err) {
+        console.warn('Error reading location from localStorage:', err);
+      }
+      
+      // If no saved location, try to get current location
+      if ((!latitude || !longitude) && navigator.geolocation) {
+        try {
+          const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              timeout: 5000,
+              maximumAge: 0
+            });
+          });
+          latitude = position.coords.latitude;
+          longitude = position.coords.longitude;
+        } catch (geoError) {
+          console.warn('Could not get current location:', geoError);
+        }
+      }
+      
+      // Update backend with location if available, otherwise just online status
+      if (latitude && longitude) {
+        await deliveryAPI.updateLocation(latitude, longitude, next);
+        console.log('✅ Online status and location updated in backend:', { isOnline: next, latitude, longitude });
+      } else {
+        await deliveryAPI.updateOnlineStatus(next);
+        console.log('✅ Online status updated in backend (location not available):', next);
+      }
     } catch (error) {
       console.error('❌ Error updating online status in backend:', error);
       // Revert state if backend update fails
@@ -199,8 +238,11 @@ export default function FeedNavbar({ className = "" }) {
           }
         }
       } catch (error) {
-        // Skip logging timeout errors (handled by axios interceptor)
-        if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+        // Skip logging network and timeout errors (handled by axios interceptor)
+        if (error.code !== 'ECONNABORTED' && 
+            error.code !== 'ERR_NETWORK' && 
+            error.message !== 'Network Error' &&
+            !error.message?.includes('timeout')) {
           console.error("Error fetching profile image for navbar:", error);
         }
       }

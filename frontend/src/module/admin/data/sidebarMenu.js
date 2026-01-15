@@ -57,7 +57,8 @@ export const sidebarMenuData = [
         label: "Foods",
         icon: "Utensils",
         subItems: [
-          { label: "List", path: "/admin/foods" },
+          { label: "Restaurant Foods List", path: "/admin/foods" },
+          { label: "Restaurant Addons List", path: "/admin/addons" },
         ],
       },
     ],
@@ -116,37 +117,10 @@ export const sidebarMenuData = [
     label: "PROMOTIONS MANAGEMENT",
     items: [
       {
-        type: "expandable",
-        label: "Campaigns",
-        icon: "Megaphone",
-        subItems: [
-          { label: "Basic Campaign", path: "/admin/campaigns/basic" },
-          { label: "Food Campaign", path: "/admin/campaigns/food" },
-        ],
-      },
-      {
         type: "link",
-        label: "Coupons",
+        label: "Restaurant Coupons & Offers",
         path: "/admin/coupons",
         icon: "Gift",
-      },
-      {
-        type: "link",
-        label: "Cashback",
-        path: "/admin/cashback",
-        icon: "DollarSign",
-      },
-      {
-        type: "link",
-        label: "Banners",
-        path: "/admin/banners",
-        icon: "Image",
-      },
-      {
-        type: "link",
-        label: "Promotional Banner",
-        path: "/admin/promotional-banner",
-        icon: "Image",
       },
       {
         type: "expandable",
@@ -251,12 +225,6 @@ export const sidebarMenuData = [
     items: [
       {
         type: "link",
-        label: "Chattings",
-        path: "/admin/chattings",
-        icon: "MessageSquare",
-      },
-      {
-        type: "link",
         label: "Contact Messages",
         path: "/admin/contact-messages",
         icon: "Mail",
@@ -357,58 +325,12 @@ export const sidebarMenuData = [
         path: "/admin/delivery-man-payments",
         icon: "CreditCard",
       },
-      {
-        type: "link",
-        label: "Withdraw Method",
-        path: "/admin/withdraw-method",
-        icon: "Settings",
-      },
-    ],
-  },
-  {
-    type: "section",
-    label: "EMPLOYEE MANAGEMENT",
-    items: [
-      {
-        type: "link",
-        label: "Employee Role",
-        path: "/admin/employee-role",
-        icon: "UserCog",
-      },
-      {
-        type: "expandable",
-        label: "Employees",
-        icon: "User",
-        subItems: [
-          { label: "Add New Employee", path: "/admin/employees/add" },
-          { label: "Employee List", path: "/admin/employees" },
-        ],
-      },
     ],
   },
   {
     type: "section",
     label: "SYSTEM SETTINGS",
     items: [
-      {
-        type: "expandable",
-        label: "3rd Party & Configurations",
-        icon: "Settings",
-        subItems: [
-          { label: "3rd Party", path: "/admin/3rd-party-configurations/party" },
-          { label: "Firebase Notification", path: "/admin/3rd-party-configurations/firebase" },
-          { label: "Offline Payment Setup", path: "/admin/3rd-party-configurations/offline-payment" },
-          { label: "Join Us Page Setup", path: "/admin/3rd-party-configurations/join-us" },
-          { label: "Analytics Script", path: "/admin/3rd-party-configurations/analytics" },
-          { label: "AI Setup", path: "/admin/3rd-party-configurations/ai" },
-        ],
-      },
-      {
-        type: "link",
-        label: "App & Web Settings",
-        path: "/admin/app-web-settings",
-        icon: "Globe",
-      },
       {
         type: "link",
         label: "Landing Page Management",
@@ -427,26 +349,7 @@ export const sidebarMenuData = [
         icon: "Globe",
         subItems: [
           { label: "Admin Landing Page", path: "/admin/landing-page-settings/admin" },
-          { label: "React Landing Page", path: "/admin/landing-page-settings/react" },
         ],
-      },
-      {
-        type: "link",
-        label: "Page Meta Data",
-        path: "/admin/page-meta-data",
-        icon: "MessageSquare",
-      },
-      {
-        type: "link",
-        label: "React Site",
-        path: "/admin/react-site",
-        icon: "Globe",
-      },
-      {
-        type: "link",
-        label: "Clean Database",
-        path: "/admin/clean-database",
-        icon: "Database",
       },
       {
         type: "link",

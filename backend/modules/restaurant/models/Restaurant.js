@@ -4,11 +4,25 @@ import bcrypt from 'bcryptjs';
 const locationSchema = new mongoose.Schema({
   latitude: Number,
   longitude: Number,
+  // GeoJSON coordinates [longitude, latitude] for spatial queries
+  coordinates: {
+    type: [Number],
+    default: undefined
+  },
+  // Live address from Google Maps reverse geocoding
+  formattedAddress: String,
+  // Stored address fields
+  address: String, // Full address string
   addressLine1: String,
   addressLine2: String,
   area: String,
   city: String,
+  state: String,
   landmark: String,
+  zipCode: String,
+  pincode: String,
+  postalCode: String,
+  street: String,
 });
 
 const deliveryTimingsSchema = new mongoose.Schema({
@@ -30,6 +44,7 @@ const restaurantSchema = new mongoose.Schema(
       },
       lowercase: true,
       trim: true,
+      sparse: true, // Allow multiple null values in unique index
     },
     phone: {
       type: String,
@@ -284,6 +299,18 @@ restaurantSchema.pre('save', async function(next) {
     }
     
     this.slug = baseSlug;
+  }
+  
+  // CRITICAL: For phone signups, ensure email field is completely unset (not null/undefined)
+  // This prevents duplicate key errors on sparse unique index
+  if (this.phone && !this.email && (this.signupMethod === 'phone' || !this.signupMethod)) {
+    // Explicitly ensure email is undefined (not null) to prevent MongoDB from indexing it
+    // Mongoose will omit undefined fields but will include null fields
+    if (this.email === null || this.email === undefined) {
+      // Remove email from the document to prevent it from being saved
+      this.$unset = this.$unset || {};
+      this.$unset.email = '';
+    }
   }
   
   // Hash password if it's modified

@@ -71,6 +71,7 @@ const orderSchema = new mongoose.Schema({
     city: String,
     state: String,
     zipCode: String,
+    formattedAddress: String, // Complete formatted address from live location
     location: {
       type: {
         type: String,
@@ -179,7 +180,7 @@ const orderSchema = new mongoose.Schema({
   },
   deliveryPartnerId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'Delivery'
   },
   estimatedDeliveryTime: {
     type: Number, // in minutes
@@ -193,6 +194,46 @@ const orderSchema = new mongoose.Schema({
   },
   cancellationReason: {
     type: String
+  },
+  assignmentInfo: {
+    restaurantId: String,
+    distance: Number, // Distance in km
+    assignedBy: {
+      type: String,
+      enum: ['zone_match', 'nearest_distance', 'manual', 'nearest_available']
+    },
+    zoneId: String,
+    zoneName: String,
+    deliveryPartnerId: String,
+    assignedAt: Date
+  },
+  deliveryState: {
+    status: {
+      type: String,
+      enum: ['pending', 'accepted', 'reached_pickup', 'order_confirmed', 'en_route_to_delivery', 'delivered'],
+      default: 'pending'
+    },
+    currentPhase: {
+      type: String,
+      enum: ['assigned', 'en_route_to_pickup', 'at_pickup', 'en_route_to_delivery', 'at_delivery', 'completed'],
+      default: 'assigned'
+    },
+    acceptedAt: Date,
+    reachedPickupAt: Date,
+    orderIdConfirmedAt: Date,
+    routeToPickup: {
+      coordinates: [[Number]], // [[lat, lng], ...]
+      distance: Number, // in km
+      duration: Number, // in minutes
+      calculatedAt: Date
+    },
+    routeToDelivery: {
+      coordinates: [[Number]], // [[lat, lng], ...]
+      distance: Number, // in km
+      duration: Number, // in minutes
+      calculatedAt: Date,
+      method: String // 'osrm', 'dijkstra', 'haversine'
+    }
   }
 }, {
   timestamps: true

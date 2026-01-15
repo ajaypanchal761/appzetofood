@@ -18,6 +18,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@turf/turf": "^7.3.1",
     "axios": "^1.6.5",
     "bcryptjs": "^2.4.3",
     "bull": "^4.12.2",
@@ -42,6 +43,7 @@
     "olamaps-web-sdk": "^1.2.0",
     "pdfkit": "^0.13.0",
     "razorpay": "^2.9.2",
+    "react-map-gl": "^8.1.0",
     "redis": "^4.6.12",
     "socket.io": "^4.6.1",
     "twilio": "^4.19.1",

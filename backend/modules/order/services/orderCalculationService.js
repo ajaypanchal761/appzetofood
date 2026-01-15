@@ -1,4 +1,5 @@
 import Restaurant from '../../restaurant/models/Restaurant.js';
+import Offer from '../../restaurant/models/Offer.js';
 import mongoose from 'mongoose';
 
 /**
@@ -138,19 +139,76 @@ export const calculateOrderPricing = async ({
     let discount = 0;
     let appliedCoupon = null;
     
-    if (couponCode) {
-      // TODO: Fetch coupon from database
-      // For now, using hardcoded coupons
-      const availableCoupons = [
-        { code: 'GETOFF40ON249', discount: 40, minOrder: 249, type: 'flat' },
-        { code: 'FIRST50', discount: 50, minOrder: 199, type: 'flat', maxDiscount: 50 },
-        { code: 'FREEDEL', discount: 0, minOrder: 149, type: 'flat', freeDelivery: true },
-      ];
-      
-      const coupon = availableCoupons.find(c => c.code === couponCode);
-      if (coupon) {
-        appliedCoupon = coupon;
-        discount = calculateDiscount(coupon, subtotal);
+    if (couponCode && restaurant) {
+      try {
+        // Get restaurant ObjectId
+        let restaurantObjectId = restaurant._id;
+        if (!restaurantObjectId && mongoose.Types.ObjectId.isValid(restaurantId) && restaurantId.length === 24) {
+          restaurantObjectId = new mongoose.Types.ObjectId(restaurantId);
+        }
+
+        if (restaurantObjectId) {
+          const now = new Date();
+          
+          // Find active offer with this coupon code for this restaurant
+          const offer = await Offer.findOne({
+            restaurant: restaurantObjectId,
+            status: 'active',
+            'items.couponCode': couponCode,
+            startDate: { $lte: now },
+            $or: [
+              { endDate: { $gte: now } },
+              { endDate: null }
+            ]
+          }).lean();
+
+          if (offer) {
+            // Find the specific item coupon
+            const couponItem = offer.items.find(item => item.couponCode === couponCode);
+            
+            if (couponItem) {
+              // Check if coupon is valid for items in cart
+              const cartItemIds = items.map(item => item.itemId);
+              const isValidForCart = couponItem.itemId && cartItemIds.includes(couponItem.itemId);
+              
+              // Check minimum order value
+              const minOrderMet = !offer.minOrderValue || subtotal >= offer.minOrderValue;
+              
+              if (isValidForCart && minOrderMet) {
+                // Calculate discount based on offer type
+                const itemInCart = items.find(item => item.itemId === couponItem.itemId);
+                if (itemInCart) {
+                  const itemQuantity = itemInCart.quantity || 1;
+                  
+                  // Calculate discount per item
+                  const discountPerItem = couponItem.originalPrice - couponItem.discountedPrice;
+                  
+                  // Apply discount to all quantities of this item
+                  discount = Math.round(discountPerItem * itemQuantity);
+                  
+                  // Ensure discount doesn't exceed item subtotal
+                  const itemSubtotal = (itemInCart.price || 0) * itemQuantity;
+                  discount = Math.min(discount, itemSubtotal);
+                }
+                
+                appliedCoupon = {
+                  code: couponCode,
+                  discount: discount,
+                  discountPercentage: couponItem.discountPercentage,
+                  minOrder: offer.minOrderValue || 0,
+                  type: offer.discountType === 'percentage' ? 'percentage' : 'flat',
+                  itemId: couponItem.itemId,
+                  itemName: couponItem.itemName,
+                  originalPrice: couponItem.originalPrice,
+                  discountedPrice: couponItem.discountedPrice,
+                };
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching coupon from database: ${error.message}`);
+        // Continue without coupon if there's an error
       }
     }
     

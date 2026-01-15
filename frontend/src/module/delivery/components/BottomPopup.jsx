@@ -70,8 +70,9 @@ export default function BottomPopup({
     const deltaY = currentY - swipeStartY.current
     
     // Only allow downward swipe (positive deltaY)
+    // Don't call preventDefault - CSS touch-action: none handles scrolling prevention
     if (deltaY > 0) {
-      e.preventDefault()
+      // e.preventDefault() // Removed to avoid passive listener error - CSS touch-action handles it
       e.stopPropagation()
       setDragY(deltaY)
     }
@@ -130,7 +131,7 @@ export default function BottomPopup({
     const deltaY = currentY - swipeStartY.current
     
     if (deltaY > 0) {
-      e.preventDefault()
+      // e.preventDefault() // Not needed for mouse events, but keeping for consistency
       setDragY(deltaY)
     }
   }

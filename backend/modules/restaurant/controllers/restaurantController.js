@@ -277,6 +277,17 @@ export const updateRestaurantProfile = asyncHandler(async (req, res) => {
 
     // Update location if provided
     if (location) {
+      // Ensure coordinates array is set if latitude/longitude exist
+      if (location.latitude && location.longitude && !location.coordinates) {
+        location.coordinates = [location.longitude, location.latitude]; // GeoJSON format: [lng, lat]
+      }
+      
+      // If coordinates array exists but no lat/lng, extract them
+      if (location.coordinates && Array.isArray(location.coordinates) && location.coordinates.length >= 2) {
+        if (!location.longitude) location.longitude = location.coordinates[0];
+        if (!location.latitude) location.latitude = location.coordinates[1];
+      }
+      
       updateData.location = location;
     }
 

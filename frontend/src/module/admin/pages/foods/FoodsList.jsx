@@ -1,11 +1,144 @@
-import { useState, useMemo } from "react"
-import { Search, Download, ChevronDown, Plus, Edit, Trash2, Info } from "lucide-react"
-import { foodsDummy } from "../../data/foodsDummy"
+import { useState, useMemo, useEffect } from "react"
+import { Search, Trash2, Loader2 } from "lucide-react"
+import { adminAPI, restaurantAPI } from "@/lib/api"
+import apiClient from "@/lib/api"
+import { toast } from "sonner"
 
 export default function FoodsList() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [foods, setFoods] = useState(foodsDummy)
-  const [selectedPriority, setSelectedPriority] = useState("")
+  const [foods, setFoods] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(false)
+
+  // Fetch all foods from all restaurants
+  useEffect(() => {
+    const fetchAllFoods = async () => {
+      try {
+        setLoading(true)
+        
+        // First, fetch all restaurants
+        const restaurantsResponse = await adminAPI.getRestaurants({ limit: 1000 })
+        const restaurants = restaurantsResponse?.data?.data?.restaurants || 
+                          restaurantsResponse?.data?.restaurants || 
+                          []
+        
+        if (restaurants.length === 0) {
+          setFoods([])
+          setLoading(false)
+          return
+        }
+
+        // Fetch menu for each restaurant and extract all food items
+        const allFoods = []
+        
+        for (const restaurant of restaurants) {
+          try {
+            const restaurantId = restaurant._id || restaurant.id
+            const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurantId)
+            const menu = menuResponse?.data?.data?.menu || menuResponse?.data?.menu
+            
+            if (menu && menu.sections) {
+              // Extract items from sections and subsections
+              menu.sections.forEach((section) => {
+                // Items directly in section
+                if (section.items && Array.isArray(section.items)) {
+                  section.items.forEach((item) => {
+                    allFoods.push({
+                      id: item.id || `${restaurantId}-${section.id}-${item.name}`,
+                      _id: item._id,
+                      name: item.name || "Unnamed Item",
+                      image: item.image || item.images?.[0] || "https://via.placeholder.com/40",
+                      priority: "Normal", // Default priority
+                      status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
+                      restaurantId: restaurantId,
+                      restaurantName: restaurant.name || "Unknown Restaurant",
+                      sectionName: section.name || "Unknown Section",
+                      price: item.price || 0,
+                      foodType: item.foodType || "Non-Veg",
+                      approvalStatus: item.approvalStatus || 'pending',
+                      originalItem: item // Keep original item data
+                    })
+                  })
+                }
+                
+                // Items in subsections
+                if (section.subsections && Array.isArray(section.subsections)) {
+                  section.subsections.forEach((subsection) => {
+                    if (subsection.items && Array.isArray(subsection.items)) {
+                      subsection.items.forEach((item) => {
+                        allFoods.push({
+                          id: item.id || `${restaurantId}-${section.id}-${subsection.id}-${item.name}`,
+                          _id: item._id,
+                          name: item.name || "Unnamed Item",
+                          image: item.image || item.images?.[0] || "https://via.placeholder.com/40",
+                          priority: "Normal", // Default priority
+                          status: item.isAvailable !== false && item.approvalStatus !== 'rejected',
+                          restaurantId: restaurantId,
+                          restaurantName: restaurant.name || "Unknown Restaurant",
+                          sectionName: section.name || "Unknown Section",
+                          subsectionName: subsection.name || "Unknown Subsection",
+                          price: item.price || 0,
+                          foodType: item.foodType || "Non-Veg",
+                          approvalStatus: item.approvalStatus || 'pending',
+                          originalItem: item // Keep original item data
+                        })
+                      })
+                    }
+                  })
+                }
+              })
+            }
+          } catch (error) {
+            // Silently skip restaurants that don't have menus or have errors
+            console.warn(`Failed to fetch menu for restaurant ${restaurant._id || restaurant.id}:`, error.message)
+          }
+        }
+        
+        setFoods(allFoods)
+      } catch (error) {
+        console.error("Error fetching foods:", error)
+        toast.error("Failed to load foods from restaurants")
+        setFoods([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAllFoods()
+  }, [])
+
+  // Format ID to FOOD format (e.g., FOOD519399)
+  const formatFoodId = (id) => {
+    if (!id) return "FOOD000000"
+    
+    const idString = String(id)
+    // Extract last 6 digits from the ID
+    // Handle formats like "1768285554154-0.703896654519399" or "item-1768285554154-0.703896654519399"
+    const parts = idString.split(/[-.]/)
+    let lastDigits = ""
+    
+    // Get the last part and extract digits
+    if (parts.length > 0) {
+      const lastPart = parts[parts.length - 1]
+      // Extract only digits from the last part
+      const digits = lastPart.match(/\d+/g)
+      if (digits && digits.length > 0) {
+        // Get last 6 digits from all digits found
+        const allDigits = digits.join("")
+        lastDigits = allDigits.slice(-6).padStart(6, "0")
+      }
+    }
+    
+    // If no digits found, use a hash of the ID
+    if (!lastDigits) {
+      const hash = idString.split("").reduce((acc, char) => {
+        return ((acc << 5) - acc) + char.charCodeAt(0) | 0
+      }, 0)
+      lastDigits = Math.abs(hash).toString().slice(-6).padStart(6, "0")
+    }
+    
+    return `FOOD${lastDigits}`
+  }
 
   const filteredFoods = useMemo(() => {
     let result = [...foods]
@@ -14,32 +147,105 @@ export default function FoodsList() {
       const query = searchQuery.toLowerCase().trim()
       result = result.filter(food =>
         food.name.toLowerCase().includes(query) ||
-        food.id.toString().includes(query)
+        food.id.toString().includes(query) ||
+        food.restaurantName?.toLowerCase().includes(query)
       )
     }
 
-    if (selectedPriority) {
-      result = result.filter(food => food.priority === selectedPriority)
+    return result
+  }, [foods, searchQuery])
+
+  const handleDelete = async (id) => {
+    const food = foods.find(f => f.id === id)
+    if (!food) return
+
+    if (!window.confirm(`Are you sure you want to delete "${food.name}"? This action cannot be undone.`)) {
+      return
     }
 
-    return result
-  }, [foods, searchQuery, selectedPriority])
+    try {
+      setDeleting(true)
+      
+      // Get the restaurant's menu
+      const menuResponse = await restaurantAPI.getMenuByRestaurantId(food.restaurantId)
+      const menu = menuResponse?.data?.data?.menu || menuResponse?.data?.menu
+      
+      if (!menu || !menu.sections) {
+        throw new Error("Menu not found")
+      }
 
-  const handleToggleStatus = (id) => {
-    setFoods(foods.map(food =>
-      food.id === id ? { ...food, status: !food.status } : food
-    ))
-  }
+      // Find and remove the item from the menu structure
+      let itemRemoved = false
+      const updatedSections = menu.sections.map(section => {
+        // Check items in section
+        if (section.items && Array.isArray(section.items)) {
+          const itemIndex = section.items.findIndex(item => 
+            String(item.id) === String(food.id) || 
+            String(item.id) === String(food.originalItem?.id)
+          )
+          if (itemIndex !== -1) {
+            section.items.splice(itemIndex, 1)
+            itemRemoved = true
+          }
+        }
+        
+        // Check items in subsections
+        if (section.subsections && Array.isArray(section.subsections)) {
+          section.subsections = section.subsections.map(subsection => {
+            if (subsection.items && Array.isArray(subsection.items)) {
+              const itemIndex = subsection.items.findIndex(item => 
+                String(item.id) === String(food.id) || 
+                String(item.id) === String(food.originalItem?.id)
+              )
+              if (itemIndex !== -1) {
+                subsection.items.splice(itemIndex, 1)
+                itemRemoved = true
+              }
+            }
+            return subsection
+          })
+        }
+        
+        return section
+      })
 
-  const handlePriorityChange = (id, newPriority) => {
-    setFoods(foods.map(food =>
-      food.id === id ? { ...food, priority: newPriority } : food
-    ))
-  }
+      if (!itemRemoved) {
+        throw new Error("Item not found in menu")
+      }
 
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this food item?")) {
-      setFoods(foods.filter(food => food.id !== id))
+      // Update menu in backend
+      // Note: Since we're admin, we need to use a workaround
+      // The restaurant menu update endpoint requires restaurant authentication
+      // For now, we'll try using the restaurant endpoint directly
+      // TODO: Create admin endpoint: PUT /api/admin/restaurants/:id/menu
+      try {
+        // Try using restaurant menu update endpoint
+        // This might fail if backend doesn't allow admin to update restaurant menus
+        const response = await apiClient.put(
+          `/restaurant/menu`,
+          { sections: updatedSections }
+        )
+        
+        if (!response.data || !response.data.success) {
+          throw new Error(response.data?.message || "Failed to update menu")
+        }
+      } catch (apiError) {
+        // If direct API call fails, we need an admin endpoint
+        // For now, show a helpful error message
+        if (apiError.response?.status === 401 || apiError.response?.status === 403) {
+          throw new Error("Admin cannot directly update restaurant menus. Please contact developer to add admin menu update endpoint.")
+        }
+        throw apiError
+      }
+
+      // Remove from local state
+      setFoods(foods.filter(f => f.id !== id))
+      toast.success("Food item deleted successfully")
+    } catch (error) {
+      console.error("Error deleting food:", error)
+      toast.error(error?.response?.data?.message || "Failed to delete food item")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -68,20 +274,6 @@ export default function FoodsList() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative">
-              <select
-                value={selectedPriority}
-                onChange={(e) => setSelectedPriority(e.target.value)}
-                className="px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-400"
-              >
-                <option value="">Select priority</option>
-                <option value="High">High</option>
-                <option value="Normal">Normal</option>
-                <option value="Low">Low</option>
-              </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-            </div>
-
             <div className="relative flex-1 sm:flex-initial min-w-[200px]">
               <input
                 type="text"
@@ -92,17 +284,6 @@ export default function FoodsList() {
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             </div>
-
-            <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
-              <Download className="w-4 h-4" />
-              <span>Export</span>
-              <ChevronDown className="w-3 h-3" />
-            </button>
-
-            <button className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 transition-all shadow-sm">
-              <Plus className="w-4 h-4" />
-              <span>Add New Food</span>
-            </button>
           </div>
         </div>
       </div>
@@ -122,24 +303,24 @@ export default function FoodsList() {
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Title
                 </th>
-                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                  <div className="flex items-center gap-1">
-                    <span>Priority Level</span>
-                    <Info className="w-3 h-3 text-slate-400" />
-                  </div>
-                </th>
-                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
-                  Status
-                </th>
                 <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   Action
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
-              {filteredFoods.length === 0 ? (
+              {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center">
+                  <td colSpan={4} className="px-6 py-20 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+                      <p className="text-sm text-slate-500">Loading foods from restaurants...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredFoods.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                       <p className="text-sm text-slate-500">No food items match your search</p>
@@ -170,60 +351,27 @@ export default function FoodsList() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col">
                         <span className="text-sm font-medium text-slate-900">{food.name}</span>
-                        <span className="text-xs text-slate-500">ID #{food.id}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="relative">
-                        <select
-                          value={food.priority}
-                          onChange={(e) => handlePriorityChange(food.id, e.target.value)}
-                          className="px-3 py-1.5 pr-6 text-xs rounded-md border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-400"
-                        >
-                          <option value="High">High</option>
-                          <option value="Normal">Normal</option>
-                          <option value="Low">Low</option>
-                        </select>
-                        <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => handleToggleStatus(food.id)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
-                          food.status
-                            ? "bg-blue-600"
-                            : food.id === 14
-                            ? "bg-slate-300"
-                            : "bg-slate-300"
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            food.status ? "translate-x-6" : "translate-x-1"
-                          }`}
-                        />
-                        {food.id === 14 && !food.status && (
-                          <span className="absolute left-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-slate-500"></span>
+                        <span className="text-xs text-slate-500">ID #{formatFoodId(food.id)}</span>
+                        {food.restaurantName && (
+                          <span className="text-xs text-slate-400 mt-0.5">
+                            {food.restaurantName}
+                          </span>
                         )}
-                      </button>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(food.id)}
-                          className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
-                          title="Delete"
-                        >
+                      <button
+                        onClick={() => handleDelete(food.id)}
+                        disabled={deleting}
+                        className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete"
+                      >
+                        {deleting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
                           <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))

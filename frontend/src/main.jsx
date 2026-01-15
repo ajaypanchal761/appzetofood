@@ -7,25 +7,51 @@ import App from './App.jsx'
 import { getGoogleMapsApiKey } from './lib/utils/googleMapsApiKey.js'
 
 // Load Google Maps API dynamically from backend database
+// Only load if not already loaded to prevent multiple loads
 (async () => {
+  // Check if Google Maps is already loaded
+  if (window.google && window.google.maps) {
+    console.log('✅ Google Maps already loaded');
+    return;
+  }
+  
+  // Check if script is already being loaded
+  const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+  if (existingScript) {
+    console.log('✅ Google Maps script already exists, waiting for it to load...');
+    return;
+  }
+  
   try {
     const googleMapsApiKey = await getGoogleMapsApiKey()
-    if (googleMapsApiKey && !window.google) {
+    if (googleMapsApiKey) {
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places,geometry,drawing`
       script.async = true
       script.defer = true
+      script.onload = () => {
+        console.log('✅ Google Maps API loaded via script tag');
+      }
+      script.onerror = () => {
+        console.error('❌ Failed to load Google Maps API script');
+      }
       document.head.appendChild(script)
     }
   } catch (error) {
     console.warn('Failed to load Google Maps API key:', error.message)
     // Fallback to env variable
     const fallbackKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-    if (fallbackKey && !window.google) {
+    if (fallbackKey) {
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${fallbackKey}&libraries=places,geometry`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${fallbackKey}&libraries=places,geometry,drawing`
       script.async = true
       script.defer = true
+      script.onload = () => {
+        console.log('✅ Google Maps API loaded via script tag (fallback)');
+      }
+      script.onerror = () => {
+        console.error('❌ Failed to load Google Maps API script (fallback)');
+      }
       document.head.appendChild(script)
     }
   }

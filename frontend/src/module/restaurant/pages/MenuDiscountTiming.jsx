@@ -51,13 +51,6 @@ export default function MenuDiscountTiming() {
     return "/restaurant/hub-growth/create-offers/delight-customers"
   }
 
-  const getPreviewPath = () => {
-    if (discountType === "percentage-menu") return "/restaurant/hub-growth/create-offers/delight-customers/percentage/preview"
-    if (discountType === "flat-price-menu") return "/restaurant/hub-growth/create-offers/delight-customers/flat-price/preview"
-    if (discountType === "bogo-menu") return "/restaurant/hub-growth/create-offers/delight-customers/bogo/preview"
-    return "/restaurant/hub-growth/create-offers/delight-customers/freebies/preview"
-  }
-
   const isFormValid =
     customerGroup && offerDays && startDate && targetMealtime && (
       (discountType === "percentage-menu" && discountCards && discountCards.length > 0) ||
@@ -68,21 +61,24 @@ export default function MenuDiscountTiming() {
   const handlePreview = () => {
     if (!isFormValid) return
 
-    navigate(getPreviewPath(), {
-      state: {
-        customerGroup,
-        offerPreference: "all",
-        discountType,
-        goalId: "delight-customers",
-        offerDays,
-        startDate,
-        targetMealtime,
-        discountCards,
-        priceCards,
-        discountConstruct,
-        selectedItems,
-      },
+    // TODO: Save offer to backend here
+    console.log("Offer data:", {
+      customerGroup,
+      offerPreference: "all",
+      discountType,
+      goalId: "delight-customers",
+      offerDays,
+      startDate,
+      targetMealtime,
+      discountCards,
+      priceCards,
+      discountConstruct,
+      selectedItems,
     })
+    
+    // Navigate back to create offers page
+    alert("Offer created successfully!")
+    navigate("/restaurant/hub-growth/create-offers")
   }
 
   return (

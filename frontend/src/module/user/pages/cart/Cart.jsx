@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { Plus, Minus, ArrowLeft, ChevronRight, Clock, MapPin, Phone, FileText, Utensils, Tag, Percent, Truck, Leaf, Share2, Crown, ChevronUp, ChevronDown, X, Check, Settings, CreditCard, Wallet, Building2, Sparkles } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
@@ -9,32 +9,53 @@ import { Button } from "@/components/ui/button"
 import { useCart } from "../../context/CartContext"
 import { useProfile } from "../../context/ProfileContext"
 import { useOrders } from "../../context/OrdersContext"
-import { orderAPI, restaurantAPI } from "@/lib/api"
+import { useLocation as useUserLocation } from "../../hooks/useLocation"
+import { orderAPI, restaurantAPI, API_ENDPOINTS } from "@/lib/api"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
 
-// Sample suggested items for "Complete your meal"
-const suggestedItems = [
-  { id: 101, name: "Dal Kachori", description: "Serves, 1 Piece", price: 22.86, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=400&h=400&fit=crop&q=80", isVeg: true },
-  { id: 102, name: "Rasgulla", description: "1 Piece", price: 19, image: "https://images.unsplash.com/photo-1666190094745-d71710fc02c2?w=400&h=400&fit=crop&q=80", isVeg: true },
-  { id: 103, name: "Kaju Kachori", description: "1 Piece", price: 317, image: "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=400&h=400&fit=crop&q=80", isVeg: true },
-  { id: 104, name: "Milk Cake", description: "250g", price: 150, image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&h=400&fit=crop&q=80", isVeg: true },
-  { id: 105, name: "Gulab Jamun", description: "2 Pieces", price: 89, image: "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=400&h=400&fit=crop&q=80", isVeg: true },
-  { id: 106, name: "Jalebi", description: "100g", price: 75, image: "https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=400&h=400&fit=crop&q=80", isVeg: true },
-]
+// Removed hardcoded suggested items - now fetching approved addons from backend
+// Coupons will be fetched from backend based on items in cart
 
-// Available coupons
-const availableCoupons = [
-  { code: "GETOFF40ON249", discount: 40, minOrder: 249, description: "Save ₹40 on orders above ₹249" },
-  { code: "FIRST50", discount: 50, minOrder: 199, description: "50% off up to ₹50 on first order" },
-  { code: "FREEDEL", discount: 0, minOrder: 149, description: "Free delivery on orders above ₹149", freeDelivery: true },
-]
+/**
+ * Format full address string from address object
+ * @param {Object} address - Address object with street, additionalDetails, city, state, zipCode, or formattedAddress
+ * @returns {String} Formatted address string
+ */
+const formatFullAddress = (address) => {
+  if (!address) return ""
+  
+  // Priority 1: Use formattedAddress if available (for live location addresses)
+  if (address.formattedAddress && address.formattedAddress !== "Select location") {
+    return address.formattedAddress
+  }
+  
+  // Priority 2: Build address from parts
+  const addressParts = []
+  if (address.street) addressParts.push(address.street)
+  if (address.additionalDetails) addressParts.push(address.additionalDetails)
+  if (address.city) addressParts.push(address.city)
+  if (address.state) addressParts.push(address.state)
+  if (address.zipCode) addressParts.push(address.zipCode)
+  
+  if (addressParts.length > 0) {
+    return addressParts.join(', ')
+  }
+  
+  // Priority 3: Use address field if available
+  if (address.address && address.address !== "Select location") {
+    return address.address
+  }
+  
+  return ""
+}
 
 export default function Cart() {
   const navigate = useNavigate()
   const { cart, updateQuantity, addToCart, getCartCount, clearCart } = useCart()
   const { getDefaultAddress, getDefaultPaymentMethod, addresses, paymentMethods, userProfile } = useProfile()
   const { createOrder } = useOrders()
+  const { location: currentLocation } = useUserLocation() // Get live location address
   
   const [showCoupons, setShowCoupons] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState(null)
@@ -57,13 +78,52 @@ export default function Cart() {
   const [pricing, setPricing] = useState(null)
   const [loadingPricing, setLoadingPricing] = useState(false)
   
+  // Addons state
+  const [addons, setAddons] = useState([])
+  const [loadingAddons, setLoadingAddons] = useState(false)
+  
+  // Coupons state - fetched from backend
+  const [availableCoupons, setAvailableCoupons] = useState([])
+  const [loadingCoupons, setLoadingCoupons] = useState(false)
+  
 
   const cartCount = getCartCount()
-  const defaultAddress = getDefaultAddress()
+  const savedAddress = getDefaultAddress()
+  // Priority: Use live location if available, otherwise use saved address
+  const defaultAddress = currentLocation?.formattedAddress && currentLocation.formattedAddress !== "Select location" 
+    ? {
+        ...savedAddress,
+        formattedAddress: currentLocation.formattedAddress,
+        address: currentLocation.address || currentLocation.formattedAddress,
+        street: currentLocation.street || currentLocation.address,
+        city: currentLocation.city,
+        state: currentLocation.state,
+        zipCode: currentLocation.postalCode,
+        area: currentLocation.area,
+        location: currentLocation.latitude && currentLocation.longitude ? {
+          coordinates: [currentLocation.longitude, currentLocation.latitude]
+        } : savedAddress?.location
+      }
+    : savedAddress
   const defaultPayment = getDefaultPaymentMethod()
   
-  // Get restaurant ID from cart
-  const restaurantId = cart.length > 0 ? cart[0]?.restaurantId || cart[0]?.restaurant?.toLowerCase().replace(/\s+/g, "-") : null
+  // Get restaurant ID from cart or restaurant data
+  // Priority: restaurantData > cart[0].restaurantId
+  // DO NOT use cart[0].restaurant as slug fallback - it creates wrong slugs
+  const restaurantId = cart.length > 0 
+    ? (restaurantData?._id || restaurantData?.restaurantId || cart[0]?.restaurantId || null)
+    : null
+
+  // Stable restaurant ID for addons fetch (memoized to prevent dependency array issues)
+  // Prefer restaurantData IDs (more reliable) over slug from cart
+  const restaurantIdForAddons = useMemo(() => {
+    // Only use restaurantData if it's loaded, otherwise wait
+    if (restaurantData) {
+      return restaurantData._id || restaurantData.restaurantId || null
+    }
+    // If restaurantData is not loaded yet, return null to wait
+    return null
+  }, [restaurantData])
   
 
 
@@ -102,43 +162,256 @@ export default function Cart() {
   // Fetch restaurant data when cart has items
   useEffect(() => {
     const fetchRestaurantData = async () => {
-      if (!restaurantId || cart.length === 0) {
+      if (cart.length === 0) {
         setRestaurantData(null)
         return
       }
 
-      // Skip fetch if restaurantId looks like a slug/name (contains spaces or special chars)
-      // Only fetch if it looks like a valid ID (alphanumeric, dashes, or ObjectId format)
-      const isValidIdFormat = /^[a-zA-Z0-9\-_]+$/.test(restaurantId) && restaurantId.length >= 3
+      // If we already have restaurantData, don't fetch again
+      if (restaurantData) {
+        return
+      }
+
+      setLoadingRestaurant(true)
+
+      // Strategy 1: Try using restaurantId from cart if available
+      if (cart[0]?.restaurantId) {
+        try {
+          console.log("🔄 Fetching restaurant data by restaurantId from cart:", cart[0].restaurantId)
+          const response = await restaurantAPI.getRestaurantById(cart[0].restaurantId)
+          const data = response?.data?.data?.restaurant || response?.data?.restaurant
+          if (data) {
+            console.log("✅ Restaurant data loaded from cart restaurantId:", {
+              _id: data._id,
+              restaurantId: data.restaurantId,
+              name: data.name
+            })
+            setRestaurantData(data)
+            setLoadingRestaurant(false)
+            return
+          }
+        } catch (error) {
+          console.warn("⚠️ Failed to fetch by cart restaurantId, trying fallback...")
+        }
+      }
+
+      // Strategy 2: If no restaurantId in cart, search by restaurant name
+      if (cart[0]?.restaurant && !restaurantData) {
+        try {
+          console.log("🔍 Searching restaurant by name:", cart[0].restaurant)
+          const searchResponse = await restaurantAPI.getRestaurants({ limit: 100 })
+          const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
+          console.log("📋 Fetched", restaurants.length, "restaurants for name search")
+          
+          // Try exact match first
+          let matchingRestaurant = restaurants.find(r => 
+            r.name?.toLowerCase().trim() === cart[0].restaurant?.toLowerCase().trim()
+          )
+          
+          // If no exact match, try partial match
+          if (!matchingRestaurant) {
+            console.log("🔍 No exact match, trying partial match...")
+            matchingRestaurant = restaurants.find(r => 
+              r.name?.toLowerCase().includes(cart[0].restaurant?.toLowerCase().trim()) ||
+              cart[0].restaurant?.toLowerCase().trim().includes(r.name?.toLowerCase())
+            )
+          }
+          
+          if (matchingRestaurant) {
+            console.log("✅ Found restaurant by name:", {
+              name: matchingRestaurant.name,
+              _id: matchingRestaurant._id,
+              restaurantId: matchingRestaurant.restaurantId,
+              slug: matchingRestaurant.slug
+            })
+            setRestaurantData(matchingRestaurant)
+            setLoadingRestaurant(false)
+            return
+          } else {
+            console.warn("⚠️ Restaurant not found even by name search. Searched in", restaurants.length, "restaurants")
+            if (restaurants.length > 0) {
+              console.log("📋 Available restaurant names:", restaurants.map(r => r.name).slice(0, 10))
+            }
+          }
+        } catch (searchError) {
+          console.warn("⚠️ Error searching restaurants by name:", searchError)
+        }
+      }
+
+      // If all strategies fail, set to null
+      setRestaurantData(null)
+      setLoadingRestaurant(false)
+    }
+
+    fetchRestaurantData()
+  }, [cart.length, cart[0]?.restaurantId, cart[0]?.restaurant])
+
+  // Fetch approved addons for the restaurant
+  useEffect(() => {
+    const fetchAddonsWithId = async (idToUse) => {
+
+      console.log("🔍 Addons fetch - Using ID:", {
+        restaurantData: restaurantData ? {
+          _id: restaurantData._id,
+          restaurantId: restaurantData.restaurantId,
+          name: restaurantData.name
+        } : 'Not loaded',
+        cartRestaurantId: restaurantId,
+        idToUse: idToUse
+      })
+
+      // Convert to string for validation
+      const idString = String(idToUse)
+      console.log("🔍 Restaurant ID string:", idString, "Type:", typeof idString, "Length:", idString.length)
+
+      // Validate ID format (should be ObjectId or restaurantId format)
+      const isValidIdFormat = /^[a-zA-Z0-9\-_]+$/.test(idString) && idString.length >= 3
 
       if (!isValidIdFormat) {
-        // Restaurant ID is likely a name/slug, skip API call
-        setRestaurantData(null)
+        console.warn("⚠️ Restaurant ID format invalid:", idString)
+        setAddons([])
         return
       }
 
       try {
-        setLoadingRestaurant(true)
-        const response = await restaurantAPI.getRestaurantById(restaurantId)
-        const data = response?.data?.data?.restaurant || response?.data?.restaurant
-        if (data) {
-          setRestaurantData(data)
+        setLoadingAddons(true)
+        console.log("🚀 Fetching addons for restaurant ID:", idString)
+        const response = await restaurantAPI.getAddonsByRestaurantId(idString)
+        console.log("✅ Addons API response received:", response?.data)
+        console.log("📦 Response structure:", {
+          success: response?.data?.success,
+          data: response?.data?.data,
+          addons: response?.data?.data?.addons,
+          directAddons: response?.data?.addons
+        })
+        
+        const data = response?.data?.data?.addons || response?.data?.addons || []
+        console.log("📊 Fetched addons count:", data.length)
+        console.log("📋 Fetched addons data:", JSON.stringify(data, null, 2))
+        
+        if (data.length === 0) {
+          console.warn("⚠️ No addons returned from API. Response:", response?.data)
+        } else {
+          console.log("✅ Successfully fetched", data.length, "addons:", data.map(a => a.name))
         }
+        
+        setAddons(data)
       } catch (error) {
-        // Silently handle 404 errors - restaurant might not exist in DB, which is OK
-        // Only log non-404 errors
-        if (error.response?.status !== 404) {
-          console.error("Error fetching restaurant data:", error)
+        // Log error for debugging
+        console.error("❌ Addons fetch error:", {
+          code: error.code,
+          status: error.response?.status,
+          message: error.message,
+          url: error.config?.url,
+          data: error.response?.data
+        })
+        // Silently handle network errors and 404 errors
+        // Network errors (ERR_NETWORK) happen when backend is not running - this is OK for development
+        // 404 errors mean restaurant might not have addons or restaurant not found - also OK
+        if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
+          console.error("Error fetching addons:", error)
         }
-        // Continue with cart even if restaurant fetch fails
-        setRestaurantData(null)
+        // Continue with cart even if addons fetch fails
+        setAddons([])
       } finally {
-        setLoadingRestaurant(false)
+        setLoadingAddons(false)
       }
     }
 
-    fetchRestaurantData()
-  }, [restaurantId, cart.length])
+    const fetchAddons = async () => {
+      if (cart.length === 0) {
+        setAddons([])
+        return
+      }
+
+      // Wait for restaurantData to be loaded (including fallback search)
+      if (loadingRestaurant) {
+        console.log("⏳ Waiting for restaurantData to load (including fallback search)...")
+        return
+      }
+
+      // Must have restaurantData to fetch addons
+      if (!restaurantData) {
+        console.warn("⚠️ No restaurantData available for addons fetch")
+        setAddons([])
+        return
+      }
+
+      // Use restaurantData ID (most reliable)
+      const idToUse = restaurantData._id || restaurantData.restaurantId
+      if (!idToUse) {
+        console.warn("⚠️ No valid restaurant ID in restaurantData")
+        setAddons([])
+        return
+      }
+
+      console.log("✅ Using restaurantData ID for addons:", idToUse)
+      fetchAddonsWithId(idToUse)
+    }
+
+    fetchAddons()
+  }, [restaurantData, cart.length, loadingRestaurant])
+
+  // Fetch coupons for items in cart
+  useEffect(() => {
+    const fetchCouponsForCartItems = async () => {
+      if (cart.length === 0 || !restaurantId) {
+        setAvailableCoupons([])
+        return
+      }
+
+      console.log(`[CART-COUPONS] Fetching coupons for ${cart.length} items in cart`)
+      setLoadingCoupons(true)
+
+      const allCoupons = []
+      const uniqueCouponCodes = new Set()
+
+      // Fetch coupons for each item in cart
+      for (const cartItem of cart) {
+        if (!cartItem.id) {
+          console.log(`[CART-COUPONS] Skipping item without id:`, cartItem)
+          continue
+        }
+
+        try {
+          console.log(`[CART-COUPONS] Fetching coupons for itemId: ${cartItem.id}, name: ${cartItem.name}`)
+          const response = await restaurantAPI.getCouponsByItemIdPublic(restaurantId, cartItem.id)
+          
+          if (response?.data?.success && response?.data?.data?.coupons) {
+            const coupons = response.data.data.coupons
+            console.log(`[CART-COUPONS] Found ${coupons.length} coupons for item ${cartItem.id}`)
+            
+            // Add coupons, avoiding duplicates
+            coupons.forEach(coupon => {
+              if (!uniqueCouponCodes.has(coupon.couponCode)) {
+                uniqueCouponCodes.add(coupon.couponCode)
+                // Convert backend coupon format to frontend format
+                allCoupons.push({
+                  code: coupon.couponCode,
+                  discount: coupon.originalPrice - coupon.discountedPrice,
+                  discountPercentage: coupon.discountPercentage,
+                  minOrder: coupon.minOrderValue || 0,
+                  description: `Save ₹${coupon.originalPrice - coupon.discountedPrice} with '${coupon.couponCode}'`,
+                  originalPrice: coupon.originalPrice,
+                  discountedPrice: coupon.discountedPrice,
+                  itemId: cartItem.id,
+                  itemName: cartItem.name,
+                })
+              }
+            })
+          }
+        } catch (error) {
+          console.error(`[CART-COUPONS] Error fetching coupons for item ${cartItem.id}:`, error)
+        }
+      }
+
+      console.log(`[CART-COUPONS] Total unique coupons found: ${allCoupons.length}`, allCoupons)
+      setAvailableCoupons(allCoupons)
+      setLoadingCoupons(false)
+    }
+
+    fetchCouponsForCartItems()
+  }, [cart, restaurantId])
 
   // Calculate pricing from backend whenever cart, address, or coupon changes
   useEffect(() => {
@@ -293,40 +566,79 @@ export default function Cart() {
 
     setIsPlacingOrder(true)
 
+    // Get API base URL (needed for error handling)
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
     try {
-      // Create order in backend
-      const orderResponse = await orderAPI.createOrder({
-        items: cart.map(item => ({
+      console.log("🛒 Starting order placement process...")
+      console.log("📦 Cart items:", cart.map(item => ({ id: item.id, name: item.name, quantity: item.quantity, price: item.price })))
+      console.log("💰 Applied coupon:", appliedCoupon?.code || "None")
+      console.log("📍 Delivery address:", defaultAddress?.label || defaultAddress?.city)
+      
+      // Ensure couponCode is included in pricing
+      const orderPricing = pricing || {
+        subtotal,
+        deliveryFee,
+        tax: gstCharges,
+        platformFee,
+        discount,
+        total,
+        couponCode: appliedCoupon?.code || null
+      };
+      
+      // Add couponCode if not present but coupon is applied
+      if (!orderPricing.couponCode && appliedCoupon?.code) {
+        orderPricing.couponCode = appliedCoupon.code;
+      }
+
+      // Include all cart items (main items + addons)
+      // Note: Addons are added as separate cart items when user clicks the + button
+      const orderItems = cart.map(item => ({
           itemId: item.id,
           name: item.name,
           price: item.price,
-          quantity: item.quantity,
-          image: item.image,
-          description: item.description,
+        quantity: item.quantity || 1,
+        image: item.image || "",
+        description: item.description || "",
           isVeg: item.isVeg !== false
-        })),
+      }))
+
+      console.log("📋 Order items to send:", orderItems)
+      console.log("💵 Order pricing:", orderPricing)
+
+      // Check API base URL before making request (for debugging)
+      const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.ORDER.CREATE}`;
+      console.log("🌐 Making request to:", fullUrl)
+      console.log("🔑 Authentication token present:", !!localStorage.getItem('accessToken') || !!localStorage.getItem('user_accessToken'))
+      
+      // Create order in backend
+      const orderResponse = await orderAPI.createOrder({
+        items: orderItems,
         address: defaultAddress,
         restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || "unknown",
         restaurantName: restaurantData?.name || cart[0]?.restaurant || "Unknown Restaurant",
-        pricing: pricing || {
-          subtotal,
-          deliveryFee,
-          tax: gstCharges,
-          discount,
-          total,
-          couponCode: appliedCoupon?.code
-        },
-        deliveryFleet,
-        note,
-        sendCutlery,
+        pricing: orderPricing,
+        deliveryFleet: deliveryFleet || 'standard',
+        note: note || "",
+        sendCutlery: sendCutlery !== false,
         paymentMethod: "razorpay"
       })
 
+      console.log("✅ Order created successfully:", orderResponse.data)
+
       const { order, razorpay } = orderResponse.data.data
 
-      if (!razorpay || !razorpay.orderId) {
-        throw new Error("Failed to initialize payment")
+      if (!razorpay || !razorpay.orderId || !razorpay.key) {
+        console.error("❌ Razorpay initialization failed:", { razorpay, order })
+        throw new Error(razorpay ? "Razorpay payment gateway is not configured. Please contact support." : "Failed to initialize payment")
       }
+
+      console.log("💳 Razorpay order created:", {
+        orderId: razorpay.orderId,
+        amount: razorpay.amount,
+        currency: razorpay.currency,
+        keyPresent: !!razorpay.key
+      })
 
       // Get user info for Razorpay prefill
       const userInfo = userProfile || {}
@@ -334,25 +646,40 @@ export default function Cart() {
       const userEmail = userInfo.email || ""
       const userName = userInfo.name || ""
 
+      // Format phone number (remove non-digits, take last 10 digits)
+      const formattedPhone = userPhone.replace(/\D/g, "").slice(-10)
+
+      console.log("👤 User info for payment:", {
+        name: userName,
+        email: userEmail,
+        phone: formattedPhone
+      })
+
       // Initialize Razorpay payment
       await initRazorpayPayment({
         key: razorpay.key,
-        amount: razorpay.amount,
-        currency: razorpay.currency,
+        amount: razorpay.amount, // Already in paise from backend
+        currency: razorpay.currency || 'INR',
         order_id: razorpay.orderId,
         name: "Appzeto Food",
-        description: `Order ${order.orderId}`,
+        description: `Order ${order.orderId} - ₹${(razorpay.amount / 100).toFixed(2)}`,
         prefill: {
           name: userName,
           email: userEmail,
-          contact: userPhone.replace(/\D/g, "").slice(-10)
+          contact: formattedPhone
         },
         notes: {
           orderId: order.orderId,
-          userId: userInfo.id || ""
+          userId: userInfo.id || "",
+          restaurantId: restaurantId || "unknown"
         },
         handler: async (response) => {
           try {
+            console.log("✅ Payment successful, verifying...", {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id
+            })
+
             // Verify payment with backend
             const verifyResponse = await orderAPI.verifyPayment({
               orderId: order.id,
@@ -361,33 +688,105 @@ export default function Cart() {
               razorpaySignature: response.razorpay_signature
             })
 
+            console.log("✅ Payment verification response:", verifyResponse.data)
+
             if (verifyResponse.data.success) {
               // Payment successful
+              console.log("🎉 Order placed successfully:", {
+                orderId: order.orderId,
+                paymentId: verifyResponse.data.data?.payment?.paymentId
+              })
               setPlacedOrderId(order.orderId)
               setShowOrderSuccess(true)
               clearCart()
               setIsPlacingOrder(false)
             } else {
-              throw new Error("Payment verification failed")
+              throw new Error(verifyResponse.data.message || "Payment verification failed")
             }
           } catch (error) {
-            console.error("Payment verification error:", error)
-            alert(error?.response?.data?.message || "Payment verification failed. Please contact support.")
+            console.error("❌ Payment verification error:", error)
+            const errorMessage = error?.response?.data?.message || error?.message || "Payment verification failed. Please contact support."
+            alert(errorMessage)
             setIsPlacingOrder(false)
           }
         },
         onError: (error) => {
-          console.error("Razorpay error:", error)
-          alert(error?.description || "Payment failed. Please try again.")
+          console.error("❌ Razorpay payment error:", error)
+          // Don't show alert for user cancellation
+          if (error?.code !== 'PAYMENT_CANCELLED' && error?.message !== 'PAYMENT_CANCELLED') {
+            const errorMessage = error?.description || error?.message || "Payment failed. Please try again."
+            alert(errorMessage)
+          }
           setIsPlacingOrder(false)
         },
         onClose: () => {
+          console.log("⚠️ Payment modal closed by user")
           setIsPlacingOrder(false)
         }
       })
     } catch (error) {
-      console.error("Order creation error:", error)
-      alert(error?.response?.data?.message || "Failed to create order. Please try again.")
+      console.error("❌ Order creation error:", error)
+      
+      let errorMessage = "Failed to create order. Please try again."
+      
+      // Handle network errors
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        const backendUrl = API_BASE_URL.replace('/api', '');
+        errorMessage = `Network Error: Cannot connect to backend server.\n\n` +
+          `Expected backend URL: ${backendUrl}\n\n` +
+          `Please check:\n` +
+          `1. Backend server is running\n` +
+          `2. Backend is accessible at ${backendUrl}\n` +
+          `3. Check browser console (F12) for more details\n\n` +
+          `If backend is not running, start it with:\n` +
+          `cd appzetofood/backend && npm start`
+        
+        console.error("🔴 Network Error Details:", {
+          code: error.code,
+          message: error.message,
+          config: {
+            url: error.config?.url,
+            baseURL: error.config?.baseURL,
+            fullUrl: error.config?.baseURL + error.config?.url,
+            method: error.config?.method
+          },
+          backendUrl: backendUrl,
+          apiBaseUrl: API_BASE_URL
+        })
+        
+        // Try to test backend connectivity
+        try {
+          fetch(backendUrl + '/health', { method: 'GET', signal: AbortSignal.timeout(5000) })
+            .then(response => {
+              if (response.ok) {
+                console.log("✅ Backend health check passed - server is running")
+              } else {
+                console.warn("⚠️ Backend health check returned:", response.status)
+              }
+            })
+            .catch(fetchError => {
+              console.error("❌ Backend health check failed:", fetchError.message)
+              console.error("💡 Make sure backend server is running at:", backendUrl)
+            })
+        } catch (fetchTestError) {
+          console.error("❌ Could not test backend connectivity:", fetchTestError.message)
+        }
+      } 
+      // Handle timeout errors
+      else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMessage = "Request timed out. The server is taking too long to respond. Please try again."
+      }
+      // Handle other axios errors
+      else if (error.response) {
+        // Server responded with error status
+        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`
+      }
+      // Handle other errors
+      else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      alert(errorMessage)
       setIsPlacingOrder(false)
     }
   }
@@ -440,8 +839,8 @@ export default function Cart() {
               <div className="min-w-0">
                 <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">{restaurantName}</p>
                 <p className="text-sm md:text-base font-medium text-gray-800 dark:text-white truncate">
-                  {restaurantData?.estimatedDeliveryTime || "10-15 mins"} to <span className="font-semibold">{defaultAddress?.label || "Home"}</span>
-                  <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs md:text-sm">{defaultAddress?.city || defaultAddress?.area || "Select address"}</span>
+                  {restaurantData?.estimatedDeliveryTime || "10-15 mins"} to <span className="font-semibold">Location</span>
+                  <span className="text-gray-400 dark:text-gray-500 ml-1 text-xs md:text-sm">{defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || defaultAddress?.city || "Select address") : "Select address"}</span>
                 </p>
               </div>
             </div>
@@ -535,24 +934,15 @@ export default function Cart() {
                 </div>
 
                 {/* Add more items */}
-                {cart.length > 0 && cart[0]?.restaurant ? (
-                  <Link 
-                    to={`/user/restaurants/${cart[0].restaurant.toLowerCase().replace(/\s+/g, "-")}`} 
-                    className="flex items-center gap-2 mt-4 md:mt-6 text-red-600 dark:text-red-400"
-                  >
-                    <Plus className="h-4 w-4 md:h-5 md:w-5" />
-                    <span className="text-sm md:text-base font-medium">Add more items</span>
-                  </Link>
-                ) : (
-                  <button 
-                    onClick={() => navigate(-1)}
-                    className="flex items-center gap-2 mt-4 md:mt-6 text-red-600 dark:text-red-400"
-                  >
-                    <Plus className="h-4 w-4 md:h-5 md:w-5" />
-                    <span className="text-sm md:text-base font-medium">Add more items</span>
-                  </button>
-                )}
+                <button 
+                  onClick={() => navigate(-1)}
+                  className="flex items-center gap-2 mt-4 md:mt-6 text-red-600 dark:text-red-400"
+                >
+                  <Plus className="h-4 w-4 md:h-5 md:w-5" />
+                  <span className="text-sm md:text-base font-medium">Add more items</span>
+                </button>
               </div>
+
 
               {/* Note & Cutlery */}
               <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl flex flex-col sm:flex-row gap-2 md:gap-3">
@@ -584,46 +974,71 @@ export default function Cart() {
                 </div>
               )}
 
-              {/* Complete your meal section */}
-              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
-                <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
-                  <div className="w-6 h-6 md:w-8 md:h-8 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center">
-                    <span className="text-xs md:text-base">🍽️</span>
-                  </div>
-                  <span className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Complete your meal with</span>
-                </div>
-                <div className="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 md:-mx-6 px-4 md:px-6 scrollbar-hide">
-                  {suggestedItems.map((item) => (
-                    <div key={item.id} className="flex-shrink-0 w-28 md:w-36">
-                      <div className="relative bg-gray-100 dark:bg-gray-800 rounded-lg md:rounded-xl overflow-hidden">
-                        <img 
-                          src={item.image} 
-                          alt={item.name}
-                          className="w-full h-28 md:h-36 object-cover rounded-lg md:rounded-xl"
-                          onError={(e) => {
-                            e.target.onerror = null
-                            e.target.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"
-                          }}
-                        />
-                        <div className="absolute top-1 md:top-2 left-1 md:left-2">
-                          <div className={`w-3.5 h-3.5 md:w-4 md:h-4 bg-white border ${item.isVeg ? 'border-green-600' : 'border-red-600'} flex items-center justify-center rounded`}>
-                            <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => addToCart({ ...item, isVeg: item.isVeg })}
-                          className="absolute bottom-1 md:bottom-2 right-1 md:right-2 w-6 h-6 md:w-7 md:h-7 bg-white border border-red-600 rounded flex items-center justify-center shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                        >
-                          <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 text-red-600" />
-                        </button>
-                      </div>
-                      <p className="text-xs md:text-sm font-medium text-gray-800 dark:text-gray-200 mt-1.5 md:mt-2 line-clamp-2 leading-tight">{item.name}</p>
-                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">{item.description}</p>
-                      <p className="text-xs md:text-sm text-gray-800 dark:text-gray-200 font-semibold mt-0.5">₹{item.price}</p>
+              {/* Complete your meal section - Approved Addons */}
+              {addons.length > 0 && (
+                <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
+                  <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
+                    <div className="w-6 h-6 md:w-8 md:h-8 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center">
+                      <span className="text-xs md:text-base">🍽️</span>
                     </div>
-                  ))}
+                    <span className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Complete your meal with</span>
+                  </div>
+                  {loadingAddons ? (
+                    <div className="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 md:-mx-6 px-4 md:px-6 scrollbar-hide">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex-shrink-0 w-28 md:w-36 animate-pulse">
+                          <div className="w-full h-28 md:h-36 bg-gray-200 dark:bg-gray-700 rounded-lg md:rounded-xl" />
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded mt-2" />
+                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded mt-1 w-2/3" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex gap-3 md:gap-4 overflow-x-auto pb-2 -mx-4 md:-mx-6 px-4 md:px-6 scrollbar-hide">
+                      {addons.map((addon) => (
+                        <div key={addon.id} className="flex-shrink-0 w-28 md:w-36">
+                          <div className="relative bg-gray-100 dark:bg-gray-800 rounded-lg md:rounded-xl overflow-hidden">
+                            <img 
+                              src={addon.image || (addon.images && addon.images[0]) || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"} 
+                              alt={addon.name}
+                              className="w-full h-28 md:h-36 object-cover rounded-lg md:rounded-xl"
+                              onError={(e) => {
+                                e.target.onerror = null
+                                e.target.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=200&fit=crop"
+                              }}
+                            />
+                            <div className="absolute top-1 md:top-2 left-1 md:left-2">
+                              <div className="w-3.5 h-3.5 md:w-4 md:h-4 bg-white border border-green-600 flex items-center justify-center rounded">
+                                <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-green-600" />
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => addToCart({ 
+                                id: addon.id, 
+                                name: addon.name, 
+                                price: addon.price, 
+                                image: addon.image || (addon.images && addon.images[0]) || "",
+                                description: addon.description || "",
+                                isVeg: true,
+                                restaurant: restaurantName,
+                                restaurantId: restaurantId
+                              })}
+                              className="absolute bottom-1 md:bottom-2 right-1 md:right-2 w-6 h-6 md:w-7 md:h-7 bg-white border border-red-600 rounded flex items-center justify-center shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            >
+                              <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 text-red-600" />
+                            </button>
+                          </div>
+                          <p className="text-xs md:text-sm font-medium text-gray-800 dark:text-gray-200 mt-1.5 md:mt-2 line-clamp-2 leading-tight">{addon.name}</p>
+                          {addon.description && (
+                            <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">{addon.description}</p>
+                          )}
+                          <p className="text-xs md:text-sm text-gray-800 dark:text-gray-200 font-semibold mt-0.5">₹{addon.price}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               {/* Coupon Section */}
               <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
@@ -638,16 +1053,25 @@ export default function Cart() {
                     </div>
                     <button onClick={handleRemoveCoupon} className="text-gray-500 dark:text-gray-400 text-xs md:text-sm font-medium">Remove</button>
                   </div>
-                ) : (
+                ) : loadingCoupons ? (
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <Percent className="h-4 w-4 md:h-5 md:w-5 text-gray-600 dark:text-gray-400" />
+                    <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">Loading coupons...</p>
+                  </div>
+                ) : availableCoupons.length > 0 ? (
                   <div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 md:gap-3">
                         <Percent className="h-4 w-4 md:h-5 md:w-5 text-gray-600 dark:text-gray-400" />
                         <div>
-                          <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200">Save ₹40 with 'GETOFF40ON249'</p>
-                          <button onClick={() => setShowCoupons(!showCoupons)} className="text-xs md:text-sm text-blue-600 dark:text-blue-400 font-medium">
-                            View all coupons →
-                          </button>
+                          <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200">
+                            Save ₹{availableCoupons[0].discount} with '{availableCoupons[0].code}'
+                          </p>
+                          {availableCoupons.length > 1 && (
+                            <button onClick={() => setShowCoupons(!showCoupons)} className="text-xs md:text-sm text-blue-600 dark:text-blue-400 font-medium">
+                              View all coupons →
+                            </button>
+                          )}
                         </div>
                       </div>
                       <Button 
@@ -655,15 +1079,21 @@ export default function Cart() {
                         variant="outline" 
                         className="h-7 md:h-8 text-xs md:text-sm border-red-600 dark:border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                         onClick={() => handleApplyCoupon(availableCoupons[0])}
+                        disabled={subtotal < availableCoupons[0].minOrder}
                       >
-                        APPLY
+                        {subtotal < availableCoupons[0].minOrder ? `Min ₹${availableCoupons[0].minOrder}` : 'APPLY'}
                       </Button>
                     </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <Percent className="h-4 w-4 md:h-5 md:w-5 text-gray-600 dark:text-gray-400" />
+                    <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">No coupons available</p>
                   </div>
                 )}
                 
                 {/* Coupons List */}
-                {showCoupons && !appliedCoupon && (
+                {showCoupons && !appliedCoupon && availableCoupons.length > 0 && (
                   <div className="mt-3 md:mt-4 space-y-2 md:space-y-3 border-t dark:border-gray-700 pt-3 md:pt-4">
                     {availableCoupons.map((coupon) => (
                       <div key={coupon.code} className="flex items-center justify-between py-2 md:py-3 border-b border-dashed dark:border-gray-700 last:border-0">
@@ -747,10 +1177,10 @@ export default function Cart() {
                     <MapPin className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
                     <div>
                       <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">
-                        Delivery at <span className="font-semibold">{defaultAddress?.isDefault ? "Home" : "Address"}</span>
+                        Delivery at <span className="font-semibold">Location</span>
                       </p>
-                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
-                        {defaultAddress ? `${defaultAddress.street}, ${defaultAddress.city}` : "Add delivery address"}
+                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+                        {defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || "Add delivery address") : "Add delivery address"}
                       </p>
                       <button className="text-xs md:text-sm text-gray-500 dark:text-gray-400 border-b border-dashed border-gray-400 dark:border-gray-600">Add instructions for delivery partner</button>
                     </div>
@@ -938,9 +1368,12 @@ export default function Cart() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900">Delivering to Home</p>
+                  <p className="text-lg font-semibold text-gray-900">Delivering to Location</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || "Address") : "Add address"}
+                  </p>
                   <p className="text-sm text-gray-500">
-                    {defaultAddress ? `${defaultAddress.city}, ${defaultAddress.street}` : "Address"}
+                    {defaultAddress ? (formatFullAddress(defaultAddress) || "Address") : "Address"}
                   </p>
                 </div>
               </div>
@@ -1069,7 +1502,7 @@ export default function Cart() {
                 </h2>
               </div>
               <p className="text-gray-500 text-base">
-                {defaultAddress ? `${defaultAddress.street}, ${defaultAddress.city}` : "Delivery Address"}
+                {defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || "Delivery Address") : "Delivery Address"}
               </p>
             </div>
 

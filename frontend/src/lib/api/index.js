@@ -371,6 +371,40 @@ export const restaurantAPI = {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.ORDERS, { params });
   },
 
+  // Get order by ID
+  getOrderById: (id) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.ORDER_BY_ID.replace(':id', id));
+  },
+
+  // Accept order
+  acceptOrder: (id, preparationTime = null) => {
+    return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_ACCEPT.replace(':id', id), {
+      preparationTime
+    });
+  },
+
+  // Reject order
+  rejectOrder: (id, reason = '') => {
+    return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_REJECT.replace(':id', id), {
+      reason
+    });
+  },
+
+  // Mark order as preparing
+  markOrderPreparing: (id, options = {}) => {
+    const url = API_ENDPOINTS.RESTAURANT.ORDER_PREPARING.replace(':id', id);
+    // Add resend query parameter if provided
+    if (options.resend) {
+      return apiClient.patch(`${url}?resend=true`);
+    }
+    return apiClient.patch(url);
+  },
+
+  // Mark order as ready
+  markOrderReady: (id) => {
+    return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_READY.replace(':id', id));
+  },
+
   // Get wallet
   getWallet: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.WALLET);
@@ -394,6 +428,14 @@ export const restaurantAPI = {
   // Get restaurant by ID or slug
   getRestaurantById: (id) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.BY_ID.replace(':id', id));
+  },
+  // Get coupons for item (public - for user cart)
+  getCouponsByItemIdPublic: (restaurantId, itemId) => {
+    return apiClient.get(
+      API_ENDPOINTS.RESTAURANT.COUPONS_BY_ITEM_ID_PUBLIC
+        .replace(':restaurantId', restaurantId)
+        .replace(':itemId', itemId)
+    );
   },
 
   // Get restaurant by owner (for restaurant module)
@@ -433,6 +475,9 @@ export const restaurantAPI = {
   },
   deleteAddon: (id) => {
     return apiClient.delete(API_ENDPOINTS.RESTAURANT.ADDON_BY_ID.replace(':id', id));
+  },
+  getAddonsByRestaurantId: (restaurantId) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.ADDONS_BY_RESTAURANT_ID.replace(':id', restaurantId));
   },
 
   getMenuByRestaurantId: (restaurantId) => {
@@ -483,6 +528,26 @@ export const restaurantAPI = {
   },
   getInventoryByRestaurantId: (restaurantId) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.INVENTORY_BY_RESTAURANT_ID.replace(':id', restaurantId));
+  },
+
+  // Offer operations (for restaurant module)
+  createOffer: (offerData) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.OFFERS, offerData);
+  },
+  getOffers: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.OFFERS, { params });
+  },
+  getOfferById: (id) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.OFFER_BY_ID.replace(':id', id));
+  },
+  updateOfferStatus: (id, status) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.OFFER_STATUS.replace(':id', id), { status });
+  },
+  deleteOffer: (id) => {
+    return apiClient.delete(API_ENDPOINTS.RESTAURANT.OFFER_BY_ID.replace(':id', id));
+  },
+  getCouponsByItemId: (itemId) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.COUPONS_BY_ITEM_ID.replace(':itemId', itemId));
   },
 };
 
@@ -559,6 +624,29 @@ export const deliveryAPI = {
   getOrders: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.ORDERS, { params });
   },
+  getOrderDetails: (orderId) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.ORDER_BY_ID.replace(':orderId', orderId));
+  },
+  acceptOrder: (orderId, currentLocation = {}) => {
+    const payload = {};
+    if (currentLocation.lat !== undefined && currentLocation.lat !== null) {
+      payload.currentLat = currentLocation.lat;
+    }
+    if (currentLocation.lng !== undefined && currentLocation.lng !== null) {
+      payload.currentLng = currentLocation.lng;
+    }
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_ACCEPT.replace(':orderId', orderId), payload);
+  },
+  confirmReachedPickup: (orderId) => {
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_REACHED_PICKUP.replace(':orderId', orderId));
+  },
+  confirmOrderId: (orderId, confirmedOrderId, currentLocation = {}) => {
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_CONFIRM_ID.replace(':orderId', orderId), {
+      confirmedOrderId,
+      currentLat: currentLocation.lat,
+      currentLng: currentLocation.lng
+    });
+  },
 
   // Get trip history
   getTripHistory: (params = {}) => {
@@ -609,6 +697,13 @@ export const deliveryAPI = {
   // Reverify (resubmit for approval)
   reverify: () => {
     return apiClient.post(API_ENDPOINTS.DELIVERY.REVERIFY);
+  },
+
+  // Get zones within radius (for delivery boy to see nearby zones)
+  getZonesInRadius: (latitude, longitude, radius = 70) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.ZONES_IN_RADIUS, {
+      params: { latitude, longitude, radius }
+    });
   },
 };
 
@@ -732,6 +827,11 @@ export const adminAPI = {
   // Delete restaurant
   deleteRestaurant: (id) => {
     return apiClient.delete(API_ENDPOINTS.ADMIN.RESTAURANT_DELETE.replace(':id', id));
+  },
+
+  // Get all offers (with restaurant and dish details)
+  getAllOffers: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.OFFERS, { params });
   },
 
   // Restaurant Commission Management
@@ -877,6 +977,31 @@ export const adminAPI = {
 
   updateCategoryPriority: (id, priority) => {
     return apiClient.patch(API_ENDPOINTS.ADMIN.CATEGORY_PRIORITY.replace(':id', id), { priority });
+  },
+
+  // Zone Management
+  getZones: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ZONES, { params });
+  },
+
+  getZoneById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ZONE_BY_ID.replace(':id', id));
+  },
+
+  createZone: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.ZONES, data);
+  },
+
+  updateZone: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.ZONE_BY_ID.replace(':id', id), data);
+  },
+
+  deleteZone: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.ZONE_BY_ID.replace(':id', id));
+  },
+
+  toggleZoneStatus: (id) => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.ZONE_STATUS.replace(':id', id));
   },
 
   // Earning Addon Management

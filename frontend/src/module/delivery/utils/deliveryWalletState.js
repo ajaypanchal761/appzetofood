@@ -81,11 +81,14 @@ export const fetchDeliveryWallet = async () => {
     console.log('⚠️ Returning empty wallet state')
     return EMPTY_WALLET_STATE
   } catch (error) {
-    console.error('❌ Error fetching wallet data:', error)
-    console.error('❌ Error response:', error.response)
-    console.error('❌ Error response data:', error.response?.data)
-    console.error('❌ Error message:', error.message)
-    console.error('❌ Error stack:', error.stack)
+    // Skip logging network errors - they're handled by axios interceptor
+    // Network errors mean backend is not running, which is expected in some scenarios
+    if (error.code !== 'ERR_NETWORK' && error.message !== 'Network Error') {
+      console.error('❌ Error fetching wallet data:', error)
+      console.error('❌ Error response:', error.response)
+      console.error('❌ Error response data:', error.response?.data)
+      console.error('❌ Error message:', error.message)
+    }
     return EMPTY_WALLET_STATE
   }
 }

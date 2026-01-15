@@ -125,13 +125,25 @@ export const initRazorpayPayment = async (options) => {
 
     const razorpay = new window.Razorpay(razorpayOptions);
     
+    // Handle payment failures
     razorpay.on('payment.failed', function(response) {
+      console.error('Razorpay payment failed:', response);
       if (options.onError) {
-        options.onError(response.error);
+        options.onError(response.error || { description: 'Payment failed. Please try again.' });
+      }
+    });
+
+    // Handle payment method selection failures
+    razorpay.on('payment.method_selection_failed', function(response) {
+      console.error('Razorpay payment method selection failed:', response);
+      if (options.onError) {
+        options.onError(response.error || { description: 'Please select another payment method.' });
       }
     });
 
     razorpay.open();
+    
+    console.log('✅ Razorpay checkout opened successfully');
 
     return razorpay;
   } catch (error) {

@@ -46,7 +46,10 @@ export default function DeliverySettings() {
         setDeliveryStatus(JSON.parse(savedStatus))
       }
     } catch (error) {
-      console.error("Error loading delivery status:", error)
+      // Only log error if it's not a network/timeout error (backend might be down/slow)
+      if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
+        console.error("Error loading delivery status:", error)
+      }
     }
   }, [])
 
