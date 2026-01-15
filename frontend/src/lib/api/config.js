@@ -246,6 +246,8 @@ export const API_ENDPOINTS = {
     LIMELIGHT: '/dining/limelight',
     BANK_OFFERS: '/dining/bank-offers',
     MUST_TRIES: '/dining/must-tries',
+    OFFER_BANNERS: '/dining/offer-banners',
+    STORIES: '/dining/stories',
   },
 };
 

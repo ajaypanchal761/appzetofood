@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const diningCategorySchema = new mongoose.Schema({
+const diningStorySchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
@@ -24,4 +24,4 @@ const diningCategorySchema = new mongoose.Schema({
     timestamps: true
 });
 
-export default mongoose.model('DiningCategory', diningCategorySchema);
+export default mongoose.model('DiningStory', diningStorySchema);

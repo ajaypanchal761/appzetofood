@@ -727,6 +727,12 @@ export const diningAPI = {
   getMustTries: () => {
     return apiClient.get(API_ENDPOINTS.DINING.MUST_TRIES);
   },
+  getOfferBanners: () => {
+    return apiClient.get(API_ENDPOINTS.DINING.OFFER_BANNERS);
+  },
+  getStories: () => {
+    return apiClient.get(API_ENDPOINTS.DINING.STORIES);
+  },
 };
 
 // Export admin API helper functions

@@ -5,7 +5,9 @@ import {
     getCategories,
     getLimelight,
     getBankOffers,
-    getMustTries
+    getMustTries,
+    getOfferBanners,
+    getStories
 } from '../controllers/diningController.js';
 
 const router = express.Router();
@@ -16,5 +18,7 @@ router.get('/categories', getCategories);
 router.get('/limelight', getLimelight);
 router.get('/bank-offers', getBankOffers);
 router.get('/must-tries', getMustTries);
+router.get('/offer-banners', getOfferBanners);
+router.get('/stories', getStories);
 
 export default router;

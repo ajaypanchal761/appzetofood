@@ -39,6 +39,7 @@ import uploadModuleRoutes from './modules/upload/index.js';
 import locationRoutes from './modules/location/index.js';
 import heroBannerRoutes from './modules/heroBanner/index.js';
 import diningRoutes from './modules/dining/index.js';
+import diningAdminRoutes from './modules/dining/routes/diningAdminRoutes.js';
 
 
 // Validate required environment variables
@@ -100,7 +101,7 @@ const io = new Server(httpServer, {
         console.log('✅ Socket.IO: Allowing connection with no origin');
         return callback(null, true);
       }
-      
+
       // Check if origin is in allowed list
       if (allowedSocketOrigins.includes(origin)) {
         console.log(`✅ Socket.IO: Allowing connection from: ${origin}`);
@@ -152,7 +153,7 @@ restaurantNamespace.use((socket, next) => {
       origin: socket.handshake.headers.origin,
       userAgent: socket.handshake.headers['user-agent']
     });
-    
+
     // Allow all connections - authentication can be handled later if needed
     // The token is passed in auth.token but we don't validate it here
     // to avoid blocking connections unnecessarily
@@ -175,11 +176,11 @@ restaurantNamespace.on('connection', (socket) => {
       // Normalize restaurantId to string (handle both ObjectId and string)
       const normalizedRestaurantId = restaurantId?.toString() || restaurantId;
       const room = `restaurant:${normalizedRestaurantId}`;
-      
+
       socket.join(room);
       console.log(`🍽️ Restaurant ${normalizedRestaurantId} joined room: ${room}`);
       console.log(`🍽️ Total sockets in room ${room}:`, restaurantNamespace.adapter.rooms.get(room)?.size || 0);
-      
+
       // Also join with ObjectId format if it's a valid ObjectId (for compatibility)
       if (mongoose.Types.ObjectId.isValid(normalizedRestaurantId)) {
         const objectIdRoom = `restaurant:${new mongoose.Types.ObjectId(normalizedRestaurantId).toString()}`;
@@ -188,7 +189,7 @@ restaurantNamespace.on('connection', (socket) => {
           console.log(`🍽️ Restaurant also joined ObjectId room: ${objectIdRoom}`);
         }
       }
-      
+
       // Send confirmation back to client
       socket.emit('restaurant-room-joined', {
         restaurantId: normalizedRestaurantId,
@@ -223,11 +224,11 @@ deliveryNamespace.on('connection', (socket) => {
       // Normalize deliveryId to string (handle both ObjectId and string)
       const normalizedDeliveryId = deliveryId?.toString() || deliveryId;
       const room = `delivery:${normalizedDeliveryId}`;
-      
+
       socket.join(room);
       console.log(`🚴 Delivery partner ${normalizedDeliveryId} joined room: ${room}`);
       console.log(`🚴 Total sockets in room ${room}:`, deliveryNamespace.adapter.rooms.get(room)?.size || 0);
-      
+
       // Also join with ObjectId format if it's a valid ObjectId (for compatibility)
       if (mongoose.Types.ObjectId.isValid(normalizedDeliveryId)) {
         const objectIdRoom = `delivery:${new mongoose.Types.ObjectId(normalizedDeliveryId).toString()}`;
@@ -236,7 +237,7 @@ deliveryNamespace.on('connection', (socket) => {
           console.log(`🚴 Delivery partner also joined ObjectId room: ${objectIdRoom}`);
         }
       }
-      
+
       // Send confirmation back to client
       socket.emit('delivery-room-joined', {
         deliveryId: normalizedDeliveryId,
@@ -262,7 +263,14 @@ deliveryNamespace.on('connection', (socket) => {
 app.set('io', io);
 
 // Connect to databases
-connectDB();
+import { initializeCloudinary } from './config/cloudinary.js';
+
+// Connect to databases
+connectDB().then(() => {
+  // Initialize Cloudinary after DB connection
+  initializeCloudinary().catch(err => console.error('Failed to initialize Cloudinary:', err));
+});
+
 // Redis connection is optional - only connects if REDIS_ENABLED=true
 connectRedis().catch(() => {
   // Silently handle Redis connection failures
@@ -348,6 +356,7 @@ app.use('/api', uploadModuleRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api', heroBannerRoutes);
 app.use('/api/dining', diningRoutes);
+app.use('/api/admin/dining', diningAdminRoutes);
 
 // 404 handler - but skip Socket.IO paths
 app.use((req, res, next) => {
@@ -355,7 +364,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/socket.io/') || req.path.startsWith('/restaurant') || req.path.startsWith('/delivery')) {
     return next();
   }
-  
+
   res.status(404).json({
     success: false,
     message: 'Route not found'
@@ -542,7 +551,7 @@ function initializeScheduledTasks() {
         console.error('[Auto Ready Cron] Error:', error);
       }
     });
-    
+
     console.log('✅ Auto-ready order scheduler initialized (runs every 30 seconds)');
   }).catch((error) => {
     console.error('❌ Failed to initialize auto-ready service:', error);

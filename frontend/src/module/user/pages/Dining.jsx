@@ -10,6 +10,7 @@ import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
 import { diningAPI } from "@/lib/api"
+import api from "@/lib/api"
 import PageNavbar from "../components/PageNavbar"
 import OptimizedImage from "@/components/OptimizedImage"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
@@ -69,20 +70,40 @@ export default function Dining() {
   const [restaurantList, setRestaurantList] = useState([])
   const [bankOfferItems, setBankOfferItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [diningHeroBanner, setDiningHeroBanner] = useState(null)
+
+  useEffect(() => {
+    const fetchDiningHeroBanner = async () => {
+      try {
+        const response = await api.get('/hero-banners/dining/public')
+        if (response.data.success && response.data.data.banners && response.data.data.banners.length > 0) {
+          setDiningHeroBanner(response.data.data.banners[0])
+        } else {
+          setDiningHeroBanner(diningBanner)
+        }
+      } catch (error) {
+        console.error("Failed to fetch dining hero banner", error)
+        setDiningHeroBanner(diningBanner)
+      }
+    }
+    fetchDiningHeroBanner()
+  }, [])
 
   useEffect(() => {
     const fetchDiningData = async () => {
       try {
         const [cats, limes, tries, rests, offers] = await Promise.all([
           diningAPI.getCategories(),
-          diningAPI.getLimelight(),
-          diningAPI.getMustTries(),
+          diningAPI.getOfferBanners(),
+          diningAPI.getStories(),
           diningAPI.getRestaurants(location?.city ? { city: location.city } : {}),
           diningAPI.getBankOffers()
         ])
 
         if (cats.data.success && cats.data.data.length > 0) setCategories(cats.data.data)
-        if (limes.data.success && limes.data.data.length > 0) setLimelightItems(limes.data.data)
+        if (limes.data.success && limes.data.data.length > 0) {
+          setLimelightItems(limes.data.data)
+        }
         if (tries.data.success && tries.data.data.length > 0) setMustTryItems(tries.data.data)
         if (rests.data.success && rests.data.data.length > 0) setRestaurantList(rests.data.data)
         if (offers.data.success && offers.data.data.length > 0) setBankOfferItems(offers.data.data)
@@ -186,14 +207,16 @@ export default function Dining() {
       >
         {/* Background with dining banner */}
         <div className="absolute top-0 left-0 right-0 bottom-0 z-0">
-          <OptimizedImage
-            src={diningBanner}
-            alt="Dining Banner"
-            className="w-full h-full"
-            objectFit="cover"
-            priority={true}
-            sizes="100vw"
-          />
+          {diningHeroBanner && (
+            <OptimizedImage
+              src={diningHeroBanner}
+              alt="Dining Banner"
+              className="w-full h-full"
+              objectFit="cover"
+              priority={true}
+              sizes="100vw"
+            />
+          )}
         </div>
 
         {/* Navbar */}
@@ -294,7 +317,7 @@ export default function Dining() {
                         transition={{ duration: 0.5, ease: "easeOut" }}
                       >
                         <OptimizedImage
-                          src={category.image}
+                          src={category.imageUrl}
                           alt={category.name}
                           className="w-full h-full"
                           objectFit="cover"
@@ -344,8 +367,8 @@ export default function Dining() {
                 >
                   {/* Restaurant Image */}
                   <OptimizedImage
-                    src={restaurant.image}
-                    alt={restaurant.name}
+                    src={restaurant.imageUrl}
+                    alt={restaurant.tagline}
                     className="w-full h-full"
                     objectFit="cover"
                     sizes="100vw"
@@ -357,7 +380,7 @@ export default function Dining() {
                   <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10">
                     <div className="bg-white/95 backdrop-blur-sm px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg shadow-lg">
                       <span className="text-[10px] sm:text-xs font-bold text-green-500">
-                        {restaurant.discount}
+                        {restaurant.percentageOff}
                       </span>
                     </div>
                   </div>
@@ -367,14 +390,14 @@ export default function Dining() {
                     {/* Restaurant Name - Black text on white bg */}
                     <div className="bg-white dark:bg-[#1a1a1a] rounded-t-lg px-2 py-1.5 sm:px-3 sm:py-2 shadow-lg">
                       <h4 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white">
-                        {restaurant.name}
+                        {restaurant.restaurant?.name}
                       </h4>
                     </div>
 
                     {/* Subheading - White text on black bg */}
                     <div className="bg-black/90 backdrop-blur-sm rounded-b-lg px-2 py-1.5 sm:px-3 sm:py-2 shadow-lg">
                       <p className="text-[10px] sm:text-xs font-semibold text-white">
-                        {restaurant.subheading}
+                        {restaurant.tagline}
                       </p>
                     </div>
                   </div>
@@ -399,157 +422,7 @@ export default function Dining() {
           </div>
         </div>
 
-        {/* Explore & Exclusive Section - Combined on Desktop */}
-        <div className="mb-6 mt-8 sm:mt-12">
-          {/* Mobile: Separate Headings */}
-          <div className="mb-6 md:hidden">
-            <div className="flex items-center mb-2">
-              <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
-              <h3 className="px-3 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                EXPLORE
-              </h3>
-              <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
-            </div>
-          </div>
 
-          {/* Mobile: Explore Section */}
-          <div className="mb-6 md:hidden">
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <Link to="/user/dining/explore/upto50" className="rounded-xl overflow-hidden shadow-sm cursor-pointer">
-                <motion.div
-                  whileHover={{ scale: 1.05, y: -4 }}
-                  transition={{ duration: 0.3 }}
-                  className="h-32 sm:h-40 overflow-hidden"
-                >
-                  <OptimizedImage
-                    src={upto50off}
-                    alt="Up to 50% Off"
-                    className="w-full h-full"
-                    objectFit="cover"
-                    sizes="(max-width: 640px) 50vw, 25vw"
-                    placeholder="blur"
-                  />
-                </motion.div>
-              </Link>
-              <Link to="/user/dining/explore/near-rated" className="rounded-xl overflow-hidden shadow-sm cursor-pointer">
-                <motion.div
-                  whileHover={{ scale: 1.05, y: -4 }}
-                  transition={{ duration: 0.3 }}
-                  className="h-32 sm:h-40 overflow-hidden"
-                >
-                  <OptimizedImage
-                    src={nearAndTopRated}
-                    alt="Near and Top Rated"
-                    className="w-full h-full"
-                    objectFit="cover"
-                    sizes="(max-width: 640px) 50vw, 25vw"
-                    placeholder="blur"
-                  />
-                </motion.div>
-              </Link>
-            </div>
-          </div>
-
-          {/* Mobile: Exclusive on Dining Section */}
-          <div className="mb-6 md:hidden">
-            <div className="mb-6">
-              <div className="flex items-center mb-2">
-                <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
-                <h3 className="px-3 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  EXCLUSIVE ON DINING
-                </h3>
-                <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
-              </div>
-            </div>
-            <Link to="/user/dining/coffee" className="rounded-xl overflow-hidden shadow-lg block">
-              <motion.div
-                whileHover={{ scale: 1.05, y: -4 }}
-                transition={{ duration: 0.3 }}
-                className="h-40 sm:h-48 overflow-hidden"
-              >
-                <OptimizedImage
-                  src={coffeeBanner}
-                  alt="Coffee Banner"
-                  className="w-full h-full"
-                  objectFit="cover"
-                  sizes="(max-width: 640px) 100vw, 50vw"
-                  placeholder="blur"
-                />
-              </motion.div>
-            </Link>
-          </div>
-
-          {/* Desktop: Combined Layout */}
-          <div className="hidden md:block">
-            {/* Combined Heading */}
-            <div className="mb-6">
-              <div className="flex items-center mb-2">
-                <div className="flex-grow border-t border-gray-300"></div>
-                <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
-                  EXPLORE & EXCLUSIVE
-                </h3>
-                <div className="flex-grow border-t border-gray-300"></div>
-              </div>
-            </div>
-
-            {/* Desktop: Side by Side Layout - 25%, 25%, 50% */}
-            <div className="flex gap-4 lg:gap-6">
-              {/* First Explore Card - 25% */}
-              <Link to="/user/dining/explore/upto50" className="w-[25%] rounded-xl overflow-hidden shadow-sm cursor-pointer">
-                <motion.div
-                  whileHover={{ scale: 1.05, y: -4 }}
-                  transition={{ duration: 0.3 }}
-                  className="h-36 lg:h-40 overflow-hidden"
-                >
-                  <OptimizedImage
-                    src={upto50off}
-                    alt="Up to 50% Off"
-                    className="w-full h-full"
-                    objectFit="cover"
-                    sizes="25vw"
-                    placeholder="blur"
-                  />
-                </motion.div>
-              </Link>
-
-              {/* Second Explore Card - 25% */}
-              <Link to="/user/dining/explore/near-rated" className="w-[25%] rounded-xl overflow-hidden shadow-sm cursor-pointer">
-                <motion.div
-                  whileHover={{ scale: 1.05, y: -4 }}
-                  transition={{ duration: 0.3 }}
-                  className="h-36 lg:h-40 overflow-hidden"
-                >
-                  <OptimizedImage
-                    src={nearAndTopRated}
-                    alt="Near and Top Rated"
-                    className="w-full h-full"
-                    objectFit="cover"
-                    sizes="25vw"
-                    placeholder="blur"
-                  />
-                </motion.div>
-              </Link>
-
-              {/* Exclusive on Dining - 50% */}
-              <Link to="/user/dining/coffee" className="w-[50%] rounded-xl overflow-hidden shadow-lg cursor-pointer">
-                <motion.div
-                  whileHover={{ scale: 1.05, y: -4 }}
-                  transition={{ duration: 0.3 }}
-                  className="h-36 lg:h-40 overflow-hidden"
-                >
-                  <OptimizedImage
-                    src={coffeeBanner}
-                    alt="Coffee Banner"
-                    className="w-full h-full"
-                    objectFit="cover"
-                    sizes="50vw"
-                    placeholder="blur"
-                  />
-                </motion.div>
-              </Link>
-            </div>
-          </div>
-        </div>
 
         {/* Must Tries in Indore Section */}
         <div className="mb-6 mt-8 sm:mt-12">
@@ -557,7 +430,7 @@ export default function Dining() {
             <div className="flex items-center mb-2">
               <div className="flex-grow border-t border-gray-300"></div>
               <h3 className="px-3 text-sm font-semibold text-gray-500 uppercase tracking-wide">
-                MUST TRIES IN INDORE
+                MUST TRIES
               </h3>
               <div className="flex-grow border-t border-gray-300"></div>
             </div>
@@ -600,7 +473,7 @@ export default function Dining() {
                       transition={{ duration: 0.5, ease: "easeOut" }}
                     >
                       <OptimizedImage
-                        src={item.image}
+                        src={item.imageUrl}
                         alt={item.name}
                         className="w-full h-full"
                         objectFit="cover"

@@ -3,6 +3,8 @@ import DiningCategory from '../models/DiningCategory.js';
 import DiningLimelight from '../models/DiningLimelight.js';
 import DiningBankOffer from '../models/DiningBankOffer.js';
 import DiningMustTry from '../models/DiningMustTry.js';
+import DiningOfferBanner from '../models/DiningOfferBanner.js';
+import DiningStory from '../models/DiningStory.js';
 
 // Get all dining restaurants (with filtering)
 export const getRestaurants = async (req, res) => {
@@ -117,6 +119,42 @@ export const getMustTries = async (req, res) => {
             success: true,
             count: mustTries.length,
             data: mustTries
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Server Error',
+            error: error.message
+        });
+    }
+};
+
+// Get offer banners
+export const getOfferBanners = async (req, res) => {
+    try {
+        const banners = await DiningOfferBanner.find({ isActive: true }).populate('restaurant', 'name').sort({ createdAt: -1 });
+        res.status(200).json({
+            success: true,
+            count: banners.length,
+            data: banners
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Server Error',
+            error: error.message
+        });
+    }
+};
+
+// Get dining stories
+export const getStories = async (req, res) => {
+    try {
+        const stories = await DiningStory.find({ isActive: true }).sort({ createdAt: -1 });
+        res.status(200).json({
+            success: true,
+            count: stories.length,
+            data: stories
         });
     } catch (error) {
         res.status(500).json({

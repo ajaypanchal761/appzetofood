@@ -28,7 +28,14 @@ import {
   createMultipleUnder250Banners,
   deleteUnder250Banner,
   updateUnder250BannerOrder,
-  toggleUnder250BannerStatus
+  toggleUnder250BannerStatus,
+  getDiningBanners,
+  getAllDiningBanners,
+  createDiningBanner,
+  createMultipleDiningBanners,
+  deleteDiningBanner,
+  updateDiningBannerOrder,
+  toggleDiningBannerStatus
 } from '../controllers/heroBannerController.js';
 
 const router = express.Router();
@@ -36,7 +43,9 @@ const router = express.Router();
 // Public routes
 router.get('/public', getHeroBanners);
 router.get('/landing/public', getLandingConfig);
+
 router.get('/under-250/public', getUnder250Banners);
+router.get('/dining/public', getDiningBanners);
 
 // Admin routes - Hero Banners
 router.get('/', authenticateAdmin, getAllHeroBanners);
@@ -100,7 +109,27 @@ router.post(
 );
 router.delete('/under-250/:id', authenticateAdmin, deleteUnder250Banner);
 router.patch('/under-250/:id/order', authenticateAdmin, updateUnder250BannerOrder);
-router.patch('/under-250/:id/status', authenticateAdmin, toggleUnder250BannerStatus);
+
+
+
+
+// Admin routes - Dining Banners
+router.get('/dining', authenticateAdmin, getAllDiningBanners);
+router.post(
+  '/dining',
+  authenticateAdmin,
+  uploadMiddleware.single('image'),
+  createDiningBanner
+);
+router.post(
+  '/dining/multiple',
+  authenticateAdmin,
+  uploadMiddleware.array('images', 5),
+  createMultipleDiningBanners
+);
+router.delete('/dining/:id', authenticateAdmin, deleteDiningBanner);
+router.patch('/dining/:id/order', authenticateAdmin, updateDiningBannerOrder);
+router.patch('/dining/:id/status', authenticateAdmin, toggleDiningBannerStatus);
 
 export default router;
 
