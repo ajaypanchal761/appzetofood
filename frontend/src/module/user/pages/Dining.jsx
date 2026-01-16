@@ -190,12 +190,14 @@ export default function Dining() {
 
   // Auto-play carousel
   useEffect(() => {
+    if (limelightItems.length === 0) return
+
     const interval = setInterval(() => {
       setCurrentRestaurantIndex((prev) => (prev + 1) % limelightItems.length)
     }, 2000) // Change every 2 seconds
 
     return () => clearInterval(interval)
-  }, [])
+  }, [limelightItems.length])
 
 
   return (

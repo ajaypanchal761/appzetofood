@@ -132,6 +132,44 @@ export const deleteDiningOfferBanner = async (req, res) => {
     }
 };
 
+export const updateDiningOfferBanner = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { percentageOff, tagline, restaurant } = req.body;
+
+        const banner = await DiningOfferBanner.findById(id);
+        if (!banner) return errorResponse(res, 404, 'Banner not found');
+
+        if (percentageOff) banner.percentageOff = percentageOff;
+        if (tagline) banner.tagline = tagline;
+        if (restaurant) banner.restaurant = restaurant;
+
+        if (req.file) {
+            try {
+                await cloudinary.uploader.destroy(banner.cloudinaryPublicId);
+            } catch (err) {
+                console.error('Error deleting old image from Cloudinary:', err);
+            }
+
+            const result = await uploadToCloudinary(req.file.buffer, {
+                folder: 'appzeto/dining/offers',
+                resource_type: 'image'
+            });
+
+            banner.imageUrl = result.secure_url;
+            banner.cloudinaryPublicId = result.public_id;
+        }
+
+        await banner.save();
+        await banner.populate('restaurant', 'name');
+
+        return successResponse(res, 200, 'Banner updated successfully', { banner });
+    } catch (error) {
+        console.error('Error updating banner:', error);
+        return errorResponse(res, 500, 'Failed to update banner');
+    }
+};
+
 export const getActiveRestaurants = async (req, res) => {
     try {
         // Fetch restaurants that are active (assuming isServiceable or similar flag, or just all)
@@ -199,5 +237,40 @@ export const deleteDiningStory = async (req, res) => {
     } catch (error) {
         console.error('Error deleting story:', error);
         return errorResponse(res, 500, 'Failed to delete story');
+    }
+};
+
+export const updateDiningStory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name } = req.body;
+
+        const story = await DiningStory.findById(id);
+        if (!story) return errorResponse(res, 404, 'Story not found');
+
+        if (name) story.name = name;
+
+        if (req.file) {
+            try {
+                await cloudinary.uploader.destroy(story.cloudinaryPublicId);
+            } catch (err) {
+                console.error('Error deleting old image from Cloudinary:', err);
+            }
+
+            const result = await uploadToCloudinary(req.file.buffer, {
+                folder: 'appzeto/dining/stories',
+                resource_type: 'image'
+            });
+
+            story.imageUrl = result.secure_url;
+            story.cloudinaryPublicId = result.public_id;
+        }
+
+        await story.save();
+
+        return successResponse(res, 200, 'Story updated successfully', { story });
+    } catch (error) {
+        console.error('Error updating story:', error);
+        return errorResponse(res, 500, 'Failed to update story');
     }
 };
