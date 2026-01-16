@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-1. **Install Dependencies:**
+1. **Install Dependencies:**sd
    ```bash
    npm install
    ```
