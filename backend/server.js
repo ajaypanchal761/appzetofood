@@ -38,6 +38,8 @@ import subscriptionRoutes from './modules/subscription/index.js';
 import uploadModuleRoutes from './modules/upload/index.js';
 import locationRoutes from './modules/location/index.js';
 import heroBannerRoutes from './modules/heroBanner/index.js';
+import diningRoutes from './modules/dining/index.js';
+import diningAdminRoutes from './modules/dining/routes/diningAdminRoutes.js';
 
 
 // Validate required environment variables
@@ -46,22 +48,22 @@ const missingEnvVars = [];
 
 requiredEnvVars.forEach(varName => {
   let value = process.env[varName];
-  
+
   // Remove quotes if present (dotenv sometimes includes them)
   if (value && typeof value === 'string') {
     value = value.trim();
     // Remove surrounding quotes
-    if ((value.startsWith('"') && value.endsWith('"')) || 
-        (value.startsWith("'") && value.endsWith("'"))) {
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1).trim();
     }
   }
-  
+
   // Update the env var with cleaned value
   if (value) {
     process.env[varName] = value;
   }
-  
+
   // Check if valid
   if (!value || value === '' || (varName === 'JWT_SECRET' && value.includes('your-super-secret'))) {
     missingEnvVars.push(varName);
@@ -99,7 +101,7 @@ const io = new Server(httpServer, {
         console.log('✅ Socket.IO: Allowing connection with no origin');
         return callback(null, true);
       }
-      
+
       // Check if origin is in allowed list
       if (allowedSocketOrigins.includes(origin)) {
         console.log(`✅ Socket.IO: Allowing connection from: ${origin}`);
@@ -151,7 +153,7 @@ restaurantNamespace.use((socket, next) => {
       origin: socket.handshake.headers.origin,
       userAgent: socket.handshake.headers['user-agent']
     });
-    
+
     // Allow all connections - authentication can be handled later if needed
     // The token is passed in auth.token but we don't validate it here
     // to avoid blocking connections unnecessarily
@@ -174,11 +176,11 @@ restaurantNamespace.on('connection', (socket) => {
       // Normalize restaurantId to string (handle both ObjectId and string)
       const normalizedRestaurantId = restaurantId?.toString() || restaurantId;
       const room = `restaurant:${normalizedRestaurantId}`;
-      
+
       socket.join(room);
       console.log(`🍽️ Restaurant ${normalizedRestaurantId} joined room: ${room}`);
       console.log(`🍽️ Total sockets in room ${room}:`, restaurantNamespace.adapter.rooms.get(room)?.size || 0);
-      
+
       // Also join with ObjectId format if it's a valid ObjectId (for compatibility)
       if (mongoose.Types.ObjectId.isValid(normalizedRestaurantId)) {
         const objectIdRoom = `restaurant:${new mongoose.Types.ObjectId(normalizedRestaurantId).toString()}`;
@@ -187,7 +189,7 @@ restaurantNamespace.on('connection', (socket) => {
           console.log(`🍽️ Restaurant also joined ObjectId room: ${objectIdRoom}`);
         }
       }
-      
+
       // Send confirmation back to client
       socket.emit('restaurant-room-joined', {
         restaurantId: normalizedRestaurantId,
@@ -222,11 +224,11 @@ deliveryNamespace.on('connection', (socket) => {
       // Normalize deliveryId to string (handle both ObjectId and string)
       const normalizedDeliveryId = deliveryId?.toString() || deliveryId;
       const room = `delivery:${normalizedDeliveryId}`;
-      
+
       socket.join(room);
       console.log(`🚴 Delivery partner ${normalizedDeliveryId} joined room: ${room}`);
       console.log(`🚴 Total sockets in room ${room}:`, deliveryNamespace.adapter.rooms.get(room)?.size || 0);
-      
+
       // Also join with ObjectId format if it's a valid ObjectId (for compatibility)
       if (mongoose.Types.ObjectId.isValid(normalizedDeliveryId)) {
         const objectIdRoom = `delivery:${new mongoose.Types.ObjectId(normalizedDeliveryId).toString()}`;
@@ -235,7 +237,7 @@ deliveryNamespace.on('connection', (socket) => {
           console.log(`🚴 Delivery partner also joined ObjectId room: ${objectIdRoom}`);
         }
       }
-      
+
       // Send confirmation back to client
       socket.emit('delivery-room-joined', {
         deliveryId: normalizedDeliveryId,
@@ -261,7 +263,14 @@ deliveryNamespace.on('connection', (socket) => {
 app.set('io', io);
 
 // Connect to databases
-connectDB();
+import { initializeCloudinary } from './config/cloudinary.js';
+
+// Connect to databases
+connectDB().then(() => {
+  // Initialize Cloudinary after DB connection
+  initializeCloudinary().catch(err => console.error('Failed to initialize Cloudinary:', err));
+});
+
 // Redis connection is optional - only connects if REDIS_ENABLED=true
 connectRedis().catch(() => {
   // Silently handle Redis connection failures
@@ -284,7 +293,7 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
@@ -346,6 +355,8 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api', uploadModuleRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api', heroBannerRoutes);
+app.use('/api/dining', diningRoutes);
+app.use('/api/admin/dining', diningAdminRoutes);
 
 // 404 handler - but skip Socket.IO paths
 app.use((req, res, next) => {
@@ -353,7 +364,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/socket.io/') || req.path.startsWith('/restaurant') || req.path.startsWith('/delivery')) {
     return next();
   }
-  
+
   res.status(404).json({
     success: false,
     message: 'Route not found'
@@ -385,10 +396,10 @@ io.on('connection', (socket) => {
         heading: data.heading || 0,
         timestamp: Date.now()
       };
-      
+
       // Send to specific order room
       io.to(`order:${data.orderId}`).emit(`location-receive-${data.orderId}`, locationData);
-      
+
       console.log(`📍 Location broadcasted to order room ${data.orderId}:`, {
         lat: locationData.lat,
         lng: locationData.lng,
@@ -410,12 +421,12 @@ io.on('connection', (socket) => {
     if (orderId) {
       socket.join(`order:${orderId}`);
       console.log(`Customer joined order tracking: ${orderId}`);
-      
+
       // Send current location immediately when customer joins
       try {
         // Dynamic import to avoid circular dependencies
         const { default: Order } = await import('./modules/order/models/Order.js');
-        
+
         const order = await Order.findById(orderId)
           .populate({
             path: 'deliveryPartnerId',
@@ -425,7 +436,7 @@ io.on('connection', (socket) => {
             }
           })
           .lean();
-        
+
         if (order?.deliveryPartnerId?.availability?.currentLocation) {
           const coords = order.deliveryPartnerId.availability.currentLocation.coordinates;
           const locationData = {
@@ -435,7 +446,7 @@ io.on('connection', (socket) => {
             heading: 0,
             timestamp: Date.now()
           };
-          
+
           // Send current location immediately
           socket.emit(`current-location-${orderId}`, locationData);
           console.log(`📍 Sent current location to customer for order ${orderId}`);
@@ -449,18 +460,18 @@ io.on('connection', (socket) => {
   // Handle request for current location
   socket.on('request-current-location', async (orderId) => {
     if (!orderId) return;
-    
+
     try {
       // Dynamic import to avoid circular dependencies
       const { default: Order } = await import('./modules/order/models/Order.js');
-      
+
       const order = await Order.findById(orderId)
         .populate({
           path: 'deliveryPartnerId',
           select: 'availability'
         })
         .lean();
-      
+
       if (order?.deliveryPartnerId?.availability?.currentLocation) {
         const coords = order.deliveryPartnerId.availability.currentLocation.coordinates;
         const locationData = {
@@ -470,7 +481,7 @@ io.on('connection', (socket) => {
           heading: 0,
           timestamp: Date.now()
         };
-        
+
         // Send current location immediately
         socket.emit(`current-location-${orderId}`, locationData);
         console.log(`📍 Sent requested location for order ${orderId}`);
@@ -498,7 +509,7 @@ const PORT = process.env.PORT || 5000;
 
 httpServer.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-  
+
   // Initialize scheduled tasks after DB connection is established
   // Wait a bit for DB to connect, then start cron jobs
   setTimeout(() => {
@@ -521,7 +532,7 @@ function initializeScheduledTasks() {
         console.error('[Menu Schedule Cron] Error:', error);
       }
     });
-    
+
     console.log('✅ Menu item availability scheduler initialized (runs every minute)');
   }).catch((error) => {
     console.error('❌ Failed to initialize menu schedule service:', error);
@@ -540,7 +551,7 @@ function initializeScheduledTasks() {
         console.error('[Auto Ready Cron] Error:', error);
       }
     });
-    
+
     console.log('✅ Auto-ready order scheduler initialized (runs every 30 seconds)');
   }).catch((error) => {
     console.error('❌ Failed to initialize auto-ready service:', error);

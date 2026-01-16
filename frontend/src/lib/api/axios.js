@@ -17,7 +17,7 @@ const networkErrorState = {
 if (import.meta.env.DEV) {
   const backendUrl = API_BASE_URL.replace('/api', '');
   const frontendUrl = window.location.origin;
-  
+
   if (API_BASE_URL.includes('5173') || backendUrl.includes('5173')) {
     console.error('❌ CRITICAL: API_BASE_URL is pointing to FRONTEND port (5173) instead of BACKEND port (5000)');
     console.error('💡 Current API_BASE_URL:', API_BASE_URL);
@@ -49,7 +49,7 @@ const apiClient = axios.create({
  */
 function getTokenForCurrentRoute() {
   const path = window.location.pathname;
-  
+
   if (path.startsWith('/admin')) {
     return localStorage.getItem('admin_accessToken');
   } else if (path.startsWith('/restaurant-panel') || (path.startsWith('/restaurant') && !path.startsWith('/restaurants') && !path.startsWith('/restaurant/list') && !path.startsWith('/restaurant/under-250'))) {
@@ -62,7 +62,7 @@ function getTokenForCurrentRoute() {
     // User module includes /restaurants/* paths
     return localStorage.getItem('user_accessToken');
   }
-  
+
   // Fallback to legacy token for backward compatibility
   return localStorage.getItem('accessToken');
 }
@@ -75,17 +75,17 @@ apiClient.interceptors.request.use(
   (config) => {
     // Get access token for the current module based on route
     let accessToken = getTokenForCurrentRoute();
-    
+
     // Fallback to legacy token if module-specific token not found
     if (!accessToken || accessToken.trim() === '') {
       accessToken = localStorage.getItem('accessToken');
     }
-    
+
     // Ensure headers object exists
     if (!config.headers) {
       config.headers = {};
     }
-    
+
     // Debug logging for FormData requests
     if (import.meta.env.DEV && config.data instanceof FormData) {
       console.log('[API Interceptor] FormData request detected:', {
@@ -130,8 +130,8 @@ apiClient.interceptors.request.use(
     // This ensures FormData requests and other requests always have the token
     if (isAuthenticatedRoute) {
       // If no Authorization header or invalid format, set it
-      if (!config.headers.Authorization || 
-          (typeof config.headers.Authorization === 'string' && !config.headers.Authorization.startsWith('Bearer '))) {
+      if (!config.headers.Authorization ||
+        (typeof config.headers.Authorization === 'string' && !config.headers.Authorization.startsWith('Bearer '))) {
         if (accessToken && accessToken.trim() !== '' && accessToken !== 'null' && accessToken !== 'undefined') {
           config.headers.Authorization = `Bearer ${accessToken.trim()}`;
           if (import.meta.env.DEV && config.data instanceof FormData) {
@@ -213,13 +213,13 @@ apiClient.interceptors.response.use(
         console.log('✅ Backend connection restored');
       }
     }
-    
+
     // If response contains new access token, store it for the current module
     if (response.data?.accessToken) {
       const currentPath = window.location.pathname;
       let tokenKey = 'accessToken'; // fallback
       let expectedRole = 'user';
-      
+
       if (currentPath.startsWith('/admin')) {
         tokenKey = 'admin_accessToken';
         expectedRole = 'admin';
@@ -235,7 +235,7 @@ apiClient.interceptors.response.use(
         tokenKey = 'user_accessToken';
         expectedRole = 'user';
       }
-      
+
       const token = response.data.accessToken;
       const role = getRoleFromToken(token);
 
@@ -259,7 +259,7 @@ apiClient.interceptors.response.use(
         // Determine which module's refresh endpoint to use based on current route
         const currentPath = window.location.pathname;
         let refreshEndpoint = '/auth/refresh-token'; // default to user auth
-        
+
         if (currentPath.startsWith('/admin')) {
           refreshEndpoint = '/admin/auth/refresh-token';
         } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
@@ -268,7 +268,7 @@ apiClient.interceptors.response.use(
         } else if (currentPath.startsWith('/delivery')) {
           refreshEndpoint = '/delivery/auth/refresh-token';
         }
-        
+
         // Try to refresh the token
         // The refresh token is sent via httpOnly cookie automatically
         const response = await axios.post(
@@ -280,13 +280,13 @@ apiClient.interceptors.response.use(
         );
 
         const { accessToken } = response.data.data || response.data;
-        
+
         if (accessToken) {
           // Determine which module's token to update based on current route
           const currentPath = window.location.pathname;
           let tokenKey = 'accessToken'; // fallback
           let expectedRole = 'user';
-          
+
           if (currentPath.startsWith('/admin')) {
             tokenKey = 'admin_accessToken';
             expectedRole = 'admin';
@@ -302,7 +302,7 @@ apiClient.interceptors.response.use(
             tokenKey = 'user_accessToken';
             expectedRole = 'user';
           }
-          
+
           const role = getRoleFromToken(accessToken);
 
           // Only store token if role matches expected module; otherwise treat as invalid for this module
@@ -313,7 +313,7 @@ apiClient.interceptors.response.use(
 
           // Store new access token for the current module
           localStorage.setItem(tokenKey, accessToken);
-          
+
           // Retry original request with new token
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return apiClient(originalRequest);
@@ -321,12 +321,12 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         // Show error toast in development mode for refresh errors
         if (import.meta.env.DEV) {
-          const refreshErrorMessage = 
+          const refreshErrorMessage =
             refreshError.response?.data?.message ||
             refreshError.response?.data?.error ||
             refreshError.message ||
             'Token refresh failed';
-          
+
           toast.error(refreshErrorMessage, {
             duration: 3000,
             style: {
@@ -342,13 +342,13 @@ apiClient.interceptors.response.use(
             className: 'error-toast',
           });
         }
-        
+
         // Refresh failed, clear module-specific token and redirect to login
         // BUT: Don't auto-redirect on certain pages - let them handle errors gracefully
         const currentPath = window.location.pathname;
         const isOnboardingPage = currentPath.includes('/onboarding');
         const isLandingPageManagement = currentPath.includes('/hero-banner-management') || currentPath.includes('/landing-page');
-        
+
         // For landing page management, don't auto-logout on 401 - let component handle it
         // Only auto-logout for other pages after token refresh fails
         if (!isOnboardingPage && !isLandingPageManagement) {
@@ -376,10 +376,10 @@ apiClient.interceptors.response.use(
             window.location.href = '/user/auth/sign-in';
           }
         }
-        
+
         // For onboarding page, reject the promise so component can handle it
         return Promise.reject(refreshError);
-        
+
         return Promise.reject(refreshError);
       }
     }
@@ -390,12 +390,12 @@ apiClient.interceptors.response.use(
         const now = Date.now();
         const timeSinceLastError = now - networkErrorState.lastErrorTime;
         const timeSinceLastToast = now - networkErrorState.lastToastTime;
-        
+
         // Only log console errors if cooldown period has passed
         if (timeSinceLastError >= networkErrorState.COOLDOWN_PERIOD) {
           networkErrorState.errorCount++;
           networkErrorState.lastErrorTime = now;
-          
+
           // Log error details (only once per cooldown period)
           if (networkErrorState.errorCount === 1) {
             // Network error logging removed - errors handled via toast notifications
@@ -404,12 +404,12 @@ apiClient.interceptors.response.use(
             console.warn(`⚠️ Network Error (${networkErrorState.errorCount}x) - Backend still not connected`);
           }
         }
-        
+
         // Only show toast if cooldown period has passed
         if (timeSinceLastToast >= networkErrorState.TOAST_COOLDOWN_PERIOD) {
           networkErrorState.lastToastTime = now;
           networkErrorState.toastShown = true;
-          
+
           // Show helpful error message (only once per minute)
           toast.error(`Backend not connected! Start server: cd appzetofood/backend && npm run dev`, {
             duration: 10000,
@@ -439,17 +439,17 @@ apiClient.interceptors.response.use(
         const now = Date.now();
         const timeSinceLastError = now - networkErrorState.lastErrorTime;
         const timeSinceLastToast = now - networkErrorState.lastToastTime;
-        
+
         // Only log console errors if cooldown period has passed
         if (timeSinceLastError >= networkErrorState.COOLDOWN_PERIOD) {
           networkErrorState.errorCount++;
           networkErrorState.lastErrorTime = now;
         }
-        
+
         // Only show toast if cooldown period has passed
         if (timeSinceLastToast >= networkErrorState.TOAST_COOLDOWN_PERIOD) {
           networkErrorState.lastToastTime = now;
-          
+
           // Show helpful error message (only once per minute)
           toast.error(`Request timeout - Backend may be slow or not responding. Check server status.`, {
             duration: 8000,
@@ -470,14 +470,14 @@ apiClient.interceptors.response.use(
       }
       return Promise.reject(error);
     }
-    
+
     // Handle 404 errors (route not found)
     if (error.response?.status === 404) {
       if (import.meta.env.DEV) {
         const url = error.config?.url || 'unknown';
         const fullUrl = error.config?.baseURL ? `${error.config.baseURL}${url}` : url;
         // 404 error logging removed - errors handled via toast notifications
-        
+
         // Show toast for auth routes (important)
         if (url.includes('/auth/') || url.includes('/send-otp') || url.includes('/verify-otp')) {
           toast.error('Auth API endpoint not found. Make sure backend is running on port 5000.', {
@@ -526,10 +526,10 @@ apiClient.interceptors.response.use(
     if (import.meta.env.DEV) {
       // Extract error messages from various possible locations
       const errorData = error.response?.data;
-      
+
       // Handle array of error messages (common in validation errors)
       let errorMessages = [];
-      
+
       if (Array.isArray(errorData?.message)) {
         errorMessages = errorData.message;
       } else if (Array.isArray(errorData?.errors)) {
@@ -539,15 +539,15 @@ apiClient.interceptors.response.use(
       } else if (errorData?.error) {
         errorMessages = [errorData.error];
       } else if (errorData?.data?.message) {
-        errorMessages = Array.isArray(errorData.data.message) 
-          ? errorData.data.message 
+        errorMessages = Array.isArray(errorData.data.message)
+          ? errorData.data.message
           : [errorData.data.message];
       } else if (error.message) {
         errorMessages = [error.message];
       } else {
         errorMessages = ['An error occurred'];
       }
-      
+
       // Show beautiful error toast for each error message
       errorMessages.forEach((errorMessage, index) => {
         // Add slight delay for multiple toasts to appear sequentially

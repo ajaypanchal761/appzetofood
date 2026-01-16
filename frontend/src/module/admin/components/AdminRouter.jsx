@@ -115,6 +115,7 @@ import AddonActivation from "../pages/system/AddonActivation";
 // ENV Setup (formerly System Addons)
 import SystemAddons from "../pages/system/SystemAddons";
 import LandingPageManagement from "../pages/system/LandingPageManagement";
+import DiningManagement from "../pages/system/DiningManagement";
 
 export default function AdminRouter() {
   return (
@@ -129,11 +130,13 @@ export default function AdminRouter() {
       >
         {/* Dashboard */}
         <Route path="/" element={<AdminHome />} />
+
+
         <Route path="/point-of-sale" element={<PointOfSale />} />
-        
+
         {/* Profile */}
         <Route path="/profile" element={<AdminProfile />} />
-        
+
         {/* Settings */}
         <Route path="/settings" element={<AdminSettings />} />
 
@@ -300,10 +303,12 @@ export default function AdminRouter() {
         <Route path="system-addons" element={<SystemAddons />} />
         {/* HERO BANNER MANAGEMENT */}
         <Route path="hero-banner-management" element={<LandingPageManagement />} />
+        {/* DINING MANAGEMENT */}
+        <Route path="dining-management" element={<DiningManagement />} />
       </Route>
 
       {/* Redirect /admin to /admin/ */}
       <Route path="" element={<Navigate to="/admin/login" replace />} />
-    </Routes>
+    </Routes >
   );
 }

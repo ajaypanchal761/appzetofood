@@ -122,16 +122,7 @@ export const sidebarMenuData = [
         path: "/admin/coupons",
         icon: "Gift",
       },
-      {
-        type: "expandable",
-        label: "Advertisement",
-        icon: "Image",
-        subItems: [
-          { label: "New Advertisement", path: "/admin/advertisement/new" },
-          { label: "Ad Requests", path: "/admin/advertisement/requests" },
-          { label: "Ads List", path: "/admin/advertisement" },
-        ],
-      },
+
       {
         type: "link",
         label: "Push Notification",
@@ -157,26 +148,11 @@ export const sidebarMenuData = [
         icon: "Wallet",
         subItems: [
           { label: "Add Fund", path: "/admin/wallet/add-fund" },
-          { label: "Bonus", path: "/admin/wallet/bonus" },
         ],
-      },
-      {
-        type: "expandable",
-        label: "Loyalty Point",
-        icon: "Award",
-        subItems: [
-          { label: "Report", path: "/admin/loyalty-point/report" },
-        ],
-      },
-      {
-        type: "link",
-        label: "Subscribed Mail List",
-        path: "/admin/subscribed-mail-list",
-        icon: "Mail",
       },
     ],
   },
-   {
+  {
     type: "section",
     label: "DELIVERYMAN MANAGEMENT",
     items: [
@@ -201,24 +177,7 @@ export const sidebarMenuData = [
       },
     ],
   },
-  {
-    type: "section",
-    label: "DISBURSEMENT MANAGEMENT",
-    items: [
-      {
-        type: "link",
-        label: "Restaurant Disbursement...",
-        path: "/admin/restaurant-disbursement",
-        icon: "DollarSign",
-      },
-      {
-        type: "link",
-        label: "Deliveryman Disbursement...",
-        path: "/admin/deliveryman-disbursement",
-        icon: "DollarSign",
-      },
-    ],
-  },
+
   {
     type: "section",
     label: "HELP & SUPPORT",
@@ -231,7 +190,7 @@ export const sidebarMenuData = [
       },
     ],
   },
-  
+
   {
     type: "section",
     label: "REPORT MANAGEMENT",
@@ -289,18 +248,7 @@ export const sidebarMenuData = [
           { label: "Customer Wallet Report", path: "/admin/customer-report/wallet" },
         ],
       },
-      {
-        type: "link",
-        label: "Tax Report",
-        path: "/admin/tax-report",
-        icon: "FileText",
-      },
-      {
-        type: "link",
-        label: "Restaurant VAT Report",
-        path: "/admin/restaurant-vat-report",
-        icon: "FileText",
-      },
+
     ],
   },
   {
@@ -339,18 +287,11 @@ export const sidebarMenuData = [
       },
       {
         type: "link",
-        label: "Notification Channels",
-        path: "/admin/notification-channels",
-        icon: "Bell",
+        label: "Dining Management",
+        path: "/admin/dining-management",
+        icon: "UtensilsCrossed",
       },
-      {
-        type: "expandable",
-        label: "Landing Page Settings",
-        icon: "Globe",
-        subItems: [
-          { label: "Admin Landing Page", path: "/admin/landing-page-settings/admin" },
-        ],
-      },
+
       {
         type: "link",
         label: "Addon Activation",
@@ -388,30 +329,7 @@ export const sidebarMenuData = [
           { label: "Settings", path: "/admin/subscription-management/settings" },
         ],
       },
-      {
-        type: "link",
-        label: "Email Template",
-        path: "/admin/email-template",
-        icon: "Mail",
-      },
-      {
-        type: "link",
-        label: "Theme Settings",
-        path: "/admin/theme-settings",
-        icon: "Palette",
-      },
-      {
-        type: "link",
-        label: "Gallery",
-        path: "/admin/gallery",
-        icon: "Camera",
-      },
-      {
-        type: "link",
-        label: "Login Setup",
-        path: "/admin/login-setup",
-        icon: "LogIn",
-      },
+
       {
         type: "expandable",
         label: "Pages & Social Media",
@@ -424,7 +342,7 @@ export const sidebarMenuData = [
           { label: "Refund Policy", path: "/admin/pages-social-media/refund" },
           { label: "Shipping Policy", path: "/admin/pages-social-media/shipping" },
           { label: "Cancellation Policy", path: "/admin/pages-social-media/cancellation" },
-          { label: "React Registration", path: "/admin/pages-social-media/react-registration" },
+
         ],
       },
     ],
