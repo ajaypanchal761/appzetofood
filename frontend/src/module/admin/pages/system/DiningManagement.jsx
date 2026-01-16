@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Layout, Link as LinkIcon, Tag, UtensilsCrossed, FileText } from "lucide-react"
+import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Layout, Link as LinkIcon, Tag, UtensilsCrossed, FileText, Edit, X } from "lucide-react"
 import api from "@/lib/api"
 import { getModuleToken } from "@/lib/utils/auth"
 import { Input } from "@/components/ui/input"
@@ -28,6 +28,7 @@ export default function DiningManagement() {
     const [bannerTagline, setBannerTagline] = useState("")
     const [bannerRestaurant, setBannerRestaurant] = useState("")
     const [restaurantsList, setRestaurantsList] = useState([])
+    const [editingBannerId, setEditingBannerId] = useState(null)
     const bannerFileInputRef = useRef(null)
 
     // Stories
@@ -37,6 +38,7 @@ export default function DiningManagement() {
     const [storiesDeleting, setStoriesDeleting] = useState(null)
     const [storyName, setStoryName] = useState("")
     const [storyFile, setStoryFile] = useState(null)
+    const [editingStoryId, setEditingStoryId] = useState(null)
     const storyFileInputRef = useRef(null)
 
     // Common
@@ -121,33 +123,58 @@ export default function DiningManagement() {
         } catch (err) { console.error(err) }
     }
 
-    const handleCreateBanner = async () => {
-        if (!bannerFile || !bannerPercentageOff || !bannerTagline || !bannerRestaurant) {
+    const handleSubmitBanner = async () => {
+        if (!editingBannerId && (!bannerFile || !bannerPercentageOff || !bannerTagline || !bannerRestaurant)) {
             return setError("All fields and Image are required")
         }
+        if (editingBannerId && (!bannerPercentageOff || !bannerTagline || !bannerRestaurant)) {
+            return setError("All text fields are required")
+        }
+
         try {
             setBannersUploading(true)
             const formData = new FormData()
-            formData.append('image', bannerFile)
+            if (bannerFile) formData.append('image', bannerFile)
             formData.append('percentageOff', bannerPercentageOff)
             formData.append('tagline', bannerTagline)
             formData.append('restaurant', bannerRestaurant)
 
-            const response = await api.post('/admin/dining/offer-banners', formData, getAuthConfig({
-                headers: { 'Content-Type': 'multipart/form-data' }
-            }))
+            let response;
+            if (editingBannerId) {
+                response = await api.put(`/admin/dining/offer-banners/${editingBannerId}`, formData, getAuthConfig({
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                }))
+            } else {
+                response = await api.post('/admin/dining/offer-banners', formData, getAuthConfig({
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                }))
+            }
 
             if (response.data.success) {
-                setSuccess("Banner created successfully")
-                setBannerFile(null)
-                setBannerPercentageOff("")
-                setBannerTagline("")
-                setBannerRestaurant("")
-                if (bannerFileInputRef.current) bannerFileInputRef.current.value = ""
+                setSuccess(editingBannerId ? "Banner updated successfully" : "Banner created successfully")
+                resetBannerForm()
                 fetchBanners()
             }
-        } catch (err) { setError(err.response?.data?.message || "Failed to create banner") }
+        } catch (err) { setError(err.response?.data?.message || (editingBannerId ? "Failed to update banner" : "Failed to create banner")) }
         finally { setBannersUploading(false) }
+    }
+
+    const resetBannerForm = () => {
+        setBannerFile(null)
+        setBannerPercentageOff("")
+        setBannerTagline("")
+        setBannerRestaurant("")
+        setEditingBannerId(null)
+        if (bannerFileInputRef.current) bannerFileInputRef.current.value = ""
+    }
+
+    const handleEditBanner = (banner) => {
+        setEditingBannerId(banner._id)
+        setBannerPercentageOff(banner.percentageOff)
+        setBannerTagline(banner.tagline)
+        setBannerRestaurant(banner.restaurant._id || banner.restaurant)
+        setBannerFile(null)
+        if (bannerFileInputRef.current) bannerFileInputRef.current.value = ""
     }
 
     const handleDeleteBanner = async (id) => {
@@ -170,27 +197,48 @@ export default function DiningManagement() {
         } catch (err) { console.error(err) } finally { setStoriesLoading(false) }
     }
 
-    const handleCreateStory = async () => {
-        if (!storyName || !storyFile) return setError("Name and Image are required")
+    const handleSubmitStory = async () => {
+        if (!editingStoryId && (!storyName || !storyFile)) return setError("Name and Image are required")
+        if (editingStoryId && !storyName) return setError("Name is required")
+
         try {
             setStoriesUploading(true)
             const formData = new FormData()
             formData.append('name', storyName)
-            formData.append('image', storyFile)
+            if (storyFile) formData.append('image', storyFile)
 
-            const response = await api.post('/admin/dining/stories', formData, getAuthConfig({
-                headers: { 'Content-Type': 'multipart/form-data' }
-            }))
+            let response;
+            if (editingStoryId) {
+                response = await api.put(`/admin/dining/stories/${editingStoryId}`, formData, getAuthConfig({
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                }))
+            } else {
+                response = await api.post('/admin/dining/stories', formData, getAuthConfig({
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                }))
+            }
 
             if (response.data.success) {
-                setSuccess("Story created successfully")
-                setStoryName("")
-                setStoryFile(null)
-                if (storyFileInputRef.current) storyFileInputRef.current.value = ""
+                setSuccess(editingStoryId ? "Story updated successfully" : "Story created successfully")
+                resetStoryForm()
                 fetchStories()
             }
-        } catch (err) { setError(err.response?.data?.message || "Failed to create story") }
+        } catch (err) { setError(err.response?.data?.message || (editingStoryId ? "Failed to update story" : "Failed to create story")) }
         finally { setStoriesUploading(false) }
+    }
+
+    const resetStoryForm = () => {
+        setStoryName("")
+        setStoryFile(null)
+        setEditingStoryId(null)
+        if (storyFileInputRef.current) storyFileInputRef.current.value = ""
+    }
+
+    const handleEditStory = (story) => {
+        setEditingStoryId(story._id)
+        setStoryName(story.name)
+        setStoryFile(null)
+        if (storyFileInputRef.current) storyFileInputRef.current.value = ""
     }
 
     const handleDeleteStory = async (id) => {
@@ -299,7 +347,7 @@ export default function DiningManagement() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-1">
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                                <h2 className="text-lg font-bold text-slate-900 mb-4">Add Offer Banner</h2>
+                                <h2 className="text-lg font-bold text-slate-900 mb-4">{editingBannerId ? "Edit Offer Banner" : "Add Offer Banner"}</h2>
                                 <div className="space-y-4">
                                     <div>
                                         <Label>Image</Label>
@@ -326,9 +374,14 @@ export default function DiningManagement() {
                                             ))}
                                         </select>
                                     </div>
-                                    <Button onClick={handleCreateBanner} disabled={bannersUploading} className="w-full bg-blue-600 hover:bg-blue-700">
-                                        {bannersUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Banner"}
+                                    <Button onClick={handleSubmitBanner} disabled={bannersUploading} className="w-full bg-blue-600 hover:bg-blue-700">
+                                        {bannersUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingBannerId ? "Update Banner" : "Create Banner")}
                                     </Button>
+                                    {editingBannerId && (
+                                        <Button onClick={resetBannerForm} variant="outline" className="w-full mt-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700">
+                                            Cancel Edit
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -348,6 +401,9 @@ export default function DiningManagement() {
                                                 <button onClick={() => handleDeleteBanner(banner._id)} className="absolute top-2 right-2 p-1.5 bg-red-100 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {bannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                                 </button>
+                                                <button onClick={() => handleEditBanner(banner)} className="absolute top-2 right-10 p-1.5 bg-blue-100 text-blue-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Edit className="w-4 h-4" />
+                                                </button>
                                             </div>
                                         ))}
                                         {banners.length === 0 && <p className="text-slate-500 text-center col-span-full py-8">No banners found.</p>}
@@ -362,7 +418,7 @@ export default function DiningManagement() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="lg:col-span-1">
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                                <h2 className="text-lg font-bold text-slate-900 mb-4">Add Story</h2>
+                                <h2 className="text-lg font-bold text-slate-900 mb-4">{editingStoryId ? "Edit Story" : "Add Story"}</h2>
                                 <div className="space-y-4">
                                     <div>
                                         <Label>Name</Label>
@@ -372,9 +428,14 @@ export default function DiningManagement() {
                                         <Label>Image</Label>
                                         <Input type="file" ref={storyFileInputRef} onChange={e => setStoryFile(e.target.files[0])} accept="image/*" className="mt-1" />
                                     </div>
-                                    <Button onClick={handleCreateStory} disabled={storiesUploading} className="w-full bg-blue-600 hover:bg-blue-700">
-                                        {storiesUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Story"}
+                                    <Button onClick={handleSubmitStory} disabled={storiesUploading} className="w-full bg-blue-600 hover:bg-blue-700">
+                                        {storiesUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingStoryId ? "Update Story" : "Create Story")}
                                     </Button>
+                                    {editingStoryId && (
+                                        <Button onClick={resetStoryForm} variant="outline" className="w-full mt-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700">
+                                            Cancel Edit
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -391,6 +452,9 @@ export default function DiningManagement() {
                                                 </div>
                                                 <button onClick={() => handleDeleteStory(story._id)} className="absolute top-2 right-2 p-1.5 bg-red-100 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {storiesDeleting === story._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                                </button>
+                                                <button onClick={() => handleEditStory(story)} className="absolute top-2 right-10 p-1.5 bg-blue-100 text-blue-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Edit className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         ))}
