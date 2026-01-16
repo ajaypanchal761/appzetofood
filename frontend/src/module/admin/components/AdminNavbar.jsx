@@ -341,7 +341,7 @@ export default function AdminNavbar({ onMenuClick }) {
                     <div className="w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center overflow-hidden border border-neutral-300">
                       {adminData?.profileImage ? (
                         <img
-                          src={adminData.profileImage}
+                          src={adminData.profileImage && adminData.profileImage.trim() ? adminData.profileImage : undefined}
                           alt={adminData.name || "Admin"}
                           className="w-full h-full object-cover"
                         />
@@ -392,10 +392,6 @@ export default function AdminNavbar({ onMenuClick }) {
                   >
                     <Settings className="mr-2 w-4 h-4" />
                     <span>Settings</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="cursor-pointer hover:bg-neutral-100 focus:bg-neutral-100">
-                    <FileText className="mr-2 w-4 h-4" />
-                    <span>Documentation</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

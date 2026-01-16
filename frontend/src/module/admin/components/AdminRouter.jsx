@@ -39,6 +39,7 @@ import PushNotification from "../pages/PushNotification";
 // Help & Support
 import Chattings from "../pages/Chattings";
 import ContactMessages from "../pages/ContactMessages";
+import SafetyEmergencyReports from "../pages/SafetyEmergencyReports";
 // Customer Management
 import Customers from "../pages/Customers";
 import AddFund from "../pages/wallet/AddFund";
@@ -200,6 +201,7 @@ export default function AdminRouter() {
         {/* HELP & SUPPORT */}
         <Route path="chattings" element={<Chattings />} />
         <Route path="contact-messages" element={<ContactMessages />} />
+        <Route path="safety-emergency-reports" element={<SafetyEmergencyReports />} />
 
         {/* CUSTOMER MANAGEMENT */}
         <Route path="customers" element={<Customers />} />

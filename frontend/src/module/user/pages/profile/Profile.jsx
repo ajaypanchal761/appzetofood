@@ -10,10 +10,8 @@ import {
   User, 
   Leaf, 
   Palette, 
-  Star, 
   Bookmark, 
   Building2, 
-  MessageSquare,
   Moon,
   Sun,
   Check,
@@ -21,7 +19,6 @@ import {
   Info,
   PenSquare,
   AlertTriangle,
-  Accessibility as AccessibilityIcon,
   Settings as SettingsIcon,
   Power,
   ShoppingCart
@@ -51,7 +48,6 @@ export default function Profile() {
   // Popup states
   const [vegModeOpen, setVegModeOpen] = useState(false)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
-  const [ratingsOpen, setRatingsOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   
   // Settings states
@@ -267,7 +263,7 @@ export default function Profile() {
                 <Avatar className="h-16 w-16 bg-blue-300 border-0">
                   {userProfile?.profileImage && (
                     <AvatarImage 
-                      src={userProfile.profileImage} 
+                      src={userProfile.profileImage && userProfile.profileImage.trim() ? userProfile.profileImage : undefined} 
                       alt={displayName}
                     />
                   )}
@@ -504,43 +500,6 @@ export default function Profile() {
             </Card>
           </motion.div>
 
-          <motion.div
-            whileHover={{ x: 4, scale: 1.01 }}
-            transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
-          >
-            <Card 
-              className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer"
-              onClick={() => setRatingsOpen(true)}
-            >
-              <CardContent className="p-4  flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <motion.div 
-                    className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                    whileHover={{ rotate: 360, scale: 1.1 }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    <Star className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                  </motion.div>
-                  <span className="text-base font-medium text-gray-900 dark:text-white">Your rating</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <motion.span 
-                    className="text-base font-medium text-gray-900 dark:text-white"
-                    whileHover={{ scale: 1.1 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    -- ★
-                  </motion.span>
-                  <motion.div
-                    whileHover={{ x: 4 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ChevronRight className="h-5 w-5 text-gray-400" />
-                  </motion.div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
         </div>
 
         {/* Collections Section */}
@@ -614,31 +573,6 @@ export default function Profile() {
             </Link>
 
 
-            <motion.div
-              whileHover={{ x: 4, scale: 1.01 }}
-              transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
-            >
-              <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <motion.div 
-                      className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                      whileHover={{ rotate: 15, scale: 1.1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <MessageSquare className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                    </motion.div>
-                    <span className="text-base font-medium text-gray-900 dark:text-white">Hear from restaurants</span>
-                  </div>
-                  <motion.div
-                    whileHover={{ x: 4 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                  </motion.div>
-                </CardContent>
-              </Card>
-            </motion.div>
           </div>
         </div>
 
@@ -756,34 +690,6 @@ export default function Profile() {
                         <AlertTriangle className="h-5 w-5 text-gray-700 dark:text-gray-300" />
                       </motion.div>
                       <span className="text-base font-medium text-gray-900 dark:text-white">Report a safety emergency</span>
-                    </div>
-                    <motion.div
-                      whileHover={{ x: 4 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-                    </motion.div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </Link>
-
-            <Link to="/user/profile/accessibility" className="block">
-              <motion.div
-                whileHover={{ x: 4, scale: 1.01 }}
-                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}
-              >
-                <Card className="bg-white dark:bg-[#1a1a1a] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <motion.div 
-                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
-                        whileHover={{ rotate: 15, scale: 1.1 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <AccessibilityIcon className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                      </motion.div>
-                      <span className="text-base font-medium text-gray-900 dark:text-white">Accessibility</span>
                     </div>
                     <motion.div
                       whileHover={{ x: 4 }}
@@ -977,39 +883,6 @@ export default function Profile() {
         </DialogContent>
       </Dialog>
 
-      {/* Ratings Popup */}
-      <Dialog open={ratingsOpen} onOpenChange={setRatingsOpen}>
-        <DialogContent className="max-w-sm md:max-w-md lg:max-w-lg w-[calc(100%-2rem)] rounded-2xl p-0 overflow-hidden">
-          <DialogHeader className="p-5 pb-3">
-            <DialogTitle className="text-lg font-bold text-gray-900">Your Ratings</DialogTitle>
-            <DialogDescription className="text-sm text-gray-500">
-              View and manage your restaurant and food ratings
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-5 pb-5">
-            <div className="text-center py-6">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Star className="h-8 w-8 text-gray-400" />
-              </div>
-              <p className="text-gray-900 font-semibold text-base mb-1">No ratings yet</p>
-              <p className="text-gray-500 text-xs mb-4 px-4">
-                Start rating restaurants and dishes to help others discover great food
-              </p>
-              <Button
-                onClick={() => setRatingsOpen(false)}
-                className="bg-green-600 hover:bg-green-700 text-white h-10 px-6 rounded-lg text-sm"
-              >
-                Start Rating
-              </Button>
-            </div>
-            <div className="border-t pt-3 mt-2">
-              <p className="text-xs text-gray-500 text-center">
-                Your ratings will appear here once you start rating
-              </p>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </AnimatedPage>
   )
 }

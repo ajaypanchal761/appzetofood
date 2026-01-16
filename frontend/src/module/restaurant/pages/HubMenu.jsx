@@ -920,7 +920,7 @@ export default function HubMenu() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-white ">
         <div className="">
@@ -1068,9 +1068,9 @@ export default function HubMenu() {
           </button>
         </div>
       {/* Content */}
-      <div className="flex-1 space-y-4 pt-8">
+      <div className="flex-1 space-y-4 pt-8 pb-24 overflow-y-auto">
         {activeTab === "add-ons" ? (
-          <div className="px-4 pb-20">
+          <div className="px-4">
             {/* Add Add-on Button */}
             <div className="mb-6">
               <button
@@ -1158,17 +1158,18 @@ export default function HubMenu() {
             )}
           </div>
         ) : (
-          filteredMenuGroups.map((group) => {
-            const isExpanded = expandedGroups.has(group.id)
-            const itemCount = group.items.length
-            const enabledItems = group.items.filter(item => item.isAvailable).length
+          <div className="px-4 space-y-4">
+            {filteredMenuGroups.map((group) => {
+              const isExpanded = expandedGroups.has(group.id)
+              const itemCount = group.items.length
+              const enabledItems = group.items.filter(item => item.isAvailable).length
 
-          return (
-            <div
-              key={group.id}
-              id={`group-${group.id}`}
-              className="bg-white rounded-lg  overflow-hidden"
-            >
+            return (
+              <div
+                key={group.id}
+                id={`group-${group.id}`}
+                className="bg-white rounded-lg overflow-hidden"
+              >
               {/* Group Header */}
               <div className="py-3 flex items-center justify-between px-4">
                 <div className="flex items-center gap-3 flex-1">
@@ -1289,10 +1290,11 @@ export default function HubMenu() {
 
                 </div>
               )}
-            </div>
-          )
-        }))
-        }
+              </div>
+            )
+          })}
+          </div>
+        )}
       </div>
 
       {/* Filter Popup */}

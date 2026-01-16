@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
-import { Search, ArrowUpDown, Settings, Folder, ChevronDown, Eye, Trash2, MessageSquare, Loader2 } from "lucide-react"
+import { Search, ArrowUpDown, Settings, Folder, ChevronDown, Eye, Trash2, AlertTriangle, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import apiClient from "@/lib/api/axios"
 import { API_ENDPOINTS } from "@/lib/api/config"
@@ -11,7 +11,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,86 +18,72 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-export default function ContactMessages() {
+export default function SafetyEmergencyReports() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [feedbacks, setFeedbacks] = useState([])
+  const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selectedFeedback, setSelectedFeedback] = useState(null)
+  const [selectedReport, setSelectedReport] = useState(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
-  const [isReplyDialogOpen, setIsReplyDialogOpen] = useState(false)
-  const [replyText, setReplyText] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [priorityFilter, setPriorityFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
 
   useEffect(() => {
-    fetchFeedbacks()
-  }, [statusFilter, currentPage, searchQuery])
+    fetchReports()
+  }, [statusFilter, priorityFilter, currentPage, searchQuery])
 
-  const fetchFeedbacks = async () => {
+  const fetchReports = async () => {
     try {
       setLoading(true)
       const params = {
         page: currentPage,
         limit: 10,
         status: statusFilter !== 'all' ? statusFilter : undefined,
+        priority: priorityFilter !== 'all' ? priorityFilter : undefined,
         search: searchQuery.trim() || undefined
       }
       
       // Remove undefined params
       Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
       
-      const response = await apiClient.get(API_ENDPOINTS.ADMIN.FEEDBACK, { params })
+      const response = await apiClient.get(API_ENDPOINTS.ADMIN.SAFETY_EMERGENCY, { params })
       
       if (response.data && response.data.success) {
-        setFeedbacks(response.data.data?.feedbacks || [])
+        setReports(response.data.data?.safetyEmergencies || [])
         setTotalPages(response.data.data?.pagination?.pages || 1)
       } else {
-        // Handle case where response doesn't have expected structure
-        setFeedbacks([])
+        setReports([])
         setTotalPages(1)
       }
     } catch (error) {
-      console.error('Error fetching feedbacks:', error)
+      console.error('Error fetching safety emergency reports:', error)
       console.error('Error response:', error.response)
-      console.error('Error status:', error.response?.status)
-      console.error('Error data:', error.response?.data)
-      console.error('Error message:', error.message)
-      
-      // Set empty state on error
-      setFeedbacks([])
+      setReports([])
       setTotalPages(1)
-      
-      // Show user-friendly error message
       const errorMessage = error.response?.data?.message || 
                           error.message || 
-                          'Failed to load feedbacks. Please check your connection and try again.'
+                          'Failed to load safety emergency reports. Please check your connection and try again.'
       toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleViewFeedback = (feedback) => {
-    setSelectedFeedback(feedback)
+  const handleViewReport = (report) => {
+    setSelectedReport(report)
     setIsViewDialogOpen(true)
-  }
-
-  const handleReply = (feedback) => {
-    setSelectedFeedback(feedback)
-    setReplyText(feedback.adminReply || '')
-    setIsReplyDialogOpen(true)
   }
 
   const handleUpdateStatus = async (id, newStatus) => {
     try {
-      const response = await apiClient.put(`${API_ENDPOINTS.ADMIN.FEEDBACK}/${id}/status`, {
+      const response = await apiClient.put(`${API_ENDPOINTS.ADMIN.SAFETY_EMERGENCY}/${id}/status`, {
         status: newStatus
       })
       
       if (response.data.success) {
         toast.success('Status updated successfully')
-        fetchFeedbacks()
+        fetchReports()
       }
     } catch (error) {
       console.error('Error updating status:', error)
@@ -106,66 +91,59 @@ export default function ContactMessages() {
     }
   }
 
-  const handleSubmitReply = async () => {
-    if (!replyText.trim()) {
-      toast.error('Please enter a reply')
-      return
-    }
-
+  const handleUpdatePriority = async (id, newPriority) => {
     try {
-      const response = await apiClient.put(`${API_ENDPOINTS.ADMIN.FEEDBACK}/${selectedFeedback._id}/reply`, {
-        adminReply: replyText.trim()
+      const response = await apiClient.put(`${API_ENDPOINTS.ADMIN.SAFETY_EMERGENCY}/${id}/priority`, {
+        priority: newPriority
       })
       
       if (response.data.success) {
-        toast.success('Reply sent successfully')
-        setIsReplyDialogOpen(false)
-        setReplyText("")
-        setSelectedFeedback(null)
-        fetchFeedbacks()
+        toast.success('Priority updated successfully')
+        fetchReports()
       }
     } catch (error) {
-      console.error('Error sending reply:', error)
-      toast.error(error.response?.data?.message || 'Failed to send reply')
+      console.error('Error updating priority:', error)
+      toast.error('Failed to update priority')
     }
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this feedback?')) {
+    if (!confirm('Are you sure you want to delete this safety emergency report?')) {
       return
     }
 
     try {
-      const response = await apiClient.delete(`${API_ENDPOINTS.ADMIN.FEEDBACK}/${id}`)
+      const response = await apiClient.delete(`${API_ENDPOINTS.ADMIN.SAFETY_EMERGENCY}/${id}`)
       
       if (response.data.success) {
-        toast.success('Feedback deleted successfully')
-        fetchFeedbacks()
+        toast.success('Safety emergency report deleted successfully')
+        fetchReports()
       }
     } catch (error) {
-      console.error('Error deleting feedback:', error)
-      toast.error('Failed to delete feedback')
+      console.error('Error deleting report:', error)
+      toast.error('Failed to delete safety emergency report')
     }
   }
 
-  const filteredFeedbacks = useMemo(() => {
+  const filteredReports = useMemo(() => {
     if (!searchQuery.trim()) {
-      return feedbacks
+      return reports
     }
     
     const query = searchQuery.toLowerCase().trim()
-    return feedbacks.filter(feedback =>
-      feedback.userName?.toLowerCase().includes(query) ||
-      feedback.userEmail?.toLowerCase().includes(query) ||
-      feedback.message?.toLowerCase().includes(query)
+    return reports.filter(report =>
+      report.userName?.toLowerCase().includes(query) ||
+      report.userEmail?.toLowerCase().includes(query) ||
+      report.message?.toLowerCase().includes(query)
     )
-  }, [feedbacks, searchQuery])
+  }, [reports, searchQuery])
 
   const getStatusBadge = (status) => {
     const statusConfig = {
       unread: { label: 'Unread', className: 'bg-blue-100 text-blue-700' },
       read: { label: 'Read', className: 'bg-slate-100 text-slate-700' },
-      replied: { label: 'Replied', className: 'bg-green-100 text-green-700' }
+      resolved: { label: 'Resolved', className: 'bg-green-100 text-green-700' },
+      urgent: { label: 'Urgent', className: 'bg-red-100 text-red-700' }
     }
     
     const config = statusConfig[status] || statusConfig.unread
@@ -176,12 +154,28 @@ export default function ContactMessages() {
     )
   }
 
-  if (loading && feedbacks.length === 0) {
+  const getPriorityBadge = (priority) => {
+    const priorityConfig = {
+      low: { label: 'Low', className: 'bg-gray-100 text-gray-700' },
+      medium: { label: 'Medium', className: 'bg-yellow-100 text-yellow-700' },
+      high: { label: 'High', className: 'bg-orange-100 text-orange-700' },
+      critical: { label: 'Critical', className: 'bg-red-100 text-red-700 font-bold' }
+    }
+    
+    const config = priorityConfig[priority] || priorityConfig.medium
+    return (
+      <span className={`px-3 py-1 rounded-full text-xs font-medium ${config.className}`}>
+        {config.label}
+      </span>
+    )
+  }
+
+  if (loading && reports.length === 0) {
     return (
       <div className="p-4 lg:p-6 bg-slate-50 min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-slate-600">Loading feedbacks...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-red-600 mx-auto mb-4" />
+          <p className="text-slate-600">Loading safety emergency reports...</p>
         </div>
       </div>
     )
@@ -193,13 +187,30 @@ export default function ContactMessages() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900">User Feedback</h1>
+            <AlertTriangle className="h-6 w-6 text-red-600" />
+            <h1 className="text-2xl font-bold text-slate-900">Safety Emergency Reports</h1>
             <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
-              {feedbacks.length}
+              {reports.length}
             </span>
           </div>
 
           <div className="flex gap-3">
+            {/* Priority Filter */}
+            <select
+              value={priorityFilter}
+              onChange={(e) => {
+                setPriorityFilter(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="px-4 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+            >
+              <option value="all">All Priority</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+
             {/* Status Filter */}
             <select
               value={statusFilter}
@@ -212,7 +223,8 @@ export default function ContactMessages() {
               <option value="all">All Status</option>
               <option value="unread">Unread</option>
               <option value="read">Read</option>
-              <option value="replied">Replied</option>
+              <option value="urgent">Urgent</option>
+              <option value="resolved">Resolved</option>
             </select>
 
             {/* Search */}
@@ -259,7 +271,13 @@ export default function ContactMessages() {
                 </th>
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   <div className="flex items-center gap-2">
-                    <span>Feedback</span>
+                    <span>Report</span>
+                    <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                  </div>
+                </th>
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <span>Priority</span>
                     <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
                   </div>
                 </th>
@@ -278,9 +296,9 @@ export default function ContactMessages() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
-              {filteredFeedbacks.length === 0 ? (
+              {filteredReports.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20">
+                  <td colSpan={7} className="px-6 py-20">
                     <div className="flex flex-col items-center justify-center">
                       <div className="relative mb-6">
                         <div className="w-32 h-32 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center shadow-inner">
@@ -293,15 +311,17 @@ export default function ContactMessages() {
                           </div>
                         </div>
                       </div>
-                      <p className="text-lg font-semibold text-slate-700">No Feedback Found</p>
+                      <p className="text-lg font-semibold text-slate-700">No Safety Emergency Reports Found</p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredFeedbacks.map((feedback, index) => (
+                filteredReports.map((report, index) => (
                   <tr
-                    key={feedback._id}
-                    className="hover:bg-slate-50 transition-colors"
+                    key={report._id}
+                    className={`hover:bg-slate-50 transition-colors ${
+                      report.priority === 'critical' ? 'bg-red-50/50' : ''
+                    }`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm font-medium text-slate-700">
@@ -309,18 +329,21 @@ export default function ContactMessages() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm font-medium text-slate-900">{feedback.userName}</span>
+                      <span className="text-sm font-medium text-slate-900">{report.userName}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-slate-700">{feedback.userEmail}</span>
+                      <span className="text-sm text-slate-700">{report.userEmail}</span>
                     </td>
                     <td className="px-6 py-4 max-w-md">
                       <span className="text-sm text-slate-700 line-clamp-2">
-                        {feedback.message}
+                        {report.message}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(feedback.status)}
+                      {getPriorityBadge(report.priority)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(report.status)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <DropdownMenu>
@@ -330,17 +353,22 @@ export default function ContactMessages() {
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleViewFeedback(feedback)}>
+                          <DropdownMenuItem onClick={() => handleViewReport(report)}>
                             <Eye className="w-4 h-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            onClick={() => handleUpdateStatus(feedback._id, feedback.status === 'unread' ? 'read' : 'unread')}
+                            onClick={() => handleUpdateStatus(report._id, report.status === 'unread' ? 'read' : 'unread')}
                           >
-                            Mark as {feedback.status === 'unread' ? 'Read' : 'Unread'}
+                            Mark as {report.status === 'unread' ? 'Read' : 'Unread'}
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            onClick={() => handleDelete(feedback._id)}
+                            onClick={() => handleUpdatePriority(report._id, report.priority === 'critical' ? 'high' : 'critical')}
+                          >
+                            Set Priority: {report.priority === 'critical' ? 'High' : 'Critical'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDelete(report._id)}
                             className="text-red-600"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -384,16 +412,19 @@ export default function ContactMessages() {
         )}
       </div>
 
-      {/* View Feedback Dialog */}
+      {/* View Report Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200 dark:border-slate-700">
-            <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white">Feedback Details</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+              Safety Emergency Report Details
+            </DialogTitle>
             <DialogDescription className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Complete information about the user and their feedback
+              Complete information about the safety emergency report
             </DialogDescription>
           </DialogHeader>
-          {selectedFeedback && (
+          {selectedReport && (
             <div className="px-6 py-6 space-y-6">
               {/* User Information Section */}
               <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-700">
@@ -404,76 +435,76 @@ export default function ContactMessages() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">User Name</label>
-                    <p className="text-base font-semibold text-slate-900 dark:text-white">{selectedFeedback.userName || 'N/A'}</p>
+                    <p className="text-base font-semibold text-slate-900 dark:text-white">{selectedReport.userName || 'N/A'}</p>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Email Address</label>
-                    <p className="text-base font-semibold text-slate-900 dark:text-white break-all">{selectedFeedback.userEmail || 'N/A'}</p>
+                    <p className="text-base font-semibold text-slate-900 dark:text-white break-all">{selectedReport.userEmail || 'N/A'}</p>
                   </div>
-                  {selectedFeedback.userId?.phone && (
+                  {selectedReport.userId?.phone && (
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Phone Number</label>
-                      <p className="text-base font-semibold text-slate-900 dark:text-white">{selectedFeedback.userId.phone}</p>
-                    </div>
-                  )}
-                  {selectedFeedback.userId?.name && (
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Full Name</label>
-                      <p className="text-base font-semibold text-slate-900 dark:text-white">{selectedFeedback.userId.name}</p>
+                      <p className="text-base font-semibold text-slate-900 dark:text-white">{selectedReport.userId.phone}</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Feedback Message Section */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-5 border border-blue-200 dark:border-blue-800">
+              {/* Emergency Report Section */}
+              <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl p-5 border border-red-200 dark:border-red-800">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-5 flex items-center gap-3">
-                  <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full"></div>
-                  Feedback Message
+                  <div className="w-1 h-6 bg-gradient-to-b from-red-500 to-orange-600 rounded-full"></div>
+                  Safety Emergency Report
                 </h3>
                 <div className="bg-white dark:bg-slate-800 rounded-lg p-5 border border-slate-200 dark:border-slate-700 shadow-sm">
                   <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                    {selectedFeedback.message}
+                    {selectedReport.message}
                   </p>
                 </div>
               </div>
 
-              {/* Status and Metadata Section */}
+              {/* Priority and Status Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">Status</label>
-                  <div>{getStatusBadge(selectedFeedback.status)}</div>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">Priority</label>
+                  <div>{getPriorityBadge(selectedReport.priority)}</div>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">Submitted At</label>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {new Date(selectedFeedback.createdAt).toLocaleString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">Status</label>
+                  <div>{getStatusBadge(selectedReport.status)}</div>
                 </div>
               </div>
 
-              {/* Admin Reply Section */}
-              {selectedFeedback.adminReply && (
+              {/* Metadata Section */}
+              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">Reported At</label>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                  {new Date(selectedReport.createdAt).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </p>
+              </div>
+
+              {/* Admin Response Section */}
+              {selectedReport.adminResponse && (
                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-5 border border-green-200 dark:border-green-800">
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-5 flex items-center gap-3">
                     <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-600 rounded-full"></div>
-                    Admin Reply
+                    Admin Response
                   </h3>
                   <div className="bg-white dark:bg-slate-800 rounded-lg p-5 border border-slate-200 dark:border-slate-700 shadow-sm">
                     <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                      {selectedFeedback.adminReply}
+                      {selectedReport.adminResponse}
                     </p>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
-                    {selectedFeedback.repliedAt && (
+                    {selectedReport.respondedAt && (
                       <span>
-                        Replied on: {new Date(selectedFeedback.repliedAt).toLocaleString('en-US', {
+                        Responded on: {new Date(selectedReport.respondedAt).toLocaleString('en-US', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric',
@@ -482,9 +513,9 @@ export default function ContactMessages() {
                         })}
                       </span>
                     )}
-                    {selectedFeedback.repliedBy?.name && (
+                    {selectedReport.respondedBy?.name && (
                       <span>
-                        Replied by: <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedFeedback.repliedBy.name}</span>
+                        Responded by: <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedReport.respondedBy.name}</span>
                       </span>
                     )}
                   </div>
@@ -505,52 +536,7 @@ export default function ContactMessages() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Reply Dialog */}
-      <Dialog open={isReplyDialogOpen} onOpenChange={setIsReplyDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Reply to Feedback</DialogTitle>
-            <DialogDescription>
-              Send a reply to {selectedFeedback?.userName}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-2 block">Original Feedback</label>
-              <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-700">
-                {selectedFeedback?.message}
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700 mb-2 block">Your Reply</label>
-              <Textarea
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Enter your reply..."
-                className="min-h-[150px]"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsReplyDialogOpen(false)
-                  setReplyText("")
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSubmitReply}
-                disabled={!replyText.trim()}
-              >
-                Send Reply
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
+

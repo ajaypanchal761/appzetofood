@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 import { useState, useEffect } from "react"
-import { ArrowLeft, ArrowRight, Heart, Users, Shield, Clock, Star, Award, FileText, Lock, Loader2 } from "lucide-react"
+import { ArrowLeft, ArrowRight, Heart, Users, Shield, Clock, Star, Award, FileText, Lock, Loader2, Receipt, Truck, XCircle } from "lucide-react"
 import { motion } from "framer-motion"
 import AnimatedPage from "../../components/AnimatedPage"
 import { Button } from "@/components/ui/button"
@@ -93,7 +93,7 @@ export default function About() {
                   <div className="absolute inset-0 bg-green-400 rounded-full blur-2xl opacity-30 animate-pulse" />
                   <div className="relative bg-white dark:bg-gray-800 rounded-full p-4 md:p-6 shadow-xl">
                     <img
-                      src={aboutData.logo || appzetoFoodLogo}
+                      src={aboutData.logo && aboutData.logo.trim() ? aboutData.logo : appzetoFoodLogo}
                       alt={`${aboutData.appName} Logo`}
                       className="h-16 w-16 md:h-20 md:w-20 object-contain rounded-full"
                     />
@@ -217,6 +217,60 @@ export default function About() {
                     </div>
                     <div className="text-sm text-gray-500 dark:text-gray-500">
                       Learn how we protect your data
+                    </div>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
+                </Link>
+                
+                <Link
+                  to="/profile/refund"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
+                >
+                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
+                    <Receipt className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                      Refund Policy
+                    </div>
+                    <div className="text-sm text-gray-500 dark:text-gray-500">
+                      Read our refund terms and conditions
+                    </div>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
+                </Link>
+                
+                <Link
+                  to="/profile/shipping"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
+                >
+                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
+                    <Truck className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                      Shipping Policy
+                    </div>
+                    <div className="text-sm text-gray-500 dark:text-gray-500">
+                      Learn about our shipping terms
+                    </div>
+                  </div>
+                  <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
+                </Link>
+                
+                <Link
+                  to="/profile/cancellation"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
+                >
+                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 group-hover:bg-gray-200 dark:group-hover:bg-gray-700 transition-colors">
+                    <XCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-base font-medium text-gray-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                      Cancellation Policy
+                    </div>
+                    <div className="text-sm text-gray-500 dark:text-gray-500">
+                      Read our cancellation terms and conditions
                     </div>
                   </div>
                   <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />

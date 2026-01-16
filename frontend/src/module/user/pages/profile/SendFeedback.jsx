@@ -1,29 +1,50 @@
 import { Link } from "react-router-dom"
-import { ArrowLeft, PenSquare, Check } from "lucide-react"
+import { ArrowLeft, PenSquare, Check, Loader2 } from "lucide-react"
 import AnimatedPage from "../../components/AnimatedPage"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { useState } from "react"
+import { toast } from "sonner"
+import api from "@/lib/api"
+import { API_ENDPOINTS } from "@/lib/api/config"
 
 export default function SendFeedback() {
   const [feedback, setFeedback] = useState("")
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = () => {
-    if (feedback.trim()) {
-      setIsSubmitted(true)
-      // In a real app, you would send this to your backend
-      setTimeout(() => {
-        setIsSubmitted(false)
+  const handleSubmit = async () => {
+    if (!feedback.trim()) {
+      toast.error('Please enter your feedback')
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      const response = await api.post(API_ENDPOINTS.ADMIN.FEEDBACK_CREATE, {
+        message: feedback.trim()
+      })
+      
+      if (response.data.success) {
+        setIsSubmitted(true)
         setFeedback("")
-      }, 3000)
+        toast.success('Feedback submitted successfully!')
+        setTimeout(() => {
+          setIsSubmitted(false)
+        }, 3000)
+      }
+    } catch (error) {
+      console.error('Error submitting feedback:', error)
+      toast.error(error.response?.data?.message || 'Failed to submit feedback. Please try again.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   return (
     <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
-      <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
         {/* Header */}
         <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 lg:mb-8">
           <Link to="/user/profile">
@@ -65,7 +86,15 @@ export default function SendFeedback() {
                   placeholder="Tell us what you think..."
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
-                  className="min-h-[150px] md:min-h-[180px] lg:min-h-[200px] resize-none text-sm md:text-base"
+                  className="min-h-[250px] md:min-h-[350px] lg:min-h-[400px] w-full resize-y text-sm md:text-base leading-relaxed"
+                  dir="ltr"
+                  style={{
+                    direction: 'ltr',
+                    textAlign: 'left',
+                    unicodeBidi: 'bidi-override',
+                    width: '100%',
+                    maxWidth: '100%'
+                  }}
                 />
                 <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-2">
                   {feedback.length} characters
@@ -76,10 +105,17 @@ export default function SendFeedback() {
             {/* Submit Button */}
             <Button
               onClick={handleSubmit}
-              disabled={!feedback.trim()}
-              className="w-full bg-green-600 hover:bg-green-700 text-white text-sm md:text-base h-10 md:h-12"
+              disabled={!feedback.trim() || isSubmitting}
+              className="w-full bg-green-600 hover:bg-green-700 text-white text-sm md:text-base h-10 md:h-12 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Submit Feedback
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Feedback'
+              )}
             </Button>
           </>
         ) : (

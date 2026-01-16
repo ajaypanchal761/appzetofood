@@ -57,6 +57,9 @@ import RedeemGoldCoupon from "../pages/profile/RedeemGoldCoupon"
 import About from "../pages/profile/About"
 import Terms from "../pages/profile/Terms"
 import Privacy from "../pages/profile/Privacy"
+import Refund from "../pages/profile/Refund"
+import Shipping from "../pages/profile/Shipping"
+import Cancellation from "../pages/profile/Cancellation"
 import SendFeedback from "../pages/profile/SendFeedback"
 import ReportSafetyEmergency from "../pages/profile/ReportSafetyEmergency"
 import Accessibility from "../pages/profile/Accessibility"
@@ -272,6 +275,30 @@ export default function UserRouter() {
         element={
           <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
             <Privacy />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/refund" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Refund />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/shipping" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Shipping />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/cancellation" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Cancellation />
           </ProtectedRoute>
         } 
       />

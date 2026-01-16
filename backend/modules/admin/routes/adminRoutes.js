@@ -101,6 +101,33 @@ import {
   getPrivacy,
   updatePrivacy
 } from '../controllers/privacyPolicyController.js';
+import {
+  getRefund,
+  updateRefund
+} from '../controllers/refundPolicyController.js';
+import {
+  getShipping,
+  updateShipping
+} from '../controllers/shippingPolicyController.js';
+import {
+  getCancellation,
+  updateCancellation
+} from '../controllers/cancellationPolicyController.js';
+import {
+  getAllFeedbacks,
+  getFeedbackById,
+  updateFeedbackStatus,
+  replyToFeedback,
+  deleteFeedback
+} from '../controllers/feedbackController.js';
+import {
+  getAllSafetyEmergencies,
+  getSafetyEmergencyById,
+  updateSafetyEmergencyStatus,
+  updateSafetyEmergencyPriority,
+  respondToSafetyEmergency,
+  deleteSafetyEmergency
+} from '../controllers/safetyEmergencyController.js';
 import zoneRoutes from './zoneRoutes.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
@@ -226,6 +253,33 @@ router.put('/terms', updateTerms);
 // Privacy Policy Management
 router.get('/privacy', getPrivacy);
 router.put('/privacy', updatePrivacy);
+
+// Refund Policy Management
+router.get('/refund', getRefund);
+router.put('/refund', updateRefund);
+
+// Shipping Policy Management
+router.get('/shipping', getShipping);
+router.put('/shipping', updateShipping);
+
+// Cancellation Policy Management
+router.get('/cancellation', getCancellation);
+router.put('/cancellation', updateCancellation);
+
+// Feedback Management
+router.get('/feedback', getAllFeedbacks);
+router.get('/feedback/:id', getFeedbackById);
+router.put('/feedback/:id/status', updateFeedbackStatus);
+router.put('/feedback/:id/reply', replyToFeedback);
+router.delete('/feedback/:id', deleteFeedback);
+
+// Safety Emergency Management
+router.get('/safety-emergency', getAllSafetyEmergencies);
+router.get('/safety-emergency/:id', getSafetyEmergencyById);
+router.put('/safety-emergency/:id/status', updateSafetyEmergencyStatus);
+router.put('/safety-emergency/:id/priority', updateSafetyEmergencyPriority);
+router.put('/safety-emergency/:id/respond', respondToSafetyEmergency);
+router.delete('/safety-emergency/:id', deleteSafetyEmergency);
 
 export default router;
 

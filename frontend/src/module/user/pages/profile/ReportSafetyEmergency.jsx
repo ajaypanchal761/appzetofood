@@ -1,25 +1,50 @@
 import { Link } from "react-router-dom"
-import { ArrowLeft, AlertTriangle, Phone, Shield } from "lucide-react"
+import { ArrowLeft, AlertTriangle, Phone, Shield, Loader2 } from "lucide-react"
 import AnimatedPage from "../../components/AnimatedPage"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { useState } from "react"
+import { toast } from "sonner"
+import api from "@/lib/api"
+import { API_ENDPOINTS } from "@/lib/api/config"
 
 export default function ReportSafetyEmergency() {
   const [report, setReport] = useState("")
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = () => {
-    if (report.trim()) {
-      setIsSubmitted(true)
-      // In a real app, this would trigger an emergency response
+  const handleSubmit = async () => {
+    if (!report.trim()) {
+      toast.error('Please describe the safety concern or emergency')
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      const response = await api.post(API_ENDPOINTS.ADMIN.SAFETY_EMERGENCY_CREATE, {
+        message: report.trim()
+      })
+      
+      if (response.data.success) {
+        setIsSubmitted(true)
+        setReport("")
+        toast.success('Safety emergency report submitted successfully!')
+        setTimeout(() => {
+          setIsSubmitted(false)
+        }, 5000)
+      }
+    } catch (error) {
+      console.error('Error submitting safety emergency report:', error)
+      toast.error(error.response?.data?.message || 'Failed to submit safety emergency report. Please try again.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   return (
     <AnimatedPage className="min-h-screen bg-[#f5f5f5] dark:bg-[#0a0a0a]">
-      <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
         {/* Header */}
         <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6 lg:mb-8">
           <Link to="/user/profile">
@@ -86,7 +111,15 @@ export default function ReportSafetyEmergency() {
                   placeholder="Please provide details about the safety issue..."
                   value={report}
                   onChange={(e) => setReport(e.target.value)}
-                  className="min-h-[150px] md:min-h-[180px] lg:min-h-[200px] resize-none text-sm md:text-base"
+                  className="min-h-[150px] md:min-h-[200px] lg:min-h-[250px] w-full resize-y text-sm md:text-base leading-relaxed"
+                  dir="ltr"
+                  style={{
+                    direction: 'ltr',
+                    textAlign: 'left',
+                    unicodeBidi: 'bidi-override',
+                    width: '100%',
+                    maxWidth: '100%'
+                  }}
                 />
                 <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 mt-2">
                   {report.length} characters
@@ -97,10 +130,17 @@ export default function ReportSafetyEmergency() {
             {/* Submit Button */}
             <Button
               onClick={handleSubmit}
-              disabled={!report.trim()}
-              className="w-full bg-red-600 hover:bg-red-700 text-white text-sm md:text-base h-10 md:h-12"
+              disabled={!report.trim() || isSubmitting}
+              className="w-full bg-red-600 hover:bg-red-700 text-white text-sm md:text-base h-10 md:h-12 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Report Safety Issue
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Report Safety Issue'
+              )}
             </Button>
           </>
         ) : (

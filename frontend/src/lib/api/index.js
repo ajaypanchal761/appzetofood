@@ -938,6 +938,11 @@ export const adminAPI = {
     return apiClient.get(API_ENDPOINTS.ADMIN.CATEGORIES, { params });
   },
 
+  // Get public categories (for user frontend)
+  getPublicCategories: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.CATEGORIES_PUBLIC);
+  },
+
   getCategoryById: (id) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.CATEGORY_BY_ID.replace(':id', id));
   },

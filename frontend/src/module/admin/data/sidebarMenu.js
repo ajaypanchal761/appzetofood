@@ -184,9 +184,15 @@ export const sidebarMenuData = [
     items: [
       {
         type: "link",
-        label: "Contact Messages",
+        label: "User Feedback",
         path: "/admin/contact-messages",
         icon: "Mail",
+      },
+      {
+        type: "link",
+        label: "Safety Emergency Reports",
+        path: "/admin/safety-emergency-reports",
+        icon: "AlertTriangle",
       },
     ],
   },
