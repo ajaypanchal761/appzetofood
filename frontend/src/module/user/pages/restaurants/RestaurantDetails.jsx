@@ -91,28 +91,114 @@ export default function RestaurantDetails() {
         setRestaurantError(null)
 
         console.log('Fetching restaurant with slug:', slug)
-        const response = await diningAPI.getRestaurantBySlug(slug)
+        let response = null
+        let apiRestaurant = null
 
-        if (response.data && response.data.success && response.data.data) {
-          const apiRestaurant = response.data.data
-          console.log('Fetched restaurant from API:', apiRestaurant)
+        // Try dining API first
+        try {
+          response = await diningAPI.getRestaurantBySlug(slug)
+          if (response.data && response.data.success && response.data.data) {
+            apiRestaurant = response.data.data
+            console.log('✅ Found restaurant in dining API:', apiRestaurant)
+          }
+        } catch (diningError) {
+          // If dining API fails with 404, try restaurant API
+          if (diningError.response?.status === 404) {
+            console.log('⚠️ Restaurant not found in dining API, trying restaurant API...')
+            try {
+              // Try to get restaurant by ID if slug looks like an ID
+              if (slug.match(/^[0-9a-fA-F]{24}$/)) {
+                // Looks like MongoDB ObjectId
+                response = await restaurantAPI.getRestaurantById(slug)
+                if (response.data && response.data.success && response.data.data) {
+                  apiRestaurant = response.data.data
+                  console.log('✅ Found restaurant in restaurant API by ID:', apiRestaurant)
+                }
+              } else {
+                // Search restaurants by name (slug is usually name-based)
+                const searchResponse = await restaurantAPI.getRestaurants({ limit: 100 })
+                const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
+                
+                // Try to find by slug match or name match
+                const restaurantName = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                const matchingRestaurant = restaurants.find(r => 
+                  r.slug === slug || 
+                  r.name?.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase() ||
+                  r.name?.toLowerCase() === restaurantName.toLowerCase()
+                )
+                
+                if (matchingRestaurant) {
+                  // Get full restaurant details by ID
+                  const fullResponse = await restaurantAPI.getRestaurantById(matchingRestaurant._id || matchingRestaurant.restaurantId)
+                  if (fullResponse.data && fullResponse.data.success && fullResponse.data.data) {
+                    apiRestaurant = fullResponse.data.data
+                    console.log('✅ Found restaurant in restaurant API by name search:', apiRestaurant)
+                  }
+                }
+              }
+            } catch (restaurantError) {
+              console.error('❌ Restaurant not found in restaurant API either:', restaurantError)
+              throw diningError // Throw original error to show "Restaurant not found"
+            }
+          } else {
+            throw diningError // Re-throw if it's not a 404
+          }
+        }
 
+        if (apiRestaurant) {
+          console.log('✅ Fetched restaurant from API:', apiRestaurant)
+          console.log('📋 Restaurant data keys:', Object.keys(apiRestaurant))
+          console.log('📋 Restaurant name field:', apiRestaurant?.name)
+          console.log('📋 Restaurant restaurantId:', apiRestaurant?.restaurantId)
+          console.log('📋 Restaurant _id:', apiRestaurant?._id)
+          console.log('📋 Restaurant.restaurant:', apiRestaurant?.restaurant)
+
+          // Check if this is a dining restaurant with nested restaurant data
+          const actualRestaurant = apiRestaurant?.restaurant || apiRestaurant
+          
           // Transform API data to match expected format with comprehensive fallbacks
+          // Handle both dining restaurant and regular restaurant data structures
           const transformedRestaurant = {
-            id: apiRestaurant?.restaurantId || apiRestaurant?._id || null,
-            name: apiRestaurant?.name || "Unknown Restaurant",
-            cuisine: (apiRestaurant?.cuisines && Array.isArray(apiRestaurant.cuisines) && apiRestaurant.cuisines.length > 0)
-              ? apiRestaurant.cuisines[0]
-              : "Multi-cuisine",
-            rating: apiRestaurant?.rating ?? 4.5,
-            reviews: apiRestaurant?.totalRatings ?? 0,
-            deliveryTime: apiRestaurant?.estimatedDeliveryTime || "25-30 mins",
-            distance: apiRestaurant?.distance || "1.2 km",
-            location: apiRestaurant?.location?.area || apiRestaurant?.location?.city || apiRestaurant?.location?.addressLine1 || "Location",
-            image: apiRestaurant?.profileImage?.url
-              || (Array.isArray(apiRestaurant?.menuImages) && apiRestaurant.menuImages.length > 0
-                ? apiRestaurant.menuImages[0]?.url
+            id: actualRestaurant?.restaurantId || actualRestaurant?._id || actualRestaurant?.id || apiRestaurant?.restaurantId || apiRestaurant?._id || null,
+            name: actualRestaurant?.name || apiRestaurant?.name || apiRestaurant?.restaurantName || "Unknown Restaurant",
+            cuisine: (actualRestaurant?.cuisines && Array.isArray(actualRestaurant.cuisines) && actualRestaurant.cuisines.length > 0)
+              ? actualRestaurant.cuisines[0]
+              : (apiRestaurant?.cuisines && Array.isArray(apiRestaurant.cuisines) && apiRestaurant.cuisines.length > 0)
+                ? apiRestaurant.cuisines[0]
+                : (actualRestaurant?.cuisine || apiRestaurant?.cuisine || actualRestaurant?.category || apiRestaurant?.category || "Multi-cuisine"),
+            rating: actualRestaurant?.rating ?? apiRestaurant?.rating ?? actualRestaurant?.averageRating ?? apiRestaurant?.averageRating ?? 4.5,
+            reviews: actualRestaurant?.totalRatings ?? apiRestaurant?.totalRatings ?? actualRestaurant?.reviewCount ?? apiRestaurant?.reviewCount ?? actualRestaurant?.reviews?.length ?? apiRestaurant?.reviews?.length ?? 0,
+            deliveryTime: actualRestaurant?.estimatedDeliveryTime || apiRestaurant?.estimatedDeliveryTime || actualRestaurant?.deliveryTime || apiRestaurant?.deliveryTime || actualRestaurant?.avgDeliveryTime || apiRestaurant?.avgDeliveryTime || "25-30 mins",
+            distance: actualRestaurant?.distance || apiRestaurant?.distance || actualRestaurant?.distanceFromUser || apiRestaurant?.distanceFromUser || "1.2 km",
+            location: (typeof actualRestaurant?.location === 'string' ? actualRestaurant.location : null)
+              || (typeof apiRestaurant?.location === 'string' ? apiRestaurant.location : null)
+              || actualRestaurant?.location?.area 
+              || apiRestaurant?.location?.area
+              || actualRestaurant?.location?.city 
+              || apiRestaurant?.location?.city
+              || actualRestaurant?.location?.addressLine1 
+              || apiRestaurant?.location?.addressLine1
+              || actualRestaurant?.address?.area
+              || apiRestaurant?.address?.area
+              || actualRestaurant?.address?.city
+              || apiRestaurant?.address?.city
+              || actualRestaurant?.address
+              || apiRestaurant?.address
+              || (typeof actualRestaurant?.location === 'object' ? JSON.stringify(actualRestaurant.location) : null)
+              || (typeof apiRestaurant?.location === 'object' ? JSON.stringify(apiRestaurant.location) : null)
+              || "Location",
+            image: actualRestaurant?.profileImage?.url 
+              || apiRestaurant?.profileImage?.url
+              || actualRestaurant?.profileImage 
+              || apiRestaurant?.profileImage
+              || (Array.isArray(actualRestaurant?.menuImages) && actualRestaurant.menuImages.length > 0
+                ? (actualRestaurant.menuImages[0]?.url || actualRestaurant.menuImages[0])
                 : null)
+              || (Array.isArray(apiRestaurant?.menuImages) && apiRestaurant.menuImages.length > 0
+                ? (apiRestaurant.menuImages[0]?.url || apiRestaurant.menuImages[0])
+                : null)
+              || actualRestaurant?.image
+              || apiRestaurant?.image
               || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
             priceRange: apiRestaurant?.priceRange || "$$",
             offers: Array.isArray(apiRestaurant?.offers) ? apiRestaurant.offers : [], // Will be populated from menu/offers API later
@@ -132,8 +218,8 @@ export default function RestaurantDetails() {
             outlets: Array.isArray(apiRestaurant?.outlets) ? apiRestaurant.outlets : [],
             categories: Array.isArray(apiRestaurant?.categories) ? apiRestaurant.categories : [],
             menu: Array.isArray(apiRestaurant?.menu) ? apiRestaurant.menu : [],
-            slug: apiRestaurant?.slug || slug || "unknown",
-            restaurantId: apiRestaurant?.restaurantId || apiRestaurant?._id || null,
+            slug: apiRestaurant?.slug || apiRestaurant?.name?.toLowerCase().replace(/\s+/g, '-') || slug || "unknown",
+            restaurantId: apiRestaurant?.restaurantId || apiRestaurant?._id || apiRestaurant?.id || null,
             // Add other fields with defaults
             featuredDish: apiRestaurant?.featuredDish || "Special Dish",
             featuredPrice: apiRestaurant?.featuredPrice ?? 249,
@@ -150,128 +236,186 @@ export default function RestaurantDetails() {
             menuSections: [],
           }
 
-          console.log('Transformed restaurant:', transformedRestaurant)
+          console.log('✅ Transformed restaurant:', transformedRestaurant)
+          console.log('✅ Restaurant ID for menu fetch:', transformedRestaurant.id)
+          
+          if (!transformedRestaurant.id) {
+            console.error('❌ No restaurant ID found! Cannot fetch menu.')
+          }
+          
           setRestaurant(transformedRestaurant)
 
           // Fetch menu and inventory for this restaurant
-          try {
-            const menuResponse = await restaurantAPI.getMenuByRestaurantId(transformedRestaurant.id)
-            if (menuResponse.data && menuResponse.data.success && menuResponse.data.data && menuResponse.data.data.menu) {
-              const menuSections = menuResponse.data.data.menu.sections || []
-
-              // Collect all recommended items from all sections
-              // Only include items that are both recommended (isRecommended === true) AND available (isAvailable !== false)
-              const recommendedItems = []
-              menuSections.forEach(section => {
-                // Check direct items - only include if isRecommended is explicitly true (strict check) AND item is available
-                if (section.items && Array.isArray(section.items)) {
-                  section.items.forEach(item => {
-                    // Strict check: isRecommended must be exactly boolean true
-                    // This will exclude: false, undefined, null, 0, "", and any other falsy values
-                    if (item.isRecommended === true && typeof item.isRecommended === 'boolean' && item.isAvailable !== false) {
-                      recommendedItems.push(item)
-                    }
-                  })
-                }
-                // Check subsection items - only include if isRecommended is explicitly true (strict check) AND item is available
-                if (section.subsections && Array.isArray(section.subsections)) {
-                  section.subsections.forEach(subsection => {
-                    if (subsection.items && Array.isArray(subsection.items)) {
-                      subsection.items.forEach(item => {
-                        // Strict check: isRecommended must be exactly boolean true
-                        // This will exclude: false, undefined, null, 0, "", and any other falsy values
-                        if (item.isRecommended === true && typeof item.isRecommended === 'boolean' && item.isAvailable !== false) {
-                          recommendedItems.push(item)
-                        }
-                      })
-                    }
-                  })
-                }
-              })
-
-              // Debug log to verify recommended items and their isRecommended values
-              console.log('Recommended items collected:', recommendedItems.map(item => ({
-                name: item.name,
-                isRecommended: item.isRecommended,
-                isRecommendedType: typeof item.isRecommended
-              })))
-
-              // Always create recommended section (even if empty) - will show "No dish Yet" if empty
-              const finalMenuSections = [{ name: "Recommended for you", items: recommendedItems, subsections: [] }, ...menuSections]
-
-              setRestaurant(prev => ({
-                ...prev,
-                menuSections: finalMenuSections,
-              }))
-
-              // Set first 3 sections (Recommended, Starters, Main Course) as expanded by default
-              const defaultExpandedSections = new Set([0, 1, 2]) // Index 0, 1, 2
-              setExpandedSections(defaultExpandedSections)
-
-              console.log('Fetched menu sections with recommended items:', finalMenuSections)
-            }
-          } catch (menuError) {
-            if (menuError.response && menuError.response.status === 404) {
-              console.log('Menu not found for this restaurant (might be a dining-only listing).')
-            } else {
-              console.error('Error fetching menu:', menuError)
+          // If no restaurant ID, try to find matching restaurant by name
+          let restaurantIdForMenu = transformedRestaurant.id
+          
+          if (!restaurantIdForMenu) {
+            console.warn('⚠️ No restaurant ID available, searching for restaurant by name...')
+            try {
+              const searchResponse = await restaurantAPI.getRestaurants({ limit: 100 })
+              const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
+              
+              // Try to find by exact name match
+              const matchingRestaurant = restaurants.find(r => 
+                r.name?.toLowerCase().trim() === transformedRestaurant.name?.toLowerCase().trim()
+              )
+              
+              if (matchingRestaurant) {
+                restaurantIdForMenu = matchingRestaurant._id || matchingRestaurant.restaurantId || matchingRestaurant.id
+                console.log('✅ Found matching restaurant by name, ID:', restaurantIdForMenu)
+                
+                // Update the restaurant ID in state
+                setRestaurant(prev => ({
+                  ...prev,
+                  id: restaurantIdForMenu,
+                  restaurantId: restaurantIdForMenu
+                }))
+              } else {
+                console.warn('⚠️ No matching restaurant found by name')
+              }
+            } catch (searchError) {
+              console.error('❌ Error searching for restaurant:', searchError)
             }
           }
+          
+          if (restaurantIdForMenu) {
+            try {
+              console.log('📋 Fetching menu for restaurant ID:', restaurantIdForMenu)
+              const menuResponse = await restaurantAPI.getMenuByRestaurantId(restaurantIdForMenu)
+              if (menuResponse.data && menuResponse.data.success && menuResponse.data.data && menuResponse.data.data.menu) {
+                const menuSections = menuResponse.data.data.menu.sections || []
 
-          try {
-            const inventoryResponse = await restaurantAPI.getInventoryByRestaurantId(transformedRestaurant.id)
-            if (inventoryResponse.data && inventoryResponse.data.success && inventoryResponse.data.data && inventoryResponse.data.data.inventory) {
-              const inventoryCategories = inventoryResponse.data.data.inventory.categories || []
+                // Collect all recommended items from all sections
+                // Only include items that are both recommended (isRecommended === true) AND available (isAvailable !== false)
+                const recommendedItems = []
+                menuSections.forEach(section => {
+                  // Check direct items - only include if isRecommended is explicitly true (strict check) AND item is available
+                  if (section.items && Array.isArray(section.items)) {
+                    section.items.forEach(item => {
+                      // Strict check: isRecommended must be exactly boolean true
+                      // This will exclude: false, undefined, null, 0, "", and any other falsy values
+                      if (item.isRecommended === true && typeof item.isRecommended === 'boolean' && item.isAvailable !== false) {
+                        recommendedItems.push(item)
+                      }
+                    })
+                  }
+                  // Check subsection items - only include if isRecommended is explicitly true (strict check) AND item is available
+                  if (section.subsections && Array.isArray(section.subsections)) {
+                    section.subsections.forEach(subsection => {
+                      if (subsection.items && Array.isArray(subsection.items)) {
+                        subsection.items.forEach(item => {
+                          // Strict check: isRecommended must be exactly boolean true
+                          // This will exclude: false, undefined, null, 0, "", and any other falsy values
+                          if (item.isRecommended === true && typeof item.isRecommended === 'boolean' && item.isAvailable !== false) {
+                            recommendedItems.push(item)
+                          }
+                        })
+                      }
+                    })
+                  }
+                })
 
-              // Normalize inventory categories to ensure proper structure
-              const normalizedInventory = inventoryCategories.map((category, index) => ({
-                id: category.id || `category-${index}`,
-                name: category.name || "Unnamed Category",
-                description: category.description || "",
-                itemCount: category.itemCount ?? (category.items?.length || 0),
-                inStock: category.inStock !== undefined ? category.inStock : true,
-                items: Array.isArray(category.items) ? category.items.map(item => ({
-                  id: String(item.id || Date.now() + Math.random()),
-                  name: item.name || "Unnamed Item",
-                  inStock: item.inStock !== undefined ? item.inStock : true,
-                  isVeg: item.isVeg !== undefined ? item.isVeg : true,
-                  stockQuantity: item.stockQuantity || "Unlimited",
-                  unit: item.unit || "piece",
-                  expiryDate: item.expiryDate || null,
-                  lastRestocked: item.lastRestocked || null,
-                })) : [],
-                order: category.order !== undefined ? category.order : index,
-              }))
+                // Debug log to verify recommended items and their isRecommended values
+                console.log('Recommended items collected:', recommendedItems.map(item => ({
+                  name: item.name,
+                  isRecommended: item.isRecommended,
+                  isRecommendedType: typeof item.isRecommended
+                })))
 
-              setRestaurant(prev => ({
-                ...prev,
-                inventory: normalizedInventory,
-              }))
-              console.log('✅ Fetched and normalized inventory categories:', normalizedInventory)
+                // Always create recommended section (even if empty) - will show "No dish Yet" if empty
+                const finalMenuSections = [{ name: "Recommended for you", items: recommendedItems, subsections: [] }, ...menuSections]
+
+                setRestaurant(prev => ({
+                  ...prev,
+                  menuSections: finalMenuSections,
+                }))
+
+                // Set first 3 sections (Recommended, Starters, Main Course) as expanded by default
+                const defaultExpandedSections = new Set([0, 1, 2]) // Index 0, 1, 2
+                setExpandedSections(defaultExpandedSections)
+
+                console.log('Fetched menu sections with recommended items:', finalMenuSections)
+              }
+            } catch (menuError) {
+              if (menuError.response && menuError.response.status === 404) {
+                console.log('⚠️ Menu not found for this restaurant (might be a dining-only listing).')
+              } else {
+                console.error('❌ Error fetching menu:', menuError)
+              }
             }
-          } catch (inventoryError) {
-            if (inventoryError.response && inventoryError.response.status === 404) {
-              console.log('Inventory not found for this restaurant (might be a dining-only listing).')
-            } else {
-              console.error('Error fetching inventory:', inventoryError)
+
+            try {
+              console.log('📋 Fetching inventory for restaurant ID:', restaurantIdForMenu)
+              const inventoryResponse = await restaurantAPI.getInventoryByRestaurantId(restaurantIdForMenu)
+              if (inventoryResponse.data && inventoryResponse.data.success && inventoryResponse.data.data && inventoryResponse.data.data.inventory) {
+                const inventoryCategories = inventoryResponse.data.data.inventory.categories || []
+
+                // Normalize inventory categories to ensure proper structure
+                const normalizedInventory = inventoryCategories.map((category, index) => ({
+                  id: category.id || `category-${index}`,
+                  name: category.name || "Unnamed Category",
+                  description: category.description || "",
+                  itemCount: category.itemCount ?? (category.items?.length || 0),
+                  inStock: category.inStock !== undefined ? category.inStock : true,
+                  items: Array.isArray(category.items) ? category.items.map(item => ({
+                    id: String(item.id || Date.now() + Math.random()),
+                    name: item.name || "Unnamed Item",
+                    inStock: item.inStock !== undefined ? item.inStock : true,
+                    isVeg: item.isVeg !== undefined ? item.isVeg : true,
+                    stockQuantity: item.stockQuantity || "Unlimited",
+                    unit: item.unit || "piece",
+                    expiryDate: item.expiryDate || null,
+                    lastRestocked: item.lastRestocked || null,
+                  })) : [],
+                  order: category.order !== undefined ? category.order : index,
+                }))
+
+                setRestaurant(prev => ({
+                  ...prev,
+                  inventory: normalizedInventory,
+                }))
+                console.log('✅ Fetched and normalized inventory categories:', normalizedInventory)
+              }
+            } catch (inventoryError) {
+              if (inventoryError.response && inventoryError.response.status === 404) {
+                console.log('⚠️ Inventory not found for this restaurant (might be a dining-only listing).')
+              } else {
+                console.error('❌ Error fetching inventory:', inventoryError)
+              }
             }
           }
         } else {
-          console.warn('Invalid API response structure:', response.data)
+          console.error('❌ No restaurant data found in API response')
+          console.error('❌ Response:', response)
+          console.error('❌ apiRestaurant:', apiRestaurant)
           setRestaurantError('Restaurant not found')
-          // Fallback to hardcoded data if API fails
           setRestaurant(null)
         }
       } catch (error) {
-        // Only log non-404 errors (404 is expected when restaurant doesn't exist in DB)
-        if (error.response?.status !== 404) {
-          console.error('Error fetching restaurant:', error)
-        } else {
+        // Check if it's a network error (backend not running)
+        const isNetworkError = error.code === 'ERR_NETWORK' || error.message === 'Network Error'
+        
+        // Check if it's a 404 error (restaurant doesn't exist)
+        const is404Error = error.response?.status === 404
+        
+        if (isNetworkError) {
+          // Network error - backend is not running
+          // Don't show "Restaurant not found" for network errors
+          // The axios interceptor will show a toast notification
+          console.error('Network error fetching restaurant (backend may not be running):', error)
+          setRestaurantError('Backend server is not connected. Please make sure the backend is running.')
+          setRestaurant(null)
+        } else if (is404Error) {
+          // 404 error - restaurant doesn't exist in database
           console.log(`Restaurant "${slug}" not found in database`)
+          setRestaurantError('Restaurant not found')
+          setRestaurant(null)
+        } else {
+          // Other errors
+          console.error('Error fetching restaurant:', error)
+          setRestaurantError(error.message || 'Failed to load restaurant')
+          setRestaurant(null)
         }
-        setRestaurantError(error.response?.status === 404 ? null : (error.message || 'Failed to load restaurant'))
-        // Fallback to hardcoded data if API fails
-        setRestaurant(null)
       } finally {
         setLoadingRestaurant(false)
       }
@@ -611,16 +755,26 @@ export default function RestaurantDetails() {
     )
   }
 
-  // Show error state if restaurant not found
+  // Show error state if restaurant not found or network error
   if (restaurantError && !restaurant) {
+    const isNetworkError = restaurantError.includes('Backend server is not connected')
+    const isNotFoundError = restaurantError === 'Restaurant not found'
+    
     return (
       <AnimatedPage>
         <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
           <div className="flex flex-col items-center gap-4 text-center">
-            <AlertCircle className="h-12 w-12 text-red-500" />
+            <AlertCircle className={`h-12 w-12 ${isNetworkError ? 'text-orange-500' : 'text-red-500'}`} />
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Restaurant not found</h2>
-              <p className="text-sm text-gray-600 mb-4">{restaurantError}</p>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                {isNetworkError ? 'Connection Error' : isNotFoundError ? 'Restaurant not found' : 'Error'}
+              </h2>
+              <p className="text-sm text-gray-600 mb-4 max-w-md">{restaurantError}</p>
+              {isNetworkError && (
+                <p className="text-xs text-gray-500 mb-4">
+                  Make sure the backend server is running at http://localhost:5000
+                </p>
+              )}
               <Button onClick={() => navigate(-1)} variant="outline">
                 Go Back
               </Button>
