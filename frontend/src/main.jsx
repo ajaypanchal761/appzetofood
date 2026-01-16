@@ -92,6 +92,28 @@ console.error = (...args) => {
   }
   
   // Suppress duplicate network error messages (handled by axios interceptor with cooldown)
+  // Check if any argument is an AxiosError with network error
+  const hasNetworkError = args.some(arg => {
+    if (arg && typeof arg === 'object') {
+      // Check for AxiosError with ERR_NETWORK code
+      if (arg.name === 'AxiosError' && (arg.code === 'ERR_NETWORK' || arg.message === 'Network Error')) {
+        return true
+      }
+      // Check for error objects with network error message
+      if (arg.message === 'Network Error' || arg.code === 'ERR_NETWORK') {
+        return true
+      }
+    }
+    return false
+  })
+  
+  // If we have a network error object, suppress it regardless of the message prefix
+  if (hasNetworkError) {
+    // The axios interceptor already handles throttling and shows toast notifications
+    return
+  }
+  
+  // Check error string for network error patterns (for string-based error messages)
   if (
     errorStr.includes('🌐 Network Error') ||
     errorStr.includes('Network Error - Backend server may not be running') ||
