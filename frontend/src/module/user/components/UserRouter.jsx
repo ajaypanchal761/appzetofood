@@ -55,6 +55,8 @@ import Settings from "../pages/profile/Settings"
 import Coupons from "../pages/profile/Coupons"
 import RedeemGoldCoupon from "../pages/profile/RedeemGoldCoupon"
 import About from "../pages/profile/About"
+import Terms from "../pages/profile/Terms"
+import Privacy from "../pages/profile/Privacy"
 import SendFeedback from "../pages/profile/SendFeedback"
 import ReportSafetyEmergency from "../pages/profile/ReportSafetyEmergency"
 import Accessibility from "../pages/profile/Accessibility"
@@ -254,6 +256,22 @@ export default function UserRouter() {
         element={
           <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
             <About />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/terms" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Terms />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/profile/privacy" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <Privacy />
           </ProtectedRoute>
         } 
       />

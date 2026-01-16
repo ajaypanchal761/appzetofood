@@ -1,46 +1,159 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect } from "react"
+import { toast } from "sonner"
+import api, { adminAPI } from "@/lib/api"
+import { API_ENDPOINTS } from "@/lib/api/config"
+import { Heart, Users, Shield, Clock, Star, Award, Plus, X, GripVertical } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+// Icon mapping
+const iconMap = {
+  Heart,
+  Users,
+  Shield,
+  Clock,
+  Star,
+  Award
+}
+
+const iconOptions = [
+  { value: 'Heart', label: 'Heart' },
+  { value: 'Users', label: 'Users' },
+  { value: 'Shield', label: 'Shield' },
+  { value: 'Clock', label: 'Clock' },
+  { value: 'Star', label: 'Star' },
+  { value: 'Award', label: 'Award' }
+]
+
+const colorOptions = [
+  { value: 'text-pink-600 dark:text-pink-400', label: 'Pink', bg: 'bg-pink-100 dark:bg-pink-900/30' },
+  { value: 'text-blue-600 dark:text-blue-400', label: 'Blue', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+  { value: 'text-green-600 dark:text-green-400', label: 'Green', bg: 'bg-green-100 dark:bg-green-900/30' },
+  { value: 'text-orange-600 dark:text-orange-400', label: 'Orange', bg: 'bg-orange-100 dark:bg-orange-900/30' },
+  { value: 'text-purple-600 dark:text-purple-400', label: 'Purple', bg: 'bg-purple-100 dark:bg-purple-900/30' },
+  { value: 'text-red-600 dark:text-red-400', label: 'Red', bg: 'bg-red-100 dark:bg-red-900/30' }
+]
 
 export default function AboutUs() {
-  const [activeLanguage, setActiveLanguage] = useState("default")
-  const editorRef = useRef(null)
-  const [content, setContent] = useState(`StackFood is a complete Multi-vendor Foodkind of products delivery system developed with powerful admin panel will help you to control your business smartly.
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-
-Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [aboutData, setAboutData] = useState({
+    appName: 'Appzeto Food',
+    version: '1.0.0',
+    description: '',
+    logo: '',
+    features: []
+  })
 
   useEffect(() => {
-    if (editorRef.current) {
-      const formattedContent = content.split('\n').map(line => {
-        if (line.trim() === '') return '<br>'
-        return line
-      }).join('<br>')
-      editorRef.current.innerHTML = formattedContent
-    }
+    fetchAboutData()
   }, [])
 
-  const languages = [
-    { id: "default", label: "Default" },
-    { id: "en", label: "English(EN)" },
-    { id: "bn", label: "Bengali - বাংলা (BN)" },
-    { id: "ar", label: "Arabic - العربية (AR)" },
-    { id: "es", label: "Spanish - español(ES)" }
-  ]
-
-  const executeCommand = (command, value = null) => {
-    document.execCommand(command, false, value)
-    editorRef.current?.focus()
-  }
-
-  const handleContentChange = () => {
-    if (editorRef.current) {
-      setContent(editorRef.current.innerHTML)
+  const fetchAboutData = async () => {
+    try {
+      setLoading(true)
+      const response = await api.get(API_ENDPOINTS.ADMIN.ABOUT)
+      if (response.data.success) {
+        setAboutData(response.data.data)
+      }
+    } catch (error) {
+      console.error('Error fetching about data:', error)
+      toast.error('Failed to load about page data')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    console.log("Content:", content)
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      const response = await api.put(API_ENDPOINTS.ADMIN.ABOUT, aboutData)
+      if (response.data.success) {
+        toast.success('About page updated successfully')
+        setAboutData(response.data.data)
+      }
+    } catch (error) {
+      console.error('Error saving about data:', error)
+      toast.error(error.response?.data?.message || 'Failed to save about page')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addFeature = () => {
+    setAboutData(prev => ({
+      ...prev,
+      features: [
+        ...prev.features,
+        {
+          icon: 'Heart',
+          title: '',
+          description: '',
+          color: 'text-pink-600 dark:text-pink-400',
+          bgColor: 'bg-pink-100 dark:bg-pink-900/30',
+          order: prev.features.length
+        }
+      ]
+    }))
+  }
+
+  const removeFeature = async (index) => {
+    try {
+      // Update state immediately for better UX
+      const updatedData = {
+        ...aboutData,
+        features: aboutData.features.filter((_, i) => i !== index)
+      }
+      
+      setAboutData(updatedData)
+      
+      // Save to backend immediately
+      setSaving(true)
+      const response = await api.put(API_ENDPOINTS.ADMIN.ABOUT, updatedData)
+      if (response.data.success) {
+        toast.success('Feature deleted successfully')
+        setAboutData(response.data.data)
+      }
+    } catch (error) {
+      console.error('Error deleting feature:', error)
+      toast.error(error.response?.data?.message || 'Failed to delete feature')
+      // Revert state on error
+      fetchAboutData()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const updateFeature = (index, field, value) => {
+    setAboutData(prev => {
+      const newFeatures = [...prev.features]
+      newFeatures[index] = { ...newFeatures[index], [field]: value }
+      
+      // Update bgColor when color changes
+      if (field === 'color') {
+        const colorOption = colorOptions.find(opt => opt.value === value)
+        if (colorOption) {
+          newFeatures[index].bgColor = colorOption.bg
+        }
+      }
+      
+      return { ...prev, features: newFeatures }
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 lg:p-6 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -48,117 +161,159 @@ Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu 
       <div className="max-w-6xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">About Us</h1>
+          <p className="text-sm text-slate-600 mt-1">Manage your About page content</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-2 mb-4">
-          <div className="flex gap-2 border-b border-slate-200 pb-2">
-            {languages.map((lang) => (
-              <button
-                key={lang.id}
-                onClick={() => setActiveLanguage(lang.id)}
-                className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                  activeLanguage === lang.id
-                    ? "text-blue-600"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {lang.label}
-                {activeLanguage === lang.id && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Basic Information */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Basic Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="appName">App Name</Label>
+              <Input
+                id="appName"
+                value={aboutData.appName}
+                onChange={(e) => setAboutData(prev => ({ ...prev, appName: e.target.value }))}
+                placeholder="Appzeto Food"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="version">Version</Label>
+              <Input
+                id="version"
+                value={aboutData.version}
+                onChange={(e) => setAboutData(prev => ({ ...prev, version: e.target.value }))}
+                placeholder="1.0.0"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={aboutData.description}
+                onChange={(e) => setAboutData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Your trusted food delivery partner..."
+                rows={4}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="logo">Logo URL</Label>
+              <Input
+                id="logo"
+                value={aboutData.logo}
+                onChange={(e) => setAboutData(prev => ({ ...prev, logo: e.target.value }))}
+                placeholder="https://example.com/logo.png"
+                className="mt-1"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200">
-          <div className="border-b border-slate-200 p-2 bg-slate-50">
-            <div className="flex flex-wrap gap-1 mb-2">
-              <button type="button" onClick={() => executeCommand("formatBlock", "div")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">Source</button>
-              <button type="button" onClick={() => executeCommand("cut")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">✂</button>
-              <button type="button" onClick={() => executeCommand("copy")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">📋</button>
-              <button type="button" onClick={() => executeCommand("paste")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">📄</button>
-              <button type="button" onClick={() => executeCommand("undo")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">↶</button>
-              <button type="button" onClick={() => executeCommand("redo")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">↷</button>
-              <button type="button" className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">ABC-</button>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              <button type="button" onClick={() => executeCommand("bold")} className="px-2 py-1 text-xs font-bold border border-slate-300 rounded hover:bg-white">B</button>
-              <button type="button" onClick={() => executeCommand("italic")} className="px-2 py-1 text-xs italic border border-slate-300 rounded hover:bg-white">I</button>
-              <button type="button" onClick={() => executeCommand("underline")} className="px-2 py-1 text-xs underline border border-slate-300 rounded hover:bg-white">U</button>
-              <button type="button" onClick={() => executeCommand("strikeThrough")} className="px-2 py-1 text-xs line-through border border-slate-300 rounded hover:bg-white">S</button>
-              <button type="button" onClick={() => executeCommand("subscript")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">x₂</button>
-              <button type="button" onClick={() => executeCommand("superscript")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">x²</button>
-              <button type="button" onClick={() => executeCommand("removeFormat")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">⚡</button>
-              <div className="w-px h-6 bg-slate-300 mx-1"></div>
-              <button type="button" onClick={() => executeCommand("justifyLeft")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">⬅</button>
-              <button type="button" onClick={() => executeCommand("justifyCenter")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">⬌</button>
-              <button type="button" onClick={() => executeCommand("justifyRight")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">➡</button>
-              <button type="button" onClick={() => executeCommand("justifyFull")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">⬄</button>
-              <div className="w-px h-6 bg-slate-300 mx-1"></div>
-              <button type="button" onClick={() => executeCommand("insertUnorderedList")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">•</button>
-              <button type="button" onClick={() => executeCommand("insertOrderedList")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">1.</button>
-              <button type="button" onClick={() => executeCommand("outdent")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">⬅</button>
-              <button type="button" onClick={() => executeCommand("indent")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">➡</button>
-              <button type="button" onClick={() => executeCommand("formatBlock", "blockquote")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">"</button>
-              <div className="w-px h-6 bg-slate-300 mx-1"></div>
-              <button type="button" onClick={() => { const url = prompt("Enter URL:"); if (url) executeCommand("createLink", url) }} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">🔗</button>
-              <button type="button" onClick={() => executeCommand("unlink")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">🔗✕</button>
-              <button type="button" onClick={() => { const url = prompt("Enter image URL:"); if (url) executeCommand("insertImage", url) }} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">🖼</button>
-              <button type="button" onClick={() => {
-                const rows = prompt("Number of rows:", "2")
-                const cols = prompt("Number of columns:", "2")
-                if (rows && cols && editorRef.current) {
-                  let tableHTML = "<table border='1' style='border-collapse: collapse; width: 100%;'><tbody>"
-                  for (let i = 0; i < parseInt(rows); i++) {
-                    tableHTML += "<tr>"
-                    for (let j = 0; j < parseInt(cols); j++) {
-                      tableHTML += "<td style='border: 1px solid #ccc; padding: 8px;'>&nbsp;</td>"
-                    }
-                    tableHTML += "</tr>"
-                  }
-                  tableHTML += "</tbody></table>"
-                  const selection = window.getSelection()
-                  const range = selection.getRangeAt(0)
-                  range.deleteContents()
-                  const tempDiv = document.createElement('div')
-                  tempDiv.innerHTML = tableHTML
-                  const fragment = document.createDocumentFragment()
-                  while (tempDiv.firstChild) {
-                    fragment.appendChild(tempDiv.firstChild)
-                  }
-                  range.insertNode(fragment)
-                  editorRef.current.focus()
-                }
-              }} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">⧉</button>
-              <button type="button" onClick={() => executeCommand("insertHorizontalRule")} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">─</button>
-              <button type="button" className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">Ω</button>
-              <div className="w-px h-6 bg-slate-300 mx-1"></div>
-              <select onChange={(e) => executeCommand("formatBlock", e.target.value)} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white bg-white">
-                <option value="div">Styles</option>
-                <option value="h1">Heading 1</option>
-                <option value="h2">Heading 2</option>
-                <option value="h3">Heading 3</option>
-                <option value="p">Paragraph</option>
-              </select>
-              <select onChange={(e) => executeCommand("formatBlock", e.target.value)} className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white bg-white">
-                <option value="div">Format</option>
-                <option value="p">Normal</option>
-                <option value="h1">Heading 1</option>
-                <option value="h2">Heading 2</option>
-                <option value="h3">Heading 3</option>
-                <option value="pre">Preformatted</option>
-              </select>
-              <button type="button" className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">⛶</button>
-              <button type="button" className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white">?</button>
-            </div>
-          </div>
-          <div className="p-4">
-            <div ref={editorRef} contentEditable onInput={handleContentChange} suppressContentEditableWarning className="min-h-[400px] p-4 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm text-slate-700 leading-relaxed overflow-y-auto" style={{ whiteSpace: "pre-wrap", wordWrap: "break-word" }} />
-          </div>
-        </div>
-        <div className="flex justify-end mt-6">
-          <button type="button" onClick={handleSubmit} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">Submit</button>
+        {/* Features */}
+        <Card className="mb-6">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Features</CardTitle>
+            <Button onClick={addFeature} size="sm" variant="outline">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Feature
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {aboutData.features.map((feature, index) => {
+              const IconComponent = iconMap[feature.icon] || Heart
+              return (
+                <Card key={index} className="border-2">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-4">
+                      <div className={`${feature.bgColor} rounded-lg p-3 flex-shrink-0`}>
+                        <IconComponent className={`h-6 w-6 ${feature.color}`} />
+                      </div>
+                      <div className="flex-1 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Icon</Label>
+                            <Select
+                              value={feature.icon}
+                              onValueChange={(value) => updateFeature(index, 'icon', value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {iconOptions.map(opt => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Color</Label>
+                            <Select
+                              value={feature.color}
+                              onValueChange={(value) => updateFeature(index, 'color', value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {colorOptions.map(opt => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Title</Label>
+                          <Input
+                            value={feature.title}
+                            onChange={(e) => updateFeature(index, 'title', e.target.value)}
+                            placeholder="Feature title"
+                          />
+                        </div>
+                        <div>
+                          <Label>Description</Label>
+                          <Textarea
+                            value={feature.description}
+                            onChange={(e) => updateFeature(index, 'description', e.target.value)}
+                            placeholder="Feature description"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeFeature(index)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+            {aboutData.features.length === 0 && (
+              <p className="text-center text-slate-500 py-8">No features added yet. Click "Add Feature" to get started.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving} size="lg">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
         </div>
       </div>
     </div>

@@ -90,7 +90,6 @@ import EmailTemplate from "../pages/settings/EmailTemplate";
 import ThemeSettings from "../pages/settings/ThemeSettings";
 import Gallery from "../pages/settings/Gallery";
 import LoginSetup from "../pages/settings/LoginSetup";
-import SocialMedia from "../pages/settings/SocialMedia";
 import TermsAndCondition from "../pages/settings/TermsAndCondition";
 import PrivacyPolicy from "../pages/settings/PrivacyPolicy";
 import AboutUs from "../pages/settings/AboutUs";
@@ -272,7 +271,6 @@ export default function AdminRouter() {
         {/* Business Settings - FCM */}
         <Route path="business-settings/fcm-index" element={<FirebaseNotification />} />
         {/* Pages & Social Media */}
-        <Route path="pages-social-media/social" element={<SocialMedia />} />
         <Route path="pages-social-media/terms" element={<TermsAndCondition />} />
         <Route path="pages-social-media/privacy" element={<PrivacyPolicy />} />
         <Route path="pages-social-media/about" element={<AboutUs />} />

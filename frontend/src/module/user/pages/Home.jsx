@@ -1,6 +1,7 @@
 import { useSearchParams, Link, useNavigate } from "react-router-dom"
 import { useRef, useEffect, useState, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom"
+import Lenis from "lenis"
 import { Star, Clock, MapPin, Heart, Search, Tag, Flame, ShoppingBag, ShoppingCart, Mic, SlidersHorizontal, CheckCircle2, Bookmark, BadgePercent, X, ArrowDownUp, Timer, CalendarClock, ShieldCheck, IndianRupee, UtensilsCrossed, Leaf, AlertCircle, Loader2, Plus, Check, Share2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import Footer from "../components/Footer"
@@ -400,6 +401,27 @@ export default function Home() {
       }
     }
   }, [heroBannerImages.length])
+
+  // Lenis smooth scrolling initialization
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      smoothWheel: true,
+      smoothTouch: true,
+    })
+
+    function raf(time) {
+      lenis.raf(time)
+      requestAnimationFrame(raf)
+    }
+
+    requestAnimationFrame(raf)
+
+    return () => {
+      lenis.destroy()
+    }
+  }, [])
 
   // Helper function to reset auto-slide timer
   const resetAutoSlide = useCallback(() => {

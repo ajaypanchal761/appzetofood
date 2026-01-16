@@ -89,6 +89,18 @@ import {
   approveFoodItem,
   rejectFoodItem
 } from '../controllers/foodApprovalController.js';
+import {
+  getAbout,
+  updateAbout
+} from '../controllers/aboutController.js';
+import {
+  getTerms,
+  updateTerms
+} from '../controllers/termsAndConditionController.js';
+import {
+  getPrivacy,
+  updatePrivacy
+} from '../controllers/privacyPolicyController.js';
 import zoneRoutes from './zoneRoutes.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
@@ -202,6 +214,18 @@ router.get('/offers', getAllOffers);
 
 // Zone Management
 router.use('/zones', zoneRoutes);
+
+// About Page Management
+router.get('/about', getAbout);
+router.put('/about', updateAbout);
+
+// Terms and Condition Management
+router.get('/terms', getTerms);
+router.put('/terms', updateTerms);
+
+// Privacy Policy Management
+router.get('/privacy', getPrivacy);
+router.put('/privacy', updatePrivacy);
 
 export default router;
 

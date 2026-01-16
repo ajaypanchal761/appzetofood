@@ -335,7 +335,6 @@ export const sidebarMenuData = [
         label: "Pages & Social Media",
         icon: "Link",
         subItems: [
-          { label: "Social Media", path: "/admin/pages-social-media/social" },
           { label: "Terms And Condition", path: "/admin/pages-social-media/terms" },
           { label: "Privacy Policy", path: "/admin/pages-social-media/privacy" },
           { label: "About Us", path: "/admin/pages-social-media/about" },
