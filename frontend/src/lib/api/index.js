@@ -647,6 +647,15 @@ export const deliveryAPI = {
       currentLng: currentLocation.lng
     });
   },
+  confirmReachedDrop: (orderId) => {
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_REACHED_DROP.replace(':orderId', orderId));
+  },
+  completeDelivery: (orderId, rating = null, review = '') => {
+    return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_COMPLETE_DELIVERY.replace(':orderId', orderId), {
+      rating,
+      review
+    });
+  },
 
   // Get trip history
   getTripHistory: (params = {}) => {

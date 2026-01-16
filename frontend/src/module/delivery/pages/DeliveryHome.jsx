@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
+import { toast } from "sonner"
 import {
   Lightbulb,
   HelpCircle,
@@ -1206,14 +1207,40 @@ export default function DeliveryHome() {
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
 
-      // Clear any existing watch
-      if (watchPositionIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchPositionIdRef.current)
-        watchPositionIdRef.current = null
-      }
+      // NOTE: watchPosition will be started/stopped based on isOnline status
+      // This is handled in a separate useEffect that depends on isOnline
+    } else {
+      // Default location if geolocation not available
+      setRiderLocation(prev => prev || [22.7196, 75.8577])
+    }
+  }, []) // Run only on mount - get initial location
 
-      // Watch position updates for live tracking
-      const watchId = navigator.geolocation.watchPosition(
+  // Watch position updates - ONLY when online (Production Level Implementation)
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      return
+    }
+
+    // Clear any existing watch before starting new one
+    if (watchPositionIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchPositionIdRef.current)
+      watchPositionIdRef.current = null
+    }
+
+    // Only start watchPosition if user is online
+    if (!isOnline) {
+      console.log('📍 User is offline - stopping location tracking')
+      // Hide bike marker when going offline
+      if (bikeMarkerRef.current && window.deliveryMapInstance) {
+        bikeMarkerRef.current.setMap(null)
+      }
+      return
+    }
+
+    console.log('📍 User is online - starting live location tracking')
+
+    // Watch position updates for live tracking (Only when online)
+    const watchId = navigator.geolocation.watchPosition(
         (position) => {
           // Validate coordinates
           const latitude = position.coords.latitude
@@ -1341,17 +1368,25 @@ export default function DeliveryHome() {
 
       watchPositionIdRef.current = watchId
 
+      // Show bike marker immediately if we have last known location and map is ready
+      if (window.deliveryMapInstance && lastLocationRef.current && lastLocationRef.current.length === 2) {
+        const [lat, lng] = lastLocationRef.current
+        // Get heading from route history if available
+        let heading = null
+        if (routeHistoryRef.current.length > 1) {
+          const prev = routeHistoryRef.current[routeHistoryRef.current.length - 2]
+          heading = calculateHeading(prev.lat, prev.lng, lat, lng)
+        }
+        createOrUpdateBikeMarker(lat, lng, heading, !isUserPanningRef.current)
+      }
+
       return () => {
         if (watchPositionIdRef.current !== null) {
           navigator.geolocation.clearWatch(watchPositionIdRef.current)
           watchPositionIdRef.current = null
         }
       }
-    } else {
-      // Default location if geolocation not available
-      setRiderLocation(prev => prev || [22.7196, 75.8577])
-    }
-  }, []) // Run only on mount - location tracking should always be active
+  }, [isOnline]) // Re-run when online status changes - this controls start/stop of tracking
 
   // Handle new order popup accept button swipe
   const handleNewOrderAcceptTouchStart = (e) => {
@@ -1411,25 +1446,28 @@ export default function DeliveryHome() {
 
       // Accept order via backend API and get route
       const acceptOrderAndShowRoute = async () => {
-        try {
-          // Get order ID from selectedRestaurant or newOrder
-          const orderId = selectedRestaurant?.id || newOrder?.orderMongoId || newOrder?.orderId
-          
-          console.log('🔍 Order ID lookup:', {
-            selectedRestaurantId: selectedRestaurant?.id,
-            newOrderMongoId: newOrder?.orderMongoId,
-            newOrderId: newOrder?.orderId,
-            finalOrderId: orderId
-          })
-          
-          if (!orderId) {
-            console.error('❌ No order ID found to accept')
-            toast.error('Order ID not found. Please try again.')
-            return
-          }
+        // Get order ID from selectedRestaurant or newOrder (define outside try-catch for error handling)
+        const orderId = selectedRestaurant?.id || newOrder?.orderMongoId || newOrder?.orderId
+        
+        console.log('🔍 Order ID lookup:', {
+          selectedRestaurantId: selectedRestaurant?.id,
+          newOrderMongoId: newOrder?.orderMongoId,
+          newOrderId: newOrder?.orderId,
+          finalOrderId: orderId
+        })
+        
+        if (!orderId) {
+          console.error('❌ No order ID found to accept')
+          toast.error('Order ID not found. Please try again.')
+          return
+        }
 
+        // Declare currentLocation in outer scope so it's accessible in catch block
+        let currentLocation = null
+        
+        try {
           // Get current LIVE location (prioritize riderLocation which is updated in real-time)
-          let currentLocation = riderLocation
+          currentLocation = riderLocation
           
           // If riderLocation is not available, try to get from lastLocationRef
           if (!currentLocation || currentLocation.length !== 2) {
@@ -1451,8 +1489,17 @@ export default function DeliveryHome() {
             } catch (geoError) {
               console.error('❌ Could not get current location:', geoError)
               toast.error('Location not available. Please enable location services.')
+              // Ensure currentLocation is set to null before returning
+              currentLocation = null
               return
             }
+          }
+          
+          // Validate currentLocation before proceeding
+          if (!currentLocation || currentLocation.length !== 2) {
+            console.error('❌ No valid location available')
+            toast.error('Location not available. Please enable location services.')
+            return
           }
 
           console.log('📦 Accepting order:', orderId)
@@ -1572,7 +1619,10 @@ export default function DeliveryHome() {
                 customerLng: order.address?.location?.coordinates?.[0],
                 items: order.items || [],
                 total: order.pricing?.total || 0,
-                phone: order.restaurantId?.phone || null // Restaurant phone number
+                phone: order.restaurantId?.phone || null, // Restaurant phone number
+                orderStatus: order.status || 'preparing', // Store order status (pending, preparing, ready, out_for_delivery, delivered)
+                deliveryState: order.deliveryState || {}, // Store delivery state (currentPhase, status, etc.)
+                deliveryPhase: order.deliveryState?.currentPhase || 'assigned' // Store current delivery phase
               }
               
               console.log('🏪 Updated restaurant info from backend:', restaurantInfo)
@@ -1673,39 +1723,106 @@ export default function DeliveryHome() {
               // Show route on main map using DirectionsRenderer or polyline
               if (window.deliveryMapInstance && restaurantInfo) {
                 // Use DirectionsRenderer on main map if we have directions result
-                // directionsResultForMap is captured from the outer scope
-                if (directionsResultForMap && directionsResultForMap.routes && directionsResultForMap.routes.length > 0) {
+                // Use directionsResponse state (which was set above) instead of local variable
+                const directionsResult = directionsResultForMap || (directionsResponse && directionsResponse.routes && directionsResponse.routes.length > 0 ? directionsResponse : null);
+                
+                if (directionsResult && directionsResult.routes && directionsResult.routes.length > 0) {
+                  console.log('🗺️ Setting up DirectionsRenderer on main map with route:', directionsResult);
+                  
                   // Initialize DirectionsRenderer for main map if not exists
                   if (!directionsRendererRef.current) {
+                    console.log('📦 Creating new DirectionsRenderer for main map');
                     directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
                       map: window.deliveryMapInstance,
                       suppressMarkers: true, // Hide default A/B markers - we'll use custom markers
                       polylineOptions: {
-                        strokeColor: '#4285F4', // Zomato-style blue
-                        strokeWeight: 6,
-                        strokeOpacity: 0.8
+                        strokeColor: '#4285F4', // Bright blue like Zomato
+                        strokeWeight: 10, // Even thicker for better visibility
+                        strokeOpacity: 1.0, // Fully opaque for better visibility
+                        zIndex: 1000, // High z-index to ensure it's above other elements
+                        icons: [] // No custom icons, just solid line
                       },
                       preserveViewport: false // Auto-fit bounds to route
                     });
+                    console.log('✅ DirectionsRenderer created with Zomato-style blue polyline');
                   } else {
+                    console.log('🔄 Using existing DirectionsRenderer, setting map');
                     directionsRendererRef.current.setMap(window.deliveryMapInstance);
+                    // Update polyline options to ensure visibility
+                    directionsRendererRef.current.setOptions({
+                      suppressMarkers: true,
+                      polylineOptions: {
+                        strokeColor: '#4285F4', // Bright blue like Zomato
+                        strokeWeight: 10, // Even thicker for better visibility
+                        strokeOpacity: 1.0, // Fully opaque
+                        zIndex: 1000, // High z-index
+                        icons: [] // No custom icons
+                      },
+                      preserveViewport: false
+                    });
                   }
                   
                   // Set directions response to renderer
-                  directionsRendererRef.current.setDirections(directionsResultForMap);
-                  
-                  // Fit bounds to show entire route
-                  const bounds = directionsResultForMap.routes[0].bounds;
-                  if (bounds) {
-                    window.deliveryMapInstance.fitBounds(bounds, { padding: 100 });
+                  try {
+                    // Validate directionsResult is a valid DirectionsResult object
+                    if (!directionsResult || typeof directionsResult !== 'object' || !directionsResult.routes || !Array.isArray(directionsResult.routes) || directionsResult.routes.length === 0) {
+                      console.error('❌ Invalid directionsResult:', directionsResult);
+                      return;
+                    }
+
+                    // Validate it's a Google Maps DirectionsResult (has request and legs)
+                    if (!directionsResult.request || !directionsResult.routes[0]?.legs) {
+                      console.error('❌ directionsResult is not a valid Google Maps DirectionsResult');
+                      return;
+                    }
+
+                    // Validate directionsResult is a valid DirectionsResult object
+                    if (!directionsResult || typeof directionsResult !== 'object' || !directionsResult.routes || !Array.isArray(directionsResult.routes) || directionsResult.routes.length === 0) {
+                      console.error('❌ Invalid directionsResult, cannot set directions:', directionsResult);
+                      return;
+                    }
+
+                    // Validate it's a Google Maps DirectionsResult
+                    if (!directionsResult.request || !directionsResult.routes[0]?.legs || !Array.isArray(directionsResult.routes[0].legs)) {
+                      console.error('❌ directionsResult is not a valid Google Maps DirectionsResult');
+                      return;
+                    }
+
+                    // Set new directions directly - Google Maps will replace existing directions
+                    // Don't call setDirections(null) - it's not supported and causes errors
+                    directionsRendererRef.current.setDirections(directionsResult);
+                    console.log('✅ Directions set on renderer successfully');
+                    console.log('📍 Route details:', {
+                      routes: directionsResult.routes?.length || 0,
+                      legs: directionsResult.routes?.[0]?.legs?.length || 0,
+                      distance: directionsResult.routes?.[0]?.legs?.[0]?.distance?.text,
+                      duration: directionsResult.routes?.[0]?.legs?.[0]?.duration?.text
+                    });
+
+                    // Ensure renderer is visible on map
+                    directionsRendererRef.current.setMap(window.deliveryMapInstance);
+                    
+                    // Fit bounds to show entire route
+                    const bounds = directionsResult.routes[0].bounds;
+                    if (bounds) {
+                      window.deliveryMapInstance.fitBounds(bounds, { padding: 100 });
+                      console.log('✅ Map bounds fitted to route');
+                    }
+                    
+                    console.log('✅ Route displayed on main map using DirectionsRenderer');
+                  } catch (error) {
+                    console.error('❌ Error setting directions on renderer:', error);
+                    console.error('❌ directionsResult type:', typeof directionsResult);
+                    console.error('❌ directionsResult:', directionsResult);
                   }
-                  
-                  console.log('✅ Route displayed on main map using DirectionsRenderer');
                 } else if (routeCoordinates && routeCoordinates.length > 0) {
                   // Fallback: Use polyline if Directions API result not available
+                  // setRoutePolyline will trigger useEffect that calls updateRoutePolyline
+                  console.log('📦 Using fallback polyline with', routeCoordinates.length, 'points');
                   setRoutePolyline(routeCoordinates);
-                  updateRoutePolyline(routeCoordinates);
-                  console.log('✅ Route displayed on main map using polyline');
+                  console.log('✅ Route polyline state set, will be displayed via useEffect');
+                } else {
+                  console.warn('⚠️ No route data available to display (neither Directions API result nor coordinates)');
                 }
                 
                 // Add restaurant marker to main map
@@ -1740,6 +1857,23 @@ export default function DeliveryHome() {
                 console.warn('⚠️ Main map not ready, will show route when map loads');
               }
               
+              // Save accepted order to localStorage for refresh handling
+              try {
+                const activeOrderData = {
+                  orderId: restaurantInfo.id || restaurantInfo.orderId,
+                  restaurantInfo: restaurantInfo,
+                  // Don't save directionsResponse - Google Maps objects can't be serialized to JSON
+                  // Route will be recalculated on restore using Directions API
+                  routeCoordinates: routeCoordinates, // Save coordinates for fallback polyline
+                  acceptedAt: new Date().toISOString(),
+                  hasDirectionsAPI: !!directionsResultForMap // Flag to indicate we should recalculate with Directions API
+                };
+                localStorage.setItem('deliveryActiveOrder', JSON.stringify(activeOrderData));
+                console.log('💾 Saved active order to localStorage for refresh handling');
+              } catch (storageError) {
+                console.error('❌ Error saving active order to localStorage:', storageError);
+              }
+              
               // Don't show Reached Pickup popup here - it will be shown when order becomes ready via WebSocket
               // The popup will be triggered by orderReady event from backend
             }, 300); // Wait for popup close animation
@@ -1757,14 +1891,22 @@ export default function DeliveryHome() {
             message: error.message,
             response: error.response?.data,
             status: error.response?.status,
-            orderId: orderId,
-            currentLocation: currentLocation
+            orderId: orderId || 'unknown',
+            code: error.code,
+            isNetworkError: error.code === 'ERR_NETWORK',
+            currentLocation: currentLocation && currentLocation.length === 2 ? 'available' : 'not available'
           })
           
           // Show user-friendly error message
-          const errorMessage = error.response?.data?.message || 
-                              error.message || 
-                              'Failed to accept order. Please try again.'
+          let errorMessage = 'Failed to accept order. Please try again.'
+          if (error.code === 'ERR_NETWORK') {
+            errorMessage = 'Network error. Please check your internet connection and try again.'
+          } else if (error.response?.data?.message) {
+            errorMessage = error.response.data.message
+          } else if (error.message) {
+            errorMessage = error.message
+          }
+          
           toast.error(errorMessage)
           
           // Close popup even on error
@@ -1892,10 +2034,40 @@ export default function DeliveryHome() {
       setreachedPickupIsAnimatingToComplete(true)
       setreachedPickupButtonProgress(1)
 
-      // Close popup after animation, then show order ID confirmation popup
-      setTimeout(() => {
+      // Close popup after animation, confirm reached pickup, then show order ID confirmation popup
+      setTimeout(async () => {
         setShowreachedPickupPopup(false)
-        setShowOrderIdConfirmationPopup(true)
+        
+        // Get order ID
+        const orderId = selectedRestaurant?.id || selectedRestaurant?.orderId
+        
+        if (orderId) {
+          try {
+            // Call backend API to confirm reached pickup
+            console.log('📦 Confirming reached pickup for order:', orderId)
+            const response = await deliveryAPI.confirmReachedPickup(orderId)
+            
+            if (response.data?.success) {
+              console.log('✅ Reached pickup confirmed')
+              // Show order ID confirmation popup
+              setShowOrderIdConfirmationPopup(true)
+            } else {
+              console.error('❌ Failed to confirm reached pickup:', response.data)
+              toast.error(response.data?.message || 'Failed to confirm reached pickup. Please try again.')
+              // Still show order ID popup even if API call fails
+              setShowOrderIdConfirmationPopup(true)
+            }
+          } catch (error) {
+            console.error('❌ Error confirming reached pickup:', error)
+            toast.error(error.response?.data?.message || 'Failed to confirm reached pickup. Please try again.')
+            // Still show order ID popup even if API call fails
+            setShowOrderIdConfirmationPopup(true)
+          }
+        } else {
+          // Show order ID popup even if no order ID (fallback)
+          setShowOrderIdConfirmationPopup(true)
+        }
+        
         // DO NOT show reached drop here - it will only show after order ID is confirmed
         
         // Reset after animation
@@ -1962,10 +2134,59 @@ export default function DeliveryHome() {
       setReachedDropIsAnimatingToComplete(true)
       setReachedDropButtonProgress(1)
 
-      // Close popup and show order delivered animation
-      setTimeout(() => {
+      // Close popup, confirm reached drop, and show order delivered animation
+      setTimeout(async () => {
         setShowReachedDropPopup(false)
-        setShowOrderDeliveredAnimation(true)
+        
+        // Get order ID - prioritize orderId (string) over id (MongoDB _id) for better compatibility
+        // Backend accepts both _id and orderId, but orderId is more reliable
+        const orderId = selectedRestaurant?.orderId || selectedRestaurant?.id || newOrder?.orderId || newOrder?.orderMongoId
+        
+        console.log('🔍 Order ID lookup for reached drop:', {
+          selectedRestaurantId: selectedRestaurant?.id,
+          selectedRestaurantOrderId: selectedRestaurant?.orderId,
+          newOrderMongoId: newOrder?.orderMongoId,
+          newOrderId: newOrder?.orderId,
+          finalOrderId: orderId
+        })
+        
+        if (orderId) {
+          try {
+            // Call backend API to confirm reached drop
+            console.log('📦 Confirming reached drop for order:', orderId)
+            const response = await deliveryAPI.confirmReachedDrop(orderId)
+            
+            if (response.data?.success) {
+              console.log('✅ Reached drop confirmed')
+              // Show order delivered animation
+              setShowOrderDeliveredAnimation(true)
+            } else {
+              console.error('❌ Failed to confirm reached drop:', response.data)
+              toast.error(response.data?.message || 'Failed to confirm reached drop. Please try again.')
+            }
+          } catch (error) {
+            console.error('❌ Error confirming reached drop:', error)
+            console.error('❌ Error details:', {
+              message: error.message,
+              response: error.response?.data,
+              status: error.response?.status,
+              orderId: orderId || 'unknown',
+              selectedRestaurant: selectedRestaurant,
+              newOrder: newOrder
+            })
+            
+            // Show specific error message
+            const errorMessage = error.response?.data?.message || 
+                               (error.response?.status === 404 ? 'Order not found. Please refresh and try again.' : 'Failed to confirm reached drop. Please try again.')
+            toast.error(errorMessage)
+            
+            // Still show delivered animation even if API call fails (for UX)
+            setShowOrderDeliveredAnimation(true)
+          }
+        } else {
+          // Show delivered animation even if no order ID (fallback)
+          setShowOrderDeliveredAnimation(true)
+        }
       }, 200)
     } else {
       // Reset smoothly
@@ -2025,42 +2246,138 @@ export default function DeliveryHome() {
       setOrderIdConfirmIsAnimatingToComplete(true)
       setOrderIdConfirmButtonProgress(1)
 
-      // Close popup after animation, then show directions map
-      setTimeout(() => {
+      // Close popup after animation, then confirm order ID and show polyline to customer
+      setTimeout(async () => {
         setShowOrderIdConfirmationPopup(false)
-        // Show map with directions for 5 seconds
-        setShowDirectionsMap(true)
         
-        // Fetch route for directions
-        if (selectedRestaurant && riderLocation) {
-          const fetchRoute = async () => {
-            try {
-              const url = `https://router.project-osrm.org/route/v1/driving/${riderLocation[1]},${riderLocation[0]};${selectedRestaurant.lng},${selectedRestaurant.lat}?overview=full&geometries=geojson`
-              const response = await fetch(url)
-              const data = await response.json()
-              
-              if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-                const coordinates = data.routes[0].geometry.coordinates.map((coord) => [coord[1], coord[0]])
-                setRoutePolyline(coordinates)
-              } else {
-                // Fallback: straight line
-                setRoutePolyline([riderLocation, [selectedRestaurant.lat, selectedRestaurant.lng]])
-              }
-            } catch (error) {
-              console.error('Error fetching route:', error)
-              // Fallback: straight line
-              setRoutePolyline([riderLocation, [selectedRestaurant.lat, selectedRestaurant.lng]])
-            }
-          }
-          
-          fetchRoute()
+        // Get order ID from selectedRestaurant
+        const orderId = selectedRestaurant?.id || selectedRestaurant?.orderId
+        const confirmedOrderId = selectedRestaurant?.orderId
+        
+        if (!orderId) {
+          console.error('❌ No order ID found to confirm')
+          toast.error('Order ID not found. Please try again.')
+          return
+        }
+
+        // Get current LIVE location
+        let currentLocation = riderLocation
+        if (!currentLocation || currentLocation.length !== 2) {
+          currentLocation = lastLocationRef.current
         }
         
-        // After 5 seconds, hide map and show reached drop popup
-        setTimeout(() => {
-          setShowDirectionsMap(false)
-          setShowReachedDropPopup(true)
-        }, 5000)
+        if (!currentLocation || currentLocation.length !== 2) {
+          try {
+            const position = await new Promise((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(
+                (pos) => resolve([pos.coords.latitude, pos.coords.longitude]),
+                reject,
+                { timeout: 5000, enableHighAccuracy: true }
+              )
+            })
+            currentLocation = position
+          } catch (geoError) {
+            console.error('❌ Could not get current location:', geoError)
+            toast.error('Location not available. Please enable location services.')
+            return
+          }
+        }
+
+        try {
+          // Call backend API to confirm order ID
+          console.log('📦 Confirming order ID:', orderId, 'with orderId:', confirmedOrderId)
+          const response = await deliveryAPI.confirmOrderId(orderId, confirmedOrderId, {
+            lat: currentLocation[0],
+            lng: currentLocation[1]
+          })
+          
+          console.log('✅ Order ID confirmed, response:', response.data)
+          
+          if (response.data?.success && response.data.data) {
+            const orderData = response.data.data
+            const order = orderData.order || orderData
+            const routeData = orderData.route || order.deliveryState?.routeToDelivery
+            
+            // Update selectedRestaurant with customer address
+            if (order && selectedRestaurant) {
+              const customerCoords = order.address?.location?.coordinates
+              const customerLat = customerCoords?.[1]
+              const customerLng = customerCoords?.[0]
+              
+              if (customerLat && customerLng) {
+                const updatedRestaurant = {
+                  ...selectedRestaurant,
+                  customerName: order.userId?.name || selectedRestaurant.customerName,
+                  customerAddress: order.address?.formattedAddress || 
+                                  (order.address?.street ? `${order.address.street}, ${order.address.city || ''}, ${order.address.state || ''}`.trim() : '') ||
+                                  selectedRestaurant.customerAddress,
+                  customerLat: customerLat,
+                  customerLng: customerLng
+                }
+                setSelectedRestaurant(updatedRestaurant)
+                
+                // Calculate route from delivery boy's live location to customer using Directions API
+                console.log('🗺️ Calculating route to customer using Directions API...')
+                console.log('📍 From (Delivery Boy Live Location):', currentLocation)
+                console.log('📍 To (Customer):', { lat: customerLat, lng: customerLng })
+                
+                try {
+                  const directionsResult = await calculateRouteWithDirectionsAPI(
+                    currentLocation,
+                    { lat: customerLat, lng: customerLng }
+                  )
+                  
+                  if (directionsResult) {
+                    console.log('✅ Route to customer calculated with Directions API')
+                    setDirectionsResponse(directionsResult)
+                    
+                    // Show route on main map
+                    if (window.deliveryMapInstance && directionsRendererRef.current) {
+                      directionsRendererRef.current.setDirections(directionsResult)
+                      const bounds = directionsResult.routes[0].bounds
+                      if (bounds) {
+                        window.deliveryMapInstance.fitBounds(bounds, { padding: 100 })
+                      }
+                    }
+                  } else if (routeData && routeData.coordinates && routeData.coordinates.length > 0) {
+                    // Fallback: Use backend route
+                    setRoutePolyline(routeData.coordinates)
+                    updateRoutePolyline(routeData.coordinates)
+                  }
+                } catch (routeError) {
+                  console.error('❌ Error calculating route to customer:', routeError)
+                  // Use backend route as fallback
+                  if (routeData && routeData.coordinates && routeData.coordinates.length > 0) {
+                    setRoutePolyline(routeData.coordinates)
+                    updateRoutePolyline(routeData.coordinates)
+                  }
+                }
+                
+                // Start monitoring location for "Reached Drop" detection
+                // This will be handled by a useEffect that monitors distance to customer
+              }
+            }
+            
+            // Update selectedRestaurant status to out_for_delivery
+            if (selectedRestaurant) {
+              setSelectedRestaurant({
+                ...selectedRestaurant,
+                orderStatus: 'out_for_delivery',
+                deliveryPhase: 'en_route_to_delivery'
+              });
+            }
+            
+            // Don't show reached drop popup immediately - it will appear when delivery boy reaches customer location
+            // The popup will be triggered by location monitoring (see useEffect for reached drop detection)
+            
+          } else {
+            console.error('❌ Failed to confirm order ID:', response.data)
+            toast.error(response.data?.message || 'Failed to confirm order ID. Please try again.')
+          }
+        } catch (error) {
+          console.error('❌ Error confirming order ID:', error)
+          toast.error(error.response?.data?.message || 'Failed to confirm order ID. Please try again.')
+        }
         
         // Reset after animation
         setTimeout(() => {
@@ -2076,6 +2393,37 @@ export default function DeliveryHome() {
     orderIdConfirmSwipeStartX.current = 0
     orderIdConfirmSwipeStartY.current = 0
     orderIdConfirmIsSwiping.current = false
+  }
+
+  // Handle Start Navigation Button - Opens Google Maps
+  const handleStartNavigation = () => {
+    // Get customer location from selectedRestaurant
+    const customerLat = selectedRestaurant?.customerLat;
+    const customerLng = selectedRestaurant?.customerLng;
+    
+    if (!customerLat || !customerLng) {
+      console.error('❌ Customer location not available');
+      toast.error('Customer location not found');
+      return;
+    }
+
+    console.log('🗺️ Opening Google Maps for navigation to customer:', { lat: customerLat, lng: customerLng });
+
+    // Open Google Maps with destination set (Deep Link)
+    // travelmode=two_wheeler: Bike mode for delivery boys
+    // dir_action=navigate: Direct navigation mode
+    const mapUrl = `https://www.google.com/maps/dir/?api=1&destination=${customerLat},${customerLng}&travelmode=two_wheeler&dir_action=navigate`;
+    
+    // Open in new tab/window (mobile will open Google Maps app)
+    window.open(mapUrl, '_blank');
+
+    // Show success message
+    toast.success('Opening Google Maps for navigation 🏍️', {
+      duration: 2000
+    });
+
+    // Note: Customer notification is already sent when order ID was confirmed (in confirmOrderId backend)
+    // So we don't need to call another API here
   }
 
   // Handle Order Delivered button swipe
@@ -2126,10 +2474,92 @@ export default function DeliveryHome() {
       setOrderDeliveredIsAnimatingToComplete(true)
       setOrderDeliveredButtonProgress(1)
 
-      // Close popup after animation and show customer review
-      setTimeout(() => {
+      // Close popup after animation, complete delivery, and show customer review
+      setTimeout(async () => {
         setShowOrderDeliveredAnimation(false)
-        setShowCustomerReviewPopup(true)
+        
+        // Get order ID - prioritize orderId (string) over id (MongoDB _id) for better compatibility
+        // Backend accepts both _id and orderId, but orderId is more reliable
+        const orderId = selectedRestaurant?.orderId || selectedRestaurant?.id || newOrder?.orderId || newOrder?.orderMongoId
+        
+        console.log('🔍 Order ID lookup for complete delivery:', {
+          selectedRestaurantId: selectedRestaurant?.id,
+          selectedRestaurantOrderId: selectedRestaurant?.orderId,
+          newOrderMongoId: newOrder?.orderMongoId,
+          newOrderId: newOrder?.orderId,
+          finalOrderId: orderId
+        })
+        
+        if (orderId) {
+          try {
+            // Call backend API to complete delivery
+            console.log('📦 Completing delivery for order:', orderId)
+            const response = await deliveryAPI.completeDelivery(orderId)
+            
+            if (response.data?.success) {
+              console.log('✅ Delivery completed successfully')
+              
+              // Get earnings from response
+              const earnings = response.data.data?.earnings?.amount || 0
+              
+              // Update selectedRestaurant with earnings and delivered status
+              if (selectedRestaurant) {
+                setSelectedRestaurant({
+                  ...selectedRestaurant,
+                  estimatedEarnings: earnings,
+                  amount: earnings,
+                  orderStatus: 'delivered', // Mark order as delivered
+                  status: 'delivered', // Also update status field
+                  deliveryPhase: 'completed', // Mark delivery phase as completed
+                  deliveryState: {
+                    ...selectedRestaurant.deliveryState,
+                    status: 'delivered',
+                    currentPhase: 'completed'
+                  }
+                })
+              }
+              
+              // Clear reached drop popup if it's still showing
+              setShowReachedDropPopup(false)
+              
+              // Show customer review popup
+              setShowCustomerReviewPopup(true)
+            } else {
+              console.error('❌ Failed to complete delivery:', response.data)
+              toast.error(response.data?.message || 'Failed to complete delivery. Please try again.')
+              // Clear reached drop popup if showing
+              setShowReachedDropPopup(false)
+              // Still show review popup even if API call fails
+              setShowCustomerReviewPopup(true)
+            }
+          } catch (error) {
+            console.error('❌ Error completing delivery:', error)
+            console.error('❌ Error details:', {
+              message: error.message,
+              response: error.response?.data,
+              status: error.response?.status,
+              orderId: orderId || 'unknown',
+              selectedRestaurant: selectedRestaurant,
+              newOrder: newOrder
+            })
+            
+            // Show specific error message
+            const errorMessage = error.response?.data?.message || 
+                               (error.response?.status === 404 ? 'Order not found. Please refresh and try again.' : 'Failed to complete delivery. Please try again.')
+            toast.error(errorMessage)
+            
+            // Clear reached drop popup if showing
+            setShowReachedDropPopup(false)
+            
+            // Still show review popup even if API call fails (for UX)
+            setShowCustomerReviewPopup(true)
+          }
+        } else {
+          // Clear reached drop popup if showing
+          setShowReachedDropPopup(false)
+          // Show review popup even if no order ID (fallback)
+          setShowCustomerReviewPopup(true)
+        }
         
         // Reset after animation
         setTimeout(() => {
@@ -3418,6 +3848,349 @@ export default function DeliveryHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routePolyline?.length])
 
+  // Handle directionsResponse updates - Show route on main map when directions are calculated
+  useEffect(() => {
+    if (!directionsResponse || !directionsResponse.routes || directionsResponse.routes.length === 0) {
+      return;
+    }
+
+    if (!window.deliveryMapInstance || !window.google || !window.google.maps) {
+      console.warn('⚠️ Map not ready for directions display');
+      return;
+    }
+
+    console.log('🗺️ Showing directions route on main map:', directionsResponse);
+
+    // Clear any existing fallback polyline to avoid conflicts
+    if (routePolylineRef.current) {
+      routePolylineRef.current.setMap(null);
+    }
+
+    // Initialize DirectionsRenderer for main map if not exists
+    if (!directionsRendererRef.current) {
+      console.log('📦 Creating DirectionsRenderer for main map');
+      directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
+        map: window.deliveryMapInstance,
+        suppressMarkers: true, // Hide default A/B markers - we'll use custom markers
+        polylineOptions: {
+          strokeColor: '#4285F4', // Bright blue like Zomato
+          strokeWeight: 10, // Even thicker for better visibility
+          strokeOpacity: 1.0, // Fully opaque for better visibility
+          zIndex: 1000, // High z-index to ensure it's above other elements
+          icons: [] // No custom icons, just solid line
+        },
+        preserveViewport: false // Auto-fit bounds to route
+      });
+      console.log('✅ DirectionsRenderer created with bright blue polyline');
+      
+      // Ensure it's visible by explicitly setting map
+      directionsRendererRef.current.setMap(window.deliveryMapInstance);
+    } else {
+      // Ensure renderer is attached to main map
+      directionsRendererRef.current.setMap(window.deliveryMapInstance);
+      // Update polyline options to ensure visibility
+      directionsRendererRef.current.setOptions({
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: '#4285F4', // Bright blue like Zomato
+          strokeWeight: 10, // Even thicker for better visibility
+          strokeOpacity: 1.0, // Fully opaque
+          zIndex: 1000, // High z-index
+          icons: [] // No custom icons
+        },
+        preserveViewport: false
+      });
+      console.log('✅ DirectionsRenderer re-attached to main map with updated styling');
+    }
+
+    // Set directions response to renderer
+    try {
+      // Validate directionsResponse is a valid DirectionsResult object
+      if (!directionsResponse || typeof directionsResponse !== 'object' || !directionsResponse.routes || !Array.isArray(directionsResponse.routes) || directionsResponse.routes.length === 0) {
+        console.error('❌ Invalid directionsResponse:', directionsResponse);
+        return;
+      }
+
+      // Validate it's a Google Maps DirectionsResult (has status property)
+      if (!directionsResponse.request || !directionsResponse.routes[0]?.legs) {
+        console.error('❌ directionsResponse is not a valid Google Maps DirectionsResult');
+        return;
+      }
+
+      // Clear any existing polyline first to ensure clean render
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+
+      // Ensure renderer is attached to map BEFORE setting directions
+      directionsRendererRef.current.setMap(window.deliveryMapInstance);
+
+      // Set new directions directly - Google Maps will replace existing directions
+      // Don't call setDirections(null) - it's not supported
+      directionsRendererRef.current.setDirections(directionsResponse);
+      console.log('✅ Directions set on main map renderer');
+      console.log('📍 Route details:', {
+        routes: directionsResponse.routes?.length || 0,
+        legs: directionsResponse.routes?.[0]?.legs?.length || 0,
+        distance: directionsResponse.routes?.[0]?.legs?.[0]?.distance?.text,
+        duration: directionsResponse.routes?.[0]?.legs?.[0]?.duration?.text
+      });
+
+      // Force update polyline options again after setting directions to ensure visibility
+      directionsRendererRef.current.setOptions({
+        suppressMarkers: true,
+        polylineOptions: {
+          strokeColor: '#4285F4', // Bright blue like Zomato
+          strokeWeight: 10, // Even thicker for better visibility
+          strokeOpacity: 1.0, // Fully opaque
+          zIndex: 1000, // High z-index to ensure it's above other elements
+          icons: [] // No custom icons, just solid line
+        },
+        preserveViewport: false
+      });
+
+      // Fit bounds to show entire route
+      const bounds = directionsResponse.routes[0].bounds;
+      if (bounds) {
+        window.deliveryMapInstance.fitBounds(bounds, { padding: 100 });
+        console.log('✅ Map bounds fitted to route');
+      }
+
+      // Force a redraw after a short delay to ensure polyline is visible
+      setTimeout(() => {
+        if (directionsRendererRef.current && directionsRendererRef.current.getMap()) {
+          const currentDirections = directionsRendererRef.current.getDirections();
+          if (currentDirections) {
+            // Force redraw by re-setting options
+            directionsRendererRef.current.setOptions({
+              polylineOptions: {
+                strokeColor: '#4285F4',
+                strokeWeight: 10,
+                strokeOpacity: 1.0,
+                zIndex: 1000
+              }
+            });
+            console.log('🔄 Forced polyline redraw for better visibility');
+          }
+        }
+      }, 500);
+    } catch (error) {
+      console.error('❌ Error setting directions on renderer:', error);
+      console.error('❌ directionsResponse type:', typeof directionsResponse);
+      console.error('❌ directionsResponse:', directionsResponse);
+    }
+  }, [directionsResponse])
+
+  // Restore active order from localStorage on page load/refresh
+  useEffect(() => {
+    const restoreActiveOrder = async () => {
+      try {
+        const savedOrder = localStorage.getItem('deliveryActiveOrder');
+        if (!savedOrder) {
+          console.log('📦 No active order found in localStorage');
+          return;
+        }
+
+        const activeOrderData = JSON.parse(savedOrder);
+        console.log('📦 Found active order in localStorage:', activeOrderData);
+
+        // Get order ID from saved data
+        const orderId = activeOrderData.orderId || activeOrderData.restaurantInfo?.id || activeOrderData.restaurantInfo?.orderId;
+        
+        if (!orderId) {
+          console.log('⚠️ No order ID found in saved data, removing from localStorage');
+          localStorage.removeItem('deliveryActiveOrder');
+          setSelectedRestaurant(null);
+          return;
+        }
+
+        // Verify order still exists in database before restoring
+        try {
+          console.log('🔍 Verifying order exists in database:', orderId);
+          const orderResponse = await deliveryAPI.getOrderDetails(orderId);
+          
+          if (!orderResponse.data?.success || !orderResponse.data?.data) {
+            console.log('⚠️ Order not found in database, removing from localStorage');
+            localStorage.removeItem('deliveryActiveOrder');
+            setSelectedRestaurant(null);
+            return;
+          }
+
+          const order = orderResponse.data.data;
+          
+          // Check if order is cancelled or deleted
+          if (order.status === 'cancelled' || order.status === 'delivered') {
+            console.log(`⚠️ Order is ${order.status}, removing from localStorage`);
+            localStorage.removeItem('deliveryActiveOrder');
+            setSelectedRestaurant(null);
+            return;
+          }
+
+          // Check if order is still assigned to current delivery partner
+          // (This check will be done by backend, but we can verify here too)
+          console.log('✅ Order verified in database, restoring...');
+        } catch (verifyError) {
+          // If order doesn't exist (404) or any other error, clear localStorage
+          console.log('⚠️ Error verifying order or order not found:', verifyError.response?.status || verifyError.message);
+          if (verifyError.response?.status === 404 || verifyError.response?.status === 403) {
+            console.log('⚠️ Order not found or not assigned, removing from localStorage');
+            localStorage.removeItem('deliveryActiveOrder');
+            setSelectedRestaurant(null);
+            return;
+          }
+          // For other errors (network, etc.), still try to restore but log warning
+          console.warn('⚠️ Could not verify order, but restoring anyway:', verifyError.message);
+        }
+
+        // Check if order is still valid (not too old - e.g., within 24 hours)
+        const acceptedAt = new Date(activeOrderData.acceptedAt);
+        const hoursSinceAccepted = (Date.now() - acceptedAt.getTime()) / (1000 * 60 * 60);
+        if (hoursSinceAccepted > 24) {
+          console.log('⚠️ Active order is too old, removing from localStorage');
+          localStorage.removeItem('deliveryActiveOrder');
+          setSelectedRestaurant(null);
+          return;
+        }
+
+        // Restore selectedRestaurant state
+        if (activeOrderData.restaurantInfo) {
+          setSelectedRestaurant(activeOrderData.restaurantInfo);
+          console.log('✅ Restored selectedRestaurant from localStorage');
+        }
+
+        // Wait for map to be ready
+        const waitForMap = () => {
+          if (!window.deliveryMapInstance || !window.google || !window.google.maps) {
+            setTimeout(waitForMap, 200);
+            return;
+          }
+
+          console.log('🗺️ Map ready, restoring route...');
+
+          // Recalculate route using Directions API (preferred) or use saved coordinates (fallback)
+          // Don't restore directionsResponse from localStorage - Google Maps objects can't be serialized
+          if (activeOrderData.restaurantInfo && activeOrderData.restaurantInfo.lat && activeOrderData.restaurantInfo.lng && riderLocation && riderLocation.length === 2) {
+            // Try to recalculate with Directions API first (if flag indicates we had Directions API before)
+            if (activeOrderData.hasDirectionsAPI) {
+              console.log('🔄 Recalculating route with Directions API for restored order...');
+              calculateRouteWithDirectionsAPI(
+                riderLocation,
+                { lat: activeOrderData.restaurantInfo.lat, lng: activeOrderData.restaurantInfo.lng }
+              ).then(result => {
+                if (result && result.routes && result.routes.length > 0) {
+                  setDirectionsResponse(result);
+                  console.log('✅ Route recalculated with Directions API and restored');
+                } else {
+                  // Fallback to coordinates if Directions API fails
+                  if (activeOrderData.routeCoordinates && activeOrderData.routeCoordinates.length > 0) {
+                    setRoutePolyline(activeOrderData.routeCoordinates);
+                    console.log('✅ Using fallback route coordinates from localStorage');
+                  }
+                }
+              }).catch(err => {
+                console.error('❌ Error recalculating route with Directions API:', err);
+                // Fallback to coordinates
+                if (activeOrderData.routeCoordinates && activeOrderData.routeCoordinates.length > 0) {
+                  setRoutePolyline(activeOrderData.routeCoordinates);
+                  console.log('✅ Using fallback route coordinates from localStorage');
+                }
+              });
+            } else if (activeOrderData.routeCoordinates && activeOrderData.routeCoordinates.length > 0) {
+              // Use saved coordinates if we don't have Directions API flag
+              setRoutePolyline(activeOrderData.routeCoordinates);
+              console.log('✅ Restored route polyline from localStorage');
+            }
+          } else if (activeOrderData.routeCoordinates && activeOrderData.routeCoordinates.length > 0) {
+            // Fallback: Use coordinates if restaurant info or rider location not available
+            setRoutePolyline(activeOrderData.routeCoordinates);
+            console.log('✅ Restored route polyline from localStorage (fallback)');
+          }
+        };
+
+        waitForMap();
+      } catch (error) {
+        console.error('❌ Error restoring active order:', error);
+        // Clear localStorage and state if there's an error
+        localStorage.removeItem('deliveryActiveOrder');
+        setSelectedRestaurant(null);
+        setShowReachedDropPopup(false);
+        setShowOrderDeliveredAnimation(false);
+        setShowCustomerReviewPopup(false);
+        setShowPaymentPage(false);
+      }
+    };
+
+    restoreActiveOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Run only on mount - calculateRouteWithDirectionsAPI is stable
+
+  // Utility function to clear order data when order is deleted or cancelled
+  const clearOrderData = useCallback(() => {
+    console.log('🧹 Clearing order data...');
+    localStorage.removeItem('deliveryActiveOrder');
+    setSelectedRestaurant(null);
+    setShowReachedDropPopup(false);
+    setShowOrderDeliveredAnimation(false);
+    setShowCustomerReviewPopup(false);
+    setShowPaymentPage(false);
+    setShowNewOrderPopup(false);
+    setShowreachedPickupPopup(false);
+    setShowOrderIdConfirmationPopup(false);
+    clearNewOrder();
+    clearOrderReady();
+  }, [clearNewOrder, clearOrderReady])
+
+  // Periodically verify order still exists (every 30 seconds) to catch deletions
+  useEffect(() => {
+    if (!selectedRestaurant?.id && !selectedRestaurant?.orderId) {
+      return; // No active order to verify
+    }
+
+    const orderId = selectedRestaurant.orderId || selectedRestaurant.id;
+    
+    const verifyOrderInterval = setInterval(async () => {
+      try {
+        const orderResponse = await deliveryAPI.getOrderDetails(orderId);
+        
+        if (!orderResponse.data?.success || !orderResponse.data?.data) {
+          console.log('⚠️ Order no longer exists, clearing data');
+          clearOrderData();
+          return;
+        }
+
+        const order = orderResponse.data.data;
+        
+        // Check if order is cancelled or deleted
+        if (order.status === 'cancelled') {
+          console.log('⚠️ Order is cancelled, clearing data');
+          clearOrderData();
+          return;
+        }
+
+        // Update order status if it changed
+        if (order.status && order.status !== selectedRestaurant.orderStatus) {
+          setSelectedRestaurant(prev => ({
+            ...prev,
+            orderStatus: order.status,
+            status: order.status,
+            deliveryPhase: order.deliveryState?.currentPhase || prev?.deliveryPhase,
+            deliveryState: order.deliveryState || prev?.deliveryState
+          }));
+        }
+      } catch (error) {
+        if (error.response?.status === 404 || error.response?.status === 403) {
+          console.log('⚠️ Order not found or not assigned, clearing data');
+          clearOrderData();
+        }
+        // Ignore other errors (network issues, etc.)
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => {
+      clearInterval(verifyOrderInterval);
+    };
+  }, [selectedRestaurant?.id, selectedRestaurant?.orderId, clearOrderData])
+
   // Handle route polyline visibility toggle
   useEffect(() => {
     if (routePolylineRef.current) {
@@ -3467,6 +4240,87 @@ export default function DeliveryHome() {
       // clearOrderReady();
     }
   }, [orderReady])
+
+  // Monitor delivery boy's location for "Reached Drop" detection
+  // Show "Reached Drop" popup when delivery boy is within 100 meters of customer location
+  useEffect(() => {
+    // Get order status/phase to ensure we only show "Reached Drop" when order is out for delivery
+    const orderStatus = selectedRestaurant?.orderStatus || selectedRestaurant?.status || newOrder?.status || ''
+    const deliveryPhase = selectedRestaurant?.deliveryState?.currentPhase || selectedRestaurant?.deliveryPhase || ''
+    
+    // Only show "Reached Drop" if order is actually out for delivery or in en_route_to_delivery phase
+    // CRITICAL: Do NOT show if order is already delivered or completed
+    const isOutForDelivery = (orderStatus === 'out_for_delivery' || 
+                             deliveryPhase === 'en_route_to_delivery' ||
+                             orderStatus === 'ready') && // Sometimes order can be ready but not yet out_for_delivery
+                             orderStatus !== 'delivered' && // Don't show if already delivered
+                             deliveryPhase !== 'completed' && // Don't show if delivery is completed
+                             orderStatus !== 'completed' // Don't show if order is completed
+    
+    // Only monitor if we have customer location and order ID is confirmed (order is out for delivery)
+    if (!selectedRestaurant?.customerLat || !selectedRestaurant?.customerLng || 
+        !riderLocation || riderLocation.length !== 2 ||
+        !isOutForDelivery || // CRITICAL: Only check distance when order is actually out for delivery
+        showNewOrderPopup || // Don't show if new order popup is still showing (order not accepted yet)
+        showOrderIdConfirmationPopup || // Don't show if still confirming order ID
+        showreachedPickupPopup || // Don't show if still at pickup
+        showReachedDropPopup || // Don't show if already shown
+        showOrderDeliveredAnimation || // Don't show if already delivered
+        showCustomerReviewPopup || // Don't show if review popup is showing (order completed)
+        showPaymentPage) { // Don't show if payment page is showing (order completed)
+      return
+    }
+
+    // Calculate distance to customer location
+    const distanceInMeters = calculateDistanceInMeters(
+      riderLocation[0], // lat
+      riderLocation[1], // lng
+      selectedRestaurant.customerLat,
+      selectedRestaurant.customerLng
+    )
+
+    console.log(`📍 Distance to customer: ${distanceInMeters.toFixed(2)} meters`)
+
+    // Show "Reached Drop" popup when within 100 meters of customer location
+    if (distanceInMeters <= 100 && !showReachedDropPopup) {
+      console.log('✅ Delivery boy reached drop location, showing popup')
+      setShowReachedDropPopup(true)
+      
+      // Also update polyline in real-time as delivery boy approaches
+      // The polyline will shorten automatically as they get closer
+      if (window.deliveryMapInstance && selectedRestaurant.customerLat && selectedRestaurant.customerLng) {
+        calculateRouteWithDirectionsAPI(
+          riderLocation,
+          { lat: selectedRestaurant.customerLat, lng: selectedRestaurant.customerLng }
+        ).then(result => {
+          if (result && directionsRendererRef.current) {
+            directionsRendererRef.current.setDirections(result)
+            const bounds = result.routes[0].bounds
+            if (bounds) {
+              window.deliveryMapInstance.fitBounds(bounds, { padding: 100 })
+            }
+          }
+        }).catch(err => {
+          console.warn('⚠️ Route update failed:', err)
+        })
+      }
+    }
+  }, [
+    riderLocation?.[0] ?? null, 
+    riderLocation?.[1] ?? null, 
+    selectedRestaurant?.customerLat ?? null, 
+    selectedRestaurant?.customerLng ?? null,
+    selectedRestaurant?.orderStatus ?? newOrder?.status ?? null,
+    selectedRestaurant?.deliveryPhase ?? selectedRestaurant?.deliveryState?.currentPhase ?? null,
+    Boolean(showNewOrderPopup), 
+    Boolean(showOrderIdConfirmationPopup), 
+    Boolean(showreachedPickupPopup), 
+    Boolean(showReachedDropPopup), 
+    Boolean(showOrderDeliveredAnimation),
+    Boolean(showCustomerReviewPopup),
+    Boolean(showPaymentPage),
+    calculateDistanceInMeters
+  ])
 
   // Calculate heading from two coordinates (in degrees, 0-360)
   const calculateHeading = (lat1, lng1, lat2, lng2) => {
@@ -3581,15 +4435,21 @@ export default function DeliveryHome() {
           routePolylineRef.current = new window.google.maps.Polyline({
             path: path,
             geodesic: true,
-            strokeColor: '#4285F4', // Blue color
-            strokeOpacity: 0.8,
-            strokeWeight: 5,
+            strokeColor: '#4285F4', // Bright blue like Zomato
+            strokeOpacity: 1.0, // Fully opaque for better visibility
+            strokeWeight: 10, // Thicker line for better visibility
             map: map,
-            zIndex: 1
+            zIndex: 1000 // High z-index to ensure it's above other elements
           });
           console.log('✅ Route polyline created on map with', path.length, 'points');
         } else {
           routePolylineRef.current.setPath(path);
+          routePolylineRef.current.setOptions({
+            strokeColor: '#4285F4',
+            strokeOpacity: 1.0,
+            strokeWeight: 10,
+            zIndex: 1000
+          });
           routePolylineRef.current.setMap(map);
           console.log('✅ Route polyline updated on map with', path.length, 'points');
         }
@@ -5753,6 +6613,79 @@ export default function DeliveryHome() {
         </div>
       </BottomPopup>
 
+      {/* Start Navigation Button Card - Show when order is out_for_delivery */}
+      {selectedRestaurant && 
+       (selectedRestaurant.orderStatus === 'out_for_delivery' || 
+        selectedRestaurant.deliveryPhase === 'en_route_to_delivery') && 
+       !showReachedDropPopup && 
+       !showOrderDeliveredAnimation &&
+       !showCustomerReviewPopup &&
+       !showPaymentPage && (
+        <div className="fixed bottom-24 left-0 right-0 px-4 z-50">
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="bg-white rounded-2xl shadow-2xl p-5 border border-gray-100"
+          >
+            {/* Customer Info */}
+            <div className="mb-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-teal-600"
+                  >
+                    <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    Head to Customer Location
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-0.5">
+                    {selectedRestaurant?.customerName || 'Customer'}
+                  </p>
+                </div>
+              </div>
+              {selectedRestaurant?.customerAddress && (
+                <p className="text-xs text-gray-500 ml-13 truncate">
+                  {selectedRestaurant.customerAddress}
+                </p>
+              )}
+            </div>
+
+            {/* Start Navigation Button */}
+            <button
+              onClick={handleStartNavigation}
+              className="w-full bg-[#4285F4] hover:bg-[#357ae8] text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 active:scale-95"
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+              </svg>
+              <span>START NAVIGATION</span>
+            </button>
+
+            <p className="text-center text-xs text-gray-500 mt-3">
+              Opens Google Maps in Bike Mode 🏍️
+            </p>
+          </motion.div>
+        </div>
+      )}
+
       {/* Reached Drop Popup - Only show after order ID is confirmed */}
       <BottomPopup
         isOpen={showReachedDropPopup && !showOrderIdConfirmationPopup}
@@ -6023,7 +6956,39 @@ export default function DeliveryHome() {
 
             {/* Submit Button */}
             <button
-              onClick={() => {
+              onClick={async () => {
+                // Get order ID
+                const orderId = selectedRestaurant?.id || selectedRestaurant?.orderId
+                
+                // Save review to backend (if review endpoint exists) or update order
+                if (orderId && (customerRating > 0 || customerReviewText.trim())) {
+                  try {
+                    // For now, we'll save the review when completing delivery
+                    // But since delivery is already completed, we can log it or store it locally
+                    // In production, you'd want a separate review endpoint
+                    console.log('📝 Saving review:', {
+                      orderId,
+                      rating: customerRating,
+                      review: customerReviewText
+                    })
+                    
+                    // TODO: Call review API endpoint when available
+                    // For now, store in localStorage or send with next request
+                    if (orderId) {
+                      localStorage.setItem(`delivery_review_${orderId}`, JSON.stringify({
+                        rating: customerRating,
+                        review: customerReviewText,
+                        timestamp: new Date().toISOString()
+                      }))
+                    }
+                    
+                  } catch (error) {
+                    console.error('❌ Error saving review:', error)
+                    // Continue even if review save fails
+                  }
+                }
+                
+                // Close review popup and show payment/earnings page
                 setShowCustomerReviewPopup(false)
                 setShowPaymentPage(true)
               }}

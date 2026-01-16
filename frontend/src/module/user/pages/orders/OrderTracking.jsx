@@ -1,6 +1,7 @@
 import { useParams, Link, useSearchParams } from "react-router-dom"
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import { toast } from "sonner"
 import { 
   ArrowLeft, 
   Share2, 
@@ -136,6 +137,7 @@ const DeliveryMap = ({ orderId, order, isVisible }) => {
         userLiveCoords={userLiveCoords}
         userLocationAccuracy={userLocation?.accuracy}
         deliveryBoyData={deliveryBoyData}
+        order={order}
       />
     </motion.div>
   );
@@ -338,6 +340,44 @@ export default function OrderTracking() {
       setEstimatedTime((prev) => Math.max(0, prev - 1))
     }, 60000)
     return () => clearInterval(timer)
+  }, [])
+
+  // Listen for order status updates from socket (e.g., "Delivery partner on the way")
+  useEffect(() => {
+    const handleOrderStatusNotification = (event) => {
+      const { message, title, status, estimatedDeliveryTime } = event.detail;
+      
+      console.log('📢 Order status notification received:', { message, status });
+
+      // Update order status in UI
+      if (status === 'out_for_delivery') {
+        setOrderStatus('on_way');
+      }
+
+      // Show notification toast
+      if (message) {
+        toast.success(message, {
+          duration: 5000,
+          icon: '🏍️',
+          position: 'top-center',
+          description: estimatedDeliveryTime 
+            ? `Estimated delivery in ${Math.round(estimatedDeliveryTime / 60)} minutes`
+            : undefined
+        });
+
+        // Optional: Vibrate device if supported
+        if (navigator.vibrate) {
+          navigator.vibrate([200, 100, 200]);
+        }
+      }
+    };
+
+    // Listen for custom event from DeliveryTrackingMap
+    window.addEventListener('orderStatusNotification', handleOrderStatusNotification);
+
+    return () => {
+      window.removeEventListener('orderStatusNotification', handleOrderStatusNotification);
+    };
   }, [])
 
   const handleRefresh = async () => {

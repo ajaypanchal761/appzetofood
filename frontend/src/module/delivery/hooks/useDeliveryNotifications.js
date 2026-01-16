@@ -93,8 +93,8 @@ export const useDeliveryNotifications = () => {
 
     socketRef.current = io(socketUrl, {
       path: '/socket.io/',
-      transports: ['polling'],
-      upgrade: true,
+      transports: ['polling'], // Start with polling only
+      upgrade: false, // Disable WebSocket upgrade to prevent WebSocket connection errors
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
@@ -122,13 +122,23 @@ export const useDeliveryNotifications = () => {
     });
 
     socketRef.current.on('connect_error', (error) => {
-      // Only log if it's not a network/polling error (backend might be down)
-      // Socket.IO will automatically retry connection
-      if (error.type !== 'TransportError' && error.message !== 'xhr poll error') {
+      // Only log if it's not a network/polling/websocket error (backend might be down or WebSocket not available)
+      // Socket.IO will automatically retry connection and fall back to polling
+      const isTransportError = error.type === 'TransportError' || 
+                               error.message === 'xhr poll error' ||
+                               error.message?.includes('WebSocket') ||
+                               error.message?.includes('websocket') ||
+                               error.description === 0; // WebSocket upgrade failures
+      
+      if (!isTransportError) {
         console.error('❌ Delivery Socket connection error:', error);
       } else {
-        // Silently handle transport errors - backend might not be running
-        // Socket.IO will automatically retry with exponential backoff
+        // Silently handle transport errors - backend might not be running or WebSocket not available
+        // Socket.IO will automatically retry with exponential backoff and fall back to polling
+        // Only log in development for debugging
+        if (process.env.NODE_ENV === 'development') {
+          console.log('⏳ Delivery Socket: WebSocket upgrade failed, using polling fallback');
+        }
       }
       setIsConnected(false);
     });

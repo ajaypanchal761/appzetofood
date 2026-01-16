@@ -10,7 +10,8 @@ const DeliveryTrackingMap = ({
   customerCoords,
   userLiveCoords = null,
   userLocationAccuracy = null,
-  deliveryBoyData = null 
+  deliveryBoyData = null,
+  order = null
 }) => {
   const mapRef = useRef(null);
   const bikeMarkerRef = useRef(null);
@@ -25,6 +26,9 @@ const DeliveryTrackingMap = ({
   const [distance, setDistance] = useState("");
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [deliveryBoyLocation, setDeliveryBoyLocation] = useState(null);
+  const routePolylineRef = useRef(null);
+  const lastRouteUpdateRef = useRef(null);
 
   const backendUrl = API_BASE_URL.replace('/api', '');
   const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState("");
@@ -38,8 +42,8 @@ const DeliveryTrackingMap = ({
     })
   }, [])
 
-  // Draw route using Google Maps Directions API
-  const drawRoute = useCallback((start, end) => {
+  // Draw route using Google Maps Directions API with live updates
+  const drawRoute = useCallback((start, end, updateETA = true) => {
     if (!mapInstance.current || !directionsServiceRef.current || !directionsRendererRef.current) return;
 
     directionsServiceRef.current.route({
@@ -51,31 +55,73 @@ const DeliveryTrackingMap = ({
         directionsRendererRef.current.setDirections(result);
         
         // Calculate ETA and distance
-        const route = result.routes[0];
-        if (route.legs && route.legs.length > 0) {
-          const leg = route.legs[0];
-          const durationInMinutes = Math.ceil(leg.duration.value / 60);
-          const distanceInKm = (leg.distance.value / 1000).toFixed(1);
-          setEta(`${durationInMinutes} mins`);
-          setDistance(`${distanceInKm} km`);
+        if (updateETA) {
+          const route = result.routes[0];
+          if (route.legs && route.legs.length > 0) {
+            const leg = route.legs[0];
+            const durationInMinutes = Math.ceil(leg.duration.value / 60);
+            const distanceInKm = (leg.distance.value / 1000).toFixed(1);
+            setEta(`${durationInMinutes} mins`);
+            setDistance(`${distanceInKm} km`);
+          }
         }
       } else {
         console.error('Directions request failed:', status);
         // Fallback calculation
-        const R = 6371;
-        const dLat = (end.lat - start.lat) * Math.PI / 180;
-        const dLng = (end.lng - start.lng) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-          Math.cos(start.lat * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180) *
-          Math.sin(dLng/2) * Math.sin(dLng/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        const distanceKm = R * c;
-        const estimatedMinutes = Math.ceil((distanceKm / 30) * 60);
-        setDistance(`${distanceKm.toFixed(1)} km`);
-        setEta(`${estimatedMinutes} mins`);
+        if (updateETA) {
+          const R = 6371;
+          const dLat = (end.lat - start.lat) * Math.PI / 180;
+          const dLng = (end.lng - start.lng) * Math.PI / 180;
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(start.lat * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          const distanceKm = R * c;
+          const estimatedMinutes = Math.ceil((distanceKm / 30) * 60);
+          setDistance(`${distanceKm.toFixed(1)} km`);
+          setEta(`${estimatedMinutes} mins`);
+        }
       }
     });
   }, []);
+
+  // Determine which route to show based on order phase
+  const getRouteToShow = useCallback(() => {
+    if (!order || !deliveryBoyLocation) {
+      // No delivery boy location yet, show restaurant to customer
+      return { start: restaurantCoords, end: customerCoords };
+    }
+
+    const currentPhase = order.deliveryState?.currentPhase || 'assigned';
+    const status = order.deliveryState?.status || 'pending';
+
+    // Phase 1: Delivery boy going to restaurant (en_route_to_pickup)
+    if (currentPhase === 'en_route_to_pickup' || status === 'accepted') {
+      return { 
+        start: { lat: deliveryBoyLocation.lat, lng: deliveryBoyLocation.lng }, 
+        end: restaurantCoords 
+      };
+    }
+
+    // Phase 2: Delivery boy at restaurant (at_pickup) - show route to customer
+    if (currentPhase === 'at_pickup' || status === 'reached_pickup' || status === 'order_confirmed') {
+      return { 
+        start: restaurantCoords, 
+        end: customerCoords 
+      };
+    }
+
+    // Phase 3: Delivery boy going to customer (en_route_to_delivery)
+    if (currentPhase === 'en_route_to_delivery' || status === 'en_route_to_delivery' || order.status === 'out_for_delivery') {
+      return { 
+        start: { lat: deliveryBoyLocation.lat, lng: deliveryBoyLocation.lng }, 
+        end: customerCoords 
+      };
+    }
+
+    // Default: Show restaurant to customer
+    return { start: restaurantCoords, end: customerCoords };
+  }, [order, deliveryBoyLocation, restaurantCoords, customerCoords]);
 
   // Move bike smoothly with rotation
   const moveBikeSmoothly = useCallback((lat, lng, heading) => {
@@ -160,7 +206,9 @@ const DeliveryTrackingMap = ({
     socketRef.current.on(`location-receive-${orderId}`, (data) => {
       console.log('📍 Received location update:', data);
       if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
-        setCurrentLocation({ lat: data.lat, lng: data.lng, heading: data.heading || 0 });
+        const location = { lat: data.lat, lng: data.lng, heading: data.heading || 0 };
+        setCurrentLocation(location);
+        setDeliveryBoyLocation(location);
         moveBikeSmoothly(data.lat, data.lng, data.heading || 0);
       }
     });
@@ -168,8 +216,23 @@ const DeliveryTrackingMap = ({
     socketRef.current.on(`current-location-${orderId}`, (data) => {
       console.log('📍 Received current location:', data);
       if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
-        setCurrentLocation({ lat: data.lat, lng: data.lng, heading: data.heading || 0 });
+        const location = { lat: data.lat, lng: data.lng, heading: data.heading || 0 };
+        setCurrentLocation(location);
+        setDeliveryBoyLocation(location);
         moveBikeSmoothly(data.lat, data.lng, data.heading || 0);
+      }
+    });
+
+    // Listen for order status updates (e.g., "Delivery partner on the way")
+    socketRef.current.on('order_status_update', (data) => {
+      console.log('📢 Received order status update:', data);
+      
+      // Trigger custom event so OrderTracking component can handle notification
+      // This avoids circular dependencies and keeps notification logic in OrderTracking
+      if (window.dispatchEvent && data.message) {
+        window.dispatchEvent(new CustomEvent('orderStatusNotification', {
+          detail: data
+        }));
       }
     });
 
@@ -177,6 +240,7 @@ const DeliveryTrackingMap = ({
       if (socketRef.current) {
         socketRef.current.off(`location-receive-${orderId}`);
         socketRef.current.off(`current-location-${orderId}`);
+        socketRef.current.off('order_status_update');
         socketRef.current.disconnect();
       }
     };
@@ -364,10 +428,13 @@ const DeliveryTrackingMap = ({
           });
         }
 
-        // Draw route
+        // Draw route based on order phase
         mapInstance.current.addListener('tilesloaded', () => {
           setIsMapLoaded(true);
-          drawRoute(restaurantCoords, customerCoords);
+          
+          // Initial route - will be updated when delivery boy location is received
+          // Default: show restaurant to customer (will update when delivery boy location arrives)
+          drawRoute(restaurantCoords, customerCoords, true);
         });
 
         console.log('✅ Google Map initialized successfully');
@@ -375,7 +442,30 @@ const DeliveryTrackingMap = ({
         console.error('❌ Map initialization error:', error);
       }
     }
-  }, [restaurantCoords, customerCoords, drawRoute]);
+  }, [restaurantCoords, customerCoords, drawRoute, getRouteToShow, deliveryBoyLocation]);
+
+  // Update route when delivery boy location or order phase changes
+  useEffect(() => {
+    if (!isMapLoaded) return;
+    
+    // Throttle route updates to avoid too many API calls
+    const now = Date.now();
+    if (lastRouteUpdateRef.current && (now - lastRouteUpdateRef.current) < 10000) {
+      return; // Skip if updated less than 10 seconds ago
+    }
+    
+    const route = getRouteToShow();
+    if (route.start && route.end) {
+      lastRouteUpdateRef.current = now;
+      drawRoute(route.start, route.end, true);
+      console.log('🔄 Route updated:', {
+        phase: order?.deliveryState?.currentPhase,
+        status: order?.deliveryState?.status,
+        from: route.start,
+        to: route.end
+      });
+    }
+  }, [isMapLoaded, deliveryBoyLocation, order?.deliveryState?.currentPhase, order?.deliveryState?.status, order?.status, getRouteToShow, drawRoute, order]);
 
   // Update bike when location changes
   useEffect(() => {

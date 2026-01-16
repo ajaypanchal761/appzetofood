@@ -121,22 +121,89 @@ deliveryBoyCommissionSchema.statics.findApplicableRule = async function(distance
 
 // Static method to calculate commission for a given distance
 deliveryBoyCommissionSchema.statics.calculateCommission = async function(distance) {
-  const rule = await this.findApplicableRule(distance);
-  if (!rule) {
-    throw new Error('No commission rule found for the given distance');
+  // Get all active rules sorted by minDistance (ascending)
+  const rules = await this.find({ status: true }).sort({ minDistance: 1 });
+  
+  if (!rules || rules.length === 0) {
+    throw new Error('No commission rules found');
   }
   
-  // Commission = Base Payout + (Distance × Commission Per Km)
-  const commission = rule.basePayout + (distance * rule.commissionPerKm);
+  // Find the applicable rule based on distance
+  // Logic: Find the rule where distance falls within the range (minDistance <= distance <= maxDistance)
+  // Or find the highest tier rule if distance exceeds all maxDistance limits
+  let applicableRule = null;
+  
+  // First, try to find exact match (distance within rule's range)
+  for (const rule of rules) {
+    if (distance >= rule.minDistance) {
+      // Check if distance is within this rule's range
+      if (rule.maxDistance === null || rule.maxDistance === undefined) {
+        // Unlimited range (e.g., 10+ km) - this is the highest tier
+        applicableRule = rule;
+        break;
+      } else if (distance <= rule.maxDistance) {
+        // Distance is within this rule's range (e.g., 4-10 km)
+        applicableRule = rule;
+        break;
+      }
+      // If distance > maxDistance, continue to next (higher) rule
+      // Keep this rule as potential fallback
+      applicableRule = rule;
+    }
+  }
+  
+  // If distance is less than all minDistances, use first rule (lowest tier)
+  // This should typically be 0-4km with base payout only
+  if (!applicableRule || distance < applicableRule.minDistance) {
+    applicableRule = rules[0];
+  }
+  
+  // If still no rule found (edge case), use first rule
+  if (!applicableRule) {
+    applicableRule = rules[0];
+  }
+  
+  // Calculate commission
+  // IMPORTANT: Base payout is ALWAYS given to delivery boy
+  let basePayout = applicableRule.basePayout;
+  let distanceCommission = 0;
+  
+  // Per km commission is only added if distance >= rule's minDistance
+  // Example scenarios:
+  // - Distance = 2 km, Rule = 4-10 km (₹4/km): commission = base only (2 < 4)
+  // - Distance = 7 km, Rule = 4-10 km (₹4/km): commission = base + (7 × 4)
+  // - Distance = 15 km, Rule = 10+ km (₹10/km): commission = base + (15 × 10)
+  if (distance >= applicableRule.minDistance) {
+    // Apply per km commission for the entire distance
+    distanceCommission = distance * applicableRule.commissionPerKm;
+  }
+  // If distance < minDistance, only base payout is given (distanceCommission = 0)
+  
+  const commission = basePayout + distanceCommission;
+  
+  console.log(`📊 Commission calculation for ${distance.toFixed(2)} km:`, {
+    rule: applicableRule.name,
+    minDistance: applicableRule.minDistance,
+    maxDistance: applicableRule.maxDistance,
+    basePayout: basePayout,
+    commissionPerKm: applicableRule.commissionPerKm,
+    perKmApplied: distance >= applicableRule.minDistance,
+    distanceCommission: distanceCommission,
+    totalCommission: commission
+  });
   
   return {
-    rule,
+    rule: applicableRule,
     commission: Math.round(commission * 100) / 100, // Round to 2 decimal places
     breakdown: {
-      basePayout: rule.basePayout,
+      basePayout: basePayout,
       distance: distance,
-      commissionPerKm: rule.commissionPerKm,
-      distanceCommission: distance * rule.commissionPerKm
+      minDistance: applicableRule.minDistance,
+      maxDistance: applicableRule.maxDistance,
+      commissionPerKm: applicableRule.commissionPerKm,
+      distanceCommission: distanceCommission,
+      // Flag to indicate if per km commission was applied
+      perKmApplied: distance >= applicableRule.minDistance
     }
   };
 };

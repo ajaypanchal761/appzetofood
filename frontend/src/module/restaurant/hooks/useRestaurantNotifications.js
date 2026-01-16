@@ -50,7 +50,7 @@ export const useRestaurantNotifications = () => {
     socketRef.current = io(socketUrl, {
       path: '/socket.io/', // Explicitly set Socket.IO path
       transports: ['polling'], // Start with polling only - more reliable
-      upgrade: true, // Allow upgrade to websocket if available
+      upgrade: false, // Disable WebSocket upgrade to prevent WebSocket connection errors
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
@@ -86,8 +86,12 @@ export const useRestaurantNotifications = () => {
 
     // Listen for connection errors
     socketRef.current.on('connect_error', (error) => {
-      // Only log if it's not a network error (backend not running)
-      if (error.message && !error.message.includes('websocket error') && !error.message.includes('xhr poll error')) {
+      // Only log if it's not a transport/network error (backend might be down or network issue)
+      // Socket.IO will automatically retry connection
+      if (error.type !== 'TransportError' && 
+          error.message !== 'xhr poll error' && 
+          error.message !== 'xhr post error' &&
+          !error.message?.includes('websocket error')) {
         console.error('❌ Restaurant Socket connection error:', error);
         console.error('❌ Error details:', {
           message: error.message,
@@ -95,8 +99,12 @@ export const useRestaurantNotifications = () => {
           description: error.description
         });
       } else {
-        // Backend is likely not running - silent fail, will retry
-        console.log('⏳ Waiting for backend server...');
+        // Silently handle transport errors - backend might not be running or network issue
+        // Socket.IO will automatically retry with exponential backoff
+        // Only log in development for debugging
+        if (process.env.NODE_ENV === 'development') {
+          console.log('⏳ Restaurant Socket: Waiting for backend server or network issue...');
+        }
       }
       setIsConnected(false);
     });
