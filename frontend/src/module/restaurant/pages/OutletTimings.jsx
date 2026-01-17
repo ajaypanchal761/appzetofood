@@ -16,12 +16,17 @@ const stringToTime = (timeString) => {
     return new Date(2000, 0, 1, 9, 0) // Default to 9:00 AM
   }
   const [hours, minutes] = timeString.split(":").map(Number)
-  return new Date(2000, 0, 1, hours || 9, minutes || 0)
+  // Ensure valid hours (0-23) and minutes (0-59)
+  const validHours = Math.max(0, Math.min(23, hours || 9))
+  const validMinutes = Math.max(0, Math.min(59, minutes || 0))
+  return new Date(2000, 0, 1, validHours, validMinutes)
 }
 
 // Helper function to convert Date object to "HH:mm" string
 const timeToString = (date) => {
-  if (!date) return "09:00"
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    return "09:00"
+  }
   const hours = date.getHours().toString().padStart(2, "0")
   const minutes = date.getMinutes().toString().padStart(2, "0")
   return `${hours}:${minutes}`
@@ -172,8 +177,22 @@ export default function OutletTimings() {
   }
 
   const handleTimeChange = (day, timeType, newTime) => {
+    if (!newTime) {
+      console.warn('⚠️ No time value received in handleTimeChange')
+      return
+    }
+    
     isInternalUpdate.current = true
     const timeString = timeToString(newTime)
+    
+    // Validate time string format
+    if (!timeString || !timeString.includes(":")) {
+      console.warn('⚠️ Invalid time string generated:', timeString)
+      return
+    }
+    
+    console.log(`🕐 Time changed for ${day} - ${timeType}: ${timeString}`)
+    
     setDays(prev => ({
       ...prev,
       [day]: {
@@ -275,7 +294,18 @@ export default function OutletTimings() {
                                 <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50/60">
                                   <MobileTimePicker
                                     value={stringToTime(dayData.openingTime)}
-                                    onChange={(newValue) => handleTimeChange(day, "openingTime", newValue)}
+                                    onChange={(newValue) => {
+                                      console.log('🕐 Opening time picker onChange:', newValue)
+                                      if (newValue) {
+                                        handleTimeChange(day, "openingTime", newValue)
+                                      }
+                                    }}
+                                    onAccept={(newValue) => {
+                                      console.log('✅ Opening time picker onAccept:', newValue)
+                                      if (newValue) {
+                                        handleTimeChange(day, "openingTime", newValue)
+                                      }
+                                    }}
                                     slotProps={{
                                       textField: {
                                         variant: "outlined",
@@ -320,7 +350,18 @@ export default function OutletTimings() {
                                 <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50/60">
                                   <MobileTimePicker
                                     value={stringToTime(dayData.closingTime)}
-                                    onChange={(newValue) => handleTimeChange(day, "closingTime", newValue)}
+                                    onChange={(newValue) => {
+                                      console.log('🕐 Closing time picker onChange:', newValue)
+                                      if (newValue) {
+                                        handleTimeChange(day, "closingTime", newValue)
+                                      }
+                                    }}
+                                    onAccept={(newValue) => {
+                                      console.log('✅ Closing time picker onAccept:', newValue)
+                                      if (newValue) {
+                                        handleTimeChange(day, "closingTime", newValue)
+                                      }
+                                    }}
                                     slotProps={{
                                       textField: {
                                         variant: "outlined",

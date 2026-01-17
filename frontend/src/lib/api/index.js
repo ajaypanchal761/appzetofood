@@ -892,6 +892,10 @@ export const adminAPI = {
   },
 
   // Get all delivery partners
+  getDeliveryEarnings: (params = {}) => {
+    return apiClient.get('/admin/delivery-partners/earnings', { params });
+  },
+
   getDeliveryPartners: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_PARTNERS, { params });
   },

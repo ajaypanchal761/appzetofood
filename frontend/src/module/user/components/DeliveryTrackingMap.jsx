@@ -54,6 +54,17 @@ const DeliveryTrackingMap = ({
       if (status === 'OK' && result) {
         directionsRendererRef.current.setDirections(result);
         
+        // Limit zoom after polyline is shown (max zoom 16)
+        setTimeout(() => {
+          if (mapInstance.current) {
+            const currentZoom = mapInstance.current.getZoom();
+            const MAX_ZOOM_POLYLINE = 16;
+            if (currentZoom > MAX_ZOOM_POLYLINE) {
+              mapInstance.current.setZoom(MAX_ZOOM_POLYLINE);
+            }
+          }
+        }, 100);
+        
         // Calculate ETA and distance
         if (updateETA) {
           const route = result.routes[0];
@@ -175,6 +186,13 @@ const DeliveryTrackingMap = ({
 
         // Smoothly pan map to follow bike
         mapInstance.current.panTo(position);
+        
+        // Limit zoom during live tracking (max zoom 16)
+        const currentZoom = mapInstance.current.getZoom();
+        const MAX_ZOOM_TRACKING = 16;
+        if (currentZoom > MAX_ZOOM_TRACKING) {
+          mapInstance.current.setZoom(MAX_ZOOM_TRACKING);
+        }
       }
     } catch (error) {
       console.error('❌ Error moving bike:', error);
@@ -308,9 +326,19 @@ const DeliveryTrackingMap = ({
         mapInstance.current = new window.google.maps.Map(mapRef.current, {
           center: { lat: centerLat, lng: centerLng },
           zoom: 15,
+          maxZoom: 16, // Maximum zoom during live tracking (limit excessive zoom)
           mapTypeId: window.google.maps.MapTypeId.ROADMAP,
           tilt: 45, // 3D view
           heading: 0
+        });
+        
+        // Add zoom listener to limit zoom during live tracking
+        mapInstance.current.addListener('zoom_changed', () => {
+          const currentZoom = mapInstance.current.getZoom();
+          const MAX_ZOOM_TRACKING = 16;
+          if (currentZoom > MAX_ZOOM_TRACKING) {
+            mapInstance.current.setZoom(MAX_ZOOM_TRACKING);
+          }
         });
 
         // Initialize Directions Service and Renderer
@@ -321,7 +349,7 @@ const DeliveryTrackingMap = ({
           polylineOptions: {
             strokeColor: '#10b981',
             strokeWeight: 6,
-            strokeOpacity: 0.9
+            strokeOpacity: 0 // Hidden - polyline removed
           }
         });
 

@@ -326,6 +326,7 @@ export async function notifyDeliveryBoyOrderReady(order, deliveryPartnerId) {
     const normalizedDeliveryPartnerId = deliveryPartnerId?.toString() || deliveryPartnerId;
 
     // Prepare order ready notification
+    const coords = order.restaurantId?.location?.coordinates;
     const orderReadyNotification = {
       orderId: order.orderId || order._id,
       mongoId: order._id?.toString(),
@@ -333,7 +334,10 @@ export async function notifyDeliveryBoyOrderReady(order, deliveryPartnerId) {
       restaurantName: order.restaurantName || order.restaurantId?.name,
       restaurantAddress: order.restaurantId?.address || order.restaurantId?.location?.address,
       message: `Order ${order.orderId} is ready for pickup`,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      // Include restaurant coords so delivery app can show Reached Pickup when rider is near (coordinates: [lng, lat])
+      restaurantLat: coords?.[1],
+      restaurantLng: coords?.[0]
     };
 
     // Try to find delivery partner's room

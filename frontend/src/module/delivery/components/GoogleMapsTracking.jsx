@@ -153,7 +153,10 @@ export default function GoogleMapsTracking({
       if (deliveryLocation && (isFullScreen || !showRoute)) {
         mapRef.current.panTo(deliveryLocation);
         if (!hasInitialBoundsFitted.current || isFullScreen) {
-          mapRef.current.setZoom(isFullScreen ? 17 : 15);
+          const targetZoom = isFullScreen ? 17 : 15;
+          // Limit zoom if polyline is shown or during live tracking
+          const MAX_ZOOM = 16;
+          mapRef.current.setZoom(isTracking || showRoute ? Math.min(targetZoom, MAX_ZOOM) : targetZoom);
           hasInitialBoundsFitted.current = true;
         }
       } else {
@@ -164,6 +167,10 @@ export default function GoogleMapsTracking({
           left: 50,
           right: 50
         });
+        // Limit zoom after fitBounds if polyline is shown or during live tracking
+        setTimeout(() => {
+          limitZoomIfNeeded(mapRef.current);
+        }, 100);
         hasInitialBoundsFitted.current = true;
       }
       if (mapRef.current._setProgrammaticChange) {
@@ -178,7 +185,10 @@ export default function GoogleMapsTracking({
     if (mapRef.current) {
       if (deliveryLocation && (isFullScreen || !showRoute)) {
         mapRef.current.panTo(deliveryLocation);
-        mapRef.current.setZoom(isFullScreen ? 17 : 15);
+        const targetZoom = isFullScreen ? 17 : 15;
+        // Limit zoom if polyline is shown or during live tracking
+        const MAX_ZOOM = 16;
+        mapRef.current.setZoom(isTracking || showRoute ? Math.min(targetZoom, MAX_ZOOM) : targetZoom);
         hasInitialBoundsFitted.current = true;
       } else {
         const bounds = new window.google.maps.LatLngBounds();
@@ -193,6 +203,10 @@ export default function GoogleMapsTracking({
           bounds.extend(customerLocation);
         }
         mapRef.current.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+        // Limit zoom after fitBounds if polyline is shown or during live tracking
+        setTimeout(() => {
+          limitZoomIfNeeded(mapRef.current);
+        }, 100);
         hasInitialBoundsFitted.current = true;
       }
     }
@@ -204,6 +218,18 @@ export default function GoogleMapsTracking({
     setUserHasInteracted(false);
     hasInitialBoundsFitted.current = false;
   };
+
+  // Helper function to limit zoom level when polyline is shown or during live tracking
+  const limitZoomIfNeeded = useCallback((map) => {
+    if (!map) return;
+    const currentZoom = map.getZoom();
+    const MAX_ZOOM = 16; // Maximum zoom when polyline is shown or during live tracking
+    
+    // Limit zoom if polyline is shown or during live tracking
+    if ((showRoute || isTracking) && currentZoom > MAX_ZOOM) {
+      map.setZoom(MAX_ZOOM);
+    }
+  }, [showRoute, isTracking]);
 
   const onLoad = useCallback((map) => {
     mapRef.current = map
@@ -218,6 +244,8 @@ export default function GoogleMapsTracking({
     map.addListener('dragstart', trackInteraction);
     map.addListener('zoom_changed', () => {
       if (!isProgrammaticChange) {
+        // Limit zoom when polyline is shown or during live tracking
+        limitZoomIfNeeded(map);
         setTimeout(() => {
           if (!isProgrammaticChange) {
             trackInteraction();
@@ -229,7 +257,7 @@ export default function GoogleMapsTracking({
     map._setProgrammaticChange = (value) => {
       isProgrammaticChange = value;
     };
-  }, [])
+  }, [limitZoomIfNeeded])
 
   // Calculate and display route using Google Directions Service
   const calculateAndDisplayRoute = useCallback((origin, destination, waypoints = []) => {
@@ -271,11 +299,12 @@ export default function GoogleMapsTracking({
         map: mapRef.current,
         suppressMarkers: true, // We'll use custom markers
         preserveViewport: true, // Preserve viewport - we'll center manually
-        polylineOptions: {
-          strokeColor: '#3b82f6', // Bright blue like Zomato/Swiggy
-          strokeWeight: 6,
-          strokeOpacity: 0.9,
-        },
+                      polylineOptions: {
+                        strokeColor: '#3b82f6', // Bright blue like Zomato/Swiggy
+                        strokeWeight: 6,
+                        strokeOpacity: 1.0, // Fully visible - plain solid line
+                        icons: [], // No icons/dots - plain solid line only
+                      },
       })
     } else {
       // Ensure preserveViewport is true so route updates don't change viewport
@@ -339,6 +368,23 @@ export default function GoogleMapsTracking({
             })
           }
           directionsRendererRef.current.setDirections(result);
+          
+          // Force remove any default icons/dots from polyline after directions are set
+          // Try multiple times to ensure icons are removed
+          [100, 300, 500, 700].forEach(delay => {
+            setTimeout(() => {
+              if (directionsRendererRef.current) {
+                directionsRendererRef.current.setOptions({
+                  polylineOptions: {
+                    strokeColor: '#3b82f6',
+                    strokeWeight: 6,
+                    strokeOpacity: 1.0,
+                    icons: [] // Explicitly remove all icons/dots - plain solid line only
+                  }
+                });
+              }
+            }, delay);
+          });
         } else {
           console.error('❌ Directions request failed:', status, { origin, destination })
           setRouteInfo(null)
@@ -551,6 +597,7 @@ export default function GoogleMapsTracking({
           mapTypeControl: false,
           fullscreenControl: false,
           disableDefaultUI: true,
+          maxZoom: (showRoute || isTracking) ? 16 : 20, // Limit max zoom when polyline is shown or during live tracking
           styles: [
             {
               featureType: "poi",
@@ -605,18 +652,7 @@ export default function GoogleMapsTracking({
           />
         )}
 
-        {/* Show fallback polyline only if route is not being shown or there's an error */}
-        {( !showRoute || routeError ) && (
-          <Polyline
-            path={path}
-            options={{
-              strokeColor: routeError ? '#ef4444' : '#16a34a',
-              strokeOpacity: 0.7,
-              strokeWeight: 4,
-              geodesic: true,
-            }}
-          />
-        )}
+        {/* Polyline removed - no longer showing route line */}
       </GoogleMap>
     </div>
   )

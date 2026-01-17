@@ -173,6 +173,7 @@ export const sidebarMenuData = [
           { label: "Bonus", path: "/admin/delivery-partners/bonus" },
           { label: "Earning Addon", path: "/admin/delivery-partners/earning-addon" },
           { label: "Earning Addon History", path: "/admin/delivery-partners/earning-addon-history" },
+          { label: "Delivery Earning", path: "/admin/delivery-partners/earnings" },
         ],
       },
     ],

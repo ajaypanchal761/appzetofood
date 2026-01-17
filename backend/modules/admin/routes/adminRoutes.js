@@ -41,6 +41,9 @@ import {
   reverifyDeliveryPartner
 } from '../controllers/deliveryPartnerController.js';
 import {
+  getDeliveryEarnings
+} from '../controllers/deliveryEarningsController.js';
+import {
   addBonus,
   getBonusTransactions
 } from '../controllers/deliveryBonusController.js';
@@ -184,6 +187,7 @@ router.patch('/categories/:id/priority', updateCategoryPriority);
 // Delivery Partner Management
 router.get('/delivery-partners/requests', getJoinRequests);
 router.get('/delivery-partners', getDeliveryPartners);
+router.get('/delivery-partners/earnings', getDeliveryEarnings);
 router.get('/delivery-partners/:id', getDeliveryPartnerById);
 router.post('/delivery-partners/:id/approve', approveDeliveryPartner);
 router.post('/delivery-partners/:id/reject', rejectDeliveryPartner);

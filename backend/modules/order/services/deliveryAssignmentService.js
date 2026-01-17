@@ -1,5 +1,7 @@
 import Delivery from '../../delivery/models/Delivery.js';
 import Order from '../models/Order.js';
+import Zone from '../../admin/models/Zone.js';
+import Restaurant from '../../restaurant/models/Restaurant.js';
 
 /**
  * Calculate distance between two coordinates using Haversine formula
@@ -22,18 +24,20 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
 }
 
 /**
- * Find the nearest available delivery boy to a restaurant location
+ * Find the nearest available delivery boy to a restaurant location (with zone-based filtering)
  * @param {number} restaurantLat - Restaurant latitude
  * @param {number} restaurantLng - Restaurant longitude
+ * @param {string} restaurantId - Restaurant ID (for zone lookup)
  * @param {number} maxDistance - Maximum distance in km (default: 50km)
  * @returns {Promise<Object|null>} Nearest delivery boy or null
  */
-export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, maxDistance = 50) {
+export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, restaurantId = null, maxDistance = 50) {
   try {
-    console.log(`🔍 Searching for nearest delivery partner near restaurant: ${restaurantLat}, ${restaurantLng}`);
+    console.log(`🔍 Searching for nearest delivery partner near restaurant: ${restaurantLat}, ${restaurantLng} (Restaurant ID: ${restaurantId})`);
     
-    // Find all online delivery partners
-    const deliveryPartners = await Delivery.find({
+    // Step 1: Find zone for restaurant (if restaurantId provided)
+    let zone = null;
+    let deliveryQuery = {
       'availability.isOnline': true,
       status: { $in: ['approved', 'active'] },
       isActive: true,
@@ -41,8 +45,43 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, maxDi
         $exists: true,
         $ne: [0, 0] // Exclude default/null coordinates
       }
-    })
-      .select('_id name phone availability.currentLocation availability.lastLocationUpdate status isActive')
+    };
+
+    if (restaurantId) {
+      try {
+        // Try to find zone by restaurantId
+        const restaurantIdObj = restaurantId.toString ? restaurantId.toString() : restaurantId;
+        zone = await Zone.findOne({
+          restaurantId: restaurantIdObj,
+          isActive: true
+        }).lean();
+
+        if (zone) {
+          console.log(`✅ Found zone: ${zone.name} for restaurant ${restaurantId}`);
+          
+          // Option A: Filter by zoneId if Delivery model has zoneId field
+          // Uncomment when zoneId is added to Delivery model
+          // deliveryQuery.zoneId = zone._id;
+
+          // Option B: Filter by geo-spatial query (if zone has boundary)
+          // This is more complex and slower, but works without modifying Delivery model
+          if (zone.boundary && zone.boundary.coordinates) {
+            // For now, we'll use distance-based with zone coordinate check
+            // In production, you can use $geoWithin for better accuracy
+            console.log(`📍 Zone boundary found, will filter by location after distance calculation`);
+          }
+        } else {
+          console.log(`⚠️ No zone found for restaurant ${restaurantId}, using distance-based assignment`);
+        }
+      } catch (zoneError) {
+        console.warn(`⚠️ Error finding zone for restaurant ${restaurantId}:`, zoneError.message);
+        // Continue with distance-based assignment
+      }
+    }
+
+    // Find all online delivery partners (with zone filter if applicable)
+    const deliveryPartners = await Delivery.find(deliveryQuery)
+      .select('_id name phone availability.currentLocation availability.lastLocationUpdate status isActive zoneId')
       .lean();
 
     console.log(`📊 Found ${deliveryPartners?.length || 0} online delivery partners in database`);
@@ -64,7 +103,7 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, maxDi
       return null;
     }
 
-    // Calculate distance for each delivery partner
+    // Calculate distance for each delivery partner and filter by zone if applicable
     const deliveryPartnersWithDistance = deliveryPartners
       .map(partner => {
         const location = partner.availability?.currentLocation;
@@ -79,13 +118,48 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, maxDi
           return null;
         }
 
+        // Filter by zone if zone exists
+        if (zone) {
+          // Option A: Check zoneId match (when zoneId is added to Delivery model)
+          if (partner.zoneId && partner.zoneId.toString() !== zone._id.toString()) {
+            console.log(`⚠️ Delivery partner ${partner._id} not in zone ${zone.name} (partner zone: ${partner.zoneId}, required zone: ${zone._id})`);
+            return null; // Skip delivery partners not in the restaurant's zone
+          }
+
+          // Option B: Geo-spatial check (point-in-polygon) if zoneId not available
+          // Simple point-in-polygon using ray casting algorithm
+          if (!partner.zoneId && zone.coordinates && zone.coordinates.length >= 3) {
+            // Zone coordinates: [{ latitude, longitude }, ...]
+            const zoneCoords = zone.coordinates;
+            let inside = false;
+            
+            for (let i = 0, j = zoneCoords.length - 1; i < zoneCoords.length; j = i++) {
+              const xi = zoneCoords[i].longitude;
+              const yi = zoneCoords[i].latitude;
+              const xj = zoneCoords[j].longitude;
+              const yj = zoneCoords[j].latitude;
+              
+              const intersect = ((yi > lat) !== (yj > lat)) &&
+                (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+              
+              if (intersect) inside = !inside;
+            }
+            
+            if (!inside) {
+              console.log(`⚠️ Delivery partner ${partner._id} location (${lat}, ${lng}) not within zone ${zone.name} boundary`);
+              return null;
+            }
+          }
+        }
+
         const distance = calculateDistance(restaurantLat, restaurantLng, lat, lng);
         
         return {
           ...partner,
           distance,
           latitude: lat,
-          longitude: lng
+          longitude: lng,
+          zoneId: partner.zoneId || null
         };
       })
       .filter(partner => partner !== null && partner.distance <= maxDistance)
@@ -127,16 +201,27 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, maxDi
  * @param {number} restaurantLng - Restaurant longitude
  * @returns {Promise<Object|null>} Assignment result or null
  */
-export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantLng) {
+export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantLng, restaurantId = null) {
   try {
+    // CRITICAL: Don't assign if order is already delivered/completed
+    if (order.status === 'delivered' || 
+        order.deliveryState?.currentPhase === 'completed' ||
+        order.deliveryState?.status === 'delivered') {
+      console.log(`⚠️ Order ${order.orderId} is already delivered/completed. Cannot assign.`);
+      return null;
+    }
+    
     // Check if order already has a delivery partner assigned
     if (order.deliveryPartnerId) {
       console.log(`⚠️ Order ${order.orderId} already has delivery partner assigned`);
       return null;
     }
 
-    // Find nearest delivery boy
-    const nearestDeliveryBoy = await findNearestDeliveryBoy(restaurantLat, restaurantLng);
+    // Get restaurantId from order if not provided
+    const orderRestaurantId = restaurantId || order.restaurantId;
+    
+    // Find nearest delivery boy (with zone-based filtering)
+    const nearestDeliveryBoy = await findNearestDeliveryBoy(restaurantLat, restaurantLng, orderRestaurantId);
 
     if (!nearestDeliveryBoy) {
       console.log(`⚠️ No delivery boy found for order ${order.orderId}`);

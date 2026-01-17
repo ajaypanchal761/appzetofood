@@ -227,8 +227,8 @@ export const acceptOrder = asyncHandler(async (req, res) => {
           } else if (freshOrder.deliveryPartnerId) {
             console.log(`⚠️ Order ${order.orderId} already has delivery partner: ${freshOrder.deliveryPartnerId}`);
           } else {
-            // Assign to nearest delivery boy
-            const assignmentResult = await assignOrderToDeliveryBoy(freshOrder, restaurantLat, restaurantLng);
+            // Assign to nearest delivery boy (with zone-based filtering)
+            const assignmentResult = await assignOrderToDeliveryBoy(freshOrder, restaurantLat, restaurantLng, restaurantId);
 
             if (assignmentResult && assignmentResult.deliveryPartnerId) {
               // Reload order with populated userId after assignment
@@ -499,7 +499,7 @@ export const markOrderPreparing = asyncHandler(async (req, res) => {
         }
 
         // Assign to nearest delivery boy
-        const assignmentResult = await assignOrderToDeliveryBoy(freshOrder, restaurantLat, restaurantLng);
+        const assignmentResult = await assignOrderToDeliveryBoy(freshOrder, restaurantLat, restaurantLng, restaurantId);
 
         if (assignmentResult && assignmentResult.deliveryPartnerId) {
           // Reload order with populated userId after assignment
@@ -604,17 +604,45 @@ export const markOrderReady = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, `Order cannot be marked as ready. Current status: ${order.status}`);
     }
 
+    // Update order status and tracking
+    const now = new Date();
     order.status = 'ready';
+    if (!order.tracking) {
+      order.tracking = {};
+    }
+    order.tracking.ready = {
+      status: true,
+      timestamp: now
+    };
     await order.save();
+
+    // Populate order for notifications
+    const populatedOrder = await Order.findById(order._id)
+      .populate('restaurantId', 'name location address phone')
+      .populate('userId', 'name phone')
+      .populate('deliveryPartnerId', 'name phone')
+      .lean();
 
     try {
       await notifyRestaurantOrderUpdate(order._id.toString(), 'ready');
     } catch (notifError) {
-      console.error('Error sending notification:', notifError);
+      console.error('Error sending restaurant notification:', notifError);
+    }
+
+    // Notify delivery boy that order is ready for pickup
+    if (populatedOrder.deliveryPartnerId) {
+      try {
+        const { notifyDeliveryBoyOrderReady } = await import('../../order/services/deliveryNotificationService.js');
+        const deliveryPartnerId = populatedOrder.deliveryPartnerId._id || populatedOrder.deliveryPartnerId;
+        await notifyDeliveryBoyOrderReady(populatedOrder, deliveryPartnerId);
+        console.log(`✅ Order ready notification sent to delivery partner ${deliveryPartnerId}`);
+      } catch (deliveryNotifError) {
+        console.error('Error sending delivery boy notification:', deliveryNotifError);
+      }
     }
 
     return successResponse(res, 200, 'Order marked as ready', {
-      order
+      order: populatedOrder || order
     });
   } catch (error) {
     console.error('Error updating order status:', error);

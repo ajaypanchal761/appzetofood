@@ -27,13 +27,23 @@ const logger = winston.createLogger({
 export const getOrders = asyncHandler(async (req, res) => {
   try {
     const delivery = req.delivery;
-    const { status, page = 1, limit = 20 } = req.query;
+    const { status, page = 1, limit = 20, includeDelivered } = req.query;
 
     // Build query
     const query = { deliveryPartnerId: delivery._id };
 
     if (status) {
       query.status = status;
+    } else {
+      // By default, exclude delivered and cancelled orders unless explicitly requested
+      if (includeDelivered !== 'true' && includeDelivered !== true) {
+        query.status = { $nin: ['delivered', 'cancelled'] };
+        // Also exclude orders with completed delivery phase
+        query.$or = [
+          { 'deliveryState.currentPhase': { $ne: 'completed' } },
+          { 'deliveryState.currentPhase': { $exists: false } }
+        ];
+      }
     }
 
     // Calculate pagination
@@ -246,6 +256,8 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     const { orderId } = req.params;
     const deliveryId = delivery._id;
 
+    console.log(`📍 confirmReachedPickup called - orderId: ${orderId}, deliveryId: ${deliveryId}`);
+
     // Find order by _id or orderId field
     let order = null;
     
@@ -264,8 +276,11 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     }
 
     if (!order) {
+      console.warn(`⚠️ Order not found - orderId: ${orderId}, deliveryId: ${deliveryId}`);
       return errorResponse(res, 404, 'Order not found or not assigned to you');
     }
+
+    console.log(`✅ Order found: ${order.orderId}, Current phase: ${order.deliveryState?.currentPhase || 'none'}, Status: ${order.deliveryState?.status || 'none'}, Order status: ${order.status || 'none'}`);
 
     // Initialize deliveryState if it doesn't exist
     if (!order.deliveryState) {
@@ -283,13 +298,26 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     // Check if order is in valid state
     // Allow reached pickup if:
     // - currentPhase is 'en_route_to_pickup' OR
+    // - currentPhase is 'at_pickup' (already at pickup - idempotent, allow re-confirmation)
     // - status is 'accepted' OR  
     // - currentPhase is 'accepted' (alternative phase name)
+    // - order status is 'preparing' or 'ready' (restaurant preparing/ready)
     const isValidState = order.deliveryState.currentPhase === 'en_route_to_pickup' || 
+                         order.deliveryState.currentPhase === 'at_pickup' || // Already at pickup - idempotent
                          order.deliveryState.status === 'accepted' ||
+                         order.deliveryState.status === 'reached_pickup' || // Already reached - idempotent
                          order.deliveryState.currentPhase === 'accepted' ||
                          order.status === 'preparing' || // Order is preparing, can reach pickup
                          order.status === 'ready'; // Order is ready, can reach pickup
+
+    // If already at pickup, just return success (idempotent operation)
+    if (order.deliveryState.currentPhase === 'at_pickup' || order.deliveryState.status === 'reached_pickup') {
+      console.log(`ℹ️ Order ${order.orderId} already at pickup. Returning success (idempotent).`);
+      return successResponse(res, 200, 'Reached pickup already confirmed', {
+        order,
+        message: 'Order was already marked as reached pickup'
+      });
+    }
 
     if (!isValidState) {
       return errorResponse(res, 400, `Order is not in valid state for reached pickup. Current phase: ${order.deliveryState?.currentPhase || 'unknown'}, Status: ${order.deliveryState?.status || 'unknown'}, Order status: ${order.status || 'unknown'}`);
@@ -408,13 +436,16 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
 
     // Check if order is in valid state for order ID confirmation
     // Allow confirmation if:
-    // - currentPhase is 'at_pickup' OR
+    // - currentPhase is 'at_pickup' (after Reached Pickup) OR
     // - status is 'reached_pickup' OR
-    // - order status is 'preparing' or 'ready' (restaurant preparing/ready)
+    // - order status is 'preparing' or 'ready' (restaurant preparing/ready) OR
+    // - currentPhase is 'en_route_to_pickup' or status is 'accepted' (Reached Pickup not yet persisted / edge case)
     const isValidState = order.deliveryState.currentPhase === 'at_pickup' ||
                          order.deliveryState.status === 'reached_pickup' ||
                          order.status === 'preparing' ||
-                         order.status === 'ready';
+                         order.status === 'ready' ||
+                         order.deliveryState.currentPhase === 'en_route_to_pickup' ||
+                         order.deliveryState.status === 'accepted';
 
     if (!isValidState) {
       return errorResponse(res, 400, `Order is not at pickup. Current phase: ${order.deliveryState?.currentPhase || 'unknown'}, Status: ${order.deliveryState?.status || 'unknown'}, Order status: ${order.status || 'unknown'}`);
@@ -643,43 +674,60 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
 
     // Update order state - only if not already at delivery (idempotent)
     let finalOrder = null;
-    // Ensure we have the correct ID format for MongoDB operations
-    // order._id is a Mongoose ObjectId, convert to string if needed for findByIdAndUpdate
-    const orderMongoId = order._id?.toString ? order._id : order._id; 
     
     if (order.deliveryState.currentPhase !== 'at_delivery') {
-      // Use findByIdAndUpdate to properly update nested fields
-      const updatedOrder = await Order.findByIdAndUpdate(
-        orderMongoId,
-        {
-          $set: {
-            'deliveryState.status': 'en_route_to_delivery',
-            'deliveryState.currentPhase': 'at_delivery'
-          }
-        },
-        { new: true, runValidators: true }
-      )
-      .populate('restaurantId', 'name location address phone')
-      .populate('userId', 'name phone')
-      .lean(); // Use lean() for better performance and to get plain object
+      try {
+        // Update the order document directly since we have it
+        order.deliveryState.status = 'en_route_to_delivery';
+        order.deliveryState.currentPhase = 'at_delivery';
+        order.deliveryState.reachedDropAt = new Date();
+        
+        // Save the order
+        await order.save();
+        
+        // Populate and get the updated order for response
+        const updatedOrder = await Order.findById(order._id)
+          .populate('restaurantId', 'name location address phone')
+          .populate('userId', 'name phone')
+          .lean(); // Use lean() for better performance
 
-      if (!updatedOrder) {
-        return errorResponse(res, 500, 'Failed to update order state');
+        if (!updatedOrder) {
+          console.error(`❌ Failed to fetch updated order ${order._id}`);
+          return errorResponse(res, 500, 'Failed to update order state');
+        }
+
+        finalOrder = updatedOrder;
+      } catch (updateError) {
+        console.error(`❌ Error updating order ${order._id}:`, updateError);
+        console.error('Update error stack:', updateError.stack);
+        console.error('Update error details:', {
+          message: updateError.message,
+          name: updateError.name,
+          orderId: order._id,
+          orderStatus: order.status,
+          deliveryPhase: order.deliveryState?.currentPhase
+        });
+        throw updateError; // Re-throw to be caught by outer catch
       }
-
-      finalOrder = updatedOrder;
     } else {
       // If already at delivery, populate the order for response
-      const populatedOrder = await Order.findById(orderMongoId)
-        .populate('restaurantId', 'name location address phone')
-        .populate('userId', 'name phone')
-        .lean(); // Use lean() for better performance
-      
-      if (!populatedOrder) {
-        return errorResponse(res, 500, 'Failed to fetch order details');
+      try {
+        const populatedOrder = await Order.findById(order._id)
+          .populate('restaurantId', 'name location address phone')
+          .populate('userId', 'name phone')
+          .lean(); // Use lean() for better performance
+        
+        if (!populatedOrder) {
+          console.error(`❌ Failed to fetch order ${order._id} details`);
+          return errorResponse(res, 500, 'Failed to fetch order details');
+        }
+        
+        finalOrder = populatedOrder;
+      } catch (fetchError) {
+        console.error(`❌ Error fetching order ${order._id}:`, fetchError);
+        console.error('Fetch error stack:', fetchError.stack);
+        throw fetchError; // Re-throw to be caught by outer catch
       }
-      
-      finalOrder = populatedOrder;
     }
 
     if (!finalOrder) {
@@ -772,9 +820,65 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, 'Order not found or not assigned to you');
     }
 
-    // Check if order is in valid state
-    if (order.status !== 'out_for_delivery' && 
-        order.deliveryState?.currentPhase !== 'at_delivery') {
+    // Check if order is already delivered/completed (idempotent - allow if already completed)
+    const isAlreadyDelivered = order.status === 'delivered' || 
+                               order.deliveryState?.currentPhase === 'completed' ||
+                               order.deliveryState?.status === 'delivered';
+    
+    if (isAlreadyDelivered) {
+      console.log(`ℹ️ Order ${order.orderId || order._id} is already delivered/completed. Returning success (idempotent).`);
+      
+      // Return success with existing order data (idempotent operation)
+      // Still calculate earnings if not already calculated
+      let earnings = null;
+      try {
+        // Check if earnings were already calculated
+        const wallet = await DeliveryWallet.findOne({ deliveryPartnerId: delivery._id });
+        const orderIdForTransaction = order._id?.toString ? order._id.toString() : order._id;
+        const existingTransaction = wallet?.transactions?.find(
+          t => t.orderId && t.orderId.toString() === orderIdForTransaction && t.type === 'payment'
+        );
+        
+        if (existingTransaction) {
+          earnings = {
+            amount: existingTransaction.amount,
+            transactionId: existingTransaction._id?.toString() || existingTransaction.id
+          };
+        } else {
+          // Calculate earnings even if order is already delivered (for consistency)
+          let deliveryDistance = 0;
+          if (order.deliveryState?.routeToDelivery?.distance) {
+            deliveryDistance = order.deliveryState.routeToDelivery.distance;
+          } else if (order.assignmentInfo?.distance) {
+            deliveryDistance = order.assignmentInfo.distance;
+          }
+          
+          if (deliveryDistance > 0) {
+            const commissionResult = await DeliveryBoyCommission.calculateCommission(deliveryDistance);
+            earnings = {
+              amount: commissionResult.commission,
+              breakdown: commissionResult.breakdown
+            };
+          }
+        }
+      } catch (earningsError) {
+        console.error('⚠️ Error calculating earnings for already delivered order:', earningsError.message);
+      }
+      
+      return successResponse(res, 200, 'Order already delivered', {
+        order: order,
+        earnings: earnings,
+        message: 'Order was already marked as delivered'
+      });
+    }
+
+    // Check if order is in valid state for completion
+    // Allow completion if order is out_for_delivery OR at_delivery phase
+    const isValidState = order.status === 'out_for_delivery' || 
+                         order.deliveryState?.currentPhase === 'at_delivery' ||
+                         order.deliveryState?.currentPhase === 'en_route_to_delivery';
+    
+    if (!isValidState) {
       return errorResponse(res, 400, `Order cannot be completed. Current status: ${order.status}, Phase: ${order.deliveryState?.currentPhase || 'unknown'}`);
     }
 

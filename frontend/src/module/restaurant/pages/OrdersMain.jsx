@@ -549,7 +549,7 @@ export default function OrdersMain() {
       case "ready":
         return <ReadyOrders onSelectOrder={handleSelectOrder} />
       case "out-for-delivery":
-        return <EmptyState message="Out for delivery orders will appear here" />
+        return <OutForDeliveryOrders onSelectOrder={handleSelectOrder} />
       case "scheduled":
         return <EmptyState message="Scheduled orders will appear here" />
       default:
@@ -1519,6 +1519,77 @@ function PreparingOrders({ onSelectOrder }) {
     }
   }, []) // Empty dependency array is correct here - we want this to run once on mount
 
+  // Track which orders have been marked as ready to avoid duplicate API calls
+  const markedReadyOrdersRef = useRef(new Set())
+
+  // Auto-mark orders as ready when ETA reaches 0
+  useEffect(() => {
+    if (!currentTime || orders.length === 0) return
+
+    const checkAndMarkReady = async () => {
+      for (const order of orders) {
+        const orderKey = order.mongoId || order.orderId
+        
+        // Skip if already marked as ready
+        if (markedReadyOrdersRef.current.has(orderKey)) {
+          continue
+        }
+        
+        // Calculate remaining ETA
+        const elapsedMs = currentTime - order.preparingTimestamp
+        const elapsedMinutes = Math.floor(elapsedMs / 60000)
+        const remainingMinutes = Math.max(0, order.initialETA - elapsedMinutes)
+        
+        // If ETA has reached 0 (or slightly past), mark as ready
+        if (remainingMinutes <= 0 && order.status === 'preparing') {
+          const elapsedSeconds = Math.floor(elapsedMs / 1000)
+          const totalETASeconds = order.initialETA * 60
+          
+          // Mark as ready when ETA time has elapsed (with 2 second buffer)
+          if (elapsedSeconds >= totalETASeconds - 2) {
+            try {
+              console.log(`🔄 Auto-marking order ${order.orderId} as ready (ETA reached 0)`)
+              markedReadyOrdersRef.current.add(orderKey) // Mark as processing
+              await restaurantAPI.markOrderReady(order.mongoId || order.orderId)
+              console.log(`✅ Order ${order.orderId} marked as ready`)
+              // Order will be removed from preparing list on next fetch
+            } catch (error) {
+              const status = error.response?.status
+              const msg = (error.response?.data?.message || error.message || '').toLowerCase()
+              // If 400 and message says order cannot be marked ready (e.g. already ready),
+              // treat as idempotent - backend cron or another client already marked it.
+              if (status === 400 && (msg.includes('cannot be marked as ready') || msg.includes('current status'))) {
+                // Keep in markedReadyOrdersRef so we don't retry; order will disappear on next fetch
+              } else {
+                console.error(`❌ Failed to auto-mark order ${order.orderId} as ready:`, error)
+                markedReadyOrdersRef.current.delete(orderKey)
+              }
+              // Don't show error toast - it will retry on next check (for non-idempotent errors)
+            }
+          }
+        }
+      }
+    }
+
+    // Check every 2 seconds for orders that need to be marked ready
+    const readyCheckInterval = setInterval(checkAndMarkReady, 2000)
+    
+    return () => {
+      clearInterval(readyCheckInterval)
+    }
+  }, [currentTime, orders])
+  
+  // Clear marked orders when orders list changes (orders moved to ready)
+  useEffect(() => {
+    const currentOrderKeys = new Set(orders.map(o => o.mongoId || o.orderId))
+    // Remove keys that are no longer in the preparing orders list
+    for (const key of markedReadyOrdersRef.current) {
+      if (!currentOrderKeys.has(key)) {
+        markedReadyOrdersRef.current.delete(key)
+      }
+    }
+  }, [orders])
+
   if (loading) {
     return (
       <div className="pt-4 pb-6">
@@ -1691,6 +1762,123 @@ function ReadyOrders({ onSelectOrder }) {
       {orders.length === 0 ? (
         <div className="text-center py-8 text-gray-500 text-sm">
           No orders ready for pickup
+        </div>
+      ) : (
+        <div>
+          {orders.map((order) => (
+            <OrderCard
+              key={order.orderId || order.mongoId}
+              {...order}
+              onSelect={onSelectOrder}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Out for Delivery Orders List
+const OutForDeliveryOrders = ({ onSelectOrder }) => {
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+    let intervalId = null
+
+    const fetchOrders = async () => {
+      try {
+        // Fetch all orders and filter for 'out_for_delivery' status on frontend
+        const response = await restaurantAPI.getOrders()
+        
+        if (!isMounted) return
+        
+        if (response.data?.success && response.data.data?.orders) {
+          // Filter orders with 'out_for_delivery' status
+          const outForDeliveryOrders = response.data.data.orders.filter(
+            order => order.status === 'out_for_delivery'
+          )
+          
+          const transformedOrders = outForDeliveryOrders.map(order => ({
+            orderId: order.orderId || order._id,
+            mongoId: order._id,
+            status: order.status || 'out_for_delivery',
+            customerName: order.userId?.name || 'Customer',
+            type: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
+            tableOrToken: null,
+            timePlaced: new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            eta: null,
+            itemsSummary: order.items?.map(item => `${item.quantity}x ${item.name}`).join(', ') || 'No items',
+            photoUrl: order.items?.[0]?.image || null,
+            photoAlt: order.items?.[0]?.name || 'Order'
+          }))
+          
+          if (isMounted) {
+            setOrders(transformedOrders)
+            setLoading(false)
+          }
+        } else {
+          if (isMounted) {
+            setOrders([])
+            setLoading(false)
+          }
+        }
+      } catch (error) {
+        if (!isMounted) return
+        
+        // Don't log network errors repeatedly - they're expected if backend is down
+        if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
+          console.error('Error fetching out for delivery orders:', error)
+        }
+        
+        if (isMounted) {
+          setOrders([])
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchOrders()
+    
+    // Refresh every 10 seconds
+    intervalId = setInterval(() => {
+      if (isMounted) {
+        fetchOrders()
+      }
+    }, 10000)
+    
+    return () => {
+      isMounted = false
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, []) // Empty dependency array is correct here - we want this to run once on mount
+
+  if (loading) {
+    return (
+      <div className="pt-4 pb-6">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-base font-semibold text-black">Out for delivery</h2>
+          <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+        </div>
+        <div className="text-center py-8 text-gray-500 text-sm">Loading...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="pt-4 pb-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-base font-semibold text-black">
+          Out for delivery
+        </h2>
+        <span className="text-xs text-gray-500">{orders.length} active</span>
+      </div>
+      {orders.length === 0 ? (
+        <div className="text-center py-8 text-gray-500 text-sm">
+          No orders out for delivery
         </div>
       ) : (
         <div>

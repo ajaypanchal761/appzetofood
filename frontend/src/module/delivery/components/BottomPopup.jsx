@@ -14,6 +14,7 @@ import { X } from "lucide-react"
  * @param {boolean} closeOnBackdropClick - Close when backdrop is clicked (default: true)
  * @param {string} maxHeight - Maximum height of popup (default: "90vh")
  * @param {boolean} showHandle - Show drag handle (default: true)
+ * @param {boolean} disableSwipeToClose - Disable swipe-to-close functionality (default: false)
  */
 export default function BottomPopup({
   isOpen,
@@ -23,7 +24,8 @@ export default function BottomPopup({
   showCloseButton = true,
   closeOnBackdropClick = true,
   maxHeight = "90vh",
-  showHandle = true
+  showHandle = true,
+  disableSwipeToClose = false
 }) {
   const popupRef = useRef(null)
   const handleRef = useRef(null)
@@ -106,6 +108,9 @@ export default function BottomPopup({
 
   // Handle mouse events for desktop drag support
   const handleMouseDown = (e) => {
+    // Don't allow swipe if disabled
+    if (disableSwipeToClose) return
+    
     const target = e.target
     const isHandle = handleRef.current?.contains(target)
     
@@ -125,7 +130,8 @@ export default function BottomPopup({
   }
 
   const handleMouseMove = (e) => {
-    if (!isSwiping.current || !isOpen) return
+    // Don't allow swipe if disabled
+    if (disableSwipeToClose || !isSwiping.current || !isOpen) return
     
     const currentY = e.clientY
     const deltaY = currentY - swipeStartY.current
@@ -137,7 +143,8 @@ export default function BottomPopup({
   }
 
   const handleMouseUp = (e) => {
-    if (!isSwiping.current) {
+    // Don't allow swipe if disabled
+    if (disableSwipeToClose || !isSwiping.current) {
       isSwiping.current = false
       setIsDragging(false)
       return
