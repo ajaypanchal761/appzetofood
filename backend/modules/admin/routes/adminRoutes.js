@@ -128,6 +128,10 @@ import {
   respondToSafetyEmergency,
   deleteSafetyEmergency
 } from '../controllers/safetyEmergencyController.js';
+import {
+  getOrders,
+  getOrderById
+} from '../controllers/orderController.js';
 import zoneRoutes from './zoneRoutes.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
@@ -280,6 +284,10 @@ router.put('/safety-emergency/:id/status', updateSafetyEmergencyStatus);
 router.put('/safety-emergency/:id/priority', updateSafetyEmergencyPriority);
 router.put('/safety-emergency/:id/respond', respondToSafetyEmergency);
 router.delete('/safety-emergency/:id', deleteSafetyEmergency);
+
+// Order Management
+router.get('/orders', getOrders);
+router.get('/orders/:id', getOrderById);
 
 export default router;
 

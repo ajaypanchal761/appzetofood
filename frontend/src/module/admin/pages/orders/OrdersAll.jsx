@@ -1,12 +1,10 @@
-import { ordersDummy } from "../../data/ordersDummy"
-import OrdersTopbar from "../../components/orders/OrdersTopbar"
-import OrdersTable from "../../components/orders/OrdersTable"
-import FilterPanel from "../../components/orders/FilterPanel"
-import ViewOrderDialog from "../../components/orders/ViewOrderDialog"
-import SettingsDialog from "../../components/orders/SettingsDialog"
-import { useOrdersManagement } from "../../components/orders/useOrdersManagement"
+import OrdersPage from "./OrdersPage"
 
 export default function OrdersAll() {
+  // Use OrdersPage component with "all" status
+  return <OrdersPage statusKey="all" />
+  
+  /* Legacy code - kept for reference
   const {
     searchQuery,
     setSearchQuery,

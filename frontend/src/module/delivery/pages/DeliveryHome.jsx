@@ -1734,7 +1734,8 @@ export default function DeliveryHome() {
                     console.log('📦 Creating new DirectionsRenderer for main map');
                     directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
                       map: window.deliveryMapInstance,
-                      suppressMarkers: true, // Hide default A/B markers - we'll use custom markers
+                      suppressMarkers: true, // Hide default A/B markers AND destination car icon
+                      suppressInfoWindows: false,
                       polylineOptions: {
                         strokeColor: '#4285F4', // Bright blue like Zomato
                         strokeWeight: 10, // Even thicker for better visibility
@@ -1744,19 +1745,23 @@ export default function DeliveryHome() {
                       },
                       preserveViewport: false // Auto-fit bounds to route
                     });
-                    console.log('✅ DirectionsRenderer created with Zomato-style blue polyline');
+                    console.log('✅ DirectionsRenderer created with Zomato-style blue polyline (markers suppressed)');
                   } else {
                     console.log('🔄 Using existing DirectionsRenderer, setting map');
                     directionsRendererRef.current.setMap(window.deliveryMapInstance);
-                    // Update polyline options to ensure visibility
+                    // Update polyline options to ensure visibility and suppress markers
                     directionsRendererRef.current.setOptions({
-                      suppressMarkers: true,
+                      suppressMarkers: true, // Hide default markers including car icon
+                      suppressInfoWindows: false,
                       polylineOptions: {
                         strokeColor: '#4285F4', // Bright blue like Zomato
                         strokeWeight: 10, // Even thicker for better visibility
                         strokeOpacity: 1.0, // Fully opaque
                         zIndex: 1000, // High z-index
                         icons: [] // No custom icons
+                      },
+                      markerOptions: {
+                        visible: false // Explicitly hide all markers
                       },
                       preserveViewport: false
                     });
@@ -1837,16 +1842,23 @@ export default function DeliveryHome() {
                     restaurantMarkerRef.current.setMap(null);
                   }
                   
-                  // Create restaurant marker on main map
+                  // Create restaurant marker on main map with kitchen icon
                   restaurantMarkerRef.current = new window.google.maps.Marker({
                     position: restaurantLocation,
                     map: window.deliveryMapInstance,
                     icon: {
-                      url: 'https://cdn-icons-png.flaticon.com/512/3176/3176295.png', // Restaurant icon
-                      scaledSize: new window.google.maps.Size(40, 40),
-                      anchor: new window.google.maps.Point(20, 40)
+                      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="11" fill="#FF6B35" stroke="#FFFFFF" stroke-width="2"/>
+                          <path d="M8 10c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v6H8v-6z" fill="#FFFFFF"/>
+                          <path d="M7 16h10M10 12h4M9 14h6" stroke="#FF6B35" stroke-width="1.5" stroke-linecap="round"/>
+                          <path d="M10 8h4v2h-4z" fill="#FFFFFF" opacity="0.7"/>
+                        </svg>
+                      `),
+                      scaledSize: new window.google.maps.Size(48, 48),
+                      anchor: new window.google.maps.Point(24, 48)
                     },
-                    title: restaurantInfo.name || 'Restaurant',
+                    title: restaurantInfo.name || 'Kitchen',
                     animation: window.google.maps.Animation.DROP,
                     zIndex: 10
                   });
@@ -2040,6 +2052,21 @@ export default function DeliveryHome() {
         
         // Get order ID
         const orderId = selectedRestaurant?.id || selectedRestaurant?.orderId
+        
+        // CRITICAL: Check if order is already delivered/completed - don't call API
+        const orderStatus = selectedRestaurant?.orderStatus || selectedRestaurant?.status || ''
+        const deliveryPhase = selectedRestaurant?.deliveryPhase || selectedRestaurant?.deliveryState?.currentPhase || ''
+        const isDelivered = orderStatus === 'delivered' || 
+                            deliveryPhase === 'completed' || 
+                            deliveryPhase === 'delivered' ||
+                            selectedRestaurant?.deliveryState?.status === 'delivered'
+        
+        if (isDelivered) {
+          console.warn('⚠️ Order is already delivered, skipping reached pickup confirmation')
+          toast.error('Order is already delivered. Cannot confirm reached pickup.')
+          setShowreachedPickupPopup(false)
+          return
+        }
         
         if (orderId) {
           try {
@@ -2253,6 +2280,21 @@ export default function DeliveryHome() {
         // Get order ID from selectedRestaurant
         const orderId = selectedRestaurant?.id || selectedRestaurant?.orderId
         const confirmedOrderId = selectedRestaurant?.orderId
+        
+        // CRITICAL: Check if order is already delivered/completed - don't call API
+        const orderStatus = selectedRestaurant?.orderStatus || selectedRestaurant?.status || ''
+        const deliveryPhase = selectedRestaurant?.deliveryPhase || selectedRestaurant?.deliveryState?.currentPhase || ''
+        const isDelivered = orderStatus === 'delivered' || 
+                            deliveryPhase === 'completed' || 
+                            deliveryPhase === 'delivered' ||
+                            selectedRestaurant?.deliveryState?.status === 'delivered'
+        
+        if (isDelivered) {
+          console.warn('⚠️ Order is already delivered, skipping order ID confirmation')
+          toast.error('Order is already delivered. Cannot confirm order ID.')
+          setShowOrderIdConfirmationPopup(false)
+          return
+        }
         
         if (!orderId) {
           console.error('❌ No order ID found to confirm')
@@ -2512,15 +2554,17 @@ export default function DeliveryHome() {
                   status: 'delivered', // Also update status field
                   deliveryPhase: 'completed', // Mark delivery phase as completed
                   deliveryState: {
-                    ...selectedRestaurant.deliveryState,
+                    ...(selectedRestaurant.deliveryState || {}),
                     status: 'delivered',
                     currentPhase: 'completed'
                   }
                 })
               }
               
-              // Clear reached drop popup if it's still showing
+              // CRITICAL: Clear all pickup/delivery related popups when order is delivered
               setShowReachedDropPopup(false)
+              setShowreachedPickupPopup(false) // Clear reached pickup popup
+              setShowOrderIdConfirmationPopup(false) // Clear order ID confirmation popup
               
               // Show customer review popup
               setShowCustomerReviewPopup(true)
@@ -3686,17 +3730,23 @@ export default function DeliveryHome() {
             map.fitBounds(bounds, { padding: 50 });
           }
 
-          // Add custom Restaurant Marker
+          // Add custom Restaurant Marker with kitchen icon
           if (!restaurantMarkerRef.current) {
             restaurantMarkerRef.current = new window.google.maps.Marker({
               position: restaurantLocation,
               map: map,
               icon: {
-                url: 'https://cdn-icons-png.flaticon.com/512/3176/3176295.png', // Restaurant icon
-                scaledSize: new window.google.maps.Size(40, 40),
-                anchor: new window.google.maps.Point(20, 40)
+                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="#FF6B35">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 4.17 4.42 9.92 6.24 12.11.4.48 1.08.48 1.52 0C14.58 18.92 19 13.17 19 9c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5 14.5 7.62 14.5 9 13.38 11.5 12 11.5z"/>
+                    <circle cx="12" cy="9" r="3" fill="#FFFFFF"/>
+                    <path d="M8 16h2v6H8zm6 0h2v6h-2z" fill="#FFFFFF"/>
+                  </svg>
+                `),
+                scaledSize: new window.google.maps.Size(48, 48),
+                anchor: new window.google.maps.Point(24, 48)
               },
-              title: selectedRestaurant.name || 'Restaurant',
+              title: selectedRestaurant.name || 'Kitchen',
               animation: window.google.maps.Animation.DROP
             });
           } else {
@@ -3840,13 +3890,23 @@ export default function DeliveryHome() {
   }, [showDirectionsMap, riderLocation, selectedRestaurant?.id, calculateDistanceInMeters])
 
   // Handle route polyline visibility and updates
+  // Only show fallback polyline if DirectionsRenderer is NOT active
   useEffect(() => {
-    // Update polyline when routePolyline state changes (from order acceptance)
+    // Don't show fallback polyline if DirectionsRenderer is active (it handles road-snapped routes)
+    if (directionsRendererRef.current && directionsRendererRef.current.getDirections()) {
+      // DirectionsRenderer is active, hide fallback polyline
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+      return;
+    }
+    
+    // Only show fallback polyline if DirectionsRenderer is NOT active
     if (routePolyline && routePolyline.length > 0 && window.deliveryMapInstance) {
       updateRoutePolyline();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routePolyline?.length])
+  }, [routePolyline?.length, directionsResponse])
 
   // Handle directionsResponse updates - Show route on main map when directions are calculated
   useEffect(() => {
@@ -3871,7 +3931,8 @@ export default function DeliveryHome() {
       console.log('📦 Creating DirectionsRenderer for main map');
       directionsRendererRef.current = new window.google.maps.DirectionsRenderer({
         map: window.deliveryMapInstance,
-        suppressMarkers: true, // Hide default A/B markers - we'll use custom markers
+        suppressMarkers: true, // Hide default A/B markers AND destination car icon
+        suppressInfoWindows: false,
         polylineOptions: {
           strokeColor: '#4285F4', // Bright blue like Zomato
           strokeWeight: 10, // Even thicker for better visibility
@@ -3879,18 +3940,22 @@ export default function DeliveryHome() {
           zIndex: 1000, // High z-index to ensure it's above other elements
           icons: [] // No custom icons, just solid line
         },
+        markerOptions: {
+          visible: false // Explicitly hide all markers including car icon
+        },
         preserveViewport: false // Auto-fit bounds to route
       });
-      console.log('✅ DirectionsRenderer created with bright blue polyline');
+      console.log('✅ DirectionsRenderer created with bright blue polyline (markers suppressed)');
       
       // Ensure it's visible by explicitly setting map
       directionsRendererRef.current.setMap(window.deliveryMapInstance);
     } else {
       // Ensure renderer is attached to main map
       directionsRendererRef.current.setMap(window.deliveryMapInstance);
-      // Update polyline options to ensure visibility
+      // Update polyline options to ensure visibility and suppress markers
       directionsRendererRef.current.setOptions({
-        suppressMarkers: true,
+        suppressMarkers: true, // Hide default markers including car icon
+        suppressInfoWindows: false,
         polylineOptions: {
           strokeColor: '#4285F4', // Bright blue like Zomato
           strokeWeight: 10, // Even thicker for better visibility
@@ -3898,9 +3963,12 @@ export default function DeliveryHome() {
           zIndex: 1000, // High z-index
           icons: [] // No custom icons
         },
+        markerOptions: {
+          visible: false // Explicitly hide all markers
+        },
         preserveViewport: false
       });
-      console.log('✅ DirectionsRenderer re-attached to main map with updated styling');
+      console.log('✅ DirectionsRenderer re-attached to main map with updated styling (markers suppressed)');
     }
 
     // Set directions response to renderer
@@ -3937,14 +4005,19 @@ export default function DeliveryHome() {
       });
 
       // Force update polyline options again after setting directions to ensure visibility
+      // Also explicitly suppress all markers including destination markers (car icon)
       directionsRendererRef.current.setOptions({
-        suppressMarkers: true,
+        suppressMarkers: true, // Hide all default markers (including destination car icon)
+        suppressInfoWindows: false, // Keep info windows if needed
         polylineOptions: {
           strokeColor: '#4285F4', // Bright blue like Zomato
           strokeWeight: 10, // Even thicker for better visibility
           strokeOpacity: 1.0, // Fully opaque
           zIndex: 1000, // High z-index to ensure it's above other elements
           icons: [] // No custom icons, just solid line
+        },
+        markerOptions: {
+          visible: false // Explicitly hide all markers
         },
         preserveViewport: false
       });
@@ -4192,7 +4265,18 @@ export default function DeliveryHome() {
   }, [selectedRestaurant?.id, selectedRestaurant?.orderId, clearOrderData])
 
   // Handle route polyline visibility toggle
+  // Only show fallback polyline if DirectionsRenderer is NOT active
   useEffect(() => {
+    // Don't show fallback polyline if DirectionsRenderer is active (it handles road-snapped routes)
+    if (directionsRendererRef.current && directionsRendererRef.current.getDirections()) {
+      // DirectionsRenderer is active, hide fallback polyline
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+      return;
+    }
+
+    // Only show fallback polyline if DirectionsRenderer is NOT active
     if (routePolylineRef.current) {
       if (showRoutePath && routeHistoryRef.current.length >= 2) {
         routePolylineRef.current.setMap(window.deliveryMapInstance);
@@ -4203,13 +4287,12 @@ export default function DeliveryHome() {
         routePolylineRef.current.setMap(null);
       }
     }
-  }, [showRoutePath, routePolyline])
+  }, [showRoutePath, routePolyline, directionsResponse])
 
   // Listen for order ready event from backend (when restaurant ETA becomes 0)
   useEffect(() => {
     if (orderReady) {
       console.log('✅ Order ready event received:', orderReady);
-      console.log('✅ Showing Reached Pickup popup');
       
       // Update selectedRestaurant with order data from orderReady event if available
       if (orderReady.orderId || orderReady.order) {
@@ -4222,7 +4305,9 @@ export default function DeliveryHome() {
             name: order.restaurantName || order.restaurantId?.name || selectedRestaurant?.name,
             address: order.restaurantId?.location?.formattedAddress || 
                     order.restaurantId?.location?.address ||
-                    selectedRestaurant?.address
+                    selectedRestaurant?.address,
+            lat: order.restaurantId?.location?.coordinates?.[1] || selectedRestaurant?.lat,
+            lng: order.restaurantId?.location?.coordinates?.[0] || selectedRestaurant?.lng
           }
           setSelectedRestaurant(restaurantInfo)
           console.log('🏪 Updated restaurant info from orderReady event:', restaurantInfo)
@@ -4232,42 +4317,194 @@ export default function DeliveryHome() {
       // Close directions map if open
       setShowDirectionsMap(false);
       
-      // Show Reached Pickup popup
-      setShowreachedPickupPopup(true);
+      // Check if delivery boy is within 500m - if yes, show popup immediately
+      // But only if order is not already delivered/completed
+      const orderStatus = restaurantInfo?.orderStatus || restaurantInfo?.status || ''
+      const deliveryPhase = restaurantInfo?.deliveryPhase || restaurantInfo?.deliveryState?.currentPhase || ''
+      const isDelivered = orderStatus === 'delivered' || 
+                          deliveryPhase === 'completed' || 
+                          deliveryPhase === 'delivered' ||
+                          restaurantInfo?.deliveryState?.status === 'delivered'
       
-      // Clear the orderReady state after showing popup
-      // Don't clear immediately - let user see the popup
-      // clearOrderReady();
+      if (!isDelivered && selectedRestaurant?.lat && selectedRestaurant?.lng && riderLocation && riderLocation.length === 2) {
+        const distanceToRestaurant = calculateDistanceInMeters(
+          riderLocation[0],
+          riderLocation[1],
+          selectedRestaurant.lat,
+          selectedRestaurant.lng
+        )
+        
+        if (distanceToRestaurant <= 500) {
+          console.log('✅ Delivery boy within 500m of restaurant, showing Reached Pickup popup')
+          setShowreachedPickupPopup(true)
+        }
+      }
     }
-  }, [orderReady])
+  }, [orderReady, selectedRestaurant, riderLocation, calculateDistanceInMeters])
+
+  // Monitor delivery boy's location for "Reached Pickup" detection
+  // Show "Reached Pickup" popup when delivery boy is within 500 meters of restaurant location
+  useEffect(() => {
+    // Don't show if popup is already showing, or if order hasn't been accepted yet
+    if (showreachedPickupPopup || 
+        showNewOrderPopup || 
+        showOrderIdConfirmationPopup || // Don't show if order ID is already being confirmed
+        showReachedDropPopup || // Don't show if already reached drop
+        showOrderDeliveredAnimation || // Don't show if order is delivered
+        showCustomerReviewPopup || // Don't show if showing review popup
+        showPaymentPage || // Don't show if showing payment page
+        !selectedRestaurant?.lat || 
+        !selectedRestaurant?.lng || 
+        !riderLocation || 
+        riderLocation.length !== 2) {
+      return
+    }
+
+    // Only show for orders that are in pickup phase (en_route_to_pickup or at_pickup)
+    const deliveryPhase = selectedRestaurant?.deliveryPhase || selectedRestaurant?.deliveryState?.currentPhase || ''
+    const orderStatus = selectedRestaurant?.orderStatus || selectedRestaurant?.status || ''
+    
+    // CRITICAL: Don't show if order is already delivered/completed
+    const isDelivered = orderStatus === 'delivered' || 
+                        deliveryPhase === 'completed' || 
+                        deliveryPhase === 'delivered' ||
+                        selectedRestaurant?.deliveryState?.status === 'delivered'
+
+    if (isDelivered) {
+      // Hide popup if it's showing and order is delivered
+      if (showreachedPickupPopup) {
+        setShowreachedPickupPopup(false)
+      }
+      return
+    }
+    
+    // Only show if order is accepted and on the way to pickup or at pickup
+    const isInPickupPhase = deliveryPhase === 'en_route_to_pickup' || 
+                            deliveryPhase === 'at_pickup' ||
+                            orderStatus === 'ready' ||
+                            orderStatus === 'preparing'
+
+    if (!isInPickupPhase) {
+      return
+    }
+
+    // Calculate distance to restaurant location
+    const distanceInMeters = calculateDistanceInMeters(
+      riderLocation[0], // lat
+      riderLocation[1], // lng
+      selectedRestaurant.lat,
+      selectedRestaurant.lng
+    )
+
+    console.log(`📍 Distance to restaurant: ${distanceInMeters.toFixed(2)} meters`)
+
+    // Show "Reached Pickup" popup when within 500 meters of restaurant location
+    if (distanceInMeters <= 500 && !showreachedPickupPopup) {
+      console.log('✅ Delivery boy reached pickup location (within 500m), showing popup')
+      setShowreachedPickupPopup(true)
+      
+      // Close directions map if open
+      setShowDirectionsMap(false)
+    }
+  }, [
+    riderLocation?.[0] ?? null, 
+    riderLocation?.[1] ?? null, 
+    selectedRestaurant?.lat ?? null, 
+    selectedRestaurant?.lng ?? null,
+    selectedRestaurant?.deliveryPhase ?? selectedRestaurant?.deliveryState?.currentPhase ?? null,
+    selectedRestaurant?.orderStatus ?? selectedRestaurant?.status ?? null,
+    Boolean(showNewOrderPopup), 
+    Boolean(showOrderIdConfirmationPopup), 
+    Boolean(showreachedPickupPopup),
+    Boolean(showReachedDropPopup),
+    Boolean(showOrderDeliveredAnimation),
+    Boolean(showCustomerReviewPopup),
+    Boolean(showPaymentPage),
+    selectedRestaurant?.orderStatus,
+    selectedRestaurant?.status,
+    selectedRestaurant?.deliveryPhase,
+    selectedRestaurant?.deliveryState?.status,
+    calculateDistanceInMeters
+  ])
+
+  // CRITICAL: Monitor order status and close all pickup/delivery popups when order is delivered
+  useEffect(() => {
+    const orderStatus = selectedRestaurant?.orderStatus || selectedRestaurant?.status || ''
+    const deliveryPhase = selectedRestaurant?.deliveryPhase || selectedRestaurant?.deliveryState?.currentPhase || ''
+    const deliveryStateStatus = selectedRestaurant?.deliveryState?.status || ''
+    
+    const isDelivered = orderStatus === 'delivered' || 
+                        deliveryPhase === 'completed' || 
+                        deliveryPhase === 'delivered' ||
+                        deliveryStateStatus === 'delivered' ||
+                        showPaymentPage ||
+                        showOrderDeliveredAnimation
+
+    if (isDelivered) {
+      // Close all pickup/delivery related popups when order is delivered
+      if (showreachedPickupPopup) {
+        console.log('🚫 Order is delivered, closing Reached Pickup popup')
+        setShowreachedPickupPopup(false)
+      }
+      if (showOrderIdConfirmationPopup) {
+        console.log('🚫 Order is delivered, closing Order ID Confirmation popup')
+        setShowOrderIdConfirmationPopup(false)
+      }
+      if (showReachedDropPopup && !showOrderDeliveredAnimation && !showCustomerReviewPopup) {
+        console.log('🚫 Order is delivered, closing Reached Drop popup')
+        setShowReachedDropPopup(false)
+      }
+    }
+  }, [
+    selectedRestaurant?.orderStatus,
+    selectedRestaurant?.status,
+    selectedRestaurant?.deliveryPhase,
+    selectedRestaurant?.deliveryState?.currentPhase,
+    selectedRestaurant?.deliveryState?.status,
+    showPaymentPage,
+    showOrderDeliveredAnimation,
+    showreachedPickupPopup,
+    showOrderIdConfirmationPopup,
+    showReachedDropPopup
+  ])
 
   // Monitor delivery boy's location for "Reached Drop" detection
   // Show "Reached Drop" popup when delivery boy is within 100 meters of customer location
   useEffect(() => {
+    // CRITICAL: If payment page is showing, delivery is completed - do NOT show reached drop popup
+    if (showPaymentPage || showCustomerReviewPopup || showOrderDeliveredAnimation) {
+      // Clear reached drop popup if it's still showing when payment page appears
+      if (showReachedDropPopup) {
+        setShowReachedDropPopup(false)
+      }
+      return
+    }
+
     // Get order status/phase to ensure we only show "Reached Drop" when order is out for delivery
     const orderStatus = selectedRestaurant?.orderStatus || selectedRestaurant?.status || newOrder?.status || ''
     const deliveryPhase = selectedRestaurant?.deliveryState?.currentPhase || selectedRestaurant?.deliveryPhase || ''
     
     // Only show "Reached Drop" if order is actually out for delivery or in en_route_to_delivery phase
     // CRITICAL: Do NOT show if order is already delivered or completed
-    const isOutForDelivery = (orderStatus === 'out_for_delivery' || 
+    const isDeliveredOrCompleted = orderStatus === 'delivered' || 
+                                   orderStatus === 'completed' || 
+                                   deliveryPhase === 'completed' ||
+                                   deliveryPhase === 'at_delivery' // Don't show if already at delivery (reached drop already confirmed)
+    
+    const isOutForDelivery = !isDeliveredOrCompleted && (
+                             orderStatus === 'out_for_delivery' || 
                              deliveryPhase === 'en_route_to_delivery' ||
-                             orderStatus === 'ready') && // Sometimes order can be ready but not yet out_for_delivery
-                             orderStatus !== 'delivered' && // Don't show if already delivered
-                             deliveryPhase !== 'completed' && // Don't show if delivery is completed
-                             orderStatus !== 'completed' // Don't show if order is completed
+                             orderStatus === 'ready') // Sometimes order can be ready but not yet out_for_delivery
     
     // Only monitor if we have customer location and order ID is confirmed (order is out for delivery)
     if (!selectedRestaurant?.customerLat || !selectedRestaurant?.customerLng || 
         !riderLocation || riderLocation.length !== 2 ||
         !isOutForDelivery || // CRITICAL: Only check distance when order is actually out for delivery
+        isDeliveredOrCompleted || // CRITICAL: Don't check if order is already delivered/completed
         showNewOrderPopup || // Don't show if new order popup is still showing (order not accepted yet)
         showOrderIdConfirmationPopup || // Don't show if still confirming order ID
         showreachedPickupPopup || // Don't show if still at pickup
-        showReachedDropPopup || // Don't show if already shown
-        showOrderDeliveredAnimation || // Don't show if already delivered
-        showCustomerReviewPopup || // Don't show if review popup is showing (order completed)
-        showPaymentPage) { // Don't show if payment page is showing (order completed)
+        showReachedDropPopup) { // Don't show if already shown
       return
     }
 
@@ -4409,7 +4646,17 @@ export default function DeliveryHome() {
 
   // Create or update route polyline (blue line showing traveled path) - LEGACY/FALLBACK
   // Accepts optional coordinates parameter to draw route immediately without waiting for state update
+  // This is a FALLBACK polyline - should only be used when DirectionsRenderer is NOT available
   const updateRoutePolyline = (coordinates = null) => {
+    // Don't show fallback polyline if DirectionsRenderer is active (it handles road-snapped routes)
+    if (directionsRendererRef.current && directionsRendererRef.current.getDirections()) {
+      // DirectionsRenderer is active, hide fallback polyline
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+      return;
+    }
+
     if (!window.google || !window.google.maps || !window.deliveryMapInstance) {
       console.warn('⚠️ Map not ready for polyline update');
       return;
@@ -4431,27 +4678,29 @@ export default function DeliveryHome() {
 
       if (path.length > 0) {
         // Create or update polyline
+        // Use geodesic: false to follow roads more closely (though it won't be perfect without Directions API)
         if (!routePolylineRef.current) {
           routePolylineRef.current = new window.google.maps.Polyline({
             path: path,
-            geodesic: true,
+            geodesic: false, // Changed to false - this makes it follow the coordinate path more closely
             strokeColor: '#4285F4', // Bright blue like Zomato
             strokeOpacity: 1.0, // Fully opaque for better visibility
             strokeWeight: 10, // Thicker line for better visibility
             map: map,
             zIndex: 1000 // High z-index to ensure it's above other elements
           });
-          console.log('✅ Route polyline created on map with', path.length, 'points');
+          console.log('✅ Route polyline created on map with', path.length, 'points (FALLBACK - use DirectionsRenderer for road-snapped routes)');
         } else {
           routePolylineRef.current.setPath(path);
           routePolylineRef.current.setOptions({
+            geodesic: false, // Changed to false
             strokeColor: '#4285F4',
             strokeOpacity: 1.0,
             strokeWeight: 10,
             zIndex: 1000
           });
           routePolylineRef.current.setMap(map);
-          console.log('✅ Route polyline updated on map with', path.length, 'points');
+          console.log('✅ Route polyline updated on map with', path.length, 'points (FALLBACK)');
         }
 
         // Fit map bounds to show entire route
@@ -5132,74 +5381,6 @@ export default function DeliveryHome() {
         </div>
       </div>
 
-      {/* Map View Toggle Bar - Only visible when map is shown, transparent overlay on map */}
-      {!showHomeSections && (
-        <>
-          {/* Segmented Control - Hotspot/Select drop - Centered */}
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute top-[155px] left-1/2 -translate-x-1/2 z-40"
-          >
-            <div className="relative inline-flex rounded-full bg-white backdrop-blur-md shadow-lg border border-gray-200 overflow-hidden p-1">
-              {/* Animated sliding background */}
-              <motion.div
-                className="absolute top-1 bottom-1 rounded-full bg-black"
-                initial={false}
-                animate={{
-                  left: mapViewMode === "hotspot" ? "4px" : "50%",
-                  width: mapViewMode === "hotspot" ? "calc(50% - 4px)" : "calc(50% - 4px)",
-                }}
-                transition={{
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 30
-                }}
-              />
-
-              {/* Buttons */}
-              <button
-                onClick={() => setMapViewMode("hotspot")}
-                className={`relative px-6 py-2.5 font-semibold text-sm transition-colors duration-200 whitespace-nowrap rounded-full z-10 ${mapViewMode === "hotspot"
-                    ? "text-white"
-                    : "text-black"
-                  }`}
-              >
-                Hotspot
-              </button>
-              <button
-                onClick={() => {
-                  const selectedDropLocation = getSelectedDropLocation()
-                  if (!selectedDropLocation) {
-                    navigate("/delivery/select-drop-location")
-                  } else {
-                    setMapViewMode("selectDrop")
-                  }
-                }}
-                className={`relative px-6 py-2.5 font-semibold text-sm transition-colors duration-200 whitespace-nowrap rounded-full z-10 ${mapViewMode === "selectDrop"
-                    ? "text-white"
-                    : "text-black"
-                  }`}
-              >
-                Select drop
-              </button>
-            </div>
-          </motion.div>
-
-          {/* Hamburger Menu Button - Absolute Right */}
-          <motion.button
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute top-[160px] right-4 z-40 w-10 h-10 rounded-full bg-white/80 backdrop-blur-md border border-gray-300/50 flex items-center justify-center hover:bg-white/90 transition-colors"
-          >
-            <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </motion.button>
-        </>
-      )}
 
       {/* Conditional Content Based on Swipe Bar Position */}
       {!showHomeSections ? (
@@ -6416,9 +6597,15 @@ export default function DeliveryHome() {
         )}
       </AnimatePresence>
 
-      {/* Reached Pickup Popup */}
+      {/* Reached Pickup Popup - Only show if order is not delivered */}
       <BottomPopup
-        isOpen={showreachedPickupPopup}
+        isOpen={showreachedPickupPopup && 
+                selectedRestaurant?.orderStatus !== 'delivered' && 
+                selectedRestaurant?.status !== 'delivered' &&
+                selectedRestaurant?.deliveryPhase !== 'completed' &&
+                selectedRestaurant?.deliveryState?.status !== 'delivered' &&
+                !showOrderDeliveredAnimation &&
+                !showPaymentPage}
         onClose={() => setShowreachedPickupPopup(false)}
         showCloseButton={false}
         closeOnBackdropClick={false}
@@ -6522,9 +6709,15 @@ export default function DeliveryHome() {
         </div>
       </BottomPopup>
 
-      {/* Order ID Confirmation Popup - After Reached Pickup - BLOCKING */}
+      {/* Order ID Confirmation Popup - After Reached Pickup - BLOCKING - Only show if order is not delivered */}
       <BottomPopup
-        isOpen={showOrderIdConfirmationPopup}
+        isOpen={showOrderIdConfirmationPopup && 
+                selectedRestaurant?.orderStatus !== 'delivered' && 
+                selectedRestaurant?.status !== 'delivered' &&
+                selectedRestaurant?.deliveryPhase !== 'completed' &&
+                selectedRestaurant?.deliveryState?.status !== 'delivered' &&
+                !showOrderDeliveredAnimation &&
+                !showPaymentPage}
         onClose={() => {}} // Block closing - must confirm order ID
         showCloseButton={false}
         closeOnBackdropClick={false}
@@ -6990,6 +7183,7 @@ export default function DeliveryHome() {
                 
                 // Close review popup and show payment/earnings page
                 setShowCustomerReviewPopup(false)
+                setShowReachedDropPopup(false) // Clear reached drop popup if still showing
                 setShowPaymentPage(true)
               }}
               className="w-full bg-green-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-green-700 transition-colors shadow-lg"
@@ -7052,6 +7246,16 @@ export default function DeliveryHome() {
               <button
                 onClick={() => {
                   setShowPaymentPage(false)
+                  // CRITICAL: Clear all order-related popups and states when completing
+                  setShowreachedPickupPopup(false)
+                  setShowOrderIdConfirmationPopup(false)
+                  setShowReachedDropPopup(false)
+                  setShowOrderDeliveredAnimation(false)
+                  setShowCustomerReviewPopup(false)
+                  
+                  // Clear selected restaurant/order to prevent showing popups for delivered order
+                  setSelectedRestaurant(null)
+                  
                   navigate("/delivery")
                   // Reset states
                   setTimeout(() => {

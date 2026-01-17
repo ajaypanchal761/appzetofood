@@ -1,12 +1,14 @@
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { FileText, Calendar, Package } from "lucide-react"
-import { ordersDummy } from "../../data/ordersDummy"
+import { adminAPI } from "@/lib/api"
+import { toast } from "sonner"
 import OrdersTopbar from "../../components/orders/OrdersTopbar"
 import OrdersTable from "../../components/orders/OrdersTable"
 import FilterPanel from "../../components/orders/FilterPanel"
 import ViewOrderDialog from "../../components/orders/ViewOrderDialog"
 import SettingsDialog from "../../components/orders/SettingsDialog"
 import { useOrdersManagement } from "../../components/orders/useOrdersManagement"
+import { Loader2 } from "lucide-react"
 
 // Status configuration with titles, colors, and icons
 const statusConfig = {
@@ -26,30 +28,41 @@ const statusConfig = {
 
 export default function OrdersPage({ statusKey = "all" }) {
   const config = statusConfig[statusKey] || statusConfig["all"]
+  const [orders, setOrders] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
   
-  // Get base filtered orders by status
-  const baseFilteredOrders = useMemo(() => {
-    if (statusKey === "all") {
-      return ordersDummy
+  // Fetch orders from backend API
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        setIsLoading(true)
+        const params = {
+          page: 1,
+          limit: 1000, // Fetch all orders for now (can be optimized with pagination later)
+          status: statusKey === "all" ? undefined : statusKey
+        }
+        
+        const response = await adminAPI.getOrders(params)
+        
+        if (response.data?.success && response.data?.data?.orders) {
+          setOrders(response.data.data.orders)
+          setTotalCount(response.data.data.pagination?.total || response.data.data.orders.length)
+        } else {
+          console.error("Failed to fetch orders:", response.data)
+          toast.error("Failed to fetch orders")
+          setOrders([])
+        }
+      } catch (error) {
+        console.error("Error fetching orders:", error)
+        toast.error(error.response?.data?.message || "Failed to fetch orders")
+        setOrders([])
+      } finally {
+        setIsLoading(false)
+      }
     }
-    
-    // Map route keys to order status values
-    const statusMap = {
-      "scheduled": "Scheduled",
-      "pending": "Pending",
-      "accepted": "Accepted",
-      "processing": "Processing",
-      "food-on-the-way": "Food On The Way",
-      "delivered": "Delivered",
-      "canceled": "Canceled",
-      "payment-failed": "Payment Failed",
-      "refunded": "Refunded",
-      "dine-in": "Dine In",
-      "offline-payments": "Offline Payments",
-    }
-    
-    const targetStatus = statusMap[statusKey]
-    return ordersDummy.filter(order => order.orderStatus === targetStatus)
+
+    fetchOrders()
   }, [statusKey])
 
   const {
@@ -76,7 +89,18 @@ export default function OrdersPage({ statusKey = "all" }) {
     handlePrintOrder,
     toggleColumn,
     resetColumns,
-  } = useOrdersManagement(baseFilteredOrders, statusKey, config.title)
+  } = useOrdersManagement(orders, statusKey, config.title)
+
+  if (isLoading) {
+    return (
+      <div className="p-4 lg:p-6 bg-slate-50 min-h-screen w-full max-w-full overflow-x-hidden flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+          <p className="text-gray-600">Loading orders...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen w-full max-w-full overflow-x-hidden">

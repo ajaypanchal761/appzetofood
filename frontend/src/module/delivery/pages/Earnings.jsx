@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, Share2, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react"
+import { ArrowLeft, Share2, ChevronLeft, ChevronRight, ChevronDown, Loader2 } from "lucide-react"
 import { formatCurrency } from "../../restaurant/utils/currency"
 import { useProgressStore } from "../store/progressStore"
+import { deliveryAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 export default function Earnings() {
   const navigate = useNavigate()
@@ -93,25 +95,197 @@ export default function Earnings() {
     }
   }
 
-  const [earningsData, setEarningsData] = useState(() => 
-    generateDummyData(selectedDate, activeTab)
-  )
+  const [earningsData, setEarningsData] = useState({
+    totalEarnings: 0,
+    orders: 0,
+    hours: 0,
+    minutes: 0,
+    orderEarning: 0,
+    incentive: 0,
+    otherEarnings: 0
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [dailyEarningsData, setDailyEarningsData] = useState([])
+  const [weeklyEarningsData, setWeeklyEarningsData] = useState([])
 
   const { updateTodayEarnings } = useProgressStore()
 
+  // Fetch earnings from backend API
   useEffect(() => {
-    const data = generateDummyData(selectedDate, activeTab)
-    setEarningsData(data)
-    
-    // Update store if viewing today's data
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const selectedDateNormalized = new Date(selectedDate)
-    selectedDateNormalized.setHours(0, 0, 0, 0)
-    
-    if (activeTab === "day" && selectedDateNormalized.getTime() === today.getTime()) {
-      updateTodayEarnings(data.totalEarnings)
+    const fetchEarnings = async () => {
+      try {
+        setIsLoading(true)
+        
+        // Map activeTab to backend period format
+        const periodMap = {
+          'day': 'today',
+          'week': 'week',
+          'month': 'month',
+          'all': 'all'
+        }
+        const period = periodMap[activeTab] || 'all'
+        
+        // If date is specified, pass it to backend
+        const params = {
+          period,
+          page: 1,
+          limit: 1000
+        }
+        
+        // For week/month, pass the selected date
+        if (activeTab === 'week' || activeTab === 'month' || activeTab === 'day') {
+          params.date = selectedDate.toISOString()
+        }
+        
+        const response = await deliveryAPI.getEarnings(params)
+        
+        if (response.data?.success && response.data?.data) {
+          const data = response.data.data
+          const summary = data.summary || {}
+          
+          // Set earnings data
+          setEarningsData({
+            totalEarnings: summary.totalEarnings || 0,
+            orders: summary.totalOrders || 0,
+            hours: summary.totalHours || 0,
+            minutes: summary.totalMinutes || 0,
+            orderEarning: summary.orderEarning || 0,
+            incentive: summary.incentive || 0,
+            otherEarnings: summary.otherEarnings || 0
+          })
+          
+          // For week view, calculate daily breakdown
+          if (activeTab === 'week' && data.earnings) {
+            const weekRange = getWeekRange(selectedDate)
+            const dailyBreakdown = []
+            
+            for (let i = 0; i < 7; i++) {
+              const date = new Date(weekRange.start)
+              date.setDate(weekRange.start.getDate() + i)
+              
+              // Find earnings for this date
+              const dayEarnings = data.earnings.filter(e => {
+                const eDate = new Date(e.deliveredAt || e.createdAt)
+                return eDate.toDateString() === date.toDateString()
+              })
+              
+              const dayTotal = dayEarnings.reduce((sum, e) => sum + (e.amount || 0), 0)
+              const dayOrders = dayEarnings.length
+              
+              // Calculate time for this day
+              let dayMinutes = 0
+              dayEarnings.forEach(e => {
+                // Try to get order time if available in description
+                // Otherwise estimate based on order count
+                dayMinutes += 30 // Average 30 minutes per order
+              })
+              
+              dailyBreakdown.push({
+                date,
+                day: date.getDate(),
+                earnings: dayTotal,
+                orders: dayOrders,
+                hours: Math.floor(dayMinutes / 60),
+                minutes: dayMinutes % 60,
+                isFuture: date > new Date()
+              })
+            }
+            
+            setDailyEarningsData(dailyBreakdown)
+          }
+          
+          // For month view, calculate weekly breakdown
+          if (activeTab === 'month' && data.earnings) {
+            const year = selectedDate.getFullYear()
+            const month = selectedDate.getMonth()
+            const firstDay = new Date(year, month, 1)
+            const lastDay = new Date(year, month + 1, 0)
+            
+            // Calculate weeks
+            const weeklyBreakdown = []
+            let currentWeekStart = new Date(firstDay)
+            const firstDayOfWeek = firstDay.getDay()
+            const daysToMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
+            currentWeekStart.setDate(firstDay.getDate() - daysToMonday)
+            
+            let weekNumber = 1
+            while (currentWeekStart <= lastDay) {
+              const weekEnd = new Date(currentWeekStart)
+              weekEnd.setDate(currentWeekStart.getDate() + 6)
+              
+              if (weekEnd >= firstDay && currentWeekStart <= lastDay) {
+                // Find earnings for this week
+                const weekEarnings = data.earnings.filter(e => {
+                  const eDate = new Date(e.deliveredAt || e.createdAt)
+                  return eDate >= currentWeekStart && eDate <= weekEnd
+                })
+                
+                const weekTotal = weekEarnings.reduce((sum, e) => sum + (e.amount || 0), 0)
+                const weekOrders = weekEarnings.length
+                
+                // Calculate time for this week
+                let weekMinutes = weekOrders * 30 // Average 30 minutes per order
+                
+                weeklyBreakdown.push({
+                  weekStart: new Date(currentWeekStart),
+                  weekEnd: new Date(weekEnd),
+                  weekNumber: weekNumber++,
+                  earnings: weekTotal,
+                  orders: weekOrders,
+                  hours: Math.floor(weekMinutes / 60),
+                  minutes: weekMinutes % 60,
+                  isFuture: weekEnd > new Date()
+                })
+              }
+              
+              currentWeekStart.setDate(currentWeekStart.getDate() + 7)
+            }
+            
+            setWeeklyEarningsData(weeklyBreakdown)
+          }
+          
+          // Update store if viewing today's data
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          const selectedDateNormalized = new Date(selectedDate)
+          selectedDateNormalized.setHours(0, 0, 0, 0)
+          
+          if (activeTab === "day" && selectedDateNormalized.getTime() === today.getTime()) {
+            updateTodayEarnings(summary.totalEarnings || 0)
+          }
+        } else {
+          console.error('Failed to fetch earnings:', response.data)
+          toast.error('Failed to fetch earnings')
+          // Set zero data on error
+          setEarningsData({
+            totalEarnings: 0,
+            orders: 0,
+            hours: 0,
+            minutes: 0,
+            orderEarning: 0,
+            incentive: 0,
+            otherEarnings: 0
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching earnings:', error)
+        toast.error(error.response?.data?.message || 'Failed to fetch earnings')
+        // Set zero data on error
+        setEarningsData({
+          totalEarnings: 0,
+          orders: 0,
+          hours: 0,
+          minutes: 0,
+          orderEarning: 0,
+          incentive: 0,
+          otherEarnings: 0
+        })
+      } finally {
+        setIsLoading(false)
+      }
     }
+
+    fetchEarnings()
   }, [selectedDate, activeTab, updateTodayEarnings])
 
   // Close dropdowns when clicking outside
@@ -313,10 +487,10 @@ export default function Earnings() {
 
   // Get daily earnings for current week (only show when week tab is active)
   const weekRange = getWeekRange(selectedDate)
-  const dailyEarnings = activeTab === "week" ? generateDailyEarnings(weekRange.start) : []
+  const dailyEarnings = activeTab === "week" ? (dailyEarningsData.length > 0 ? dailyEarningsData : generateDailyEarnings(weekRange.start)) : []
   
   // Get weekly earnings for current month (only show when month tab is active)
-  const weeklyEarnings = activeTab === "month" ? generateWeeklyEarnings(selectedDate) : []
+  const weeklyEarnings = activeTab === "month" ? (weeklyEarningsData.length > 0 ? weeklyEarningsData : generateWeeklyEarnings(selectedDate)) : []
   
   // Calculate total orders and time for the week
   const weekTotalOrders = dailyEarnings.reduce((sum, day) => sum + day.orders, 0)
@@ -351,6 +525,17 @@ export default function Earnings() {
       navigator.clipboard.writeText(`My earnings: ${formatCurrency(earningsData.totalEarnings)}`)
       alert('Earnings copied to clipboard!')
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-black" />
+          <p className="text-gray-600">Loading earnings...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

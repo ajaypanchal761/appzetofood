@@ -6,6 +6,7 @@ import Restaurant from '../../restaurant/models/Restaurant.js';
 import DeliveryWallet from '../models/DeliveryWallet.js';
 import DeliveryBoyCommission from '../../admin/models/DeliveryBoyCommission.js';
 import { calculateRoute } from '../../order/services/routeCalculationService.js';
+import mongoose from 'mongoose';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -74,10 +75,20 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
     const delivery = req.delivery;
     const { orderId } = req.params;
 
-    const order = await Order.findOne({
-      _id: orderId,
+    // Build query to find order by either _id or orderId field
+    const query = {
       deliveryPartnerId: delivery._id
-    })
+    };
+
+    // Check if orderId is a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
+      query._id = orderId;
+    } else {
+      // If not a valid ObjectId, search by orderId field
+      query.orderId = orderId;
+    }
+
+    const order = await Order.findOne(query)
       .populate('restaurantId', 'name slug profileImage address phone')
       .populate('userId', 'name phone email')
       .lean();
@@ -90,7 +101,7 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
       order
     });
   } catch (error) {
-    logger.error(`Error fetching order details: ${error.message}`);
+    logger.error(`Error fetching order details: ${error.message}`, { error: error.stack });
     return errorResponse(res, 500, 'Failed to fetch order details');
   }
 });
@@ -233,20 +244,55 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
   try {
     const delivery = req.delivery;
     const { orderId } = req.params;
+    const deliveryId = delivery._id;
 
-    const order = await Order.findOne({
-      _id: orderId,
-      deliveryPartnerId: delivery._id
-    });
+    // Find order by _id or orderId field
+    let order = null;
+    
+    // Check if orderId is a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
+      order = await Order.findOne({
+        _id: orderId,
+        deliveryPartnerId: deliveryId
+      });
+    } else {
+      // If not a valid ObjectId, search by orderId field
+      order = await Order.findOne({
+        orderId: orderId,
+        deliveryPartnerId: deliveryId
+      });
+    }
 
     if (!order) {
       return errorResponse(res, 404, 'Order not found or not assigned to you');
     }
 
+    // Initialize deliveryState if it doesn't exist
+    if (!order.deliveryState) {
+      order.deliveryState = {
+        status: 'accepted',
+        currentPhase: 'en_route_to_pickup'
+      };
+    }
+
+    // Ensure currentPhase exists
+    if (!order.deliveryState.currentPhase) {
+      order.deliveryState.currentPhase = 'en_route_to_pickup';
+    }
+
     // Check if order is in valid state
-    if (order.deliveryState?.currentPhase !== 'en_route_to_pickup' && 
-        order.deliveryState?.status !== 'accepted') {
-      return errorResponse(res, 400, `Order is not in valid state for reached pickup. Current phase: ${order.deliveryState?.currentPhase}`);
+    // Allow reached pickup if:
+    // - currentPhase is 'en_route_to_pickup' OR
+    // - status is 'accepted' OR  
+    // - currentPhase is 'accepted' (alternative phase name)
+    const isValidState = order.deliveryState.currentPhase === 'en_route_to_pickup' || 
+                         order.deliveryState.status === 'accepted' ||
+                         order.deliveryState.currentPhase === 'accepted' ||
+                         order.status === 'preparing' || // Order is preparing, can reach pickup
+                         order.status === 'ready'; // Order is ready, can reach pickup
+
+    if (!isValidState) {
+      return errorResponse(res, 400, `Order is not in valid state for reached pickup. Current phase: ${order.deliveryState?.currentPhase || 'unknown'}, Status: ${order.deliveryState?.status || 'unknown'}, Order status: ${order.status || 'unknown'}`);
     }
 
     // Update order state
@@ -258,9 +304,11 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     console.log(`✅ Delivery partner ${delivery._id} reached pickup for order ${order.orderId}`);
 
     // After 10 seconds, trigger order ID confirmation request
+    // Use order._id (MongoDB ObjectId) instead of orderId string
+    const orderMongoId = order._id;
     setTimeout(async () => {
       try {
-        const freshOrder = await Order.findById(orderId);
+        const freshOrder = await Order.findById(orderMongoId);
         if (freshOrder && freshOrder.deliveryState?.currentPhase === 'at_pickup') {
           // Emit socket event to request order ID confirmation
           let getIO;
@@ -311,12 +359,27 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
     const { confirmedOrderId } = req.body; // Order ID confirmed by delivery boy
     const { currentLat, currentLng } = req.body; // Current location for route calculation
 
-    const order = await Order.findOne({
-      _id: orderId,
-      deliveryPartnerId: delivery._id
-    })
-      .populate('userId', 'name phone')
-      .lean();
+    // Find order by _id or orderId field
+    let order = null;
+    const deliveryId = delivery._id;
+
+    // Check if orderId is a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
+      order = await Order.findOne({
+        _id: orderId,
+        deliveryPartnerId: deliveryId
+      })
+        .populate('userId', 'name phone')
+        .lean();
+    } else {
+      // If not a valid ObjectId, search by orderId field
+      order = await Order.findOne({
+        orderId: orderId,
+        deliveryPartnerId: deliveryId
+      })
+        .populate('userId', 'name phone')
+        .lean();
+    }
 
     if (!order) {
       return errorResponse(res, 404, 'Order not found or not assigned to you');
@@ -328,8 +391,33 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
     }
 
     // Check if order is in valid state
-    if (order.deliveryState?.currentPhase !== 'at_pickup') {
-      return errorResponse(res, 400, `Order is not at pickup. Current phase: ${order.deliveryState?.currentPhase}`);
+    // Initialize deliveryState if it doesn't exist
+    if (!order.deliveryState) {
+      // If deliveryState doesn't exist, initialize it but still allow confirmation
+      // This can happen if reached pickup was confirmed but deliveryState wasn't saved properly
+      order.deliveryState = {
+        status: 'reached_pickup',
+        currentPhase: 'at_pickup'
+      };
+    }
+
+    // Ensure currentPhase exists
+    if (!order.deliveryState.currentPhase) {
+      order.deliveryState.currentPhase = 'at_pickup';
+    }
+
+    // Check if order is in valid state for order ID confirmation
+    // Allow confirmation if:
+    // - currentPhase is 'at_pickup' OR
+    // - status is 'reached_pickup' OR
+    // - order status is 'preparing' or 'ready' (restaurant preparing/ready)
+    const isValidState = order.deliveryState.currentPhase === 'at_pickup' ||
+                         order.deliveryState.status === 'reached_pickup' ||
+                         order.status === 'preparing' ||
+                         order.status === 'ready';
+
+    if (!isValidState) {
+      return errorResponse(res, 400, `Order is not at pickup. Current phase: ${order.deliveryState?.currentPhase || 'unknown'}, Status: ${order.deliveryState?.status || 'unknown'}, Order status: ${order.status || 'unknown'}`);
     }
 
     // Get customer location
@@ -353,9 +441,18 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
         [deliveryLng, deliveryLat] = deliveryPartner.availability.currentLocation.coordinates;
       } else {
         // Use restaurant location as fallback
-        const restaurant = await Restaurant.findById(order.restaurantId)
-          .select('location')
-          .lean();
+        // order.restaurantId might be a string or ObjectId
+        let restaurant = null;
+        if (mongoose.Types.ObjectId.isValid(order.restaurantId)) {
+          restaurant = await Restaurant.findById(order.restaurantId)
+            .select('location')
+            .lean();
+        } else {
+          // Try to find by restaurantId field if it's a string
+          restaurant = await Restaurant.findOne({ restaurantId: order.restaurantId })
+            .select('location')
+            .lean();
+        }
         if (restaurant?.location?.coordinates) {
           [deliveryLng, deliveryLat] = restaurant.location.coordinates;
         } else {
@@ -369,9 +466,14 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
       useDijkstra: true
     });
 
-    // Update order state
+    // Update order state - use order._id (MongoDB _id) not orderId string
+    // Since we found the order, order._id should exist (from .lean() it's a plain object with _id)
+    const orderMongoId = order._id;
+    if (!orderMongoId) {
+      return errorResponse(res, 500, 'Order ID not found in order object');
+    }
     const updatedOrder = await Order.findByIdAndUpdate(
-      orderId,
+      orderMongoId,
       {
         $set: {
           'deliveryState.status': 'order_confirmed',
@@ -460,17 +562,60 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
     const delivery = req.delivery;
     const { orderId } = req.params;
 
-    const order = await Order.findOne({
-      $or: [
-        { _id: orderId },
-        { orderId: orderId }
-      ],
-      deliveryPartnerId: delivery._id
+    if (!delivery || !delivery._id) {
+      return errorResponse(res, 401, 'Delivery partner authentication required');
+    }
+
+    if (!orderId) {
+      return errorResponse(res, 400, 'Order ID is required');
+    }
+
+    // Find order by _id or orderId, and ensure it's assigned to this delivery partner
+    // Try multiple comparison methods for deliveryPartnerId (ObjectId vs string)
+    const deliveryId = delivery._id;
+    
+    console.log(`🔍 Searching for order: ${orderId}, Delivery ID: ${deliveryId}`);
+    
+    // Try finding order with different deliveryPartnerId comparison methods
+    // First try without lean() to get Mongoose document (needed for proper ObjectId comparison)
+    let order = await Order.findOne({
+      $and: [
+        {
+          $or: [
+            { _id: orderId },
+            { orderId: orderId }
+          ]
+        },
+        {
+          deliveryPartnerId: deliveryId // Try as ObjectId first (most common)
+        }
+      ]
     });
+    
+    // If not found, try with string comparison
+    if (!order) {
+      console.log(`⚠️ Order not found with ObjectId comparison, trying string comparison...`);
+      order = await Order.findOne({
+        $and: [
+          {
+            $or: [
+              { _id: orderId },
+              { orderId: orderId }
+            ]
+          },
+          {
+            deliveryPartnerId: deliveryId.toString() // Try as string
+          }
+        ]
+      });
+    }
 
     if (!order) {
+      console.error(`❌ Order ${orderId} not found or not assigned to delivery ${deliveryId}`);
       return errorResponse(res, 404, 'Order not found or not assigned to you');
     }
+    
+    console.log(`✅ Order found: ${order.orderId || order._id}, Status: ${order.status}, Phase: ${order.deliveryState?.currentPhase || 'N/A'}`);
 
     // Initialize deliveryState if it doesn't exist
     if (!order.deliveryState) {
@@ -478,6 +623,11 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
         status: 'pending',
         currentPhase: 'assigned'
       };
+    }
+
+    // Ensure deliveryState.currentPhase exists
+    if (!order.deliveryState.currentPhase) {
+      order.deliveryState.currentPhase = 'assigned';
     }
 
     // Check if order is in valid state
@@ -492,11 +642,15 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
     }
 
     // Update order state - only if not already at delivery (idempotent)
-    let finalOrder = order;
+    let finalOrder = null;
+    // Ensure we have the correct ID format for MongoDB operations
+    // order._id is a Mongoose ObjectId, convert to string if needed for findByIdAndUpdate
+    const orderMongoId = order._id?.toString ? order._id : order._id; 
+    
     if (order.deliveryState.currentPhase !== 'at_delivery') {
       // Use findByIdAndUpdate to properly update nested fields
       const updatedOrder = await Order.findByIdAndUpdate(
-        order._id,
+        orderMongoId,
         {
           $set: {
             'deliveryState.status': 'en_route_to_delivery',
@@ -506,24 +660,34 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
         { new: true, runValidators: true }
       )
       .populate('restaurantId', 'name location address phone')
-      .populate('userId', 'name phone');
+      .populate('userId', 'name phone')
+      .lean(); // Use lean() for better performance and to get plain object
 
       if (!updatedOrder) {
         return errorResponse(res, 500, 'Failed to update order state');
       }
 
-      // Convert to plain object for response
-      finalOrder = updatedOrder.toObject ? updatedOrder.toObject() : updatedOrder;
+      finalOrder = updatedOrder;
     } else {
       // If already at delivery, populate the order for response
-      const populatedOrder = await Order.findById(order._id)
+      const populatedOrder = await Order.findById(orderMongoId)
         .populate('restaurantId', 'name location address phone')
-        .populate('userId', 'name phone');
+        .populate('userId', 'name phone')
+        .lean(); // Use lean() for better performance
       
-      finalOrder = populatedOrder?.toObject ? populatedOrder.toObject() : populatedOrder || order;
+      if (!populatedOrder) {
+        return errorResponse(res, 500, 'Failed to fetch order details');
+      }
+      
+      finalOrder = populatedOrder;
     }
 
-    console.log(`✅ Delivery partner ${delivery._id} reached drop location for order ${finalOrder.orderId}`);
+    if (!finalOrder) {
+      return errorResponse(res, 500, 'Failed to process order');
+    }
+
+    const orderIdForLog = finalOrder.orderId || finalOrder._id?.toString() || orderId;
+    console.log(`✅ Delivery partner ${delivery._id} reached drop location for order ${orderIdForLog}`);
 
     return successResponse(res, 200, 'Reached drop confirmed', {
       order: finalOrder,
@@ -552,25 +716,57 @@ export const completeDelivery = asyncHandler(async (req, res) => {
     const { orderId } = req.params;
     const { rating, review } = req.body; // Optional rating and review from delivery boy
 
-    if (!delivery) {
-      return errorResponse(res, 401, 'Delivery partner not authenticated');
+    if (!delivery || !delivery._id) {
+      return errorResponse(res, 401, 'Delivery partner authentication required');
     }
 
     if (!orderId) {
       return errorResponse(res, 400, 'Order ID is required');
     }
 
-    // Find order - try both by _id and orderId
-    let order = await Order.findOne({
-      $or: [
-        { _id: orderId },
-        { orderId: orderId }
-      ],
-      deliveryPartnerId: delivery._id
-    })
-      .populate('restaurantId', 'name location address phone')
-      .populate('userId', 'name phone')
-      .lean();
+    // Find order - try both by _id and orderId, and ensure it's assigned to this delivery partner
+    const deliveryId = delivery._id;
+    let order = null;
+    
+    // Check if orderId is a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
+      order = await Order.findOne({
+        _id: orderId,
+        deliveryPartnerId: deliveryId
+      })
+        .populate('restaurantId', 'name location address phone')
+        .populate('userId', 'name phone')
+        .lean();
+    } else {
+      // If not a valid ObjectId, search by orderId field
+      order = await Order.findOne({
+        orderId: orderId,
+        deliveryPartnerId: deliveryId
+      })
+        .populate('restaurantId', 'name location address phone')
+        .populate('userId', 'name phone')
+        .lean();
+    }
+    
+    // If still not found, try with string comparison for deliveryPartnerId
+    if (!order) {
+      order = await Order.findOne({
+        $and: [
+          {
+            $or: [
+              { _id: orderId },
+              { orderId: orderId }
+            ]
+          },
+          {
+            deliveryPartnerId: deliveryId.toString()
+          }
+        ]
+      })
+        .populate('restaurantId', 'name location address phone')
+        .populate('userId', 'name phone')
+        .lean();
+    }
 
     if (!order) {
       return errorResponse(res, 404, 'Order not found or not assigned to you');
@@ -579,12 +775,18 @@ export const completeDelivery = asyncHandler(async (req, res) => {
     // Check if order is in valid state
     if (order.status !== 'out_for_delivery' && 
         order.deliveryState?.currentPhase !== 'at_delivery') {
-      return errorResponse(res, 400, `Order cannot be completed. Current status: ${order.status}, Phase: ${order.deliveryState?.currentPhase}`);
+      return errorResponse(res, 400, `Order cannot be completed. Current status: ${order.status}, Phase: ${order.deliveryState?.currentPhase || 'unknown'}`);
+    }
+
+    // Ensure we have order._id - from .lean() it's a plain object with _id
+    const orderMongoId = order._id;
+    if (!orderMongoId) {
+      return errorResponse(res, 500, 'Order ID not found in order object');
     }
 
     // Update order to delivered
     const updatedOrder = await Order.findByIdAndUpdate(
-      order._id,
+      orderMongoId,
       {
         $set: {
           status: 'delivered',
@@ -597,13 +799,18 @@ export const completeDelivery = asyncHandler(async (req, res) => {
           'deliveryState.currentPhase': 'completed'
         }
       },
-      { new: true }
+      { new: true, runValidators: true }
     )
       .populate('restaurantId', 'name location address phone')
       .populate('userId', 'name phone')
       .lean();
 
-    console.log(`✅ Order ${order.orderId} marked as delivered by delivery partner ${delivery._id}`);
+    if (!updatedOrder) {
+      return errorResponse(res, 500, 'Failed to update order status');
+    }
+
+    const orderIdForLog = updatedOrder.orderId || order.orderId || orderMongoId?.toString() || orderId;
+    console.log(`✅ Order ${orderIdForLog} marked as delivered by delivery partner ${delivery._id}`);
 
     // Calculate delivery earnings based on admin's commission rules
     // Get delivery distance (in km) from order
@@ -633,7 +840,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       deliveryDistance = R * c;
     }
     
-    console.log(`📏 Delivery distance: ${deliveryDistance.toFixed(2)} km for order ${order.orderId}`);
+    console.log(`📏 Delivery distance: ${deliveryDistance.toFixed(2)} km for order ${orderIdForLog}`);
 
     // Calculate earnings using admin's commission rules
     let totalEarning = 0;
@@ -645,7 +852,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       totalEarning = commissionResult.commission;
       commissionBreakdown = commissionResult.breakdown;
       
-      console.log(`💰 Delivery earnings calculated using commission rules: ₹${totalEarning.toFixed(2)} for order ${order.orderId}`);
+      console.log(`💰 Delivery earnings calculated using commission rules: ₹${totalEarning.toFixed(2)} for order ${orderIdForLog}`);
       console.log(`📊 Commission breakdown:`, {
         rule: commissionResult.rule.name,
         basePayout: commissionResult.breakdown.basePayout,
@@ -668,20 +875,21 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       let wallet = await DeliveryWallet.findOrCreateByDeliveryId(delivery._id);
       
       // Check if transaction already exists for this order
-      const existingTransaction = wallet.transactions.find(
-        t => t.orderId && t.orderId.toString() === order._id.toString() && t.type === 'payment'
+      const orderIdForTransaction = orderMongoId?.toString ? orderMongoId.toString() : orderMongoId;
+      const existingTransaction = wallet.transactions?.find(
+        t => t.orderId && t.orderId.toString() === orderIdForTransaction && t.type === 'payment'
       );
 
       if (existingTransaction) {
-        console.warn(`⚠️ Earning already added for order ${order.orderId}, skipping wallet update`);
+        console.warn(`⚠️ Earning already added for order ${orderIdForLog}, skipping wallet update`);
       } else {
         // Add payment transaction to wallet
         walletTransaction = wallet.addTransaction({
           amount: totalEarning,
           type: 'payment',
           status: 'Completed',
-          description: `Delivery earnings for Order #${order.orderId} (Distance: ${deliveryDistance.toFixed(2)} km)`,
-          orderId: order._id,
+          description: `Delivery earnings for Order #${orderIdForLog} (Distance: ${deliveryDistance.toFixed(2)} km)`,
+          orderId: orderMongoId || order._id,
           paymentCollected: order.payment?.method === 'cash' // If COD, payment was collected
         });
 
@@ -689,10 +897,10 @@ export const completeDelivery = asyncHandler(async (req, res) => {
 
         logger.info(`💰 Earning added to wallet for delivery: ${delivery._id}`, {
           deliveryId: delivery.deliveryId || delivery._id.toString(),
-          orderId: order.orderId,
+          orderId: orderIdForLog,
           amount: totalEarning,
           distance: deliveryDistance,
-          transactionId: walletTransaction._id,
+          transactionId: walletTransaction?._id || walletTransaction?.id,
           walletBalance: wallet.totalBalance
         });
 
@@ -732,12 +940,13 @@ export const completeDelivery = asyncHandler(async (req, res) => {
     const response = successResponse(res, 200, 'Delivery completed successfully', responseData);
 
     // Handle notifications asynchronously (don't block response)
+    const orderIdForNotification = orderMongoId?.toString ? orderMongoId.toString() : orderMongoId;
     Promise.all([
       // Notify restaurant about delivery completion
       (async () => {
         try {
           const { notifyRestaurantOrderUpdate } = await import('../../order/services/restaurantNotificationService.js');
-          await notifyRestaurantOrderUpdate(order._id.toString(), 'delivered');
+          await notifyRestaurantOrderUpdate(orderIdForNotification, 'delivered');
         } catch (notifError) {
           console.error('Error sending restaurant notification:', notifError);
         }
@@ -747,7 +956,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
         try {
           const { notifyUserOrderUpdate } = await import('../../order/services/userNotificationService.js');
           if (notifyUserOrderUpdate) {
-            await notifyUserOrderUpdate(order._id.toString(), 'delivered');
+            await notifyUserOrderUpdate(orderIdForNotification, 'delivered');
           }
         } catch (notifError) {
           console.error('Error sending user notification:', notifError);

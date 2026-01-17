@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react"
-import { BarChart3, ChevronDown, Settings, FileText, FileSpreadsheet, Code } from "lucide-react"
-import { ordersDummy } from "../../data/ordersDummy"
+import { useMemo, useState, useEffect } from "react"
+import { BarChart3, ChevronDown, Settings, FileText, FileSpreadsheet, Code, Loader2 } from "lucide-react"
+import { adminAPI } from "@/lib/api"
+import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { exportReportsToCSV, exportReportsToExcel, exportReportsToPDF, exportReportsToJSON } from "../../components/reports/reportsExportUtils"
@@ -32,6 +33,13 @@ const statusMeta = {
 const PAGE_SIZE = 25
 
 export default function RegularOrderReport() {
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [zones, setZones] = useState([])
+  const [restaurants, setRestaurants] = useState([])
+  const [customers, setCustomers] = useState([])
+  
   const [filters, setFilters] = useState({
     zone: "All Zones",
     restaurant: "All restaurants",
@@ -43,34 +51,121 @@ export default function RegularOrderReport() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
+  // Fetch zones, restaurants, and customers for filter dropdowns
+  useEffect(() => {
+    const fetchFilterData = async () => {
+      try {
+        // Fetch zones
+        const zonesRes = await adminAPI.getZones({ limit: 100, isActive: true })
+        if (zonesRes.data?.success) {
+          setZones(zonesRes.data.data.zones || [])
+        }
+
+        // Fetch restaurants
+        const restaurantsRes = await adminAPI.getRestaurants({ limit: 100 })
+        if (restaurantsRes.data?.success) {
+          setRestaurants(restaurantsRes.data.data.restaurants || [])
+        }
+
+        // Fetch customers (users)
+        const usersRes = await adminAPI.getUsers({ limit: 100 })
+        if (usersRes.data?.success) {
+          setCustomers(usersRes.data.data.users || [])
+        }
+      } catch (err) {
+        console.error("Error fetching filter data:", err)
+      }
+    }
+
+    fetchFilterData()
+  }, [])
+
+  // Calculate date range based on time filter
+  const getDateRange = () => {
+    const now = new Date()
+    let fromDate = null
+    let toDate = null
+
+    switch (filters.time) {
+      case "Today":
+        fromDate = new Date(now.setHours(0, 0, 0, 0))
+        toDate = new Date(now.setHours(23, 59, 59, 999))
+        break
+      case "This Week":
+        const weekStart = new Date(now)
+        weekStart.setDate(now.getDate() - now.getDay())
+        weekStart.setHours(0, 0, 0, 0)
+        fromDate = weekStart
+        toDate = new Date(now.setHours(23, 59, 59, 999))
+        break
+      case "This Month":
+        fromDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+        break
+      default:
+        // All Time - no date filter
+        break
+    }
+
+    return { fromDate, toDate }
+  }
+
+  // Fetch orders from backend
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const { fromDate, toDate } = getDateRange()
+        const params = {
+          page: 1,
+          limit: 10000, // Fetch all orders for report (can be optimized later)
+          search: searchQuery || undefined,
+          zone: filters.zone !== "All Zones" ? filters.zone : undefined,
+          restaurant: filters.restaurant !== "All restaurants" ? filters.restaurant : undefined,
+          customer: filters.customer !== "All customers" ? filters.customer : undefined,
+          fromDate: fromDate ? fromDate.toISOString().split('T')[0] : undefined,
+          toDate: toDate ? toDate.toISOString().split('T')[0] : undefined,
+        }
+
+        const response = await adminAPI.getOrders(params)
+        
+        if (response.data?.success) {
+          // Transform backend orders to match frontend format
+          const transformedOrders = (response.data.data.orders || []).map(order => ({
+            orderId: order.orderId,
+            restaurant: order.restaurant,
+            customerName: order.customerName,
+            totalItemAmount: order.totalItemAmount || 0,
+            itemDiscount: order.itemDiscount || 0,
+            discountedAmount: order.discountedAmount || 0,
+            couponDiscount: order.couponDiscount || 0,
+            referralDiscount: order.referralDiscount || 0,
+            vatTax: order.vatTax || 0,
+            deliveryCharge: order.deliveryCharge || 0,
+            totalAmount: order.totalAmount || 0,
+            orderStatus: order.orderStatus,
+          }))
+          setOrders(transformedOrders)
+        } else {
+          setError(response.data?.message || "Failed to fetch orders")
+          toast.error(response.data?.message || "Failed to fetch orders")
+        }
+      } catch (err) {
+        console.error("Error fetching orders:", err)
+        setError(err.response?.data?.message || "Failed to fetch orders")
+        toast.error(err.response?.data?.message || "Failed to fetch orders")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchOrders()
+  }, [filters, searchQuery])
+
   const filteredOrders = useMemo(() => {
-    let result = [...ordersDummy]
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase()
-      result = result.filter((order) => {
-        return (
-          order.orderId.toLowerCase().includes(q) ||
-          order.restaurant.toLowerCase().includes(q) ||
-          order.customerName.toLowerCase().includes(q)
-        )
-      })
-    }
-
-    if (filters.zone !== "All Zones") {
-      // Filter by zone if needed
-    }
-
-    if (filters.restaurant !== "All restaurants") {
-      result = result.filter(o => o.restaurant === filters.restaurant)
-    }
-
-    if (filters.customer !== "All customers") {
-      result = result.filter(o => o.customerName === filters.customer)
-    }
-
-    return result
-  }, [searchQuery, filters])
+    return orders // Orders are already filtered by backend
+  }, [orders])
 
   const handleExport = (format) => {
     if (filteredOrders.length === 0) {
@@ -81,13 +176,14 @@ export default function RegularOrderReport() {
       { key: "orderId", label: "Order ID" },
       { key: "restaurant", label: "Restaurant" },
       { key: "customerName", label: "Customer Name" },
-      { key: "totalAmount", label: "Total Item Amount" },
+      { key: "totalItemAmount", label: "Total Item Amount" },
       { key: "itemDiscount", label: "Item Discount" },
       { key: "discountedAmount", label: "Discounted Amount" },
       { key: "couponDiscount", label: "Coupon Discount" },
       { key: "referralDiscount", label: "Referral Discount" },
       { key: "vatTax", label: "VAT/Tax" },
       { key: "deliveryCharge", label: "Delivery Charge" },
+      { key: "totalAmount", label: "Order Amount" },
       { key: "orderStatus", label: "Status" },
     ]
     switch (format) {
@@ -177,6 +273,33 @@ export default function RegularOrderReport() {
     )
   }
 
+  if (loading) {
+    return (
+      <div className="p-2 lg:p-3 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+          <p className="text-gray-600">Loading orders...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-2 lg:p-3 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-2">Error: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-2 lg:p-3 bg-slate-50 min-h-screen">
       <div className="w-full mx-auto">
@@ -200,9 +323,11 @@ export default function RegularOrderReport() {
                 className="w-full px-2.5 py-1.5 pr-5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs appearance-none cursor-pointer"
               >
                 <option value="All Zones">All Zones</option>
-                <option value="Zone 1">Zone 1</option>
-                <option value="Zone 2">Zone 2</option>
-                <option value="Zone 3">Zone 3</option>
+                {zones.map((zone) => (
+                  <option key={zone._id} value={zone.name}>
+                    {zone.name}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
             </div>
@@ -214,9 +339,11 @@ export default function RegularOrderReport() {
                 className="w-full px-2.5 py-1.5 pr-5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs appearance-none cursor-pointer"
               >
                 <option value="All restaurants">All restaurants</option>
-                <option value="Cafe Monarch">Cafe Monarch</option>
-                <option value="Hungry Puppets">Hungry Puppets</option>
-                <option value="Cheese Burger">Cheese Burger</option>
+                {restaurants.map((restaurant) => (
+                  <option key={restaurant._id} value={restaurant.name}>
+                    {restaurant.name}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
             </div>
@@ -228,8 +355,11 @@ export default function RegularOrderReport() {
                 className="w-full px-2.5 py-1.5 pr-5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs appearance-none cursor-pointer"
               >
                 <option value="All customers">All customers</option>
-                <option value="Jane Doe">Jane Doe</option>
-                <option value="John Doe">John Doe</option>
+                {customers.map((customer) => (
+                  <option key={customer._id} value={customer.name}>
+                    {customer.name}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
             </div>
@@ -438,7 +568,7 @@ export default function RegularOrderReport() {
                         <span className="text-[10px] text-slate-700">{formatAmount(order.deliveryCharge)}</span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] font-medium text-slate-900">{formatAmount(order.totalAmount)}</span>
+                        <span className="text-[10px] font-medium text-slate-900">{formatAmount(order.totalAmount || order.totalItemAmount)}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-slate-100 text-slate-700">
