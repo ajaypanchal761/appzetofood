@@ -21,7 +21,7 @@ async function getIOInstance() {
 export async function notifyRestaurantNewOrder(order, restaurantId) {
   try {
     const io = await getIOInstance();
-    
+
     if (!io) {
       console.warn('Socket.IO not initialized, skipping restaurant notification');
       return;
@@ -68,19 +68,19 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
 
     // Get restaurant namespace
     const restaurantNamespace = io.of('/restaurant');
-    
+
     // Normalize restaurantId to string (handle both ObjectId and string)
     const normalizedRestaurantId = restaurantId?.toString() || restaurantId;
-    
+
     // Try multiple room formats to ensure we find the restaurant
     const roomVariations = [
       `restaurant:${normalizedRestaurantId}`,
       `restaurant:${restaurantId}`,
-      ...(mongoose.Types.ObjectId.isValid(normalizedRestaurantId) 
+      ...(mongoose.Types.ObjectId.isValid(normalizedRestaurantId)
         ? [`restaurant:${new mongoose.Types.ObjectId(normalizedRestaurantId).toString()}`]
         : [])
     ];
-    
+
     // Get all connected sockets in the restaurant room
     let socketsInRoom = [];
     for (const room of roomVariations) {
@@ -91,13 +91,13 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
         break;
       }
     }
-    
+
     const primaryRoom = roomVariations[0];
-    
+
     console.log(`📢 Attempting to notify restaurant ${normalizedRestaurantId} about order ${order.orderId}`);
     console.log(`📢 Room variations:`, roomVariations);
     console.log(`📢 Connected sockets in primary room ${primaryRoom}:`, socketsInRoom.length);
-    
+
     // Emit new order notification to all room variations
     roomVariations.forEach(room => {
       restaurantNamespace.to(room).emit('new_order', orderNotification);
@@ -120,7 +120,7 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
     }
 
     console.log(`✅ Notified restaurant ${normalizedRestaurantId} about new order ${order.orderId}`);
-    
+
     return {
       success: true,
       restaurantId,
@@ -140,7 +140,7 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
 export async function notifyRestaurantOrderUpdate(orderId, status) {
   try {
     const io = await getIOInstance();
-    
+
     if (!io) {
       return;
     }
@@ -152,7 +152,7 @@ export async function notifyRestaurantOrderUpdate(orderId, status) {
 
     // Get restaurant namespace
     const restaurantNamespace = io.of('/restaurant');
-    
+
     restaurantNamespace.to(`restaurant:${order.restaurantId}`).emit('order_status_update', {
       orderId: order.orderId,
       status,
