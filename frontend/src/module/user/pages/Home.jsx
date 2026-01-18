@@ -34,6 +34,7 @@ import { useLocation } from "../hooks/useLocation"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
 import offerImage from "@/assets/offerimage.png"
 import api, { restaurantAPI } from "@/lib/api"
+import { API_BASE_URL } from "@/lib/api/config"
 import OptimizedImage from "@/components/OptimizedImage"
 // Explore More Icons
 import exploreOffers from "@/assets/explore more icons/offers.png"
@@ -620,7 +621,9 @@ export default function Home() {
         
         // First, test backend connection
         try {
-          const healthCheck = await fetch('http://localhost:5000/health')
+          // Use API_BASE_URL from config (supports both dev and production)
+          const backendUrl = API_BASE_URL.replace('/api', '')
+          const healthCheck = await fetch(`${backendUrl}/health`)
           if (!healthCheck.ok) {
             throw new Error(`Backend health check failed: ${healthCheck.status}`)
           }
