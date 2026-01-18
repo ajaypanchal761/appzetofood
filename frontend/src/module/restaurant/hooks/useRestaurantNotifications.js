@@ -38,8 +38,58 @@ export const useRestaurantNotifications = () => {
       return;
     }
 
-    const backendUrl = API_BASE_URL.replace('/api', '');
+    // Normalize backend URL - fix any URL issues first, then remove /api suffix
+    let backendUrl = API_BASE_URL;
+    
+    // Fix malformed protocol patterns first (before removing /api)
+    // - https:/ becomes https://
+    // - https: becomes https://
+    backendUrl = backendUrl.replace(/^(https?):\/?(?=\/|$)/i, (match, protocol) => {
+      return `${protocol}://`;
+    });
+    
+    // Fix duplicate protocols (https://https:// becomes https://)
+    backendUrl = backendUrl.replace(/^(https?:\/\/)+(https?:\/\/)+/gi, (match) => {
+      const protocol = match.match(/^(https?):\/\//i)?.[1] || 'https';
+      return `${protocol}://`;
+    });
+    
+    // Fix patterns like https://https:// or http://http://
+    backendUrl = backendUrl.replace(/^(https?:\/\/)(https?:\/\/)/i, '$1');
+    
+    // Fix multiple slashes after protocol (https:/// becomes https://)
+    backendUrl = backendUrl.replace(/(https?:\/\/)\/+/g, '$1');
+    
+    // Remove /api suffix
+    backendUrl = backendUrl.replace(/\/api\/?$/, ''); // Remove trailing /api
+    backendUrl = backendUrl.replace(/\/+$/, ''); // Remove trailing slashes
+    
+    // Final protocol fix in case removing /api broke something
+    backendUrl = backendUrl.replace(/^(https?):\/?(?=\/)/i, (match, protocol) => {
+      return `${protocol}://`;
+    });
+    
+    // Validate backend URL format
+    if (!backendUrl || !backendUrl.startsWith('http')) {
+      console.error('❌ CRITICAL: Invalid backend URL format:', backendUrl);
+      console.error('💡 API_BASE_URL:', API_BASE_URL);
+      console.error('💡 Expected format: https://your-domain.com or http://localhost:5000');
+      return; // Don't try to connect with invalid URL
+    }
+    
+    // Construct Socket.IO URL
     const socketUrl = `${backendUrl}/restaurant`;
+    
+    // Validate socket URL format
+    try {
+      new URL(socketUrl); // This will throw if URL is invalid
+    } catch (urlError) {
+      console.error('❌ CRITICAL: Invalid Socket.IO URL:', socketUrl);
+      console.error('💡 URL validation error:', urlError.message);
+      console.error('💡 Backend URL:', backendUrl);
+      console.error('💡 API_BASE_URL:', API_BASE_URL);
+      return; // Don't try to connect with invalid URL
+    }
     
     console.log('🔌 Attempting to connect to Socket.IO:', socketUrl);
     console.log('🔌 Backend URL:', backendUrl);
@@ -50,8 +100,16 @@ export const useRestaurantNotifications = () => {
     // Warn if trying to connect to localhost in production
     if (import.meta.env.MODE === 'production' && backendUrl.includes('localhost')) {
       console.error('❌ CRITICAL: Trying to connect Socket.IO to localhost in production!');
-      console.error('💡 Fix: Set VITE_API_BASE_URL to your production backend URL');
+      console.error('💡 This means VITE_API_BASE_URL was not set during build time');
       console.error('💡 Current socketUrl:', socketUrl);
+      console.error('💡 Current API_BASE_URL:', API_BASE_URL);
+      console.error('💡 Fix: Rebuild frontend with: VITE_API_BASE_URL=https://your-backend-domain.com/api npm run build');
+      console.error('💡 Note: Vite environment variables are embedded at BUILD TIME, not runtime');
+      console.error('💡 You must rebuild and redeploy the frontend with correct VITE_API_BASE_URL');
+      
+      // Don't try to connect to localhost in production - it will fail
+      setIsConnected(false);
+      return;
     }
 
     // Initialize socket connection to restaurant namespace
