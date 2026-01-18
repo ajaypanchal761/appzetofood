@@ -30,6 +30,7 @@ import { useGigStore } from "../store/gigStore"
 import { useProgressStore } from "../store/progressStore"
 import { getAllDeliveryOrders } from "../utils/deliveryOrderStatus"
 import { deliveryAPI } from "@/lib/api"
+import { API_BASE_URL } from "@/lib/api/config"
 import FeedNavbar from "../components/FeedNavbar"
 import AvailableCashLimit from "../components/AvailableCashLimit"
 import BottomPopup from "../components/BottomPopup"
@@ -227,7 +228,7 @@ export default function PocketPage() {
           if (error.code === 'ERR_NETWORK') {
             console.error('🔴 Network Error - Backend server may not be running!')
             console.error('💡 Please ensure:')
-            console.error('   1. Backend server is running on http://localhost:5000')
+            console.error(`   1. Backend server is running on ${API_BASE_URL.replace('/api', '')}`)
             console.error('   2. Backend server has been restarted after adding the new route')
             console.error('   3. Route /api/delivery/earnings/active-offers is registered')
             console.error('   4. No CORS issues blocking the request')

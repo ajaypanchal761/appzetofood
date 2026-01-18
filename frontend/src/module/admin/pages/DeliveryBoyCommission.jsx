@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Search, Edit, Trash2, IndianRupee, Settings, Check, Columns, MapPin, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { adminAPI } from "@/lib/api"
+import { API_BASE_URL } from "@/lib/api/config"
 import { toast } from "sonner"
 
 export default function DeliveryBoyCommission() {
@@ -113,11 +114,11 @@ export default function DeliveryBoyCommission() {
       
       // Handle network errors
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        const errorMessage = 'Cannot connect to backend server. Please ensure the backend is running on port 5000.'
+        const errorMessage = `Cannot connect to backend server. Please ensure the backend is running on ${API_BASE_URL.replace('/api', '')}`
         toast.error(errorMessage)
         console.error('💡 Backend connection issue. Check:')
         console.error('   1. Is backend server running? (npm start in backend folder)')
-        console.error('   2. Is backend running on http://localhost:5000?')
+        console.error(`   2. Is backend running on ${API_BASE_URL.replace('/api', '')}?`)
         console.error('   3. Check browser console for CORS errors')
         setCommissions([])
         return
@@ -303,11 +304,11 @@ export default function DeliveryBoyCommission() {
       
       // Handle network errors
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        const errorMessage = 'Cannot connect to backend server. Please ensure the backend is running on port 5000.'
+        const errorMessage = `Cannot connect to backend server. Please ensure the backend is running on ${API_BASE_URL.replace('/api', '')}`
         toast.error(errorMessage)
         console.error('💡 Backend connection issue. Check:')
         console.error('   1. Is backend server running? (npm start in backend folder)')
-        console.error('   2. Is backend running on http://localhost:5000?')
+        console.error(`   2. Is backend running on ${API_BASE_URL.replace('/api', '')}?`)
         console.error('   3. Check browser console for CORS errors')
         return
       }

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { restaurantAPI, diningAPI } from "@/lib/api"
+import { API_BASE_URL } from "@/lib/api/config"
 import { Loader2 } from "lucide-react"
 import {
   ArrowLeft,
@@ -772,7 +773,7 @@ export default function RestaurantDetails() {
               <p className="text-sm text-gray-600 mb-4 max-w-md">{restaurantError}</p>
               {isNetworkError && (
                 <p className="text-xs text-gray-500 mb-4">
-                  Make sure the backend server is running at http://localhost:5000
+                  Make sure the backend server is running at {API_BASE_URL.replace('/api', '')}
                 </p>
               )}
               <Button onClick={() => navigate(-1)} variant="outline">

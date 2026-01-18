@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { exportBonusToExcel, exportBonusToPDF } from "../../components/deliveryman/deliverymanExportUtils"
 import { adminAPI } from "@/lib/api"
+import { API_BASE_URL } from "@/lib/api/config"
 
 // Helper function to format bonus amount properly
 const formatBonusAmount = (transaction) => {
@@ -215,7 +216,7 @@ export default function DeliverymanBonus() {
         }
       } else if (error.request) {
         // Request was made but no response received
-        errorMessage = "No response from server. Please check if backend server is running on port 5000."
+        errorMessage = `No response from server. Please check if backend server is running on ${API_BASE_URL.replace('/api', '')}`
       } else {
         // Error setting up the request
         errorMessage = error.message || "Failed to add bonus. Please try again."

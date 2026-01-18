@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Search, Download, ChevronDown, Plus, Edit, Trash2, Info, MapPin, SlidersHorizontal, ArrowDownUp, Timer, Star, IndianRupee, UtensilsCrossed, BadgePercent, ShieldCheck, X, Loader2, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { adminAPI } from "@/lib/api"
+import { API_BASE_URL } from "@/lib/api/config"
 import { toast } from "sonner"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -58,8 +59,7 @@ export default function Category() {
     }
     
     // Log API base URL for debugging
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
-    console.log('API Base URL:', apiBaseUrl)
+    console.log('API Base URL:', API_BASE_URL)
     console.log('Admin Token:', adminToken ? 'Present' : 'Missing')
     
     fetchCategories()
@@ -154,7 +154,7 @@ export default function Category() {
         // Request was made but no response received
         console.error('Network error - No response from server')
         console.error('Request URL:', error.config?.baseURL + error.config?.url)
-        toast.error('Cannot connect to server. Please check if backend is running on ' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'))
+        toast.error('Cannot connect to server. Please check if backend is running on ' + API_BASE_URL.replace('/api', ''))
       } else {
         // Something else happened
         console.error('Request setup error:', error.message)
@@ -462,7 +462,7 @@ export default function Category() {
       })
       
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        toast.error('Cannot connect to server. Please check if backend is running on ' + (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'))
+        toast.error('Cannot connect to server. Please check if backend is running on ' + API_BASE_URL.replace('/api', ''))
       } else if (error.response) {
         toast.error(error.response.data?.message || `Error ${error.response.status}: Failed to save category`)
       } else {

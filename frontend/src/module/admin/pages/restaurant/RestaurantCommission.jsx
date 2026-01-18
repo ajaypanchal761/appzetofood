@@ -6,6 +6,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { adminAPI } from "@/lib/api"
+import { API_BASE_URL } from "@/lib/api/config"
 import { toast } from "sonner"
 
 export default function RestaurantCommission() {
@@ -94,10 +95,10 @@ export default function RestaurantCommission() {
       
       // Handle network errors
       if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        toast.error('Cannot connect to backend server. Please ensure the backend is running on port 5000.')
+        toast.error(`Cannot connect to backend server. Please ensure the backend is running on ${API_BASE_URL.replace('/api', '')}`)
         console.error('💡 Backend connection issue. Check:')
         console.error('   1. Is backend server running? (npm start in backend folder)')
-        console.error('   2. Is backend running on http://localhost:5000?')
+        console.error(`   2. Is backend running on ${API_BASE_URL.replace('/api', '')}?`)
         console.error('   3. Check browser console for CORS errors')
       } else {
         toast.error(error.response?.data?.message || 'Failed to fetch commissions')

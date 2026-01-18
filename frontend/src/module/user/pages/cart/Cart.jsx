@@ -11,6 +11,7 @@ import { useProfile } from "../../context/ProfileContext"
 import { useOrders } from "../../context/OrdersContext"
 import { useLocation as useUserLocation } from "../../hooks/useLocation"
 import { orderAPI, restaurantAPI, API_ENDPOINTS } from "@/lib/api"
+import { API_BASE_URL } from "@/lib/api/config"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
 
@@ -566,8 +567,7 @@ export default function Cart() {
 
     setIsPlacingOrder(true)
 
-    // Get API base URL (needed for error handling)
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    // Use API_BASE_URL from config (supports both dev and production)
 
     try {
       console.log("🛒 Starting order placement process...")
