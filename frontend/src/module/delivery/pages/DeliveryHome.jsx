@@ -405,6 +405,7 @@ export default function DeliveryHome() {
   const [showRejectPopup, setShowRejectPopup] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const alertAudioRef = useRef(null)
+  const userInteractedRef = useRef(false) // Track user interaction for autoplay policy
   const newOrderAcceptButtonRef = useRef(null)
   const newOrderAcceptButtonSwipeStartX = useRef(0)
   const newOrderAcceptButtonSwipeStartY = useRef(0)
@@ -867,8 +868,36 @@ export default function DeliveryHome() {
     }
   }, [location.pathname, animationKey])
 
+  // Track user interaction for autoplay policy
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      userInteractedRef.current = true
+      // Remove listeners after first interaction
+      document.removeEventListener('click', handleUserInteraction)
+      document.removeEventListener('touchstart', handleUserInteraction)
+      document.removeEventListener('keydown', handleUserInteraction)
+    }
+    
+    // Listen for user interaction
+    document.addEventListener('click', handleUserInteraction, { once: true })
+    document.addEventListener('touchstart', handleUserInteraction, { once: true })
+    document.addEventListener('keydown', handleUserInteraction, { once: true })
+    
+    return () => {
+      document.removeEventListener('click', handleUserInteraction)
+      document.removeEventListener('touchstart', handleUserInteraction)
+      document.removeEventListener('keydown', handleUserInteraction)
+    }
+  }, [])
+
   // Play alert sound function - plays until countdown ends (30 seconds)
   const playAlertSound = async () => {
+    // Only play if user has interacted with the page (browser autoplay policy)
+    if (!userInteractedRef.current) {
+      console.log('🔇 Audio playback skipped - user has not interacted with page yet')
+      return null
+    }
+    
     try {
       // Use local alert.mp3 file from assets
       const audio = new Audio(alertSound)
@@ -892,7 +921,10 @@ export default function DeliveryHome() {
         return audio
       } catch (playError) {
         // Autoplay was prevented or other error
-        console.error('❌ Could not play alert sound:', playError)
+        // Don't log autoplay policy errors as they're expected before user interaction
+        if (!playError.message?.includes('user didn\'t interact') && !playError.name?.includes('NotAllowedError')) {
+          console.error('❌ Could not play alert sound:', playError)
+        }
         // Try to load the audio first
         audio.load()
         try {
@@ -900,7 +932,10 @@ export default function DeliveryHome() {
           console.log('✅ Alert sound started playing after load()')
           return audio
         } catch (retryError) {
-          console.error('❌ Could not play alert sound after retry:', retryError)
+          // Don't log autoplay policy errors
+          if (!retryError.message?.includes('user didn\'t interact') && !retryError.name?.includes('NotAllowedError')) {
+            console.error('❌ Could not play alert sound after retry:', retryError)
+          }
           return null
         }
       }

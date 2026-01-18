@@ -13,6 +13,7 @@ export const useRestaurantNotifications = () => {
   const [newOrder, setNewOrder] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const audioRef = useRef(null);
+  const userInteractedRef = useRef(false); // Track user interaction for autoplay policy
   const [restaurantId, setRestaurantId] = useState(null);
 
   // Get restaurant ID from API
@@ -265,16 +266,50 @@ export const useRestaurantNotifications = () => {
     };
   }, [restaurantId]);
 
+  // Track user interaction for autoplay policy
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      userInteractedRef.current = true;
+      // Remove listeners after first interaction
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+    
+    // Listen for user interaction
+    document.addEventListener('click', handleUserInteraction, { once: true });
+    document.addEventListener('touchstart', handleUserInteraction, { once: true });
+    document.addEventListener('keydown', handleUserInteraction, { once: true });
+    
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+  }, []);
+
   const playNotificationSound = () => {
     try {
       if (audioRef.current) {
+        // Only play if user has interacted with the page (browser autoplay policy)
+        if (!userInteractedRef.current) {
+          console.log('🔇 Audio playback skipped - user has not interacted with page yet');
+          return;
+        }
+        
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(error => {
-          console.warn('Error playing notification sound:', error);
+          // Don't log autoplay policy errors as they're expected
+          if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
+            console.warn('Error playing notification sound:', error);
+          }
         });
       }
     } catch (error) {
-      console.warn('Error playing sound:', error);
+      // Don't log autoplay policy errors
+      if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
+        console.warn('Error playing sound:', error);
+      }
     }
   };
 

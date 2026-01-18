@@ -19,20 +19,57 @@ export const useDeliveryNotifications = () => {
   const [deliveryPartnerId, setDeliveryPartnerId] = useState(null);
 
   // Step 3: All callbacks before effects (unconditional)
+  // Track user interaction for autoplay policy
+  const userInteractedRef = useRef(false);
+  
   const playNotificationSound = useCallback(() => {
     try {
       if (audioRef.current) {
+        // Only play if user has interacted with the page (browser autoplay policy)
+        if (!userInteractedRef.current) {
+          console.log('🔇 Audio playback skipped - user has not interacted with page yet');
+          return;
+        }
+        
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(error => {
-          console.warn('Error playing notification sound:', error);
+          // Don't log autoplay policy errors as they're expected
+          if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
+            console.warn('Error playing notification sound:', error);
+          }
         });
       }
     } catch (error) {
-      console.warn('Error playing sound:', error);
+      // Don't log autoplay policy errors
+      if (!error.message?.includes('user didn\'t interact') && !error.name?.includes('NotAllowedError')) {
+        console.warn('Error playing sound:', error);
+      }
     }
   }, []);
 
   // Step 4: All effects (unconditional hook calls, conditional logic inside)
+  // Track user interaction for autoplay policy
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      userInteractedRef.current = true;
+      // Remove listeners after first interaction
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+    
+    // Listen for user interaction
+    document.addEventListener('click', handleUserInteraction, { once: true });
+    document.addEventListener('touchstart', handleUserInteraction, { once: true });
+    document.addEventListener('keydown', handleUserInteraction, { once: true });
+    
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+  }, []);
+  
   // Initialize audio on mount
   useEffect(() => {
     if (!audioRef.current) {
@@ -85,11 +122,84 @@ export const useDeliveryNotifications = () => {
       return;
     }
 
-    const backendUrl = API_BASE_URL.replace('/api', '');
+    // Normalize backend URL - use simpler, more robust approach
+    let backendUrl = API_BASE_URL;
+    
+    // Step 1: Extract protocol and hostname using URL parsing if possible
+    try {
+      const urlObj = new URL(backendUrl);
+      // Remove /api from pathname
+      let pathname = urlObj.pathname.replace(/^\/api\/?$/, '');
+      // Reconstruct clean URL
+      backendUrl = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? `:${urlObj.port}` : ''}${pathname}`;
+    } catch (e) {
+      // If URL parsing fails, use regex-based normalization
+      // Remove /api suffix first
+      backendUrl = backendUrl.replace(/\/api\/?$/, '');
+      backendUrl = backendUrl.replace(/\/+$/, ''); // Remove trailing slashes
+      
+      // Normalize protocol - ensure exactly two slashes after protocol
+      // Fix patterns: https:/, https:///, https://https://
+      if (backendUrl.startsWith('https:') || backendUrl.startsWith('http:')) {
+        // Extract protocol
+        const protocolMatch = backendUrl.match(/^(https?):/i);
+        if (protocolMatch) {
+          const protocol = protocolMatch[1].toLowerCase();
+          // Remove everything up to and including the first valid domain part
+          const afterProtocol = backendUrl.substring(protocol.length + 1);
+          // Remove leading slashes
+          const cleanPath = afterProtocol.replace(/^\/+/, '');
+          // Reconstruct with exactly two slashes
+          backendUrl = `${protocol}://${cleanPath}`;
+        }
+      }
+    }
+    
+    // Final cleanup: ensure exactly two slashes after protocol
+    backendUrl = backendUrl.replace(/^(https?):\/+/gi, '$1://');
+    backendUrl = backendUrl.replace(/\/+$/, ''); // Remove trailing slashes
+    
     const socketUrl = `${backendUrl}/delivery`;
     
     console.log('🔌 Attempting to connect to Delivery Socket.IO:', socketUrl);
+    console.log('🔌 Backend URL:', backendUrl);
+    console.log('🔌 API_BASE_URL:', API_BASE_URL);
     console.log('🔌 Delivery Partner ID:', deliveryPartnerId);
+    console.log('🔌 Environment:', import.meta.env.MODE);
+    
+    // Warn if trying to connect to localhost in production
+    if (import.meta.env.MODE === 'production' && backendUrl.includes('localhost')) {
+      console.error('❌ CRITICAL: Trying to connect Socket.IO to localhost in production!');
+      console.error('💡 This means VITE_API_BASE_URL was not set during build time');
+      console.error('💡 Current socketUrl:', socketUrl);
+      console.error('💡 Current API_BASE_URL:', API_BASE_URL);
+      console.error('💡 Fix: Rebuild frontend with: VITE_API_BASE_URL=https://your-backend-domain.com/api npm run build');
+      console.error('💡 Note: Vite environment variables are embedded at BUILD TIME, not runtime');
+      console.error('💡 You must rebuild and redeploy the frontend with correct VITE_API_BASE_URL');
+      
+      // Don't try to connect to localhost in production - it will fail
+      setIsConnected(false);
+      return;
+    }
+    
+    // Validate backend URL format
+    if (!backendUrl || !backendUrl.startsWith('http')) {
+      console.error('❌ CRITICAL: Invalid backend URL format:', backendUrl);
+      console.error('💡 API_BASE_URL:', API_BASE_URL);
+      console.error('💡 Expected format: https://your-domain.com or http://localhost:5000');
+      return; // Don't try to connect with invalid URL
+    }
+    
+    // Validate socket URL format
+    try {
+      new URL(socketUrl); // This will throw if URL is invalid
+    } catch (urlError) {
+      console.error('❌ CRITICAL: Invalid Socket.IO URL:', socketUrl);
+      console.error('💡 URL validation error:', urlError.message);
+      console.error('💡 Backend URL:', backendUrl);
+      console.error('💡 API_BASE_URL:', API_BASE_URL);
+      return; // Don't try to connect with invalid URL
+    }
 
     socketRef.current = io(socketUrl, {
       path: '/socket.io/',
