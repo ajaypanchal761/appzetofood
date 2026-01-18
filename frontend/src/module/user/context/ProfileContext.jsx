@@ -64,6 +64,13 @@ export function ProfileProvider({ children }) {
     return saved ? JSON.parse(saved) : []
   })
 
+  // VegMode state - stored in localStorage for persistence
+  const [vegMode, setVegMode] = useState(() => {
+    const saved = localStorage.getItem("userVegMode")
+    // Default to true (ON) if not set
+    return saved !== null ? saved === "true" : true
+  })
+
   // Save to localStorage whenever userProfile, addresses or paymentMethods change
   useEffect(() => {
     localStorage.setItem("userProfile", JSON.stringify(userProfile))
@@ -80,6 +87,10 @@ export function ProfileProvider({ children }) {
   useEffect(() => {
     localStorage.setItem("userFavorites", JSON.stringify(favorites))
   }, [favorites])
+
+  useEffect(() => {
+    localStorage.setItem("userVegMode", vegMode.toString())
+  }, [vegMode])
 
   // Fetch user profile and addresses from API on mount and when authentication changes
   useEffect(() => {
@@ -311,6 +322,8 @@ export function ProfileProvider({ children }) {
       addresses,
       paymentMethods,
       favorites,
+      vegMode,
+      setVegMode,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -335,6 +348,8 @@ export function ProfileProvider({ children }) {
       addresses,
       paymentMethods,
       favorites,
+      vegMode,
+      setVegMode,
       addAddress,
       updateAddress,
       deleteAddress,
@@ -385,7 +400,9 @@ export function useProfile() {
       addFavorite: () => console.warn("ProfileProvider not available"),
       removeFavorite: () => console.warn("ProfileProvider not available"),
       isFavorite: () => false,
-      getFavorites: () => []
+      getFavorites: () => [],
+      vegMode: true,
+      setVegMode: () => console.warn("ProfileProvider not available")
     }
   }
   return context

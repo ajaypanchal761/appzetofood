@@ -2,11 +2,16 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { X } from "lucide-react"
+import { adminAPI } from "@/lib/api"
+import { API_ENDPOINTS } from "@/lib/api/config"
+import api from "@/lib/api"
+import { toast } from "sonner"
 
 export default function ShareFeedback() {
   const navigate = useNavigate()
   const [rating, setRating] = useState(null)
   const [showThanks, setShowThanks] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const numbers = Array.from({ length: 11 }, (_, i) => i)
 
@@ -14,9 +19,27 @@ export default function ShareFeedback() {
     navigate(-1)
   }
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (rating === null) return
-    setShowThanks(true)
+    
+    try {
+      setIsSubmitting(true)
+      // Save feedback experience to backend (public route)
+      await api.post(API_ENDPOINTS.ADMIN.FEEDBACK_EXPERIENCE_CREATE, {
+        rating,
+        module: 'restaurant'
+      })
+      setShowThanks(true)
+    } catch (error) {
+      console.error('Error submitting feedback:', error)
+      // Still show thanks popup even if backend save fails (graceful degradation)
+      if (error.response?.status !== 401) {
+        toast.error('Failed to save feedback, but thank you for your input!')
+      }
+      setShowThanks(true)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (

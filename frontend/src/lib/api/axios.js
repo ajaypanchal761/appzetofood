@@ -52,13 +52,13 @@ function getTokenForCurrentRoute() {
 
   if (path.startsWith('/admin')) {
     return localStorage.getItem('admin_accessToken');
-  } else if (path.startsWith('/restaurant-panel') || (path.startsWith('/restaurant') && !path.startsWith('/restaurants') && !path.startsWith('/restaurant/list') && !path.startsWith('/restaurant/under-250'))) {
+  } else if (path.startsWith('/restaurant') && !path.startsWith('/restaurants') && !path.startsWith('/restaurant/list') && !path.startsWith('/restaurant/under-250')) {
     // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
     // Exclude public routes like /restaurant/list and /restaurant/under-250
     return localStorage.getItem('restaurant_accessToken');
   } else if (path.startsWith('/delivery')) {
     return localStorage.getItem('delivery_accessToken');
-  } else if (path.startsWith('/user') || path === '/' || (!path.startsWith('/admin') && !path.startsWith('/restaurant-panel') && !(path.startsWith('/restaurant') && !path.startsWith('/restaurants')) && !path.startsWith('/delivery'))) {
+  } else if (path.startsWith('/user') || path === '/' || (!path.startsWith('/admin') && !(path.startsWith('/restaurant') && !path.startsWith('/restaurants')) && !path.startsWith('/delivery'))) {
     // User module includes /restaurants/* paths
     return localStorage.getItem('user_accessToken');
   }
@@ -115,14 +115,16 @@ apiClient.interceptors.request.use(
                                      !requestUrl.includes('/restaurant/categories') &&
                                      !requestUrl.includes('/restaurant/onboarding') &&
                                      !requestUrl.includes('/restaurant/delivery-status') &&
+                                     !requestUrl.includes('/restaurant/finance') &&
+                                     !requestUrl.includes('/restaurant/wallet') &&
+                                     !requestUrl.includes('/restaurant/analytics') &&
                                      (requestUrl.match(/\/restaurant\/[^/]+$/) || 
-                                      requestUrl.match(/\/restaurant\/[^/]+\/menu/) ||
-                                      requestUrl.match(/\/restaurant\/[^/]+\/addons/) ||
-                                      requestUrl.match(/\/restaurant\/[^/]+\/inventory/) ||
+                                      requestUrl.match(/\/restaurant\/[^/]+\/menu/) || 
+                                      requestUrl.match(/\/restaurant\/[^/]+\/addons/) || 
+                                      requestUrl.match(/\/restaurant\/[^/]+\/inventory/) || 
                                       requestUrl.match(/\/restaurant\/[^/]+\/offers/)));
     
     const isAuthenticatedRoute = (path.startsWith('/admin') || 
-                                  path.startsWith('/restaurant-panel') || 
                                   (path.startsWith('/restaurant') && !path.startsWith('/restaurants') && !isPublicRestaurantRoute) || 
                                   path.startsWith('/delivery')) && !isPublicRestaurantRoute;
     
@@ -223,7 +225,7 @@ apiClient.interceptors.response.use(
       if (currentPath.startsWith('/admin')) {
         tokenKey = 'admin_accessToken';
         expectedRole = 'admin';
-      } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+      } else if (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants')) {
         // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
         tokenKey = 'restaurant_accessToken';
         expectedRole = 'restaurant';
@@ -262,7 +264,7 @@ apiClient.interceptors.response.use(
 
         if (currentPath.startsWith('/admin')) {
           refreshEndpoint = '/admin/auth/refresh-token';
-        } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+        } else if (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants')) {
           // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
           refreshEndpoint = '/restaurant/auth/refresh-token';
         } else if (currentPath.startsWith('/delivery')) {
@@ -290,7 +292,7 @@ apiClient.interceptors.response.use(
           if (currentPath.startsWith('/admin')) {
             tokenKey = 'admin_accessToken';
             expectedRole = 'admin';
-          } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+          } else if (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants')) {
             // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
             tokenKey = 'restaurant_accessToken';
             expectedRole = 'restaurant';
@@ -357,7 +359,7 @@ apiClient.interceptors.response.use(
             localStorage.removeItem('admin_authenticated');
             localStorage.removeItem('admin_user');
             window.location.href = '/admin/login';
-          } else if (currentPath.startsWith('/restaurant-panel') || (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants'))) {
+          } else if (currentPath.startsWith('/restaurant') && !currentPath.startsWith('/restaurants')) {
             // /restaurant/* is for restaurant module, /restaurants/* is for user module viewing restaurants
             localStorage.removeItem('restaurant_accessToken');
             localStorage.removeItem('restaurant_authenticated');

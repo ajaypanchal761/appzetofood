@@ -76,11 +76,77 @@ export const useRestaurantNotifications = () => {
     backendUrl = backendUrl.replace(/^(https?):\/+/gi, '$1://');
     backendUrl = backendUrl.replace(/\/+$/, ''); // Remove trailing slashes
     
+    // CRITICAL: Check for localhost in production BEFORE creating socket
+    // Detect production environment more reliably
+    const frontendHostname = window.location.hostname;
+    const isLocalhost = frontendHostname === 'localhost' || 
+                        frontendHostname === '127.0.0.1' ||
+                        frontendHostname === '';
+    const isProductionBuild = import.meta.env.MODE === 'production' || import.meta.env.PROD;
+    // Production deployment: not localhost AND (HTTPS OR has domain name with dots)
+    const isProductionDeployment = !isLocalhost && (
+      window.location.protocol === 'https:' || 
+      (frontendHostname.includes('.') && !frontendHostname.startsWith('192.168.') && !frontendHostname.startsWith('10.'))
+    );
+    
+    // If backend URL is localhost but we're not running locally, BLOCK connection
+    const backendIsLocalhost = backendUrl.includes('localhost') || backendUrl.includes('127.0.0.1');
+    // Block if: backend is localhost AND (production build OR production deployment)
+    // Allow if: frontend is also localhost (development scenario)
+    const shouldBlockConnection = backendIsLocalhost && (isProductionBuild || isProductionDeployment) && !isLocalhost;
+    
+    if (shouldBlockConnection) {
+      // Try to infer backend URL from frontend URL (common pattern: api.domain.com or domain.com/api)
+      const frontendHost = window.location.hostname;
+      const frontendProtocol = window.location.protocol;
+      let suggestedBackendUrl = null;
+      
+      // Common patterns:
+      // - If frontend is on foods.appzeto.com, backend might be api.foods.appzeto.com or foods.appzeto.com
+      if (frontendHost.includes('foods.appzeto.com')) {
+        suggestedBackendUrl = `${frontendProtocol}//api.foods.appzeto.com/api`;
+      } else if (frontendHost.includes('appzeto.com')) {
+        suggestedBackendUrl = `${frontendProtocol}//api.${frontendHost}/api`;
+      }
+      
+      console.error('❌ CRITICAL: BLOCKING Socket.IO connection to localhost!');
+      console.error('💡 This means VITE_API_BASE_URL was not set during build time');
+      console.error('💡 Current backendUrl:', backendUrl);
+      console.error('💡 Current API_BASE_URL:', API_BASE_URL);
+      console.error('💡 VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL || 'NOT SET');
+      console.error('💡 Environment mode:', import.meta.env.MODE);
+      console.error('💡 Frontend hostname:', frontendHost);
+      console.error('💡 Frontend protocol:', frontendProtocol);
+      console.error('💡 Is production build:', isProductionBuild);
+      console.error('💡 Is production deployment:', isProductionDeployment);
+      console.error('💡 Backend is localhost:', backendIsLocalhost);
+      if (suggestedBackendUrl) {
+        console.error('💡 Suggested backend URL:', suggestedBackendUrl);
+        console.error('💡 Fix: Rebuild frontend with: VITE_API_BASE_URL=' + suggestedBackendUrl + ' npm run build');
+      } else {
+        console.error('💡 Fix: Rebuild frontend with: VITE_API_BASE_URL=https://your-backend-domain.com/api npm run build');
+      }
+      console.error('💡 Note: Vite environment variables are embedded at BUILD TIME, not runtime');
+      console.error('💡 You must rebuild and redeploy the frontend with correct VITE_API_BASE_URL');
+      
+      // Clean up any existing socket connection
+      if (socketRef.current) {
+        console.log('🧹 Cleaning up existing socket connection...');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      
+      // Don't try to connect to localhost in production - it will fail
+      setIsConnected(false);
+      return; // CRITICAL: Exit early to prevent socket creation
+    }
+    
     // Validate backend URL format
     if (!backendUrl || !backendUrl.startsWith('http')) {
       console.error('❌ CRITICAL: Invalid backend URL format:', backendUrl);
       console.error('💡 API_BASE_URL:', API_BASE_URL);
       console.error('💡 Expected format: https://your-domain.com or http://localhost:5000');
+      setIsConnected(false);
       return; // Don't try to connect with invalid URL
     }
     
@@ -89,12 +155,21 @@ export const useRestaurantNotifications = () => {
     
     // Validate socket URL format
     try {
-      new URL(socketUrl); // This will throw if URL is invalid
+      const urlTest = new URL(socketUrl); // This will throw if URL is invalid
+      // Additional validation: ensure it's not localhost in production
+      if ((isProductionBuild || isProductionDeployment) && (urlTest.hostname === 'localhost' || urlTest.hostname === '127.0.0.1')) {
+        console.error('❌ CRITICAL: Socket URL contains localhost in production!');
+        console.error('💡 Socket URL:', socketUrl);
+        console.error('💡 This should have been caught earlier, but blocking anyway');
+        setIsConnected(false);
+        return;
+      }
     } catch (urlError) {
       console.error('❌ CRITICAL: Invalid Socket.IO URL:', socketUrl);
       console.error('💡 URL validation error:', urlError.message);
       console.error('💡 Backend URL:', backendUrl);
       console.error('💡 API_BASE_URL:', API_BASE_URL);
+      setIsConnected(false);
       return; // Don't try to connect with invalid URL
     }
     
@@ -103,21 +178,8 @@ export const useRestaurantNotifications = () => {
     console.log('🔌 API_BASE_URL:', API_BASE_URL);
     console.log('🔌 Restaurant ID:', restaurantId);
     console.log('🔌 Environment:', import.meta.env.MODE);
-    
-    // Warn if trying to connect to localhost in production
-    if (import.meta.env.MODE === 'production' && backendUrl.includes('localhost')) {
-      console.error('❌ CRITICAL: Trying to connect Socket.IO to localhost in production!');
-      console.error('💡 This means VITE_API_BASE_URL was not set during build time');
-      console.error('💡 Current socketUrl:', socketUrl);
-      console.error('💡 Current API_BASE_URL:', API_BASE_URL);
-      console.error('💡 Fix: Rebuild frontend with: VITE_API_BASE_URL=https://your-backend-domain.com/api npm run build');
-      console.error('💡 Note: Vite environment variables are embedded at BUILD TIME, not runtime');
-      console.error('💡 You must rebuild and redeploy the frontend with correct VITE_API_BASE_URL');
-      
-      // Don't try to connect to localhost in production - it will fail
-      setIsConnected(false);
-      return;
-    }
+    console.log('🔌 Is Production Build:', isProductionBuild);
+    console.log('🔌 Is Production Deployment:', isProductionDeployment);
 
     // Initialize socket connection to restaurant namespace
     // Use polling first as it's more reliable, websocket will upgrade automatically

@@ -3,6 +3,7 @@ import io from 'socket.io-client';
 import { API_BASE_URL } from '@/lib/api/config';
 import { deliveryAPI } from '@/lib/api';
 import alertSound from '@/assets/audio/alert.mp3';
+import originalSound from '@/assets/audio/original.mp3';
 
 export const useDeliveryNotifications = () => {
   // CRITICAL: All hooks must be called unconditionally and in the same order every render
@@ -24,6 +25,27 @@ export const useDeliveryNotifications = () => {
   
   const playNotificationSound = useCallback(() => {
     try {
+      // Get current selected sound preference from localStorage
+      const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone';
+      const soundFile = selectedSound === 'original' ? originalSound : alertSound;
+      
+      // Update audio source if preference changed or initialize if not exists
+      if (audioRef.current) {
+        const currentSrc = audioRef.current.src;
+        const newSrc = soundFile;
+        // Check if source needs to be updated
+        if (!currentSrc.includes(newSrc.split('/').pop())) {
+          audioRef.current.pause();
+          audioRef.current.src = newSrc;
+          audioRef.current.load();
+          console.log('🔊 Audio source updated to:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+        }
+      } else {
+        // Initialize audio if not exists
+        audioRef.current = new Audio(soundFile);
+        audioRef.current.volume = 0.7;
+      }
+      
       if (audioRef.current) {
         // Only play if user has interacted with the page (browser autoplay policy)
         if (!userInteractedRef.current) {
@@ -70,11 +92,26 @@ export const useDeliveryNotifications = () => {
     };
   }, []);
   
-  // Initialize audio on mount
+  // Initialize audio on mount - use selected preference from localStorage
   useEffect(() => {
+    // Get selected alert sound preference from localStorage
+    const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone';
+    const soundFile = selectedSound === 'original' ? originalSound : alertSound;
+    
     if (!audioRef.current) {
-      audioRef.current = new Audio(alertSound);
+      audioRef.current = new Audio(soundFile);
       audioRef.current.volume = 0.7;
+      console.log('🔊 Audio initialized with:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+    } else {
+      // Update audio source if preference changed
+      const currentSrc = audioRef.current.src;
+      const newSrc = soundFile;
+      if (!currentSrc.includes(newSrc.split('/').pop())) {
+        audioRef.current.pause();
+        audioRef.current.src = newSrc;
+        audioRef.current.load();
+        console.log('🔊 Audio updated to:', selectedSound === 'original' ? 'Original' : 'Zomato Tone');
+      }
     }
     
     return () => {
@@ -83,7 +120,7 @@ export const useDeliveryNotifications = () => {
         audioRef.current = null;
       }
     };
-  }, []);
+  }, []); // Note: This runs once on mount. To update dynamically, we'd need to listen to storage events
 
   // Fetch delivery partner ID
   useEffect(() => {

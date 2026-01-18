@@ -31,6 +31,38 @@ export function CartProvider({ children }) {
 
   const addToCart = (item, sourcePosition = null) => {
     setCart((prev) => {
+      // CRITICAL: Validate restaurant consistency
+      // If cart already has items, ensure new item belongs to the same restaurant
+      if (prev.length > 0) {
+        const firstItemRestaurantId = prev[0]?.restaurantId;
+        const firstItemRestaurantName = prev[0]?.restaurant;
+        const newItemRestaurantId = item?.restaurantId;
+        const newItemRestaurantName = item?.restaurant;
+        
+        // Check if restaurant IDs match
+        if (firstItemRestaurantId && newItemRestaurantId && 
+            firstItemRestaurantId !== newItemRestaurantId) {
+          console.error('❌ Cannot add item: Cart contains items from different restaurant!', {
+            cartRestaurantId: firstItemRestaurantId,
+            cartRestaurantName: firstItemRestaurantName,
+            newItemRestaurantId: newItemRestaurantId,
+            newItemRestaurantName: newItemRestaurantName
+          });
+          // Show error to user (will be handled by calling component)
+          throw new Error(`Cart already contains items from "${firstItemRestaurantName}". Please clear cart or complete order first.`);
+        }
+        
+        // Also check restaurant name as fallback
+        if (firstItemRestaurantName && newItemRestaurantName && 
+            firstItemRestaurantName !== newItemRestaurantName) {
+          console.error('❌ Cannot add item: Restaurant name mismatch!', {
+            cartRestaurantName: firstItemRestaurantName,
+            newItemRestaurantName: newItemRestaurantName
+          });
+          throw new Error(`Cart already contains items from "${firstItemRestaurantName}". Please clear cart or complete order first.`);
+        }
+      }
+      
       const existing = prev.find((i) => i.id === item.id)
       if (existing) {
         // Set last add event for animation when incrementing existing item
@@ -50,6 +82,13 @@ export function CartProvider({ children }) {
           i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
         )
       }
+      
+      // Validate item has required restaurant info
+      if (!item.restaurantId && !item.restaurant) {
+        console.error('❌ Cannot add item: Missing restaurant information!', item);
+        throw new Error('Item is missing restaurant information. Please refresh the page.');
+      }
+      
       const newItem = { ...item, quantity: 1 }
       
       // Set last add event for animation if sourcePosition is provided
@@ -189,7 +228,12 @@ export function CartProvider({ children }) {
 export function useCart() {
   const context = useContext(CartContext)
   if (!context) {
-    throw new Error("useCart must be used within a CartProvider")
+    const errorMessage = "useCart must be used within a CartProvider. " +
+      "Make sure the component is rendered inside UserLayout which provides CartProvider. " +
+      "Check that the route is defined inside UserRouter with UserLayout wrapper.";
+    console.error('❌', errorMessage);
+    console.error('💡 Component stack:', new Error().stack);
+    throw new Error(errorMessage);
   }
   return context
 }

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { restaurantAPI, diningAPI } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
+import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 import {
   ArrowLeft,
@@ -37,6 +38,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import AnimatedPage from "../../components/AnimatedPage"
 import { useCart } from "../../context/CartContext"
+import { useProfile } from "../../context/ProfileContext"
 import AddToCartAnimation from "../../components/AddToCartAnimation"
 
 
@@ -47,6 +49,7 @@ export default function RestaurantDetails() {
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
+  const { vegMode } = useProfile()
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [quantities, setQuantities] = useState({})
@@ -447,16 +450,46 @@ export default function RestaurantDetails() {
       [item.id]: newQuantity,
     }))
 
+    // CRITICAL: Validate restaurant data before adding to cart
+    if (!restaurant || !restaurant.name) {
+      console.error('❌ Cannot add item to cart: Restaurant data is missing!');
+      toast.error('Restaurant information is missing. Please refresh the page.');
+      return;
+    }
+
+    // Ensure we have a valid restaurantId
+    const validRestaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id;
+    if (!validRestaurantId) {
+      console.error('❌ Cannot add item to cart: Restaurant ID is missing!', {
+        restaurant: restaurant,
+        restaurantId: restaurant?.restaurantId,
+        _id: restaurant?._id,
+        id: restaurant?.id
+      });
+      toast.error('Restaurant ID is missing. Please refresh the page.');
+      return;
+    }
+
+    // Log for debugging
+    console.log('🛒 Adding item to cart:', {
+      itemName: item.name,
+      restaurantName: restaurant.name,
+      restaurantId: validRestaurantId,
+      restaurant_id: restaurant._id,
+      restaurant_restaurantId: restaurant.restaurantId
+    });
+
     // Prepare cart item with all required properties
     const cartItem = {
       id: item.id,
       name: item.name,
       price: item.price,
       image: item.image,
-      restaurant: restaurant?.name || "Unknown Restaurant",
-      restaurantId: restaurant?.restaurantId || restaurant?._id || restaurant?.id || null,
+      restaurant: restaurant.name, // Use restaurant.name directly (already validated)
+      restaurantId: validRestaurantId, // Use validated restaurantId
       description: item.description,
       originalPrice: item.originalPrice,
+      isVeg: item.isVeg !== false // Add isVeg property
     }
 
     // Get source position for animation from event target
@@ -514,9 +547,16 @@ export default function RestaurantDetails() {
 
         // If incrementing quantity, trigger add animation with sourcePosition
         if (newQuantity > existingCartItem.quantity && sourcePosition) {
-          addToCart(cartItem, sourcePosition)
-          if (newQuantity > existingCartItem.quantity + 1) {
-            updateQuantity(item.id, newQuantity)
+          try {
+            addToCart(cartItem, sourcePosition)
+            if (newQuantity > existingCartItem.quantity + 1) {
+              updateQuantity(item.id, newQuantity)
+            }
+          } catch (error) {
+            // Handle restaurant mismatch error
+            console.error('❌ Error adding item to cart:', error);
+            toast.error(error.message || 'Cannot add item from different restaurant. Please clear cart first.');
+            return; // Don't update quantity if add failed
           }
         }
         // If decreasing quantity, trigger removal animation with sourcePosition
@@ -530,9 +570,15 @@ export default function RestaurantDetails() {
       } else {
         // Add to cart first (adds with quantity 1), then update to desired quantity
         // Pass sourcePosition when adding a new item
-        addToCart(cartItem, sourcePosition)
-        if (newQuantity > 1) {
-          updateQuantity(item.id, newQuantity)
+        try {
+          addToCart(cartItem, sourcePosition)
+          if (newQuantity > 1) {
+            updateQuantity(item.id, newQuantity)
+          }
+        } catch (error) {
+          // Handle restaurant mismatch error
+          console.error('❌ Error adding item to cart:', error);
+          toast.error(error.message || 'Cannot add item from different restaurant. Please clear cart first.');
         }
       }
     }
@@ -637,7 +683,13 @@ export default function RestaurantDetails() {
         if (!itemName.includes(query)) return false
       }
 
-      // Veg/Non-veg filter
+      // VegMode filter - when vegMode is ON, show only Veg items
+      // When vegMode is false/null/undefined, show all items (Veg and Non-Veg)
+      if (vegMode === true) {
+        if (item.foodType !== "Veg") return false
+      }
+
+      // Veg/Non-veg filter (local filter override)
       if (filters.vegNonVeg === "veg") {
         // Show only veg items
         if (item.foodType !== "Veg") return false

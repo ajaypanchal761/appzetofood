@@ -42,7 +42,7 @@ import { firebaseAuth } from "@/lib/firebase"
 import { clearModuleAuth } from "@/lib/utils/auth"
 
 export default function Profile() {
-  const { userProfile } = useProfile()
+  const { userProfile, vegMode, setVegMode } = useProfile()
   const navigate = useNavigate()
   
   // Popup states
@@ -51,7 +51,6 @@ export default function Profile() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   
   // Settings states
-  const [vegMode, setVegMode] = useState(true)
   const [appearance, setAppearance] = useState(() => {
     // Load theme from localStorage or default to 'light'
     return localStorage.getItem('appTheme') || 'light'

@@ -41,6 +41,7 @@ import refundPublicRoutes from './modules/admin/routes/refundPublicRoutes.js';
 import shippingPublicRoutes from './modules/admin/routes/shippingPublicRoutes.js';
 import cancellationPublicRoutes from './modules/admin/routes/cancellationPublicRoutes.js';
 import feedbackPublicRoutes from './modules/admin/routes/feedbackPublicRoutes.js';
+import feedbackExperiencePublicRoutes from './modules/admin/routes/feedbackExperiencePublicRoutes.js';
 import safetyEmergencyPublicRoutes from './modules/admin/routes/safetyEmergencyPublicRoutes.js';
 import subscriptionRoutes from './modules/subscription/index.js';
 import uploadModuleRoutes from './modules/upload/index.js';
@@ -187,16 +188,27 @@ restaurantNamespace.on('connection', (socket) => {
       const normalizedRestaurantId = restaurantId?.toString() || restaurantId;
       const room = `restaurant:${normalizedRestaurantId}`;
 
+      // Log room join attempt with detailed info
+      console.log(`🍽️ Restaurant attempting to join room:`, {
+        restaurantId: restaurantId,
+        normalizedRestaurantId: normalizedRestaurantId,
+        room: room,
+        socketId: socket.id,
+        socketAuth: socket.handshake.auth
+      });
+
       socket.join(room);
-      console.log(`🍽️ Restaurant ${normalizedRestaurantId} joined room: ${room}`);
-      console.log(`🍽️ Total sockets in room ${room}:`, restaurantNamespace.adapter.rooms.get(room)?.size || 0);
+      const roomSize = restaurantNamespace.adapter.rooms.get(room)?.size || 0;
+      console.log(`✅ Restaurant ${normalizedRestaurantId} joined room: ${room}`);
+      console.log(`📊 Total sockets in room ${room}: ${roomSize}`);
 
       // Also join with ObjectId format if it's a valid ObjectId (for compatibility)
       if (mongoose.Types.ObjectId.isValid(normalizedRestaurantId)) {
         const objectIdRoom = `restaurant:${new mongoose.Types.ObjectId(normalizedRestaurantId).toString()}`;
         if (objectIdRoom !== room) {
           socket.join(objectIdRoom);
-          console.log(`🍽️ Restaurant also joined ObjectId room: ${objectIdRoom}`);
+          const objectIdRoomSize = restaurantNamespace.adapter.rooms.get(objectIdRoom)?.size || 0;
+          console.log(`✅ Restaurant also joined ObjectId room: ${objectIdRoom} (${objectIdRoomSize} sockets)`);
         }
       }
 
@@ -206,8 +218,14 @@ restaurantNamespace.on('connection', (socket) => {
         room: room,
         socketId: socket.id
       });
+      
+      // Log all rooms this socket is now in
+      const socketRooms = Array.from(socket.rooms).filter(r => r.startsWith('restaurant:'));
+      console.log(`📋 Socket ${socket.id} is now in restaurant rooms:`, socketRooms);
     } else {
       console.warn('⚠️ Restaurant tried to join without restaurantId');
+      console.warn('⚠️ Socket ID:', socket.id);
+      console.warn('⚠️ Socket auth:', socket.handshake.auth);
     }
   });
 
@@ -370,6 +388,7 @@ app.use('/api', refundPublicRoutes);
 app.use('/api', shippingPublicRoutes);
 app.use('/api', cancellationPublicRoutes);
 app.use('/api', feedbackPublicRoutes);
+app.use('/api', feedbackExperiencePublicRoutes);
 app.use('/api', safetyEmergencyPublicRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api', uploadModuleRoutes);

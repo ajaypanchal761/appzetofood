@@ -351,6 +351,34 @@ export const rejectOrder = asyncHandler(async (req, res) => {
       restaurant.restaurantId ||
       restaurant.id;
 
+    // Log for debugging
+    console.log('🔍 Reject order - Looking up order:', {
+      orderIdParam: id,
+      restaurantId: restaurantId,
+      restaurant_id: restaurant._id?.toString(),
+      restaurant_restaurantId: restaurant.restaurantId
+    });
+
+    // Prepare restaurantId variations for query (handle both _id and restaurantId formats)
+    const restaurantIdVariations = [restaurantId];
+    if (mongoose.Types.ObjectId.isValid(restaurantId) && restaurantId.length === 24) {
+      const objectIdString = new mongoose.Types.ObjectId(restaurantId).toString();
+      if (!restaurantIdVariations.includes(objectIdString)) {
+        restaurantIdVariations.push(objectIdString);
+      }
+    }
+    // Also add restaurant._id if different
+    if (restaurant._id) {
+      const restaurantMongoId = restaurant._id.toString();
+      if (!restaurantIdVariations.includes(restaurantMongoId)) {
+        restaurantIdVariations.push(restaurantMongoId);
+      }
+    }
+    // Also add restaurant.restaurantId if different
+    if (restaurant.restaurantId && !restaurantIdVariations.includes(restaurant.restaurantId)) {
+      restaurantIdVariations.push(restaurant.restaurantId);
+    }
+
     // Try to find order by MongoDB _id or orderId (custom order ID)
     let order = null;
 
@@ -358,7 +386,12 @@ export const rejectOrder = asyncHandler(async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
       order = await Order.findOne({
         _id: id,
-        restaurantId
+        restaurantId: { $in: restaurantIdVariations }
+      });
+      console.log('🔍 Order lookup by _id:', {
+        orderId: id,
+        found: !!order,
+        orderRestaurantId: order?.restaurantId
       });
     }
 
@@ -366,13 +399,33 @@ export const rejectOrder = asyncHandler(async (req, res) => {
     if (!order) {
       order = await Order.findOne({
         orderId: id,
-        restaurantId
+        restaurantId: { $in: restaurantIdVariations }
+      });
+      console.log('🔍 Order lookup by orderId:', {
+        orderId: id,
+        found: !!order,
+        orderRestaurantId: order?.restaurantId,
+        restaurantIdVariations
       });
     }
 
     if (!order) {
+      console.error('❌ Order not found for rejection:', {
+        orderIdParam: id,
+        restaurantId: restaurantId,
+        restaurantIdVariations,
+        restaurant_id: restaurant._id?.toString(),
+        restaurant_restaurantId: restaurant.restaurantId
+      });
       return errorResponse(res, 404, 'Order not found');
     }
+
+    console.log('✅ Order found for rejection:', {
+      orderId: order.orderId,
+      orderMongoId: order._id.toString(),
+      orderRestaurantId: order.restaurantId,
+      orderStatus: order.status
+    });
 
     // Allow rejecting orders with status 'pending' or 'confirmed'
     if (!['pending', 'confirmed'].includes(order.status)) {

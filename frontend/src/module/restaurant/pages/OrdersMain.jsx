@@ -41,6 +41,7 @@ export default function OrdersMain() {
 
   // New order popup states
   const [showNewOrderPopup, setShowNewOrderPopup] = useState(false)
+  const [popupOrder, setPopupOrder] = useState(null) // Store order for popup (from Socket.IO or API)
   const [isMuted, setIsMuted] = useState(false)
   const [prepTime, setPrepTime] = useState(11)
   const [countdown, setCountdown] = useState(240) // 4 minutes in seconds
@@ -48,6 +49,7 @@ export default function OrdersMain() {
   const [showRejectPopup, setShowRejectPopup] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const audioRef = useRef(null)
+  const shownOrdersRef = useRef(new Set()) // Track orders already shown in popup
   const [restaurantStatus, setRestaurantStatus] = useState({
     isActive: null,
     rejectionReason: null,
@@ -176,14 +178,92 @@ export default function OrdersMain() {
     }
   }, [])
 
-  // Show new order popup when real order notification arrives
+  // Show new order popup when real order notification arrives from Socket.IO
   useEffect(() => {
     if (newOrder) {
-      console.log('📦 New order received in OrdersMain:', newOrder)
-      setShowNewOrderPopup(true)
-      setCountdown(240) // Reset countdown to 4 minutes
+      console.log('📦 New order received via Socket.IO:', newOrder)
+      const orderId = newOrder.orderId || newOrder.orderMongoId
+      if (orderId && !shownOrdersRef.current.has(orderId)) {
+        shownOrdersRef.current.add(orderId)
+        setPopupOrder(newOrder)
+        setShowNewOrderPopup(true)
+        setCountdown(240) // Reset countdown to 4 minutes
+      }
     }
   }, [newOrder])
+
+  // Track popup state with ref to avoid stale closures
+  const showNewOrderPopupRef = useRef(showNewOrderPopup)
+  const newOrderRef = useRef(newOrder)
+  
+  useEffect(() => {
+    showNewOrderPopupRef.current = showNewOrderPopup
+  }, [showNewOrderPopup])
+  
+  useEffect(() => {
+    newOrderRef.current = newOrder
+  }, [newOrder])
+
+  // Check for confirmed orders that haven't been shown in popup yet (fallback if Socket.IO fails)
+  useEffect(() => {
+    const checkConfirmedOrders = async () => {
+      // Skip if popup is already showing or Socket.IO order exists
+      if (showNewOrderPopupRef.current || newOrderRef.current) return
+      
+      try {
+        const response = await restaurantAPI.getOrders()
+        if (response.data?.success && response.data.data?.orders) {
+          // Find confirmed orders that haven't been shown yet
+          const confirmedOrders = response.data.data.orders.filter(
+            order => order.status === 'confirmed' && 
+                    !shownOrdersRef.current.has(order.orderId || order._id)
+          )
+          
+          // Show the most recent confirmed order in popup (double-check state)
+          if (confirmedOrders.length > 0 && !showNewOrderPopupRef.current && !newOrderRef.current) {
+            const latestConfirmedOrder = confirmedOrders[0]
+            const orderId = latestConfirmedOrder.orderId || latestConfirmedOrder._id
+            
+            // Transform order to match newOrder format
+            const orderForPopup = {
+              orderId: latestConfirmedOrder.orderId,
+              orderMongoId: latestConfirmedOrder._id,
+              restaurantId: latestConfirmedOrder.restaurantId,
+              restaurantName: latestConfirmedOrder.restaurantName,
+              items: latestConfirmedOrder.items || [],
+              total: latestConfirmedOrder.pricing?.total || 0,
+              customerAddress: latestConfirmedOrder.address,
+              status: latestConfirmedOrder.status,
+              createdAt: latestConfirmedOrder.createdAt,
+              estimatedDeliveryTime: latestConfirmedOrder.estimatedDeliveryTime || 30,
+              note: latestConfirmedOrder.note || '',
+              sendCutlery: latestConfirmedOrder.sendCutlery
+            }
+            
+            console.log('📦 Found confirmed order (fallback):', orderForPopup)
+            shownOrdersRef.current.add(orderId)
+            setPopupOrder(orderForPopup)
+            setShowNewOrderPopup(true)
+            setCountdown(240)
+          }
+        }
+      } catch (error) {
+        // Don't log 401 errors - axios interceptor handles token refresh/redirect
+        // Only log other errors (500, network errors, etc.)
+        if (error.response?.status !== 401) {
+          console.error('Error checking confirmed orders:', error)
+        }
+      }
+    }
+
+    // Check every 5 seconds for new confirmed orders (fallback mechanism)
+    const interval = setInterval(checkConfirmedOrders, 5000)
+    
+    // Check immediately on mount
+    checkConfirmedOrders()
+
+    return () => clearInterval(interval)
+  }, []) // Empty dependency array - check runs independently
 
   // Play audio when popup opens
   useEffect(() => {
@@ -222,10 +302,13 @@ export default function OrdersMain() {
       audioRef.current.currentTime = 0
     }
     
+    // Use popupOrder (from Socket.IO or API fallback) or newOrder (from hook)
+    const orderToAccept = popupOrder || newOrder
+    
     // Accept order via API if we have a real order
-    if (newOrder?.orderMongoId || newOrder?.orderId) {
+    if (orderToAccept?.orderMongoId || orderToAccept?.orderId) {
       try {
-        const orderId = newOrder.orderMongoId || newOrder.orderId
+        const orderId = orderToAccept.orderMongoId || orderToAccept.orderId
         await restaurantAPI.acceptOrder(orderId, prepTime)
         console.log('✅ Order accepted:', orderId)
       } catch (error) {
@@ -236,9 +319,13 @@ export default function OrdersMain() {
     }
     
     setShowNewOrderPopup(false)
+    setPopupOrder(null)
     clearNewOrder()
     setCountdown(240)
     setPrepTime(11)
+    
+    // Note: PreparingOrders component will automatically refresh orders via its own useEffect
+    // No need to manually refresh here as the component polls every 10 seconds
   }
 
   // Handle reject order
@@ -249,10 +336,13 @@ export default function OrdersMain() {
   const handleRejectConfirm = async () => {
     if (!rejectReason) return
     
+    // Use popupOrder (from Socket.IO or API fallback) or newOrder (from hook)
+    const orderToReject = popupOrder || newOrder
+    
     // Reject order via API if we have a real order
-    if (newOrder?.orderMongoId || newOrder?.orderId) {
+    if (orderToReject?.orderMongoId || orderToReject?.orderId) {
       try {
-        const orderId = newOrder.orderMongoId || newOrder.orderId
+        const orderId = orderToReject.orderMongoId || orderToReject.orderId
         await restaurantAPI.rejectOrder(orderId, rejectReason)
         console.log('✅ Order rejected:', orderId)
       } catch (error) {
@@ -268,6 +358,7 @@ export default function OrdersMain() {
     }
     setShowRejectPopup(false)
     setShowNewOrderPopup(false)
+    setPopupOrder(null)
     clearNewOrder()
     setRejectReason("")
     setCountdown(240)
@@ -276,7 +367,11 @@ export default function OrdersMain() {
 
   const handleRejectCancel = () => {
     setShowRejectPopup(false)
+    setShowNewOrderPopup(false)
+    setPopupOrder(null)
+    clearNewOrder()
     setRejectReason("")
+    setCountdown(240)
   }
 
   // Toggle mute
@@ -312,16 +407,16 @@ export default function OrdersMain() {
       // Restaurant name
       doc.setFontSize(14)
       doc.setFont('helvetica', 'normal')
-      doc.text(newOrder.restaurantName || 'Restaurant', 105, 30, { align: 'center' })
+      doc.text(orderToPrint.restaurantName || 'Restaurant', 105, 30, { align: 'center' })
       
       // Order details
       doc.setFontSize(10)
       doc.setFont('helvetica', 'bold')
-      doc.text(`Order ID: ${newOrder.orderId || 'N/A'}`, 20, 45)
+      doc.text(`Order ID: ${orderToPrint.orderId || 'N/A'}`, 20, 45)
       doc.setFont('helvetica', 'normal')
       
-      const orderDate = newOrder.createdAt 
-        ? new Date(newOrder.createdAt).toLocaleString('en-GB', { 
+      const orderDate = orderToPrint.createdAt 
+        ? new Date(orderToPrint.createdAt).toLocaleString('en-GB', { 
             day: 'numeric', 
             month: 'short', 
             year: 'numeric',
@@ -333,14 +428,14 @@ export default function OrdersMain() {
       doc.text(`Date: ${orderDate}`, 20, 52)
       
       // Customer address
-      if (newOrder.customerAddress) {
+      if (orderToPrint.customerAddress) {
         doc.setFont('helvetica', 'bold')
         doc.text('Delivery Address:', 20, 62)
         doc.setFont('helvetica', 'normal')
         const addressText = [
-          newOrder.customerAddress.street,
-          newOrder.customerAddress.city,
-          newOrder.customerAddress.state
+          orderToPrint.customerAddress.street,
+          orderToPrint.customerAddress.city,
+          orderToPrint.customerAddress.state
         ].filter(Boolean).join(', ') || 'Address not available'
         const addressLines = doc.splitTextToSize(addressText, 170)
         doc.text(addressLines, 20, 69)
@@ -348,13 +443,13 @@ export default function OrdersMain() {
       
       // Items table
       let yPos = 85
-      if (newOrder.items && newOrder.items.length > 0) {
+      if (orderToPrint.items && orderToPrint.items.length > 0) {
         doc.setFont('helvetica', 'bold')
         doc.text('Items:', 20, yPos)
         yPos += 8
         
         // Prepare table data
-        const tableData = newOrder.items.map(item => [
+        const tableData = orderToPrint.items.map(item => [
           item.name || 'Item',
           item.quantity || 1,
           `₹${(item.price || 0).toFixed(2)}`,
@@ -382,32 +477,32 @@ export default function OrdersMain() {
       // Total
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(12)
-      doc.text(`Total: ₹${(newOrder.total || 0).toFixed(2)}`, 20, yPos)
+      doc.text(`Total: ₹${(orderToPrint.total || 0).toFixed(2)}`, 20, yPos)
       
       // Payment status
       yPos += 10
       doc.setFontSize(10)
       doc.setFont('helvetica', 'normal')
-      doc.text(`Payment Status: ${newOrder.status === 'confirmed' ? 'Paid' : 'Pending'}`, 20, yPos)
+      doc.text(`Payment Status: ${orderToPrint.status === 'confirmed' ? 'Paid' : 'Pending'}`, 20, yPos)
       
       // Estimated delivery time
-      if (newOrder.estimatedDeliveryTime) {
+      if (orderToPrint.estimatedDeliveryTime) {
         yPos += 8
-        doc.text(`Estimated Delivery: ${newOrder.estimatedDeliveryTime} minutes`, 20, yPos)
+        doc.text(`Estimated Delivery: ${orderToPrint.estimatedDeliveryTime} minutes`, 20, yPos)
       }
       
       // Notes
-      if (newOrder.note) {
+      if (orderToPrint.note) {
         yPos += 10
         doc.setFont('helvetica', 'bold')
         doc.text('Note:', 20, yPos)
         doc.setFont('helvetica', 'normal')
-        const noteLines = doc.splitTextToSize(newOrder.note, 170)
+        const noteLines = doc.splitTextToSize(orderToPrint.note, 170)
         doc.text(noteLines, 20, yPos + 7)
       }
       
       // Send cutlery
-      if (newOrder.sendCutlery) {
+      if (orderToPrint.sendCutlery) {
         yPos += 15
         doc.setFont('helvetica', 'normal')
         doc.text('✓ Send cutlery requested', 20, yPos)
@@ -425,7 +520,7 @@ export default function OrdersMain() {
       )
       
       // Download PDF
-      const fileName = `Order-${newOrder.orderId || 'Receipt'}-${Date.now()}.pdf`
+      const fileName = `Order-${orderToPrint.orderId || 'Receipt'}-${Date.now()}.pdf`
       doc.save(fileName)
       
       console.log('✅ PDF generated successfully:', fileName)
@@ -805,10 +900,10 @@ export default function OrdersMain() {
                 <div className="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
                   <div className="flex-1">
                     <h3 className="text-base font-bold text-gray-900">
-                      {newOrder?.orderId || '#Order'}
+                      {(popupOrder || newOrder)?.orderId || '#Order'}
                     </h3>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {newOrder?.restaurantName || 'Restaurant'}
+                      {(popupOrder || newOrder)?.restaurantName || 'Restaurant'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -838,11 +933,11 @@ export default function OrdersMain() {
                   {/* Customer info */}
                   <div className="mb-4">
                     <h4 className="text-sm font-semibold text-gray-900">
-                      {newOrder?.items?.[0]?.name || 'New Order'}
+                      {(popupOrder || newOrder)?.items?.[0]?.name || 'New Order'}
                     </h4>
                     <p className="text-xs text-gray-500 mt-1">
-                      {newOrder?.createdAt 
-                        ? new Date(newOrder.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      {(popupOrder || newOrder)?.createdAt 
+                        ? new Date((popupOrder || newOrder).createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                         : 'Just now'}
                     </p>
                   </div>
@@ -859,7 +954,7 @@ export default function OrdersMain() {
                         </svg>
                         <span className="text-sm font-semibold text-gray-900">Details</span>
                         <span className="text-xs text-gray-500">
-                          {newOrder?.items?.length || 0} item{newOrder?.items?.length !== 1 ? 's' : ''}
+                          {(popupOrder || newOrder)?.items?.length || 0} item{(popupOrder || newOrder)?.items?.length !== 1 ? 's' : ''}
                         </span>
                       </div>
                       {isDetailsExpanded ? (
@@ -879,7 +974,7 @@ export default function OrdersMain() {
                           className="overflow-hidden"
                         >
                           <div className="py-3 space-y-3">
-                            {newOrder?.items?.map((item, index) => (
+                            {(popupOrder || newOrder)?.items?.map((item, index) => (
                               <div key={index} className="flex items-start gap-3">
                                 <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${item.isVeg ? 'bg-green-500' : 'bg-red-500'}`}></div>
                                 <div className="flex-1">
@@ -903,7 +998,7 @@ export default function OrdersMain() {
                   </div>
 
                   {/* Send cutlery */}
-                  {newOrder?.sendCutlery && (
+                  {(popupOrder || newOrder)?.sendCutlery && (
                     <div className="mb-4 flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
                       <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -921,7 +1016,7 @@ export default function OrdersMain() {
                       <span className="text-sm font-semibold text-gray-900">Total bill</span>
                     </div>
                     <span className="text-base font-bold text-gray-900">
-                      ₹{newOrder?.total || 0}
+                      ₹{(popupOrder || newOrder)?.total || 0}
                     </span>
                   </div>
 
@@ -1012,7 +1107,7 @@ export default function OrdersMain() {
                 {/* Header */}
                 <div className="px-4 py-4 border-b border-gray-200">
                   <h3 className="text-lg font-bold text-gray-900">
-                    Reject Order {newOrder?.orderId || '#Order'}
+                    Reject Order {(popupOrder || newOrder)?.orderId || '#Order'}
                   </h3>
                   <p className="text-sm text-gray-500 mt-1">Please select a reason for rejecting this order</p>
                 </div>
@@ -1439,7 +1534,9 @@ function PreparingOrders({ onSelectOrder }) {
         if (!isMounted) return
         
         if (response.data?.success && response.data.data?.orders) {
-          // Filter orders with 'preparing' status
+          // Filter orders with 'preparing' status only
+          // 'confirmed' orders should only appear in popup notification, not in preparing list
+          // After accepting, order status changes to 'preparing' and then appears here
           const preparingOrders = response.data.data.orders.filter(
             order => order.status === 'preparing'
           )
@@ -1480,8 +1577,11 @@ function PreparingOrders({ onSelectOrder }) {
       } catch (error) {
         if (!isMounted) return
         
-        // Don't log network errors repeatedly - they're expected if backend is down
-        if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
+        // Don't log network errors, 404, or 401 errors
+        // 401 is handled by axios interceptor (token refresh/redirect)
+        // 404 means no orders found (normal)
+        // ERR_NETWORK means backend is down (expected in dev)
+        if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404 && error.response?.status !== 401) {
           console.error('Error fetching preparing orders:', error)
         }
         

@@ -348,17 +348,17 @@ export default function ToHub() {
   ]
 
   const [chartData, setChartData] = useState([
-    { hour: "12am", orders: 2, sales: 320 },
-    { hour: "4am", orders: 1, sales: 140 },
-    { hour: "8am", orders: 4, sales: 560 },
-    { hour: "12pm", orders: 6, sales: 980 },
-    { hour: "4pm", orders: 3, sales: 420 },
-    { hour: "8pm", orders: 5, sales: 760 },
-    { hour: "12am", orders: 2, sales: 300 },
+    { hour: "12am", orders: 0, sales: 0 },
+    { hour: "4am", orders: 0, sales: 0 },
+    { hour: "8am", orders: 0, sales: 0 },
+    { hour: "12pm", orders: 0, sales: 0 },
+    { hour: "4pm", orders: 0, sales: 0 },
+    { hour: "8pm", orders: 0, sales: 0 },
+    { hour: "12am", orders: 0, sales: 0 },
   ])
 
-  const [totalSales, setTotalSales] = useState("₹ 3,480")
-  const [totalOrders, setTotalOrders] = useState("23")
+  const [totalSales, setTotalSales] = useState("₹ 0")
+  const [totalOrders, setTotalOrders] = useState("0")
   const [funnelFindView, setFunnelFindView] = useState("menu")
   const [impressionsCustomerView, setImpressionsCustomerView] = useState("affinity")
   const [menuOpensCustomerView, setMenuOpensCustomerView] = useState("affinity")
@@ -516,50 +516,8 @@ export default function ToHub() {
   const [selectedDateRange, setSelectedDateRange] = useState("yesterday")
   const [customDateRange, setCustomDateRange] = useState({ start: null, end: null })
   const [isDateLoading, setIsDateLoading] = useState(false)
-  const applyDummyData = (rangeId) => {
-    setIsDateLoading(true)
-    setTimeout(() => {
-      const base = rangeId === "today" ? 300 : rangeId === "thisWeek" ? 1200 : 800
-      const orders = Math.max(1, Math.floor(base / 50))
-      setChartData([
-        { hour: "12am", orders: Math.floor(orders * 0.1), sales: base * 0.1 },
-        { hour: "4am", orders: Math.floor(orders * 0.05), sales: base * 0.05 },
-        { hour: "8am", orders: Math.floor(orders * 0.2), sales: base * 0.2 },
-        { hour: "12pm", orders: Math.floor(orders * 0.25), sales: base * 0.25 },
-        { hour: "4pm", orders: Math.floor(orders * 0.2), sales: base * 0.2 },
-        { hour: "8pm", orders: Math.floor(orders * 0.15), sales: base * 0.15 },
-        { hour: "12am", orders: Math.floor(orders * 0.05), sales: base * 0.05 },
-      ])
-      setTotalSales(`₹ ${base.toLocaleString("en-IN")}`)
-      setTotalOrders(orders.toString())
-      setIsDateLoading(false)
-    }, 450)
-  }
-
-  const handleDateRangeSelect = (id) => {
-    if (id === "custom") {
-      setIsCustomDateOpen(true)
-      setIsDateSelectorOpen(false)
-      return
-    }
-    setSelectedDateRange(id)
-    setIsDateSelectorOpen(false)
-    applyDummyData(id)
-  }
-
-  const handleCustomDateApply = () => {
-    if (customDateRange.start && customDateRange.end) {
-      setSelectedDateRange("custom")
-      setIsCustomDateOpen(false)
-      applyDummyData("custom")
-    }
-  }
-
-  const formatDateShort = (date) =>
-    date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
-  const formatDateLong = (date) =>
-    date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })
-
+  
+  // Helper functions for date ranges
   const getDateRanges = () => {
     const now = new Date()
     const today = new Date(now)
@@ -600,6 +558,192 @@ export default function ToHub() {
       last5DaysEnd,
     }
   }
+  
+  // Calculate chart data from real orders
+  const calculateChartDataFromOrders = (orders, startDate, endDate) => {
+    // Initialize hour buckets
+    const hourBuckets = {
+      "12am": { orders: 0, sales: 0 },
+      "4am": { orders: 0, sales: 0 },
+      "8am": { orders: 0, sales: 0 },
+      "12pm": { orders: 0, sales: 0 },
+      "4pm": { orders: 0, sales: 0 },
+      "8pm": { orders: 0, sales: 0 },
+    }
+    
+    // Filter orders by date range
+    const start = new Date(startDate)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(endDate)
+    end.setHours(23, 59, 59, 999)
+    
+    const filteredOrders = orders.filter(order => {
+      if (!order.createdAt) return false
+      const orderDate = new Date(order.createdAt)
+      return orderDate >= start && orderDate <= end
+    })
+    
+    // Calculate total sales and orders
+    let totalSalesAmount = 0
+    let totalOrdersCount = 0
+    
+    // Group orders by hour
+    filteredOrders.forEach(order => {
+      const orderDate = new Date(order.createdAt)
+      const hour = orderDate.getHours()
+      
+      // Determine hour bucket
+      let hourLabel
+      if (hour >= 0 && hour < 4) hourLabel = "12am"
+      else if (hour >= 4 && hour < 8) hourLabel = "4am"
+      else if (hour >= 8 && hour < 12) hourLabel = "8am"
+      else if (hour >= 12 && hour < 16) hourLabel = "12pm"
+      else if (hour >= 16 && hour < 20) hourLabel = "4pm"
+      else hourLabel = "8pm" // 20-23
+      
+      const orderAmount = order.pricing?.total || 0
+      
+      hourBuckets[hourLabel].orders += 1
+      hourBuckets[hourLabel].sales += orderAmount
+      totalSalesAmount += orderAmount
+      totalOrdersCount += 1
+    })
+    
+    // Convert to chart data format
+    const chartData = [
+      { hour: "12am", orders: hourBuckets["12am"].orders, sales: Math.round(hourBuckets["12am"].sales) },
+      { hour: "4am", orders: hourBuckets["4am"].orders, sales: Math.round(hourBuckets["4am"].sales) },
+      { hour: "8am", orders: hourBuckets["8am"].orders, sales: Math.round(hourBuckets["8am"].sales) },
+      { hour: "12pm", orders: hourBuckets["12pm"].orders, sales: Math.round(hourBuckets["12pm"].sales) },
+      { hour: "4pm", orders: hourBuckets["4pm"].orders, sales: Math.round(hourBuckets["4pm"].sales) },
+      { hour: "8pm", orders: hourBuckets["8pm"].orders, sales: Math.round(hourBuckets["8pm"].sales) },
+      { hour: "12am", orders: 0, sales: 0 }, // Next day marker
+    ]
+    
+    return {
+      chartData,
+      totalSales: Math.round(totalSalesAmount),
+      totalOrders: totalOrdersCount
+    }
+  }
+  
+  // Fetch orders and update chart data
+  const fetchOrdersAndUpdateChart = async (rangeId) => {
+    try {
+      setIsDateLoading(true)
+      
+      // Get date range
+      const ranges = getDateRanges()
+      let startDate, endDate
+      
+      switch (rangeId) {
+        case "today":
+          startDate = ranges.today
+          endDate = ranges.today
+          break
+        case "yesterday":
+          startDate = ranges.yesterday
+          endDate = ranges.yesterday
+          break
+        case "thisWeek":
+          startDate = ranges.thisWeekStart
+          endDate = ranges.thisWeekEnd
+          break
+        case "lastWeek":
+          startDate = ranges.lastWeekStart
+          endDate = ranges.lastWeekEnd
+          break
+        case "thisMonth":
+          startDate = ranges.thisMonthStart
+          endDate = ranges.thisMonthEnd
+          break
+        case "lastMonth":
+          startDate = ranges.lastMonthStart
+          endDate = ranges.lastMonthEnd
+          break
+        case "last5days":
+          startDate = ranges.last5DaysStart
+          endDate = ranges.last5DaysEnd
+          break
+        case "custom":
+          if (customDateRange.start && customDateRange.end) {
+            startDate = customDateRange.start
+            endDate = customDateRange.end
+          } else {
+            startDate = ranges.yesterday
+            endDate = ranges.yesterday
+          }
+          break
+        default:
+          startDate = ranges.yesterday
+          endDate = ranges.yesterday
+      }
+      
+      // Fetch all orders (we'll filter by date on frontend)
+      const response = await restaurantAPI.getOrders({ page: 1, limit: 10000 })
+      
+      if (response.data?.success && response.data.data?.orders) {
+        const orders = response.data.data.orders
+        const { chartData: newChartData, totalSales: newTotalSales, totalOrders: newTotalOrders } = 
+          calculateChartDataFromOrders(orders, startDate, endDate)
+        
+        setChartData(newChartData)
+        setTotalSales(`₹ ${newTotalSales.toLocaleString("en-IN")}`)
+        setTotalOrders(newTotalOrders.toString())
+      } else {
+        // No orders found
+        setChartData([
+          { hour: "12am", orders: 0, sales: 0 },
+          { hour: "4am", orders: 0, sales: 0 },
+          { hour: "8am", orders: 0, sales: 0 },
+          { hour: "12pm", orders: 0, sales: 0 },
+          { hour: "4pm", orders: 0, sales: 0 },
+          { hour: "8pm", orders: 0, sales: 0 },
+          { hour: "12am", orders: 0, sales: 0 },
+        ])
+        setTotalSales("₹ 0")
+        setTotalOrders("0")
+      }
+    } catch (error) {
+      // Suppress 401 errors as they're handled by axios interceptor
+      if (error.response?.status !== 401) {
+        console.error('Error fetching orders for chart:', error)
+      }
+      // Keep existing data on error
+    } finally {
+      setIsDateLoading(false)
+    }
+  }
+
+  const handleDateRangeSelect = (id) => {
+    if (id === "custom") {
+      setIsCustomDateOpen(true)
+      setIsDateSelectorOpen(false)
+      return
+    }
+    setSelectedDateRange(id)
+    setIsDateSelectorOpen(false)
+    fetchOrdersAndUpdateChart(id)
+  }
+
+  const handleCustomDateApply = () => {
+    if (customDateRange.start && customDateRange.end) {
+      setSelectedDateRange("custom")
+      setIsCustomDateOpen(false)
+      fetchOrdersAndUpdateChart("custom")
+    }
+  }
+  
+  // Fetch orders on mount and when date range changes
+  useEffect(() => {
+    if (!restaurantData) return // Don't fetch if restaurant data is not loaded yet
+    fetchOrdersAndUpdateChart(selectedDateRange)
+  }, [restaurantData, selectedDateRange])
+
+  const formatDateShort = (date) =>
+    date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+  const formatDateLong = (date) =>
+    date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })
 
   const selectedRangeLabel = useMemo(() => {
     const r = getDateRanges()
@@ -1452,78 +1596,6 @@ export default function ToHub() {
         </div>
       </div>
 
-      {/* Ads card */}
-      <div className="px-4">
-        <div className="bg-white rounded-lg p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-base font-bold text-gray-900">Ads</p>
-              <p className="text-xs text-gray-500">Last updated: an hour ago</p>
-            </div>
-            <div className="relative">
-              <button 
-                onClick={() => setShowLearnMoreButton(showLearnMoreButton === 'ads-myfeed' ? null : 'ads-myfeed')}
-                className="p-2 rounded-full hover:bg-gray-100"
-              >
-                <MoreVertical className="w-5 h-5 text-gray-600" />
-              </button>
-              {showLearnMoreButton === 'ads-myfeed' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="absolute right-0 top-full mt-1 z-10"
-                >
-                  <button
-                    onClick={(e) => handleLearnMoreClick('ads', e)}
-                    className="bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    Learn more
-                  </button>
-                </motion.div>
-              )}
-            </div>
-          </div>
-
-          <div className="divide-y divide-dashed divide-gray-200">
-            <div className="grid grid-cols-2 gap-y-4 py-3">
-              {adsMetrics.slice(0, 2).map((metric) => (
-                <div key={metric.title} className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
-                  </div>
-                  <div className="text-lg font-bold text-gray-900">
-                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
-                  </div>
-                  <div className="text-xs text-gray-600">{metric.sub}</div>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-y-4 py-3">
-              {adsMetrics.slice(2).map((metric) => (
-                <div key={metric.title} className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900">{metric.title}</span>
-                  </div>
-                  <div className="text-lg font-bold text-gray-900">
-                    {metric.value} <span className="text-sm font-normal text-gray-600">{metric.change}</span>
-                  </div>
-                  <div className="text-xs text-gray-600">{metric.sub}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <button 
-            onClick={() => setActiveTopTab("ads")}
-            className="w-full bg-black text-white py-3 rounded-md text-sm font-semibold hover:bg-gray-800 transition-colors"
-          >
-            Get deeper insights
-          </button>
-        </div>
-      </div>
-
-
-      <HelpSection />
     </div>
   )
 

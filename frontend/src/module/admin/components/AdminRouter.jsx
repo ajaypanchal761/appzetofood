@@ -70,6 +70,7 @@ import CampaignOrderReport from "../pages/reports/CampaignOrderReport";
 import RestaurantReport from "../pages/reports/RestaurantReport";
 import SubscriptionReport from "../pages/reports/SubscriptionReport";
 import CustomerWalletReport from "../pages/reports/CustomerWalletReport";
+import FeedbackExperienceReport from "../pages/reports/FeedbackExperienceReport";
 import TaxReport from "../pages/reports/TaxReport";
 import RestaurantVATReport from "../pages/reports/RestaurantVATReport";
 // Transaction Management
@@ -244,6 +245,7 @@ export default function AdminRouter() {
         <Route path="restaurant-report/subscription" element={<SubscriptionReport />} />
         {/* Customer Report */}
         <Route path="customer-report/wallet" element={<CustomerWalletReport />} />
+        <Route path="customer-report/feedback-experience" element={<FeedbackExperienceReport />} />
         <Route path="tax-report" element={<TaxReport />} />
         <Route path="restaurant-vat-report" element={<RestaurantVATReport />} />
 

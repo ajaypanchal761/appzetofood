@@ -253,6 +253,7 @@ export const sidebarMenuData = [
         icon: "FileText",
         subItems: [
           { label: "Customer Wallet Report", path: "/admin/customer-report/wallet" },
+          { label: "Feedback Experience", path: "/admin/customer-report/feedback-experience" },
         ],
       },
 

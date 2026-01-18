@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { foodImages } from "@/constants/images"
 import api from "@/lib/api"
 import { restaurantAPI, adminAPI } from "@/lib/api"
+import { useProfile } from "../context/ProfileContext"
 
 // Filter options
 const filterOptions = [
@@ -26,6 +27,7 @@ const filterOptions = [
 export default function CategoryPage() {
   const { category } = useParams()
   const navigate = useNavigate()
+  const { vegMode } = useProfile()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState(category?.toLowerCase() || 'all')
   const [activeFilters, setActiveFilters] = useState(new Set())
@@ -173,6 +175,7 @@ export default function CategoryPage() {
               image: dishImage,
               originalPrice: originalPrice,
               itemId: item._id || item.id || `${item.name}-${finalPrice}`,
+              foodType: item.foodType, // Include foodType for vegMode filtering
             })
           }
         }
@@ -522,7 +525,7 @@ export default function CategoryPage() {
     }
 
     return filtered
-  }, [selectedCategory, activeFilters, searchQuery, restaurantsData, categoryKeywords])
+  }, [selectedCategory, activeFilters, searchQuery, restaurantsData, categoryKeywords, vegMode])
 
   const filteredAllRestaurants = useMemo(() => {
     const sourceData = restaurantsData.length > 0 ? restaurantsData : []
@@ -543,6 +546,11 @@ export default function CategoryPage() {
             if (categoryDishes.length > 0) {
               // Create one card per dish
               categoryDishes.forEach((dish, index) => {
+                // Filter by vegMode if enabled
+                if (vegMode && dish.foodType !== "Veg") {
+                  return // Skip non-veg dishes when vegMode is ON
+                }
+                
                 expandedDishes.push({
                   ...r,
                   // Unique ID for each dish card
@@ -614,7 +622,7 @@ export default function CategoryPage() {
     }
 
     return filtered
-  }, [selectedCategory, activeFilters, searchQuery, restaurantsData, categoryKeywords])
+  }, [selectedCategory, activeFilters, searchQuery, restaurantsData, categoryKeywords, vegMode])
 
   const handleCategorySelect = (category) => {
     const categorySlug = category.slug || category.id

@@ -5,6 +5,7 @@ import { uploadMiddleware } from '../../shared/utils/cloudinaryService.js';
 import restaurantAuthRoutes from './routes/restaurantAuthRoutes.js';
 import { getOnboarding, upsertOnboarding, createRestaurantFromOnboardingManual } from './controllers/restaurantOnboardingController.js';
 import { getRestaurants, getRestaurantById, getRestaurantByOwner, updateRestaurantProfile, uploadProfileImage, uploadMenuImage, deleteRestaurantAccount, updateDeliveryStatus, getRestaurantsWithDishesUnder250 } from './controllers/restaurantController.js';
+import { getRestaurantFinance } from './controllers/restaurantFinanceController.js';
 import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection, addAddon, getAddons, getAddonsByRestaurantId, updateAddon, deleteAddon } from './controllers/menuController.js';
 import { scheduleItemAvailability, cancelScheduledAvailability, getItemSchedule } from './controllers/menuScheduleController.js';
 import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
@@ -68,6 +69,10 @@ router.delete('/staff/:id', authenticate, deleteStaff);
 // Order routes (authenticated - for restaurant module)
 // Must come BEFORE /:id route to avoid route conflicts (/:id would match /orders)
 router.use('/', restaurantOrderRoutes);
+
+// Finance routes (authenticated - for restaurant module)
+// Must come BEFORE /:id route to avoid route conflicts (/:id would match /finance)
+router.get('/finance', authenticate, getRestaurantFinance);
 
 // Restaurant routes (public - for user module)
 router.get('/list', getRestaurants);

@@ -18,7 +18,7 @@ export default function AuthRedirect({ children, module, redirectTo = null }) {
   // Define default home pages for each module
   const moduleHomePages = {
     user: "/",
-    restaurant: "/restaurant-panel/dashboard",
+    restaurant: "/restaurant",
     delivery: "/delivery",
     admin: "/admin",
   }

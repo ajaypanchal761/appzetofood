@@ -124,6 +124,12 @@ import {
   deleteFeedback
 } from '../controllers/feedbackController.js';
 import {
+  createFeedbackExperience,
+  getFeedbackExperiences,
+  getFeedbackExperienceById,
+  deleteFeedbackExperience
+} from '../controllers/feedbackExperienceController.js';
+import {
   getAllSafetyEmergencies,
   getSafetyEmergencyById,
   updateSafetyEmergencyStatus,
@@ -280,6 +286,12 @@ router.get('/feedback/:id', getFeedbackById);
 router.put('/feedback/:id/status', updateFeedbackStatus);
 router.put('/feedback/:id/reply', replyToFeedback);
 router.delete('/feedback/:id', deleteFeedback);
+
+// Feedback Experience Management
+router.post('/feedback-experience', createFeedbackExperience);
+router.get('/feedback-experience', getFeedbackExperiences);
+router.get('/feedback-experience/:id', getFeedbackExperienceById);
+router.delete('/feedback-experience/:id', deleteFeedbackExperience);
 
 // Safety Emergency Management
 router.get('/safety-emergency', getAllSafetyEmergencies);

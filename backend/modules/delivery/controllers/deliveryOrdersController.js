@@ -99,7 +99,7 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
     }
 
     const order = await Order.findOne(query)
-      .populate('restaurantId', 'name slug profileImage address phone')
+      .populate('restaurantId', 'name slug profileImage address phone ownerPhone')
       .populate('userId', 'name phone email')
       .lean();
 
@@ -137,7 +137,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         { orderId: orderId }
       ]
     })
-      .populate('restaurantId', 'name location address phone')
+      .populate('restaurantId', 'name location address phone ownerPhone')
       .populate('userId', 'name phone')
       .lean();
 
@@ -223,7 +223,7 @@ export const acceptOrder = asyncHandler(async (req, res) => {
       },
       { new: true }
     )
-      .populate('restaurantId', 'name location address phone')
+      .populate('restaurantId', 'name location address phone ownerPhone')
       .populate('userId', 'name phone')
       .lean();
 
@@ -293,6 +293,21 @@ export const confirmReachedPickup = asyncHandler(async (req, res) => {
     // Ensure currentPhase exists
     if (!order.deliveryState.currentPhase) {
       order.deliveryState.currentPhase = 'en_route_to_pickup';
+    }
+
+    // Check if order is already past pickup phase (order ID confirmed or out for delivery)
+    // If so, return success with current state (idempotent)
+    const isPastPickupPhase = order.deliveryState.currentPhase === 'en_route_to_delivery' ||
+                               order.deliveryState.currentPhase === 'picked_up' ||
+                               order.deliveryState.status === 'order_confirmed' ||
+                               order.status === 'out_for_delivery';
+
+    if (isPastPickupPhase) {
+      console.log(`ℹ️ Order ${order.orderId} is already past pickup phase. Current phase: ${order.deliveryState?.currentPhase || 'unknown'}, Status: ${order.deliveryState?.status || 'unknown'}, Order status: ${order.status || 'unknown'}`);
+      return successResponse(res, 200, 'Order is already past pickup phase', {
+        order,
+        message: 'Order is already out for delivery'
+      });
     }
 
     // Check if order is in valid state
@@ -432,6 +447,71 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
     // Ensure currentPhase exists
     if (!order.deliveryState.currentPhase) {
       order.deliveryState.currentPhase = 'at_pickup';
+    }
+
+    // Check if order ID is already confirmed (idempotent check)
+    const isAlreadyConfirmed = order.deliveryState?.status === 'order_confirmed' ||
+                               order.deliveryState?.currentPhase === 'en_route_to_delivery' ||
+                               order.deliveryState?.currentPhase === 'picked_up' ||
+                               order.status === 'out_for_delivery' ||
+                               order.deliveryState?.orderIdConfirmedAt;
+
+    if (isAlreadyConfirmed) {
+      // Order ID is already confirmed - return success with current order data (idempotent)
+      console.log(`✅ Order ID already confirmed for order ${order.orderId}, returning current state`);
+      
+      // Get customer location for route calculation if not already calculated
+      const [customerLng, customerLat] = order.address.location.coordinates;
+      
+      // Get delivery boy's current location
+      let deliveryLat = currentLat;
+      let deliveryLng = currentLng;
+      
+      if (!deliveryLat || !deliveryLng) {
+        const deliveryPartner = await Delivery.findById(delivery._id)
+          .select('availability.currentLocation')
+          .lean();
+        
+        if (deliveryPartner?.availability?.currentLocation?.coordinates) {
+          [deliveryLng, deliveryLat] = deliveryPartner.availability.currentLocation.coordinates;
+        } else if (order.restaurantId) {
+          let restaurant = null;
+          if (mongoose.Types.ObjectId.isValid(order.restaurantId)) {
+            restaurant = await Restaurant.findById(order.restaurantId)
+              .select('location')
+              .lean();
+          } else {
+            restaurant = await Restaurant.findOne({ restaurantId: order.restaurantId })
+              .select('location')
+              .lean();
+          }
+          if (restaurant?.location?.coordinates) {
+            [deliveryLng, deliveryLat] = restaurant.location.coordinates;
+          }
+        }
+      }
+
+      // Return existing route if available, otherwise calculate new route
+      let routeData = null;
+      if (order.deliveryState?.routeToDelivery?.coordinates?.length > 0) {
+        // Use existing route
+        routeData = {
+          coordinates: order.deliveryState.routeToDelivery.coordinates,
+          distance: order.deliveryState.routeToDelivery.distance,
+          duration: order.deliveryState.routeToDelivery.duration,
+          method: order.deliveryState.routeToDelivery.method || 'dijkstra'
+        };
+      } else if (deliveryLat && deliveryLng && customerLat && customerLng) {
+        // Calculate new route if not available
+        routeData = await calculateRoute(deliveryLat, deliveryLng, customerLat, customerLng, {
+          useDijkstra: true
+        });
+      }
+
+      return successResponse(res, 200, 'Order ID already confirmed', {
+        order: order,
+        route: routeData
+      });
     }
 
     // Check if order is in valid state for order ID confirmation
@@ -687,7 +767,7 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
         
         // Populate and get the updated order for response
         const updatedOrder = await Order.findById(order._id)
-          .populate('restaurantId', 'name location address phone')
+          .populate('restaurantId', 'name location address phone ownerPhone')
           .populate('userId', 'name phone')
           .lean(); // Use lean() for better performance
 
@@ -713,7 +793,7 @@ export const confirmReachedDrop = asyncHandler(async (req, res) => {
       // If already at delivery, populate the order for response
       try {
         const populatedOrder = await Order.findById(order._id)
-          .populate('restaurantId', 'name location address phone')
+          .populate('restaurantId', 'name location address phone ownerPhone')
           .populate('userId', 'name phone')
           .lean(); // Use lean() for better performance
         
@@ -782,7 +862,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
         _id: orderId,
         deliveryPartnerId: deliveryId
       })
-        .populate('restaurantId', 'name location address phone')
+        .populate('restaurantId', 'name location address phone ownerPhone')
         .populate('userId', 'name phone')
         .lean();
     } else {
@@ -791,7 +871,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
         orderId: orderId,
         deliveryPartnerId: deliveryId
       })
-        .populate('restaurantId', 'name location address phone')
+        .populate('restaurantId', 'name location address phone ownerPhone')
         .populate('userId', 'name phone')
         .lean();
     }
@@ -811,7 +891,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
           }
         ]
       })
-        .populate('restaurantId', 'name location address phone')
+        .populate('restaurantId', 'name location address phone ownerPhone')
         .populate('userId', 'name phone')
         .lean();
     }
@@ -905,7 +985,7 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       },
       { new: true, runValidators: true }
     )
-      .populate('restaurantId', 'name location address phone')
+      .populate('restaurantId', 'name location address phone ownerPhone')
       .populate('userId', 'name phone')
       .lean();
 

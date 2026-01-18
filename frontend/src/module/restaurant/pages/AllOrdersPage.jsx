@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useNavigate } from "react-router-dom"
-import Lenis from "lenis"
 import {
   ArrowLeft,
   Search,
@@ -14,8 +13,9 @@ import {
   X,
 } from "lucide-react"
 import { DateRangeCalendar } from "@/components/ui/date-range-calendar"
+import { restaurantAPI } from "@/lib/api"
 
-// Mock order data matching the image
+// Mock order data matching the image (fallback)
 const mockOrders = [
   {
     id: "7593519447",
@@ -253,26 +253,155 @@ export default function AllOrdersPage() {
   
   // Toast state
   const [showToast, setShowToast] = useState(false)
+  
+  // Real data states
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [restaurantData, setRestaurantData] = useState(null)
 
-  // Lenis smooth scrolling
+  // Fetch restaurant data
   useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-    })
-
-    function raf(time) {
-      lenis.raf(time)
-      requestAnimationFrame(raf)
+    const fetchRestaurantData = async () => {
+      try {
+        const response = await restaurantAPI.getCurrentRestaurant()
+        const data = response?.data?.data?.restaurant || response?.data?.restaurant
+        if (data) {
+          setRestaurantData(data)
+        }
+      } catch (err) {
+        // Suppress 401 errors as they're handled by axios interceptor
+        if (err.response?.status !== 401) {
+          console.error('Error fetching restaurant data:', err)
+        }
+      }
     }
-
-    requestAnimationFrame(raf)
-
-    return () => {
-      lenis.destroy()
-    }
+    fetchRestaurantData()
   }, [])
+
+  // Transform API order to component format
+  const transformOrder = useCallback((order) => {
+    const createdAt = new Date(order.createdAt)
+    const date = createdAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    const time = createdAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+    
+    // Format address
+    const address = order.address?.formattedAddress || 
+                    order.address?.address || 
+                    (order.address?.street ? `${order.address.street}, ${order.address.city || ''}`.trim() : '') ||
+                    'Address not available'
+    
+    // Get restaurant name
+    const restaurantName = restaurantData?.name || order.restaurantId?.name || 'Restaurant'
+    
+    // Get customer name
+    const customerName = order.userId?.name || order.customerName || 'Customer'
+    
+    // Format items
+    const items = (order.items || []).map(item => ({
+      name: item.name || 'Item',
+      quantity: item.quantity || 1,
+      price: item.price || 0
+    }))
+    
+    // Determine status
+    let status = order.status?.toUpperCase() || 'PENDING'
+    if (status === 'CANCELLED') status = 'CANCELLED'
+    else if (status === 'REJECTED') status = 'REJECTED'
+    else if (status === 'DELIVERED') status = 'DELIVERED'
+    else if (status === 'PREPARING') status = 'PREPARING'
+    else if (status === 'READY') status = 'READY'
+    else if (status === 'OUT_FOR_DELIVERY' || status === 'OUT FOR DELIVERY') status = 'OUT FOR DELIVERY'
+    
+    // Get rejection/cancellation reason
+    let reason = null
+    if (status === 'REJECTED' && order.rejectionReason) {
+      reason = `Rejected by Restaurant: ${order.rejectionReason}`
+    } else if (status === 'CANCELLED' && order.cancellationReason) {
+      reason = `Cancelled by ${order.cancelledBy === 'customer' ? 'customer' : 'restaurant'}: ${order.cancellationReason}`
+    } else if (status === 'REJECTED') {
+      reason = 'Rejected by Restaurant'
+    } else if (status === 'CANCELLED') {
+      reason = 'Cancelled by customer'
+    }
+    
+    // Determine tags based on order properties
+    const tags = []
+    if (order.sendCutlery) tags.push('CUTLERY')
+    if (order.deliveryFleet === 'express') tags.push('EXPRESS DELIVERY')
+    if (order.deliveryFleet === 'self') tags.push('SELF DELIVERY')
+    // Check if all items are veg
+    const allVeg = items.every(item => item.isVeg !== false)
+    if (allVeg && items.length > 0) tags.push('VEG ONLY')
+    
+    return {
+      id: order.orderId || order._id?.toString() || '',
+      status,
+      date,
+      time,
+      restaurant: restaurantName,
+      address,
+      customer: customerName,
+      items,
+      totalPrice: order.pricing?.total || 0,
+      reason,
+      tags: tags.length > 0 ? tags : undefined,
+      createdAt: order.createdAt,
+      mongoId: order._id?.toString()
+    }
+  }, [restaurantData])
+
+  // Fetch orders from backend
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        
+        // Build query params
+        const params = {
+          page: 1,
+          limit: 1000 // Get all orders, we'll filter by date on frontend
+        }
+        
+        // Fetch all orders (we'll filter by date range on frontend)
+        const response = await restaurantAPI.getOrders(params)
+        
+        if (response.data?.success && response.data.data?.orders) {
+          // Transform orders
+          const transformedOrders = response.data.data.orders.map(transformOrder)
+          
+          // Filter by date range
+          const filteredByDate = transformedOrders.filter(order => {
+            if (!order.createdAt) return false
+            const orderDate = new Date(order.createdAt)
+            const start = new Date(startDate)
+            start.setHours(0, 0, 0, 0)
+            const end = new Date(endDate)
+            end.setHours(23, 59, 59, 999)
+            return orderDate >= start && orderDate <= end
+          })
+          
+          setOrders(filteredByDate)
+        } else {
+          setOrders([])
+        }
+      } catch (err) {
+        // Suppress 401 errors as they're handled by axios interceptor
+        if (err.response?.status !== 401) {
+          console.error('Error fetching orders:', err)
+          setError(err.message || 'Failed to fetch orders')
+        }
+        setOrders([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    if (!restaurantData) return // Don't fetch if restaurant data is not loaded yet
+    
+    fetchOrders()
+  }, [startDate, endDate, restaurantData, transformOrder])
 
   // Close calendar when clicking outside
   useEffect(() => {
@@ -402,10 +531,16 @@ export default function AllOrdersPage() {
     }
   }
 
-  const filteredOrders = mockOrders.filter(order => {
-    // Search filter
-    if (searchQuery && !order.id.includes(searchQuery)) {
-      return false
+  const filteredOrders = orders.filter(order => {
+    // Search filter - search in order ID (both full ID and numeric part)
+    if (searchQuery) {
+      const searchLower = searchQuery.toLowerCase().trim()
+      const orderIdLower = order.id.toLowerCase()
+      // Extract numeric part from order ID (e.g., "ORD-1768751659979-588" -> "1768751659979588")
+      const numericPart = order.id.replace(/\D/g, '')
+      if (!orderIdLower.includes(searchLower) && !numericPart.includes(searchLower)) {
+        return false
+      }
     }
 
     // Order status filter
@@ -451,7 +586,9 @@ export default function AllOrdersPage() {
           <div className="flex-1">
             <p className="text-sm text-gray-600">Showing order history for</p>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-gray-900">Kadhai Chammach Restaurant</h1>
+              <h1 className="text-base font-bold text-gray-900">
+                {restaurantData?.name || 'Restaurant'}
+              </h1>
               <ChevronDown className="w-4 h-4 text-gray-600" />
             </div>
           </div>
@@ -538,8 +675,27 @@ export default function AllOrdersPage() {
 
       {/* Orders List */}
       <div className="px-4 pb-24 space-y-3">
-        <AnimatePresence mode="popLayout">
-          {filteredOrders.map((order, index) => (
+        {loading && (
+          <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-600 text-sm">Loading orders...</p>
+            </div>
+          </div>
+        )}
+        
+        {!loading && error && (
+          <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-red-600 font-medium text-sm">Error loading orders</p>
+              <p className="text-gray-500 text-xs">{error}</p>
+            </div>
+          </div>
+        )}
+        
+        {!loading && !error && (
+          <AnimatePresence mode="popLayout">
+            {filteredOrders.map((order, index) => (
             <motion.div
               key={order.id}
               layout
@@ -620,9 +776,10 @@ export default function AllOrdersPage() {
             )}
           </motion.div>
         ))}
-        </AnimatePresence>
+          </AnimatePresence>
+        )}
 
-        {filteredOrders.length === 0 && (
+        {!loading && !error && filteredOrders.length === 0 && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

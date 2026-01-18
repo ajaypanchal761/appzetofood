@@ -15,16 +15,19 @@ import {
   Tag,
   Headphones,
   Ticket,
-  Car,
+  Bell,
   ChevronRight,
   IndianRupee,
   Sparkles,
-  LogOut
+  LogOut,
+  X
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { deliveryAPI } from "@/lib/api"
 import { toast } from "sonner"
 import { clearModuleAuth } from "@/lib/utils/auth"
+import alertSound from "@/assets/audio/alert.mp3"
+import originalSound from "@/assets/audio/original.mp3"
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -35,6 +38,11 @@ export default function ProfilePage() {
   const sectionsRef = useRef(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showAlertSoundPopup, setShowAlertSoundPopup] = useState(false)
+  const [selectedAlertSound, setSelectedAlertSound] = useState(() => {
+    // Load from localStorage, default to "zomato_tone"
+    return localStorage.getItem('delivery_alert_sound') || 'zomato_tone'
+  })
 
   useEffect(() => {
     // Initialize Lenis for smooth scrolling
@@ -351,13 +359,13 @@ export default function ProfilePage() {
           <div>
             <h3 className="text-base font-medium mb-3 px-1">Partner options</h3>
             <Card 
-              onClick={() => {}}
+              onClick={() => setShowAlertSoundPopup(true)}
               className="bg-white py-0 border-0 shadow-none rounded-lg cursor-pointer hover:bg-gray-200 transition-colors"
             >
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Car className="w-5 h-5" />
-                  <span className="text-sm font-medium">Rest points</span>
+                  <Bell className="w-5 h-5" />
+                  <span className="text-sm font-medium">Order alert sound</span>
                 </div>
                 <ArrowRight className="w-5 h-5 text-gray-400" />
               </CardContent>
@@ -381,6 +389,107 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Order Alert Sound Popup */}
+      {showAlertSoundPopup && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+          <div className="bg-white w-full max-w-md rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold">Order alert sound</h3>
+              <button
+                onClick={() => setShowAlertSoundPopup(false)}
+                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Options */}
+            <div className="p-4">
+              <div className="space-y-4">
+                {/* Original Option */}
+                <label className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 rounded-lg transition-colors">
+                  <span className="text-base font-medium">Original</span>
+                  <input
+                    type="radio"
+                    name="alertSound"
+                    value="original"
+                    checked={selectedAlertSound === 'original'}
+                    onChange={(e) => {
+                      setSelectedAlertSound(e.target.value)
+                      localStorage.setItem('delivery_alert_sound', e.target.value)
+                      // Play preview sound
+                      try {
+                        console.log('🔊 Playing preview sound: Original', { originalSoundPath: originalSound })
+                        const audio = new Audio(originalSound)
+                        audio.volume = 0.7
+                        const playPromise = audio.play()
+                        if (playPromise !== undefined) {
+                          playPromise
+                            .then(() => {
+                              console.log('✅ Preview sound playing: Original')
+                            })
+                            .catch(err => {
+                              console.error('❌ Preview audio error:', err)
+                            })
+                        }
+                      } catch (err) {
+                        console.error('❌ Could not create preview audio:', err)
+                      }
+                    }}
+                    className="w-5 h-5 text-black focus:ring-2 focus:ring-black"
+                  />
+                </label>
+
+                {/* Zomato Tone Option */}
+                <label className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 rounded-lg transition-colors">
+                  <span className="text-base font-medium">Zomato Tone</span>
+                  <input
+                    type="radio"
+                    name="alertSound"
+                    value="zomato_tone"
+                    checked={selectedAlertSound === 'zomato_tone'}
+                    onChange={(e) => {
+                      setSelectedAlertSound(e.target.value)
+                      localStorage.setItem('delivery_alert_sound', e.target.value)
+                      // Play preview sound
+                      try {
+                        console.log('🔊 Playing preview sound: Zomato Tone', { alertSoundPath: alertSound })
+                        const audio = new Audio(alertSound)
+                        audio.volume = 0.7
+                        const playPromise = audio.play()
+                        if (playPromise !== undefined) {
+                          playPromise
+                            .then(() => {
+                              console.log('✅ Preview sound playing: Zomato Tone')
+                            })
+                            .catch(err => {
+                              console.error('❌ Preview audio error:', err)
+                            })
+                        }
+                      } catch (err) {
+                        console.error('❌ Could not create preview audio:', err)
+                      }
+                    }}
+                    className="w-5 h-5 text-black focus:ring-2 focus:ring-black"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Ok Button */}
+            <div className="p-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowAlertSoundPopup(false)}
+                className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+              >
+                Ok
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

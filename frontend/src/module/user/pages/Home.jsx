@@ -214,8 +214,8 @@ export default function Home() {
   const [heroSearch, setHeroSearch] = useState("")
   const { openSearch, closeSearch, searchValue, setSearchValue } = useSearchOverlay()
   const { openLocationSelector } = useLocationSelector()
-  const [vegMode, setVegMode] = useState(true)
-  const [prevVegMode, setPrevVegMode] = useState(true)
+  const { vegMode, setVegMode: setVegModeContext } = useProfile()
+  const [prevVegMode, setPrevVegMode] = useState(vegMode)
   const [showVegModePopup, setShowVegModePopup] = useState(false)
   const [showSwitchOffPopup, setShowSwitchOffPopup] = useState(false)
   const [vegModeOption, setVegModeOption] = useState("all") // "all" or "pure-veg"
@@ -244,14 +244,21 @@ export default function Home() {
   const isSwiping = useRef(false)
   const autoSlideIntervalRef = useRef(null)
 
-  // Handle vegMode toggle - show popup when turned ON or OFF
+  // Sync prevVegMode when vegMode changes from context
   useEffect(() => {
+    if (vegMode !== prevVegMode && !isHandlingSwitchOff.current) {
+      setPrevVegMode(vegMode)
+    }
+  }, [vegMode])
+
+  // Handle vegMode toggle - show popup when turned ON or OFF
+  const handleVegModeChange = (newValue) => {
     // Skip if we're handling switch off confirmation
     if (isHandlingSwitchOff.current) {
       return
     }
 
-    if (vegMode && !prevVegMode) {
+    if (newValue && !prevVegMode) {
       // Veg mode was just turned ON
       // Calculate popup position relative to toggle
       if (vegModeToggleRef.current) {
@@ -262,19 +269,18 @@ export default function Home() {
         })
       }
       setShowVegModePopup(true)
-      // Don't update prevVegMode yet - wait for user to apply or cancel
-    } else if (!vegMode && prevVegMode) {
+      // Don't update context yet - wait for user to apply or cancel
+    } else if (!newValue && prevVegMode) {
       // Veg mode was just turned OFF - show switch off confirmation popup
       isHandlingSwitchOff.current = true
       setShowSwitchOffPopup(true)
-      // Revert the toggle state until user confirms
-      setVegMode(true)
-      // Don't update prevVegMode here - keep it as true so the popup can show again next time
+      // Don't update context yet - wait for user to confirm
     } else {
-      // Normal state change - update prevVegMode
-      setPrevVegMode(vegMode)
+      // Normal state change - update context directly
+      setVegModeContext(newValue)
+      setPrevVegMode(newValue)
     }
-  }, [vegMode, prevVegMode])
+  }
 
   // Update popup position on scroll/resize
   useEffect(() => {
@@ -1125,7 +1131,7 @@ export default function Home() {
                 </div>
                 <Switch
                   checked={vegMode}
-                  onCheckedChange={setVegMode}
+                  onCheckedChange={handleVegModeChange}
                   className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300 w-9 h-4 sm:w-10 sm:h-5 lg:w-12 lg:h-6 shadow-lg [&_[data-slot=switch-thumb]]:bg-white [&_[data-slot=switch-thumb]]:h-3 [&_[data-slot=switch-thumb]]:w-3 sm:[&_[data-slot=switch-thumb]]:h-4 sm:[&_[data-slot=switch-thumb]]:w-4 lg:[&_[data-slot=switch-thumb]]:h-5 lg:[&_[data-slot=switch-thumb]]:w-5 [&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 sm:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-5 lg:[&_[data-slot=switch-thumb]]:data-[state=checked]:translate-x-6 [&_[data-slot=switch-thumb]]:data-[state=unchecked]:translate-x-0"
                 />
               </motion.div>
@@ -2093,7 +2099,7 @@ export default function Home() {
               onClick={() => {
                 setShowVegModePopup(false)
                 // Revert veg mode to OFF if popup is closed without applying
-                setVegMode(false)
+                setVegModeContext(false)
                 setPrevVegMode(false)
               }}
               className="fixed inset-0 bg-black/30 z-[9998] backdrop-blur-sm"
@@ -2194,7 +2200,8 @@ export default function Home() {
                 onClick={() => {
                   setShowVegModePopup(false)
                   setIsApplyingVegMode(true)
-                  // Confirm veg mode is ON by updating prevVegMode
+                  // Confirm veg mode is ON by updating context and prevVegMode
+                  setVegModeContext(true)
                   setPrevVegMode(true)
                   // Simulate applying veg mode settings
                   setTimeout(() => {
@@ -2211,7 +2218,7 @@ export default function Home() {
                 onClick={() => {
                   setShowVegModePopup(false)
                   // Revert veg mode to OFF if popup is closed without applying
-                  setVegMode(false)
+                  setVegModeContext(false)
                   setPrevVegMode(false)
                 }}
                 className="w-full text-green-600 dark:text-green-400 font-medium text-xs hover:text-green-700 dark:hover:text-green-500 transition-colors"
@@ -2284,7 +2291,7 @@ export default function Home() {
                       setTimeout(() => {
                         setIsSwitchingOffVegMode(false)
                         isHandlingSwitchOff.current = false
-                        setVegMode(false)
+                        setVegModeContext(false)
                         setPrevVegMode(false) // Set to false to match current state (veg mode is OFF)
                       }, 2000)
                     }}
@@ -2297,7 +2304,7 @@ export default function Home() {
                     onClick={() => {
                       setShowSwitchOffPopup(false)
                       isHandlingSwitchOff.current = false
-                      setVegMode(true)
+                      setVegModeContext(true)
                       // prevVegMode stays true (from before), which is correct
                     }}
                     className="w-full text-gray-900 font-normal py-1 text-center rounded-xl hover:bg-gray-200 transition-colors text-base"

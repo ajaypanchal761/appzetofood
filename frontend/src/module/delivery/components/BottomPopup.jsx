@@ -210,7 +210,7 @@ export default function BottomPopup({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={handleBackdropClick}
-            className="fixed inset-0 bg-black/50 z-[100] backdrop-blur-sm"
+            className="fixed inset-0 bg-black/50 z-[100]"
           />
 
           {/* Popup */}

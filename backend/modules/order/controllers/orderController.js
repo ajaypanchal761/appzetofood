@@ -69,11 +69,24 @@ export const createOrder = async (req, res) => {
     let assignedRestaurantId = restaurantId;
     let assignedRestaurantName = restaurantName;
 
+    // Log incoming restaurant data for debugging
+    logger.info('🔍 Order creation - Restaurant lookup:', {
+      incomingRestaurantId: restaurantId,
+      incomingRestaurantName: restaurantName,
+      restaurantIdType: typeof restaurantId,
+      restaurantIdLength: restaurantId?.length
+    });
+
     // Find and validate the restaurant
     let restaurant = null;
     // Try to find restaurant by restaurantId, _id, or slug
     if (mongoose.Types.ObjectId.isValid(restaurantId) && restaurantId.length === 24) {
       restaurant = await Restaurant.findById(restaurantId);
+      logger.info('🔍 Restaurant lookup by _id:', {
+        restaurantId: restaurantId,
+        found: !!restaurant,
+        restaurantName: restaurant?.name
+      });
     }
     if (!restaurant) {
       restaurant = await Restaurant.findOne({
@@ -82,16 +95,42 @@ export const createOrder = async (req, res) => {
           { slug: restaurantId }
         ]
       });
+      logger.info('🔍 Restaurant lookup by restaurantId/slug:', {
+        restaurantId: restaurantId,
+        found: !!restaurant,
+        restaurantName: restaurant?.name,
+        restaurant_restaurantId: restaurant?.restaurantId,
+        restaurant__id: restaurant?._id?.toString()
+      });
     }
 
     if (!restaurant) {
+      logger.error('❌ Restaurant not found:', {
+        searchedRestaurantId: restaurantId,
+        searchedRestaurantName: restaurantName
+      });
       return res.status(404).json({
         success: false,
         message: 'Restaurant not found'
       });
     }
 
+    // CRITICAL: Validate restaurant name matches
+    if (restaurantName && restaurant.name !== restaurantName) {
+      logger.warn('⚠️ Restaurant name mismatch:', {
+        incomingName: restaurantName,
+        foundRestaurantName: restaurant.name,
+        incomingRestaurantId: restaurantId,
+        foundRestaurantId: restaurant._id?.toString() || restaurant.restaurantId
+      });
+      // Still proceed but log the mismatch
+    }
+
     if (!restaurant.isAcceptingOrders) {
+      logger.warn('⚠️ Restaurant not accepting orders:', {
+        restaurantId: restaurant._id?.toString() || restaurant.restaurantId,
+        restaurantName: restaurant.name
+      });
       return res.status(403).json({
         success: false,
         message: 'Restaurant is currently not accepting orders'
@@ -99,6 +138,10 @@ export const createOrder = async (req, res) => {
     }
 
     if (!restaurant.isActive) {
+      logger.warn('⚠️ Restaurant is inactive:', {
+        restaurantId: restaurant._id?.toString() || restaurant.restaurantId,
+        restaurantName: restaurant.name
+      });
       return res.status(403).json({
         success: false,
         message: 'Restaurant is currently inactive'
@@ -109,11 +152,13 @@ export const createOrder = async (req, res) => {
     assignedRestaurantName = restaurant.name;
 
     // Log restaurant assignment for debugging
-    logger.info('Restaurant assigned to order:', {
-      restaurantId: assignedRestaurantId,
-      restaurantName: assignedRestaurantName,
+    logger.info('✅ Restaurant assigned to order:', {
+      assignedRestaurantId: assignedRestaurantId,
+      assignedRestaurantName: assignedRestaurantName,
       restaurant_id: restaurant._id?.toString(),
-      restaurant_restaurantId: restaurant.restaurantId
+      restaurant_restaurantId: restaurant.restaurantId,
+      incomingRestaurantId: restaurantId,
+      incomingRestaurantName: restaurantName
     });
 
     // Generate order ID before creating order
@@ -345,29 +390,64 @@ export const verifyOrderPayment = async (req, res) => {
     // Notify restaurant about confirmed order (payment verified)
     try {
       const restaurantId = order.restaurantId?.toString() || order.restaurantId;
+      const restaurantName = order.restaurantName;
       
-      // Log notification attempt with detailed info
-      logger.info('Attempting to notify restaurant about confirmed order:', {
+      // CRITICAL: Log detailed info before notification
+      logger.info('🔔 CRITICAL: Attempting to notify restaurant about confirmed order:', {
         orderId: order.orderId,
         orderMongoId: order._id.toString(),
         restaurantId: restaurantId,
+        restaurantName: restaurantName,
         restaurantIdType: typeof restaurantId,
         orderRestaurantId: order.restaurantId,
         orderRestaurantIdType: typeof order.restaurantId,
-        orderStatus: order.status
+        orderStatus: order.status,
+        orderCreatedAt: order.createdAt,
+        orderItems: order.items.map(item => ({ name: item.name, quantity: item.quantity }))
       });
       
-      await notifyRestaurantNewOrder(order, restaurantId);
-      logger.info(`✅ Successfully notified restaurant ${restaurantId} about confirmed order ${order.orderId}`);
+      // Verify order has restaurantId before notifying
+      if (!restaurantId) {
+        logger.error('❌ CRITICAL: Cannot notify restaurant - order.restaurantId is missing!', {
+          orderId: order.orderId,
+          order: {
+            _id: order._id?.toString(),
+            restaurantId: order.restaurantId,
+            restaurantName: order.restaurantName
+          }
+        });
+        throw new Error('Order restaurantId is missing');
+      }
+      
+      // Verify order has restaurantName before notifying
+      if (!restaurantName) {
+        logger.warn('⚠️ Order restaurantName is missing:', {
+          orderId: order.orderId,
+          restaurantId: restaurantId
+        });
+      }
+      
+      const notificationResult = await notifyRestaurantNewOrder(order, restaurantId);
+      
+      logger.info(`✅ Successfully notified restaurant about confirmed order:`, {
+        orderId: order.orderId,
+        restaurantId: restaurantId,
+        restaurantName: restaurantName,
+        notificationResult: notificationResult
+      });
     } catch (notificationError) {
-      logger.error(`❌ Error notifying restaurant after payment verification:`, {
+      logger.error(`❌ CRITICAL: Error notifying restaurant after payment verification:`, {
         error: notificationError.message,
         stack: notificationError.stack,
         orderId: order.orderId,
-        restaurantId: order.restaurantId
+        orderMongoId: order._id?.toString(),
+        restaurantId: order.restaurantId,
+        restaurantName: order.restaurantName,
+        orderStatus: order.status
       });
       // Don't fail payment verification if notification fails
       // Order is still saved and restaurant can fetch it via API
+      // But log it as critical for debugging
     }
 
     logger.info(`Order payment verified: ${order.orderId}`, {

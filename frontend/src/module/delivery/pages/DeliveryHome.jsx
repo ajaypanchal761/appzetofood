@@ -57,6 +57,7 @@ import {
 import referralBonusBg from "../../../assets/referralbonuscardbg.png"
 import dropLocationBanner from "../../../assets/droplocationbanner.png"
 import alertSound from "../../../assets/audio/alert.mp3"
+import originalSound from "../../../assets/audio/original.mp3"
 import bikeLogo from "../../../assets/bikelogo.png"
 
 // Ola Maps API Key removed
@@ -417,6 +418,7 @@ export default function DeliveryHome() {
   const newOrderIsSwiping = useRef(false)
   const [newOrderDragY, setNewOrderDragY] = useState(0)
   const [isDraggingNewOrderPopup, setIsDraggingNewOrderPopup] = useState(false)
+  const [isNewOrderPopupMinimized, setIsNewOrderPopupMinimized] = useState(false)
   const [showDirectionsMap, setShowDirectionsMap] = useState(false)
   const [navigationMode, setNavigationMode] = useState('restaurant') // 'restaurant' or 'customer'
   const [showreachedPickupPopup, setShowreachedPickupPopup] = useState(false)
@@ -899,8 +901,35 @@ export default function DeliveryHome() {
     }
     
     try {
-      // Use local alert.mp3 file from assets
-      const audio = new Audio(alertSound)
+      // Get selected alert sound preference from localStorage
+      const selectedSound = localStorage.getItem('delivery_alert_sound') || 'zomato_tone'
+      const soundFile = selectedSound === 'original' ? originalSound : alertSound
+      
+      console.log('🔊 Playing alert sound:', {
+        selectedSound,
+        soundType: selectedSound === 'original' ? 'Original' : 'Zomato Tone',
+        soundFile,
+        originalSoundPath: originalSound,
+        alertSoundPath: alertSound
+      })
+      
+      // Verify sound file exists
+      if (!soundFile) {
+        console.error('❌ Sound file is undefined!', { selectedSound, soundFile })
+        return null
+      }
+      
+      // Use selected sound file from assets
+      const audio = new Audio(soundFile)
+      
+      // Add load event listener to verify file loads
+      audio.addEventListener('loadeddata', () => {
+        console.log('✅ Audio file loaded successfully:', soundFile)
+      })
+      
+      audio.addEventListener('canplay', () => {
+        console.log('✅ Audio can play:', soundFile)
+      })
       
       audio.volume = 1
       audio.loop = true // Loop the sound
@@ -914,26 +943,63 @@ export default function DeliveryHome() {
         })
       })
       
+      // Preload audio before playing
+      audio.preload = 'auto'
+      
       // Play the sound and wait for it to start
       try {
-        await audio.play()
-        console.log('✅ Alert sound started playing successfully')
+        // Wait for audio to be ready
+        await new Promise((resolve, reject) => {
+          audio.addEventListener('canplaythrough', resolve, { once: true })
+          audio.addEventListener('error', reject, { once: true })
+          audio.load()
+          // Timeout after 3 seconds
+          setTimeout(() => reject(new Error('Audio load timeout')), 3000)
+        })
+        
+        const playPromise = audio.play()
+        if (playPromise !== undefined) {
+          await playPromise
+        }
+        console.log('✅ Alert sound started playing successfully', {
+          src: audio.src,
+          volume: audio.volume,
+          loop: audio.loop,
+          readyState: audio.readyState
+        })
         return audio
       } catch (playError) {
-        // Autoplay was prevented or other error
+        console.error('❌ Audio play error:', {
+          error: playError,
+          message: playError.message,
+          name: playError.name,
+          soundFile,
+          selectedSound,
+          audioReadyState: audio.readyState,
+          audioSrc: audio.src
+        })
+        
         // Don't log autoplay policy errors as they're expected before user interaction
-        if (!playError.message?.includes('user didn\'t interact') && !playError.name?.includes('NotAllowedError')) {
+        if (!playError.message?.includes('user didn\'t interact') && 
+            !playError.name?.includes('NotAllowedError') &&
+            !playError.message?.includes('timeout')) {
           console.error('❌ Could not play alert sound:', playError)
         }
-        // Try to load the audio first
-        audio.load()
+        
+        // Try to load and play again
         try {
-          await audio.play()
-          console.log('✅ Alert sound started playing after load()')
+          audio.load()
+          await new Promise((resolve) => setTimeout(resolve, 100)) // Small delay
+          const playPromise = audio.play()
+          if (playPromise !== undefined) {
+            await playPromise
+          }
+          console.log('✅ Alert sound started playing after retry')
           return audio
         } catch (retryError) {
           // Don't log autoplay policy errors
-          if (!retryError.message?.includes('user didn\'t interact') && !retryError.name?.includes('NotAllowedError')) {
+          if (!retryError.message?.includes('user didn\'t interact') && 
+              !retryError.name?.includes('NotAllowedError')) {
             console.error('❌ Could not play alert sound after retry:', retryError)
           }
           return null
@@ -998,7 +1064,12 @@ export default function DeliveryHome() {
       // Play alert sound when popup appears
       const playAudio = async () => {
         try {
-          console.log('[NewOrder] 🎵 Attempting to play audio...')
+          // Check localStorage preference
+          const currentPreference = localStorage.getItem('delivery_alert_sound') || 'zomato_tone'
+          console.log('[NewOrder] 🎵 Attempting to play audio...', {
+            preference: currentPreference,
+            willUse: currentPreference === 'original' ? 'original.mp3' : 'alert.mp3'
+          })
           const audio = await playAlertSound()
           if (audio) {
             alertAudioRef.current = audio
@@ -1111,6 +1182,8 @@ export default function DeliveryHome() {
     }
     setShowRejectPopup(false)
     setShowNewOrderPopup(false)
+    setIsNewOrderPopupMinimized(false) // Reset minimized state
+    setNewOrderDragY(0) // Reset drag position
     setRejectReason("")
     setCountdownSeconds(300)
     // Here you would typically send the rejection to your backend
@@ -1682,7 +1755,8 @@ export default function DeliveryHome() {
                 customerLng: order.address?.location?.coordinates?.[0],
                 items: order.items || [],
                 total: order.pricing?.total || 0,
-                phone: order.restaurantId?.phone || null, // Restaurant phone number
+                phone: order.restaurantId?.phone || order.restaurantId?.ownerPhone || null, // Restaurant phone number (prefer phone, fallback to ownerPhone)
+                ownerPhone: order.restaurantId?.ownerPhone || null, // Owner phone number (separate field for direct access)
                 orderStatus: order.status || 'preparing', // Store order status (pending, preparing, ready, out_for_delivery, delivered)
                 deliveryState: order.deliveryState || {}, // Store delivery state (currentPhase, status, etc.)
                 deliveryPhase: order.deliveryState?.currentPhase || 'assigned' // Store current delivery phase
@@ -1820,9 +1894,13 @@ export default function DeliveryHome() {
             }
             clearNewOrder();
             
+            // Ensure route path is visible
+            setShowRoutePath(true);
+            
             // Show route on main map instead of opening full-screen directions map
             setTimeout(() => {
               console.log('✅ Showing route on main map from live location to restaurant');
+              console.log('📍 Flow: Order Accepted → Route to Restaurant → 500m Detection → Reached Pickup → Order ID → Route to Customer → 500m Detection → Reached Drop → Delivered → Review → Payment');
               
               // Show route on main map using DirectionsRenderer or polyline
               if (window.deliveryMapInstance && restaurantInfo) {
@@ -2037,6 +2115,8 @@ export default function DeliveryHome() {
             toast.error(response.data?.message || 'Failed to accept order. Please try again.')
             // Still close popup
             setShowNewOrderPopup(false)
+            setIsNewOrderPopupMinimized(false) // Reset minimized state
+            setNewOrderDragY(0) // Reset drag position
           }
         } catch (error) {
           console.error('❌ Error accepting order:', error)
@@ -2064,6 +2144,8 @@ export default function DeliveryHome() {
           
           // Close popup even on error
           setShowNewOrderPopup(false)
+          setIsNewOrderPopupMinimized(false) // Reset minimized state
+          setNewOrderDragY(0) // Reset drag position
         } finally {
           // Reset after animation
           setTimeout(() => {
@@ -2085,8 +2167,19 @@ export default function DeliveryHome() {
     newOrderAcceptButtonIsSwiping.current = false
   }
 
-  // Handle new order popup swipe down to close
+  // Handle new order popup swipe down to minimize (not close)
+  // Popup should stay visible until accept/reject is clicked
   const handleNewOrderPopupTouchStart = (e) => {
+    // Allow touch start from anywhere when minimized (for swipe up from handle)
+    if (isNewOrderPopupMinimized) {
+      e.stopPropagation()
+      newOrderSwipeStartY.current = e.touches[0].clientY
+      newOrderIsSwiping.current = true
+      setIsDraggingNewOrderPopup(true)
+      return
+    }
+
+    // When visible, only allow swipe from top handle area
     const target = e.target
     const rect = newOrderPopupRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -2105,13 +2198,24 @@ export default function DeliveryHome() {
   const handleNewOrderPopupTouchMove = (e) => {
     if (!newOrderIsSwiping.current) return
 
-    const deltaY = e.touches[0].clientY - newOrderSwipeStartY.current
+    const currentY = e.touches[0].clientY
+    const deltaY = currentY - newOrderSwipeStartY.current
+    const popupHeight = newOrderPopupRef.current?.offsetHeight || 600
 
-    if (deltaY > 0) {
-      // Don't call preventDefault - CSS touch-action handles scrolling prevention
-      // safePreventDefault(e) // Removed to avoid passive listener error
-      e.stopPropagation()
-      setNewOrderDragY(deltaY)
+    e.stopPropagation()
+
+    if (isNewOrderPopupMinimized) {
+      // Currently minimized - swiping up (negative deltaY) should restore
+      if (deltaY < 0) {
+        // Calculate new position: start from popupHeight, subtract the upward swipe distance
+        const newPosition = popupHeight + deltaY // deltaY is negative, so this reduces the position
+        setNewOrderDragY(Math.max(0, newPosition)) // Don't go above 0 (fully visible)
+      }
+    } else {
+      // Currently visible - swiping down (positive deltaY) should minimize
+      if (deltaY > 0) {
+        setNewOrderDragY(deltaY) // Direct deltaY, will be clamped to popupHeight in touchEnd
+      }
     }
   }
 
@@ -2126,16 +2230,48 @@ export default function DeliveryHome() {
 
     const deltaY = e.changedTouches[0].clientY - newOrderSwipeStartY.current
     const threshold = 100
+    const popupHeight = newOrderPopupRef.current?.offsetHeight || 600
 
-    if (deltaY > threshold) {
-      setShowNewOrderPopup(false)
-      setCountdownSeconds(300)
+    if (isNewOrderPopupMinimized) {
+      // Currently minimized - check if swiping up enough to restore
+      if (deltaY < -threshold) {
+        // Swipe up enough - restore popup
+        setIsNewOrderPopupMinimized(false)
+        setNewOrderDragY(0)
+      } else {
+        // Not enough swipe - keep minimized
+        setIsNewOrderPopupMinimized(true)
+        setNewOrderDragY(popupHeight)
+        // Delay stopping drag to allow position to be set
+        setTimeout(() => {
+          setIsDraggingNewOrderPopup(false)
+        }, 10)
+      }
     } else {
-      setNewOrderDragY(0)
+      // Currently visible - check if swiping down enough to minimize
+      if (deltaY > threshold) {
+        // Swipe down enough - minimize popup (but don't close)
+        // Set dragY first to current position
+        setNewOrderDragY(deltaY)
+        // Then set minimized state and update dragY to full height
+        setIsNewOrderPopupMinimized(true)
+        // Use requestAnimationFrame to ensure state updates are batched
+        requestAnimationFrame(() => {
+          setNewOrderDragY(popupHeight)
+          // Stop dragging after state is set
+          setTimeout(() => {
+            setIsDraggingNewOrderPopup(false)
+          }, 50)
+        })
+      } else {
+        // Not enough swipe - restore to visible (snap back)
+        setIsNewOrderPopupMinimized(false)
+        setNewOrderDragY(0)
+        setIsDraggingNewOrderPopup(false)
+      }
     }
 
     newOrderIsSwiping.current = false
-    setIsDraggingNewOrderPopup(false)
     newOrderSwipeStartY.current = 0
   }
 
@@ -2197,15 +2333,45 @@ export default function DeliveryHome() {
         // CRITICAL: Check if order is already delivered/completed - don't call API
         const orderStatus = selectedRestaurant?.orderStatus || selectedRestaurant?.status || ''
         const deliveryPhase = selectedRestaurant?.deliveryPhase || selectedRestaurant?.deliveryState?.currentPhase || ''
+        const deliveryStateStatus = selectedRestaurant?.deliveryState?.status || ''
+        
         const isDelivered = orderStatus === 'delivered' || 
                             deliveryPhase === 'completed' || 
                             deliveryPhase === 'delivered' ||
-                            selectedRestaurant?.deliveryState?.status === 'delivered'
+                            deliveryStateStatus === 'delivered'
         
         if (isDelivered) {
           console.warn('⚠️ Order is already delivered, skipping reached pickup confirmation')
           toast.error('Order is already delivered. Cannot confirm reached pickup.')
           setShowreachedPickupPopup(false)
+          return
+        }
+        
+        // CRITICAL: Check if order is already past pickup phase (order ID confirmed or out for delivery)
+        const isPastPickupPhase = orderStatus === 'out_for_delivery' ||
+                                  deliveryPhase === 'en_route_to_delivery' ||
+                                  deliveryPhase === 'picked_up' ||
+                                  deliveryStateStatus === 'order_confirmed' ||
+                                  deliveryStateStatus === 'reached_pickup' ||
+                                  deliveryPhase === 'at_pickup'
+        
+        if (isPastPickupPhase) {
+          console.warn('⚠️ Order is already past pickup phase, skipping reached pickup confirmation:', {
+            orderStatus,
+            deliveryPhase,
+            deliveryStateStatus
+          })
+          // If already at pickup or order ID confirmed, just show order ID popup after delay
+          if (deliveryPhase === 'at_pickup' || deliveryStateStatus === 'reached_pickup') {
+            // Ensure reached pickup popup is closed first
+            setShowreachedPickupPopup(false)
+            setTimeout(() => {
+              setShowOrderIdConfirmationPopup(true)
+            }, 300) // Delay to ensure reached pickup popup closes first
+            toast.info('Order is already at pickup. Showing order ID confirmation.')
+          } else {
+            toast.info('Order is already out for delivery.')
+          }
           return
         }
         
@@ -2217,23 +2383,39 @@ export default function DeliveryHome() {
             
             if (response.data?.success) {
               console.log('✅ Reached pickup confirmed')
-              // Show order ID confirmation popup
-              setShowOrderIdConfirmationPopup(true)
+              // Ensure reached pickup popup is closed first
+              setShowreachedPickupPopup(false)
+              // Wait for reached pickup popup to close, then show order ID confirmation popup
+              setTimeout(() => {
+                setShowOrderIdConfirmationPopup(true)
+              }, 300) // 300ms delay for smooth transition
             } else {
               console.error('❌ Failed to confirm reached pickup:', response.data)
               toast.error(response.data?.message || 'Failed to confirm reached pickup. Please try again.')
-              // Still show order ID popup even if API call fails
-              setShowOrderIdConfirmationPopup(true)
+              // Ensure reached pickup popup is closed
+              setShowreachedPickupPopup(false)
+              // Still show order ID popup even if API call fails, after delay
+              setTimeout(() => {
+                setShowOrderIdConfirmationPopup(true)
+              }, 300)
             }
           } catch (error) {
             console.error('❌ Error confirming reached pickup:', error)
             toast.error(error.response?.data?.message || 'Failed to confirm reached pickup. Please try again.')
-            // Still show order ID popup even if API call fails
-            setShowOrderIdConfirmationPopup(true)
+            // Ensure reached pickup popup is closed
+            setShowreachedPickupPopup(false)
+            // Still show order ID popup even if API call fails, after delay
+            setTimeout(() => {
+              setShowOrderIdConfirmationPopup(true)
+            }, 300)
           }
         } else {
-          // Show order ID popup even if no order ID (fallback)
-          setShowOrderIdConfirmationPopup(true)
+          // Ensure reached pickup popup is closed
+          setShowreachedPickupPopup(false)
+          // Show order ID popup even if no order ID (fallback), after delay
+          setTimeout(() => {
+            setShowOrderIdConfirmationPopup(true)
+          }, 300)
         }
         
         // DO NOT show reached drop here - it will only show after order ID is confirmed
@@ -2326,8 +2508,12 @@ export default function DeliveryHome() {
             
             if (response.data?.success) {
               console.log('✅ Reached drop confirmed')
-              // Show order delivered animation
-              setShowOrderDeliveredAnimation(true)
+              // Close reached drop popup first
+              setShowReachedDropPopup(false)
+              // Wait a bit, then show order delivered animation
+              setTimeout(() => {
+                setShowOrderDeliveredAnimation(true)
+              }, 300) // 300ms delay for smooth transition
             } else {
               console.error('❌ Failed to confirm reached drop:', response.data)
               toast.error(response.data?.message || 'Failed to confirm reached drop. Please try again.')
@@ -2348,12 +2534,20 @@ export default function DeliveryHome() {
                                (error.response?.status === 404 ? 'Order not found. Please refresh and try again.' : 'Failed to confirm reached drop. Please try again.')
             toast.error(errorMessage)
             
-            // Still show delivered animation even if API call fails (for UX)
-            setShowOrderDeliveredAnimation(true)
+            // Close reached drop popup first
+            setShowReachedDropPopup(false)
+            // Still show delivered animation even if API call fails (for UX), after delay
+            setTimeout(() => {
+              setShowOrderDeliveredAnimation(true)
+            }, 300)
           }
         } else {
-          // Show delivered animation even if no order ID (fallback)
-          setShowOrderDeliveredAnimation(true)
+          // Close reached drop popup first
+          setShowReachedDropPopup(false)
+          // Show delivered animation even if no order ID (fallback), after delay
+          setTimeout(() => {
+            setShowOrderDeliveredAnimation(true)
+          }, 300)
         }
       }, 200)
     } else {
@@ -2425,15 +2619,48 @@ export default function DeliveryHome() {
         // CRITICAL: Check if order is already delivered/completed - don't call API
         const orderStatus = selectedRestaurant?.orderStatus || selectedRestaurant?.status || ''
         const deliveryPhase = selectedRestaurant?.deliveryPhase || selectedRestaurant?.deliveryState?.currentPhase || ''
+        const deliveryStateStatus = selectedRestaurant?.deliveryState?.status || ''
+        
         const isDelivered = orderStatus === 'delivered' || 
                             deliveryPhase === 'completed' || 
                             deliveryPhase === 'delivered' ||
-                            selectedRestaurant?.deliveryState?.status === 'delivered'
+                            deliveryStateStatus === 'delivered'
         
         if (isDelivered) {
           console.warn('⚠️ Order is already delivered, skipping order ID confirmation')
           toast.error('Order is already delivered. Cannot confirm order ID.')
           setShowOrderIdConfirmationPopup(false)
+          return
+        }
+        
+        // CRITICAL: Check if order ID is already confirmed - don't call API again
+        const isOrderIdAlreadyConfirmed = orderStatus === 'out_for_delivery' ||
+                                          deliveryPhase === 'en_route_to_delivery' ||
+                                          deliveryPhase === 'picked_up' ||
+                                          deliveryStateStatus === 'order_confirmed' ||
+                                          selectedRestaurant?.deliveryState?.orderIdConfirmedAt
+        
+        if (isOrderIdAlreadyConfirmed) {
+          console.warn('⚠️ Order ID is already confirmed, skipping confirmation:', {
+            orderStatus,
+            deliveryPhase,
+            deliveryStateStatus,
+            orderIdConfirmedAt: selectedRestaurant?.deliveryState?.orderIdConfirmedAt
+          })
+          // Don't show error, just update the UI state and close popup
+          setSelectedRestaurant(prev => ({
+            ...prev,
+            orderStatus: 'out_for_delivery',
+            status: 'out_for_delivery',
+            deliveryPhase: 'en_route_to_delivery',
+            deliveryState: {
+              ...prev.deliveryState,
+              currentPhase: 'en_route_to_delivery',
+              status: 'order_confirmed'
+            }
+          }))
+          setShowOrderIdConfirmationPopup(false)
+          toast.info('Order ID is already confirmed. Order is out for delivery.')
           return
         }
         
@@ -2565,8 +2792,17 @@ export default function DeliveryHome() {
             setSelectedRestaurant(prev => ({
               ...prev,
               orderStatus: 'out_for_delivery',
-              deliveryPhase: 'en_route_to_delivery'
+              status: 'out_for_delivery',
+              deliveryPhase: 'en_route_to_delivery',
+              deliveryState: {
+                ...prev.deliveryState,
+                currentPhase: 'en_route_to_delivery',
+                status: 'order_confirmed'
+              }
             }))
+
+            // CRITICAL: Close Reached Pickup popup if it's still showing (shouldn't happen, but defensive)
+            setShowreachedPickupPopup(false)
 
             toast.success('Order is out for delivery. Route to customer is on the map.', { duration: 4000 })
             
@@ -2600,7 +2836,7 @@ export default function DeliveryHome() {
     orderIdConfirmIsSwiping.current = false
   }
 
-  // Handle Start Navigation Button - Opens in-app navigation map
+  // Handle Start Navigation Button - Opens Google Maps app in navigation mode
   const handleStartNavigation = () => {
     // Get customer location from selectedRestaurant
     const customerLat = selectedRestaurant?.customerLat;
@@ -2612,14 +2848,52 @@ export default function DeliveryHome() {
       return;
     }
 
-    console.log('🗺️ Starting in-app navigation to customer:', { lat: customerLat, lng: customerLng });
+    console.log('🗺️ Opening Google Maps navigation to customer:', { lat: customerLat, lng: customerLng });
 
-    // Set navigation mode to customer and show directions map
-    setNavigationMode('customer');
-    setShowDirectionsMap(true);
+    // Get current rider location for origin (optional, Google Maps will use current location if not provided)
+    const originLat = riderLocation?.[0];
+    const originLng = riderLocation?.[1];
+
+    // Detect platform (Android or iOS)
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    const isAndroid = /android/i.test(userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+
+    let mapsUrl = '';
+
+    if (isAndroid) {
+      // Android: Use google.navigation: scheme (opens directly in navigation mode)
+      // Fallback to web URL if app not installed
+      mapsUrl = `google.navigation:q=${customerLat},${customerLng}&mode=b`;
+      
+      // Try to open Google Maps app first
+      window.location.href = mapsUrl;
+      
+      // Fallback to web URL after a short delay (in case app is not installed)
+      setTimeout(() => {
+        const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${customerLat},${customerLng}&travelmode=bicycling`;
+        window.open(webUrl, '_blank');
+      }, 500);
+    } else if (isIOS) {
+      // iOS: Use comgooglemaps:// scheme (opens Google Maps app)
+      mapsUrl = `comgooglemaps://?daddr=${customerLat},${customerLng}&directionsmode=bicycling`;
+      
+      // Try to open Google Maps app first
+      window.location.href = mapsUrl;
+      
+      // Fallback to web URL after a short delay (in case app is not installed)
+      setTimeout(() => {
+        const webUrl = `https://maps.google.com/?daddr=${customerLat},${customerLng}&directionsmode=bicycling`;
+        window.open(webUrl, '_blank');
+      }, 500);
+    } else {
+      // Web/Desktop: Use web URL
+      mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${customerLat},${customerLng}&travelmode=bicycling`;
+      window.open(mapsUrl, '_blank');
+    }
 
     // Show success message
-    toast.success('Navigation started in map 🗺️', {
+    toast.success('Opening Google Maps navigation 🗺️', {
       duration: 2000
     });
   }
@@ -2726,15 +3000,23 @@ export default function DeliveryHome() {
               localStorage.removeItem('deliveryActiveOrder')
               localStorage.removeItem('activeOrder')
               
-              // Show customer review popup
-              setShowCustomerReviewPopup(true)
+              // Close order delivered animation first
+              setShowOrderDeliveredAnimation(false)
+              // Wait a bit, then show customer review popup
+              setTimeout(() => {
+                setShowCustomerReviewPopup(true)
+              }, 300) // 300ms delay for smooth transition
             } else {
               console.error('❌ Failed to complete delivery:', response.data)
               toast.error(response.data?.message || 'Failed to complete delivery. Please try again.')
               // Clear reached drop popup if showing
               setShowReachedDropPopup(false)
-              // Still show review popup even if API call fails
-              setShowCustomerReviewPopup(true)
+              // Close order delivered animation first
+              setShowOrderDeliveredAnimation(false)
+              // Still show review popup even if API call fails, after delay
+              setTimeout(() => {
+                setShowCustomerReviewPopup(true)
+              }, 300)
             }
           } catch (error) {
             console.error('❌ Error completing delivery:', error)
@@ -2754,15 +3036,22 @@ export default function DeliveryHome() {
             
             // Clear reached drop popup if showing
             setShowReachedDropPopup(false)
-            
-            // Still show review popup even if API call fails (for UX)
-            setShowCustomerReviewPopup(true)
+            // Close order delivered animation
+            setShowOrderDeliveredAnimation(false)
+            // Still show review popup even if API call fails (for UX), after delay
+            setTimeout(() => {
+              setShowCustomerReviewPopup(true)
+            }, 300)
           }
         } else {
           // Clear reached drop popup if showing
           setShowReachedDropPopup(false)
-          // Show review popup even if no order ID (fallback)
-          setShowCustomerReviewPopup(true)
+          // Close order delivered animation
+          setShowOrderDeliveredAnimation(false)
+          // Show review popup even if no order ID (fallback), after delay
+          setTimeout(() => {
+            setShowCustomerReviewPopup(true)
+          }, 300)
         }
         
         // Reset after animation
@@ -4824,6 +5113,21 @@ export default function DeliveryHome() {
       return
     }
     
+    // CRITICAL: Don't show if order ID is already confirmed (en_route_to_delivery or order_confirmed)
+    const isOrderIdConfirmed = deliveryPhase === 'en_route_to_delivery' ||
+                               deliveryPhase === 'picked_up' ||
+                               orderStatus === 'out_for_delivery' ||
+                               selectedRestaurant?.deliveryState?.status === 'order_confirmed'
+    
+    if (isOrderIdConfirmed) {
+      // Order ID is already confirmed, don't show Reached Pickup popup
+      if (showreachedPickupPopup) {
+        console.log('🚫 Order ID already confirmed, closing Reached Pickup popup')
+        setShowreachedPickupPopup(false)
+      }
+      return
+    }
+    
     // Only show if order is accepted and on the way to pickup or at pickup
     const isInPickupPhase = deliveryPhase === 'en_route_to_pickup' || 
                             deliveryPhase === 'at_pickup' ||
@@ -5012,6 +5316,11 @@ export default function DeliveryHome() {
 
   // Monitor delivery boy's location for "Reached Drop" detection
   // Show "Reached Drop" popup when delivery boy is within 500 meters of customer location
+  // Use useMemo to ensure deliveryStateStatus is always defined (prevents dependency array size changes)
+  const deliveryStateStatus = useMemo(() => {
+    return selectedRestaurant?.deliveryState?.status ?? null
+  }, [selectedRestaurant?.deliveryState?.status])
+  
   useEffect(() => {
     // CRITICAL: If payment page is showing, delivery is completed - do NOT show reached drop popup
     if (showPaymentPage || showCustomerReviewPopup || showOrderDeliveredAnimation) {
@@ -5025,9 +5334,12 @@ export default function DeliveryHome() {
                                    orderStatus === 'completed' || 
                                    deliveryPhase === 'completed' ||
                                    deliveryPhase === 'at_delivery'
+    // deliveryStateStatus is defined outside useEffect using useMemo (prevents dependency array size changes)
     const isOutForDelivery = !isDeliveredOrCompleted && (
                              orderStatus === 'out_for_delivery' || 
                              deliveryPhase === 'en_route_to_delivery' ||
+                             deliveryPhase === 'picked_up' ||
+                             deliveryStateStatus === 'order_confirmed' ||
                              orderStatus === 'ready')
 
     // Rider position: prefer riderLocation, fallback lastLocationRef
@@ -5043,8 +5355,32 @@ export default function DeliveryHome() {
       }
       return
     }
-    if (!riderPos) return
-    if (!isOutForDelivery || isDeliveredOrCompleted || showNewOrderPopup || showOrderIdConfirmationPopup || showreachedPickupPopup || showReachedDropPopup) return
+    if (!riderPos) {
+      console.log('[Reached Drop] No rider position available')
+      return
+    }
+    
+    // Don't show if other popups are active (but allow if Order ID confirmation was just completed)
+    if (isDeliveredOrCompleted || showNewOrderPopup || showreachedPickupPopup || showReachedDropPopup) {
+      return
+    }
+    
+    // Only block if Order ID confirmation popup is still actively showing
+    // If it was just closed, allow Reached Drop to show
+    if (showOrderIdConfirmationPopup) {
+      return
+    }
+    
+    // CRITICAL: Must be in delivery phase (after Order ID confirmation)
+    if (!isOutForDelivery) {
+      console.log('[Reached Drop] Order not in delivery phase:', {
+        orderStatus,
+        deliveryPhase,
+        deliveryStateStatus,
+        isOutForDelivery
+      })
+      return
+    }
 
     const distanceInMeters = calculateDistanceInMeters(
       riderPos[0],
@@ -5053,11 +5389,25 @@ export default function DeliveryHome() {
       selectedRestaurant.customerLng
     )
 
-    console.log(`📍 Distance to customer: ${distanceInMeters.toFixed(2)} meters`)
+    console.log(`📍 Distance to customer: ${distanceInMeters.toFixed(2)} meters`, {
+      riderPos: riderPos,
+      customerLat: selectedRestaurant.customerLat,
+      customerLng: selectedRestaurant.customerLng,
+      orderId: selectedRestaurant?.orderId || selectedRestaurant?.id,
+      orderStatus,
+      deliveryPhase,
+      deliveryStateStatus,
+      isOutForDelivery
+    })
 
     // Show "Reached Drop" popup when within 500 meters of customer location
     if (distanceInMeters <= 500 && !showReachedDropPopup) {
-      console.log('✅ Delivery boy reached drop (within 500m of customer), showing popup')
+      console.log('✅ Delivery boy reached drop (within 500m of customer), showing popup', {
+        distance: distanceInMeters.toFixed(2),
+        orderId: selectedRestaurant?.orderId || selectedRestaurant?.id,
+        customerLocation: { lat: selectedRestaurant.customerLat, lng: selectedRestaurant.customerLng },
+        riderLocation: riderPos
+      })
       setShowReachedDropPopup(true)
       
       // Also update polyline in real-time as delivery boy approaches
@@ -5086,6 +5436,7 @@ export default function DeliveryHome() {
     selectedRestaurant?.customerLng ?? null,
     selectedRestaurant?.orderStatus ?? newOrder?.status ?? null,
     selectedRestaurant?.deliveryPhase ?? selectedRestaurant?.deliveryState?.currentPhase ?? null,
+    deliveryStateStatus, // Use memoized value to ensure consistent dependency array size
     Boolean(showNewOrderPopup), 
     Boolean(showOrderIdConfirmationPopup), 
     Boolean(showreachedPickupPopup), 
@@ -6771,30 +7122,57 @@ export default function DeliveryHome() {
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              animate={{ opacity: isNewOrderPopupMinimized ? 0.3 : 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-[100] backdrop-blur-sm"
+              className="fixed inset-0 bg-black/50 z-[100]"
             />
+
+            {/* Minimized Handle - Show when minimized for swipe up */}
+            {isNewOrderPopupMinimized && (
+              <motion.div
+                initial={{ y: 100, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 100, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="fixed bottom-0 left-0 right-0 z-[115] flex justify-center pb-2"
+                onTouchStart={handleNewOrderPopupTouchStart}
+                onTouchMove={handleNewOrderPopupTouchMove}
+                onTouchEnd={handleNewOrderPopupTouchEnd}
+                style={{ touchAction: 'none' }}
+              >
+                <div className="bg-green-500 rounded-t-2xl px-6 py-3 shadow-lg cursor-grab active:cursor-grabbing">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-1 bg-white/80 rounded-full" />
+                    <span className="text-white text-sm font-semibold">Swipe up to view order</span>
+                    <div className="w-8 h-1 bg-white/80 rounded-full" />
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
             {/* Popup */}
             <motion.div
               ref={newOrderPopupRef}
               initial={{ y: "100%" }}
               animate={{ 
-                y: isDraggingNewOrderPopup ? newOrderDragY : 0,
-                transition: isDraggingNewOrderPopup ? { duration: 0 } : { 
-                  type: "spring", 
-                  damping: 30, 
-                  stiffness: 300 
-                }
+                y: isDraggingNewOrderPopup 
+                  ? newOrderDragY 
+                  : isNewOrderPopupMinimized 
+                    ? (newOrderPopupRef.current?.offsetHeight || 600)
+                    : 0
               }}
+              transition={isDraggingNewOrderPopup 
+                ? { duration: 0 } 
+                : isNewOrderPopupMinimized
+                  ? { duration: 0.3, ease: "easeOut" } // Smooth transition when minimizing
+                  : { 
+                      type: "spring", 
+                      damping: 30, 
+                      stiffness: 300 
+                    }
+              }
               exit={{ y: "100%" }}
-              transition={{ 
-                type: "spring", 
-                damping: 30, 
-                stiffness: 300 
-              }}
               onTouchStart={handleNewOrderPopupTouchStart}
               onTouchMove={handleNewOrderPopupTouchMove}
               onTouchEnd={handleNewOrderPopupTouchEnd}
@@ -7119,8 +7497,9 @@ export default function DeliveryHome() {
       </AnimatePresence>
 
       {/* Reached Pickup Popup - shown when order is ready (from order_ready socket) or when rider is within 500m */}
+      {/* Don't show if Order ID confirmation popup is showing */}
       <BottomPopup
-        isOpen={showreachedPickupPopup}
+        isOpen={showreachedPickupPopup && !showOrderIdConfirmationPopup}
         onClose={() => setShowreachedPickupPopup(false)}
         showCloseButton={false}
         closeOnBackdropClick={false}
@@ -7151,11 +7530,119 @@ export default function DeliveryHome() {
 
           {/* Action Buttons */}
           <div className="flex gap-3 mb-6">
-            <button className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            <button 
+              onClick={async () => {
+                // Try multiple paths to find restaurant phone number
+                let restaurantPhone = selectedRestaurant?.phone || 
+                                    selectedRestaurant?.restaurantId?.phone || 
+                                    selectedRestaurant?.ownerPhone ||
+                                    selectedRestaurant?.restaurant?.phone ||
+                                    null
+                
+                console.log('📞 Checking phone in selectedRestaurant:', {
+                  phone: selectedRestaurant?.phone,
+                  restaurantIdPhone: selectedRestaurant?.restaurantId?.phone,
+                  ownerPhone: selectedRestaurant?.ownerPhone,
+                  restaurantPhone: selectedRestaurant?.restaurant?.phone,
+                  found: !!restaurantPhone
+                })
+                
+                // If phone not found in selectedRestaurant, try to fetch order details from backend
+                if (!restaurantPhone && selectedRestaurant?.orderId) {
+                  try {
+                    console.log('📞 [CALL] Phone not found in selectedRestaurant, fetching order details from backend...')
+                    const orderId = selectedRestaurant.orderId || selectedRestaurant.id
+                    console.log('📞 [CALL] Fetching order details for orderId:', orderId)
+                    
+                    const response = await deliveryAPI.getOrderDetails(orderId)
+                    console.log('📞 [CALL] Order details API response:', JSON.stringify(response.data, null, 2))
+                    
+                    // Check multiple response formats
+                    const order = response.data?.data?.order || response.data?.order || null
+                    
+                    if (order) {
+                      console.log('📞 [CALL] Order data extracted from API:', {
+                        hasRestaurantId: !!order.restaurantId,
+                        restaurantIdType: typeof order.restaurantId,
+                        restaurantIdPhone: order.restaurantId?.phone,
+                        restaurantIdOwnerPhone: order.restaurantId?.ownerPhone,
+                        restaurantIdObject: order.restaurantId ? Object.keys(order.restaurantId) : null
+                      })
+                      
+                      // Try all possible paths in the API response
+                      // Restaurant model has both 'phone' and 'ownerPhone' fields
+                      restaurantPhone = order.restaurantId?.phone || 
+                                       order.restaurantId?.ownerPhone ||
+                                       order.restaurant?.phone ||
+                                       order.restaurant?.ownerPhone ||
+                                       order.restaurantId?.contact?.phone ||
+                                       order.restaurantId?.owner?.phone ||
+                                       null
+                      
+                      console.log('📞 [CALL] Phone extracted from order:', restaurantPhone)
+                      
+                      // If phone found, update selectedRestaurant for future use
+                      if (restaurantPhone && selectedRestaurant) {
+                        setSelectedRestaurant({
+                          ...selectedRestaurant,
+                          phone: restaurantPhone,
+                          ownerPhone: order.restaurantId?.ownerPhone || order.restaurant?.ownerPhone || restaurantPhone
+                        })
+                        console.log('✅ [CALL] Updated selectedRestaurant with phone:', restaurantPhone)
+                      }
+                      
+                      if (!restaurantPhone) {
+                        console.warn('⚠️ [CALL] Phone not found in order.restaurantId object:', order.restaurantId)
+                      }
+                    } else {
+                      console.warn('⚠️ [CALL] Order details API response format unexpected - order not found in response:', {
+                        responseKeys: Object.keys(response.data || {}),
+                        responseData: response.data
+                      })
+                    }
+                  } catch (error) {
+                    console.error('❌ [CALL] Error fetching order details for phone:', error)
+                    console.error('❌ [CALL] Error message:', error.message)
+                    console.error('❌ [CALL] Error response:', error.response?.data)
+                    console.error('❌ [CALL] Error status:', error.response?.status)
+                  }
+                } else if (!selectedRestaurant?.orderId) {
+                  console.warn('⚠️ [CALL] Cannot fetch phone - orderId not found in selectedRestaurant:', selectedRestaurant)
+                }
+                
+                if (restaurantPhone) {
+                  // Remove any spaces, dashes, or special characters except + and digits
+                  const cleanPhone = restaurantPhone.replace(/[^\d+]/g, '')
+                  console.log('📞 Calling restaurant:', { original: restaurantPhone, clean: cleanPhone })
+                  window.location.href = `tel:${cleanPhone}`
+                } else {
+                  toast.error('Restaurant phone number not available. Please contact support.')
+                  console.error('❌ Restaurant phone not found in any path:', { 
+                    selectedRestaurant,
+                    hasPhone: !!selectedRestaurant?.phone,
+                    hasRestaurantIdPhone: !!selectedRestaurant?.restaurantId?.phone,
+                    hasOwnerPhone: !!selectedRestaurant?.ownerPhone,
+                    orderId: selectedRestaurant?.orderId
+                  })
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
               <Phone className="w-5 h-5 text-gray-700" />
               <span className="text-gray-700 font-medium">Call</span>
             </button>
-            <button className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
+            <button 
+              onClick={() => {
+                const restaurantAddress = selectedRestaurant?.address || ''
+                if (restaurantAddress) {
+                  const encodedAddress = encodeURIComponent(restaurantAddress)
+                  window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, '_blank')
+                } else {
+                  toast.error('Restaurant address not available')
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+            >
               <MapPin className="w-5 h-5 text-white" />
               <span className="text-white font-medium">Map</span>
             </button>
@@ -7691,10 +8178,13 @@ export default function DeliveryHome() {
                   }
                 }
                 
-                // Close review popup and show payment/earnings page
-                setShowCustomerReviewPopup(false)
-                setShowReachedDropPopup(false) // Clear reached drop popup if still showing
-                setShowPaymentPage(true)
+                    // Close review popup first
+                    setShowCustomerReviewPopup(false)
+                    setShowReachedDropPopup(false) // Clear reached drop popup if still showing
+                    // Wait a bit, then show payment/earnings page
+                    setTimeout(() => {
+                      setShowPaymentPage(true)
+                    }, 300) // 300ms delay for smooth transition
               }}
               className="w-full bg-green-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-green-700 transition-colors shadow-lg"
             >

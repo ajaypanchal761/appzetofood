@@ -53,7 +53,33 @@ const formatFullAddress = (address) => {
 
 export default function Cart() {
   const navigate = useNavigate()
-  const { cart, updateQuantity, addToCart, getCartCount, clearCart } = useCart()
+  
+  // Defensive check: Ensure CartProvider is available
+  let cartContext;
+  try {
+    cartContext = useCart();
+  } catch (error) {
+    console.error('❌ CartProvider not found. Make sure Cart component is rendered within UserLayout.');
+    // Return early with error message
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5] dark:bg-[#0a0a0a]">
+        <div className="text-center p-8">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Cart Error</h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Cart functionality is not available. Please refresh the page.
+          </p>
+          <button
+            onClick={() => navigate('/')}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Go to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  const { cart, updateQuantity, addToCart, getCartCount, clearCart } = cartContext;
   const { getDefaultAddress, getDefaultPaymentMethod, addresses, paymentMethods, userProfile } = useProfile()
   const { createOrder } = useOrders()
   const { location: currentLocation } = useUserLocation() // Get live location address
@@ -178,21 +204,64 @@ export default function Cart() {
       // Strategy 1: Try using restaurantId from cart if available
       if (cart[0]?.restaurantId) {
         try {
-          console.log("🔄 Fetching restaurant data by restaurantId from cart:", cart[0].restaurantId)
-          const response = await restaurantAPI.getRestaurantById(cart[0].restaurantId)
+          const cartRestaurantId = cart[0].restaurantId;
+          const cartRestaurantName = cart[0].restaurant;
+          
+          console.log("🔄 Fetching restaurant data by restaurantId from cart:", cartRestaurantId)
+          const response = await restaurantAPI.getRestaurantById(cartRestaurantId)
           const data = response?.data?.data?.restaurant || response?.data?.restaurant
+          
           if (data) {
+            // CRITICAL: Validate that fetched restaurant matches cart items
+            const fetchedRestaurantId = data.restaurantId || data._id?.toString();
+            const fetchedRestaurantName = data.name;
+            
+            // Check if restaurantId matches
+            const restaurantIdMatches = 
+              fetchedRestaurantId === cartRestaurantId ||
+              data._id?.toString() === cartRestaurantId ||
+              data.restaurantId === cartRestaurantId;
+            
+            // Check if restaurant name matches (if available in cart)
+            const restaurantNameMatches = 
+              !cartRestaurantName || 
+              fetchedRestaurantName?.toLowerCase().trim() === cartRestaurantName.toLowerCase().trim();
+            
+            if (!restaurantIdMatches) {
+              console.error('❌ CRITICAL: Fetched restaurant ID does not match cart restaurantId!', {
+                cartRestaurantId: cartRestaurantId,
+                fetchedRestaurantId: fetchedRestaurantId,
+                fetched_id: data._id?.toString(),
+                fetched_restaurantId: data.restaurantId,
+                cartRestaurantName: cartRestaurantName,
+                fetchedRestaurantName: fetchedRestaurantName
+              });
+              // Don't set restaurantData if IDs don't match - this prevents wrong restaurant assignment
+              setLoadingRestaurant(false);
+              return;
+            }
+            
+            if (!restaurantNameMatches) {
+              console.warn('⚠️ WARNING: Restaurant name mismatch:', {
+                cartRestaurantName: cartRestaurantName,
+                fetchedRestaurantName: fetchedRestaurantName
+              });
+              // Still proceed but log warning
+            }
+            
             console.log("✅ Restaurant data loaded from cart restaurantId:", {
               _id: data._id,
               restaurantId: data.restaurantId,
-              name: data.name
+              name: data.name,
+              cartRestaurantId: cartRestaurantId,
+              cartRestaurantName: cartRestaurantName
             })
             setRestaurantData(data)
             setLoadingRestaurant(false)
             return
           }
         } catch (error) {
-          console.warn("⚠️ Failed to fetch by cart restaurantId, trying fallback...")
+          console.warn("⚠️ Failed to fetch by cart restaurantId, trying fallback...", error)
         }
       }
 
@@ -219,11 +288,28 @@ export default function Cart() {
           }
           
           if (matchingRestaurant) {
+            // CRITICAL: Validate that the found restaurant matches cart items
+            const cartRestaurantName = cart[0]?.restaurant?.toLowerCase().trim();
+            const foundRestaurantName = matchingRestaurant.name?.toLowerCase().trim();
+            
+            if (cartRestaurantName && foundRestaurantName && cartRestaurantName !== foundRestaurantName) {
+              console.error("❌ CRITICAL: Restaurant name mismatch!", {
+                cartRestaurantName: cart[0]?.restaurant,
+                foundRestaurantName: matchingRestaurant.name,
+                cartRestaurantId: cart[0]?.restaurantId,
+                foundRestaurantId: matchingRestaurant.restaurantId || matchingRestaurant._id
+              });
+              // Don't set restaurantData if names don't match - this prevents wrong restaurant assignment
+              setLoadingRestaurant(false);
+              return;
+            }
+            
             console.log("✅ Found restaurant by name:", {
               name: matchingRestaurant.name,
               _id: matchingRestaurant._id,
               restaurantId: matchingRestaurant.restaurantId,
-              slug: matchingRestaurant.slug
+              slug: matchingRestaurant.slug,
+              cartRestaurantName: cart[0]?.restaurant
             })
             setRestaurantData(matchingRestaurant)
             setLoadingRestaurant(false)
@@ -611,12 +697,146 @@ export default function Cart() {
       console.log("🌐 Making request to:", fullUrl)
       console.log("🔑 Authentication token present:", !!localStorage.getItem('accessToken') || !!localStorage.getItem('user_accessToken'))
       
+      // CRITICAL: Validate restaurant ID before placing order
+      // Ensure we're using the correct restaurant from restaurantData (most reliable)
+      const finalRestaurantId = restaurantData?.restaurantId || restaurantData?._id || null;
+      const finalRestaurantName = restaurantData?.name || null;
+      
+      if (!finalRestaurantId) {
+        console.error('❌ CRITICAL: Cannot place order - Restaurant ID is missing!');
+        console.error('📋 Debug info:', {
+          restaurantData: restaurantData ? {
+            _id: restaurantData._id,
+            restaurantId: restaurantData.restaurantId,
+            name: restaurantData.name
+          } : 'Not loaded',
+          cartRestaurantId: restaurantId,
+          cartRestaurantName: cart[0]?.restaurant,
+          cartItems: cart.map(item => ({
+            id: item.id,
+            name: item.name,
+            restaurant: item.restaurant,
+            restaurantId: item.restaurantId
+          }))
+        });
+        alert('Error: Restaurant information is missing. Please refresh the page and try again.');
+        setIsPlacingOrder(false);
+        return;
+      }
+      
+      // CRITICAL: Validate that ALL cart items belong to the SAME restaurant
+      const cartRestaurantIds = cart
+        .map(item => item.restaurantId)
+        .filter(Boolean);
+      
+      const cartRestaurantNames = cart
+        .map(item => item.restaurant)
+        .filter(Boolean);
+      
+      const uniqueRestaurantIds = [...new Set(cartRestaurantIds)];
+      const uniqueRestaurantNames = [...new Set(cartRestaurantNames)];
+      
+      // Check if cart has items from multiple restaurants
+      if (uniqueRestaurantIds.length > 1) {
+        console.error('❌ CRITICAL ERROR: Cart contains items from multiple restaurants!', {
+          restaurantIds: uniqueRestaurantIds,
+          restaurantNames: uniqueRestaurantNames,
+          cartItems: cart.map(item => ({
+            id: item.id,
+            name: item.name,
+            restaurant: item.restaurant,
+            restaurantId: item.restaurantId
+          }))
+        });
+        alert('Error: Your cart contains items from different restaurants. Please clear cart and add items from one restaurant only.');
+        setIsPlacingOrder(false);
+        return;
+      }
+      
+      // Validate that cart items' restaurantId matches the restaurantData
+      if (cartRestaurantIds.length > 0) {
+        const cartRestaurantId = cartRestaurantIds[0];
+        
+        // Check if cart restaurantId matches restaurantData
+        const restaurantIdMatches = 
+          cartRestaurantId === finalRestaurantId ||
+          cartRestaurantId === restaurantData?._id?.toString() ||
+          cartRestaurantId === restaurantData?.restaurantId;
+        
+        if (!restaurantIdMatches) {
+          console.error('❌ CRITICAL ERROR: Cart restaurantId does not match restaurantData!', {
+            cartRestaurantId: cartRestaurantId,
+            finalRestaurantId: finalRestaurantId,
+            restaurantDataId: restaurantData?._id?.toString(),
+            restaurantDataRestaurantId: restaurantData?.restaurantId,
+            restaurantDataName: restaurantData?.name,
+            cartRestaurantName: cartRestaurantNames[0]
+          });
+          alert(`Error: Cart items belong to "${cartRestaurantNames[0] || 'Unknown Restaurant'}" but restaurant data doesn't match. Please refresh the page and try again.`);
+          setIsPlacingOrder(false);
+          return;
+        }
+      }
+      
+      // Validate restaurant name matches
+      if (cartRestaurantNames.length > 0 && finalRestaurantName) {
+        const cartRestaurantName = cartRestaurantNames[0];
+        if (cartRestaurantName.toLowerCase().trim() !== finalRestaurantName.toLowerCase().trim()) {
+          console.error('❌ CRITICAL ERROR: Restaurant name mismatch!', {
+            cartRestaurantName: cartRestaurantName,
+            finalRestaurantName: finalRestaurantName
+          });
+          alert(`Error: Cart items belong to "${cartRestaurantName}" but restaurant data shows "${finalRestaurantName}". Please refresh the page and try again.`);
+          setIsPlacingOrder(false);
+          return;
+        }
+      }
+      
+      // Log order details for debugging
+      console.log('✅ Order validation passed - Placing order with restaurant:', {
+        restaurantId: finalRestaurantId,
+        restaurantName: finalRestaurantName,
+        restaurantDataId: restaurantData?._id,
+        restaurantDataRestaurantId: restaurantData?.restaurantId,
+        cartRestaurantId: cartRestaurantIds[0],
+        cartRestaurantName: cartRestaurantNames[0],
+        cartItemCount: cart.length
+      });
+      
+      // FINAL VALIDATION: Double-check restaurantId before sending to backend
+      const cartRestaurantId = cart[0]?.restaurantId;
+      if (cartRestaurantId && cartRestaurantId !== finalRestaurantId && 
+          cartRestaurantId !== restaurantData?._id?.toString() && 
+          cartRestaurantId !== restaurantData?.restaurantId) {
+        console.error('❌ CRITICAL: Final validation failed - restaurantId mismatch!', {
+          cartRestaurantId: cartRestaurantId,
+          finalRestaurantId: finalRestaurantId,
+          restaurantDataId: restaurantData?._id?.toString(),
+          restaurantDataRestaurantId: restaurantData?.restaurantId,
+          cartRestaurantName: cart[0]?.restaurant,
+          finalRestaurantName: finalRestaurantName
+        });
+        alert('Error: Restaurant information mismatch detected. Please refresh the page and try again.');
+        setIsPlacingOrder(false);
+        return;
+      }
+      
+      // Log final order details before sending
+      console.log('📤 FINAL: Sending order to backend with:', {
+        restaurantId: finalRestaurantId,
+        restaurantName: finalRestaurantName,
+        cartRestaurantId: cartRestaurantId,
+        cartRestaurantName: cart[0]?.restaurant,
+        itemCount: orderItems.length,
+        totalAmount: orderPricing.total
+      });
+      
       // Create order in backend
       const orderResponse = await orderAPI.createOrder({
         items: orderItems,
         address: defaultAddress,
-        restaurantId: restaurantData?.restaurantId || restaurantData?._id || restaurantId || "unknown",
-        restaurantName: restaurantData?.name || cart[0]?.restaurant || "Unknown Restaurant",
+        restaurantId: finalRestaurantId,
+        restaurantName: finalRestaurantName,
         pricing: orderPricing,
         deliveryFleet: deliveryFleet || 'standard',
         note: note || "",

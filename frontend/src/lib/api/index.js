@@ -549,6 +549,11 @@ export const restaurantAPI = {
   getCouponsByItemId: (itemId) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.COUPONS_BY_ITEM_ID.replace(':itemId', itemId));
   },
+
+  // Finance operations (for restaurant module)
+  getFinance: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.FINANCE, { params });
+  },
 };
 
 // Export delivery API helper functions
@@ -1104,6 +1109,23 @@ export const adminAPI = {
 
   rejectFoodItem: (id, reason) => {
     return apiClient.post(API_ENDPOINTS.ADMIN.FOOD_APPROVAL_REJECT.replace(':id', id), { reason });
+  },
+
+  // Feedback Experience Management
+  createFeedbackExperience: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.FEEDBACK_EXPERIENCE, data);
+  },
+
+  getFeedbackExperiences: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.FEEDBACK_EXPERIENCE, { params });
+  },
+
+  getFeedbackExperienceById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.FEEDBACK_EXPERIENCE_BY_ID.replace(':id', id));
+  },
+
+  deleteFeedbackExperience: (id) => {
+    return apiClient.delete(API_ENDPOINTS.ADMIN.FEEDBACK_EXPERIENCE_BY_ID.replace(':id', id));
   },
 };
 

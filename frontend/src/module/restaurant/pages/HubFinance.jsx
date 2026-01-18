@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { Bell, HelpCircle, Menu, ChevronDown, Calendar, Download, ArrowRight, FileText, FileDown } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
+import { restaurantAPI } from "@/lib/api"
 
 export default function HubFinance() {
   const navigate = useNavigate()
@@ -14,36 +15,155 @@ export default function HubFinance() {
   const [selectedDateRange, setSelectedDateRange] = useState("14 Nov - 14 Dec'25")
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const downloadMenuRef = useRef(null)
+  const [financeData, setFinanceData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [pastCyclesData, setPastCyclesData] = useState(null)
+  const [loadingPastCycles, setLoadingPastCycles] = useState(false)
+  const [restaurantData, setRestaurantData] = useState(null)
+  const [loadingRestaurant, setLoadingRestaurant] = useState(true)
 
-  // Get current cycle dates
+  // Fetch finance data on mount
+  useEffect(() => {
+    const fetchFinanceData = async () => {
+      try {
+        setLoading(true)
+        const response = await restaurantAPI.getFinance()
+        if (response.data?.success && response.data?.data) {
+          setFinanceData(response.data.data)
+          console.log('✅ Finance data fetched:', response.data.data)
+        }
+      } catch (error) {
+        // Suppress 401 errors as they're handled by axios interceptor (token refresh/redirect)
+        if (error.response?.status !== 401) {
+          console.error('❌ Error fetching finance data:', error)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchFinanceData()
+  }, [])
+
+  // Fetch restaurant data for header display
+  useEffect(() => {
+    // Use restaurant data from financeData if available, otherwise fetch separately
+    if (financeData?.restaurant) {
+      setRestaurantData(financeData.restaurant)
+    } else {
+      const fetchRestaurantData = async () => {
+        try {
+          const response = await restaurantAPI.getRestaurantByOwner()
+          const data = response?.data?.data?.restaurant || response?.data?.restaurant || response?.data?.data
+          if (data) {
+            setRestaurantData({
+              name: data.name,
+              restaurantId: data.restaurantId || data._id,
+              address: data.location?.address || data.location?.formattedAddress || data.address || ''
+            })
+          }
+        } catch (error) {
+          // Suppress 401 errors as they're handled by axios interceptor
+          if (error.response?.status !== 401) {
+            console.error('❌ Error fetching restaurant data:', error)
+          }
+        }
+      }
+      fetchRestaurantData()
+    }
+  }, [financeData])
+
+  // Format restaurant ID to REST###### format (e.g., REST005678)
+  const formatRestaurantId = (restaurantId) => {
+    if (!restaurantId) return ''
+    
+    // Extract numeric part from the end (e.g., "REST-1768762345335-5678" -> "5678")
+    const strId = String(restaurantId)
+    const numericMatch = strId.match(/(\d+)$/)
+    
+    if (numericMatch) {
+      const numericPart = numericMatch[1]
+      // Take last 6 digits and pad with zeros if needed
+      const lastDigits = numericPart.slice(-6).padStart(6, '0')
+      return `REST${lastDigits}`
+    }
+    
+    // Fallback: if no numeric part found, use original
+    return strId
+  }
+
+  // Get current cycle dates from API response or use default
   const currentCycleDates = useMemo(() => {
+    if (financeData?.currentCycle) {
+      return {
+        start: financeData.currentCycle.start.day,
+        end: financeData.currentCycle.end.day,
+        month: financeData.currentCycle.start.month,
+        year: financeData.currentCycle.start.year
+      }
+    }
     return {
       start: "15",
       end: "21",
       month: "Dec",
       year: "25"
     }
-  }, [])
+  }, [financeData])
 
   const handleViewDetails = () => {
     navigate("/restaurant/finance-details")
   }
 
-  // Prepare report data
+  // Fetch past cycles data when date range changes
+  const fetchPastCyclesData = async (startDate, endDate) => {
+    if (!startDate || !endDate) {
+      setPastCyclesData(null)
+      return
+    }
+
+    try {
+      setLoadingPastCycles(true)
+      const response = await restaurantAPI.getFinance({
+        startDate,
+        endDate
+      })
+      if (response.data?.success && response.data?.data?.pastCycles) {
+        setPastCyclesData(response.data.data.pastCycles)
+        console.log('✅ Past cycles data fetched:', response.data.data.pastCycles)
+      } else {
+        setPastCyclesData(null)
+      }
+    } catch (error) {
+      // Suppress 401 errors as they're handled by axios interceptor (token refresh/redirect)
+      if (error.response?.status !== 401) {
+        console.error('❌ Error fetching past cycles data:', error)
+      }
+      setPastCyclesData(null)
+    } finally {
+      setLoadingPastCycles(false)
+    }
+  }
+
+  // Prepare report data from real finance data
   const getReportData = () => {
+    const restaurantName = financeData?.restaurant?.name || "Restaurant"
+    const restaurantId = financeData?.restaurant?.restaurantId || "N/A"
+    const currentCycle = financeData?.currentCycle || {}
+    
     return {
-      restaurantName: "Kadhai Chammach Restaurant",
-      restaurantId: "20959122",
+      restaurantName,
+      restaurantId,
       dateRange: selectedDateRange,
       currentCycle: {
         start: currentCycleDates.start,
         end: currentCycleDates.end,
         month: currentCycleDates.month,
         year: currentCycleDates.year,
-        estimatedPayout: "₹0.00",
-        orders: 0,
-        payoutDate: "-"
-      }
+        estimatedPayout: `₹${(currentCycle.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        orders: currentCycle.totalOrders || 0,
+        payoutDate: currentCycle.payoutDate ? new Date(currentCycle.payoutDate).toLocaleDateString('en-IN') : "-"
+      },
+      pastCycles: pastCyclesData
     }
   }
 
@@ -255,12 +375,25 @@ export default function HubFinance() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">
                 <p className="text-lg font-bold text-gray-900 truncate">
-                  Kadhai Chammach Res...
+                  {restaurantData?.name || financeData?.restaurant?.name || "Restaurant"}
                 </p>
                 <ChevronDown className="w-4 h-4 text-gray-600 flex-shrink-0" />
               </div>
               <p className="text-xs text-gray-600 mt-0.5">
-                ID: 20959122 • By Pass Road (South), ...
+                {(() => {
+                  const restaurantId = restaurantData?.restaurantId || financeData?.restaurant?.restaurantId
+                  const address = restaurantData?.address || financeData?.restaurant?.address || ''
+                  const parts = []
+                  if (restaurantId) {
+                    const formattedId = formatRestaurantId(restaurantId)
+                    parts.push(`ID: ${formattedId}`)
+                  }
+                  if (address) {
+                    const shortAddress = address.length > 40 ? address.substring(0, 40) + '...' : address
+                    parts.push(shortAddress)
+                  }
+                  return parts.length > 0 ? parts.join(' • ') : 'Loading...'
+                })()}
               </p>
             </div>
           </div>
@@ -321,23 +454,35 @@ export default function HubFinance() {
             <div>
               <h2 className="text-base font-bold text-gray-900 mb-3">Current cycle</h2>
               <div className="bg-white rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-2">Est. payout ({currentCycleDates.start} - {currentCycleDates.end} {currentCycleDates.month})</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">₹0.00</p>
-                <p className="text-sm text-gray-600 mb-4">0 orders</p>
-                <div className="border-t border-dashed border-gray-300 pt-4 mb-4">
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="text-xs text-gray-600 mb-1">Payout for</p>
-                      <p className="text-sm font-semibold text-gray-900">
-                        {currentCycleDates.start} - {currentCycleDates.end} {currentCycleDates.month}'{currentCycleDates.year}
-                      </p>
+                {loading ? (
+                  <div className="py-8 text-center text-gray-500">Loading...</div>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-600 mb-2">Est. payout ({currentCycleDates.start} - {currentCycleDates.end} {currentCycleDates.month})</p>
+                    <p className="text-4xl font-bold text-gray-900 mb-2">
+                      ₹{(financeData?.currentCycle?.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-sm text-gray-600 mb-4">
+                      {financeData?.currentCycle?.totalOrders || 0} {financeData?.currentCycle?.totalOrders === 1 ? 'order' : 'orders'}
+                    </p>
+                    <div className="border-t border-dashed border-gray-300 pt-4 mb-4">
+                      <div className="flex justify-between">
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Payout for</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {currentCycleDates.start} - {currentCycleDates.end} {currentCycleDates.month}'{currentCycleDates.year}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-600 mb-1">Payout date</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {financeData?.currentCycle?.payoutDate ? new Date(financeData.currentCycle.payoutDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '-'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-600 mb-1">Payout date</p>
-                      <p className="text-sm font-semibold text-gray-900">-</p>
-                    </div>
-                  </div>
-                </div>
+                  </>
+                )}
                 <button
                   onClick={handleViewDetails}
                   className="text-blue-600 text-sm font-medium flex items-center gap-1 hover:opacity-70 transition-opacity"
@@ -402,11 +547,33 @@ export default function HubFinance() {
                     </AnimatePresence>
                   </div>
                 </div>
-                <div className=" rounded-lg p-4">
-                  <p className="text-sm text-gray-600 text-center">
-                    No past payouts are available for the selected date range
-                  </p>
-                </div>
+                {loadingPastCycles ? (
+                  <div className="bg-white rounded-lg p-4">
+                    <p className="text-sm text-gray-600 text-center">Loading past cycles...</p>
+                  </div>
+                ) : pastCyclesData && pastCyclesData.totalOrders > 0 ? (
+                  <div className="bg-white rounded-lg p-4 space-y-3">
+                    <div>
+                      <p className="text-xs text-gray-600 mb-2">Est. payout ({pastCyclesData.dateRange?.start?.day || ''} {pastCyclesData.dateRange?.start?.month || ''} - {pastCyclesData.dateRange?.end?.day || ''} {pastCyclesData.dateRange?.end?.month || ''}'{pastCyclesData.dateRange?.end?.year || ''})</p>
+                      <p className="text-2xl font-bold text-gray-900 mb-2">
+                        ₹{(pastCyclesData.estimatedPayout || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-sm text-gray-600">{pastCyclesData.totalOrders || 0} {pastCyclesData.totalOrders === 1 ? 'order' : 'orders'}</p>
+                    </div>
+                    <div className="border-t border-dashed border-gray-300 pt-3">
+                      <div className="flex justify-between text-xs text-gray-600">
+                        <span>Total Order Value: ₹{(pastCyclesData.totalOrderValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        <span>Commission: ₹{(pastCyclesData.totalCommission || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg p-4">
+                    <p className="text-sm text-gray-600 text-center">
+                      No past payouts are available for the selected date range
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

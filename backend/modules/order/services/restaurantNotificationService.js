@@ -27,6 +27,21 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
       return;
     }
 
+    // CRITICAL: Validate restaurantId matches order's restaurantId
+    const orderRestaurantId = order.restaurantId?.toString() || order.restaurantId;
+    const providedRestaurantId = restaurantId?.toString() || restaurantId;
+    
+    if (orderRestaurantId !== providedRestaurantId) {
+      console.error('❌ CRITICAL: RestaurantId mismatch in notification!', {
+        orderRestaurantId: orderRestaurantId,
+        providedRestaurantId: providedRestaurantId,
+        orderId: order.orderId,
+        orderRestaurantName: order.restaurantName
+      });
+      // Use order's restaurantId instead of provided one
+      restaurantId = orderRestaurantId;
+    }
+
     // Get restaurant details
     let restaurant = null;
     if (mongoose.Types.ObjectId.isValid(restaurantId)) {
@@ -39,6 +54,16 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
           { _id: restaurantId }
         ]
       }).lean();
+    }
+    
+    // Validate restaurant name matches order
+    if (restaurant && order.restaurantName && restaurant.name !== order.restaurantName) {
+      console.warn('⚠️ Restaurant name mismatch:', {
+        orderRestaurantName: order.restaurantName,
+        foundRestaurantName: restaurant.name,
+        restaurantId: restaurantId
+      });
+      // Still proceed but log warning
     }
 
     // Prepare order notification data
@@ -94,44 +119,75 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
 
     const primaryRoom = roomVariations[0];
 
-    console.log(`📢 Attempting to notify restaurant ${normalizedRestaurantId} about order ${order.orderId}`);
-    console.log(`📢 Room variations:`, roomVariations);
-    console.log(`📢 Connected sockets in primary room ${primaryRoom}:`, socketsInRoom.length);
+    console.log(`📢 CRITICAL: Attempting to notify restaurant about new order:`);
+    console.log(`📢 Order ID: ${order.orderId}`);
+    console.log(`📢 Order MongoDB ID: ${order._id?.toString()}`);
+    console.log(`📢 Restaurant ID (normalized): ${normalizedRestaurantId}`);
+    console.log(`📢 Restaurant Name: ${order.restaurantName}`);
+    console.log(`📢 Restaurant ID from order: ${order.restaurantId}`);
+    console.log(`📢 Room variations to try:`, roomVariations);
+    console.log(`📢 Connected sockets in primary room ${primaryRoom}: ${socketsInRoom.length}`);
 
-    // Emit new order notification to all room variations
-    roomVariations.forEach(room => {
-      restaurantNamespace.to(room).emit('new_order', orderNotification);
-      restaurantNamespace.to(room).emit('play_notification_sound', {
-        type: 'new_order',
-        orderId: order.orderId,
-        message: `New order received: ${order.orderId}`
+    // CRITICAL: Only emit to the specific restaurant room - NEVER broadcast to all restaurants
+    // This ensures orders only go to the correct restaurant
+    if (socketsInRoom.length > 0) {
+      // Found sockets in the restaurant room - send notification only to that room
+      roomVariations.forEach(room => {
+        restaurantNamespace.to(room).emit('new_order', orderNotification);
+        restaurantNamespace.to(room).emit('play_notification_sound', {
+          type: 'new_order',
+          orderId: order.orderId,
+          message: `New order received: ${order.orderId}`
+        });
+        console.log(`📤 Sent notification to room: ${room}`);
       });
-    });
-
-    // Also emit to all sockets in the restaurant namespace (fallback if no specific room found)
-    // This ensures order notification reaches restaurant even if room join failed
-    if (socketsInRoom.length === 0) {
-      console.warn(`⚠️ No sockets connected in any restaurant room, broadcasting to all restaurant sockets`);
-      console.warn(`⚠️ This means restaurant ${normalizedRestaurantId} is not connected to Socket.IO`);
-      console.warn(`⚠️ Restaurant should check Socket.IO connection on frontend`);
+      console.log(`✅ Notified restaurant ${normalizedRestaurantId} about new order ${order.orderId} (${socketsInRoom.length} socket(s) connected)`);
+    } else {
+      // No sockets found in restaurant room - log error but DO NOT broadcast to all restaurants
+      console.error(`❌ CRITICAL: No sockets found for restaurant ${normalizedRestaurantId} in any room!`);
+      console.error(`❌ Order ${order.orderId} will NOT be delivered to restaurant ${normalizedRestaurantId}`);
+      console.error(`❌ Room variations tried:`, roomVariations);
+      console.error(`❌ Restaurant name: ${order.restaurantName}`);
+      console.error(`❌ Restaurant ID from order: ${order.restaurantId}`);
+      console.error(`❌ Normalized restaurant ID: ${normalizedRestaurantId}`);
       
-      // Broadcast to all restaurant sockets as fallback
-      restaurantNamespace.emit('new_order', orderNotification);
-      restaurantNamespace.emit('play_notification_sound', {
-        type: 'new_order',
-        orderId: order.orderId,
-        message: `New order received: ${order.orderId}`
-      });
-      
-      // Log all connected restaurant socket IDs for debugging
+      // Log all connected restaurant sockets for debugging (but don't send to them)
       const allSockets = await restaurantNamespace.fetchSockets();
       console.log(`📊 Total restaurant sockets connected: ${allSockets.length}`);
       if (allSockets.length > 0) {
-        console.log(`📊 Connected restaurant socket IDs:`, allSockets.map(s => s.id));
+        // Get room information for each socket
+        const socketRooms = [];
+        for (const socket of allSockets) {
+          const rooms = Array.from(socket.rooms);
+          socketRooms.push({
+            socketId: socket.id,
+            rooms: rooms.filter(r => r.startsWith('restaurant:'))
+          });
+        }
+        console.log(`📊 Connected restaurant sockets and their rooms:`, socketRooms);
       }
+      
+      // Still try to emit to room variations (in case socket connects later)
+      // But DO NOT broadcast to all restaurants
+      roomVariations.forEach(room => {
+        restaurantNamespace.to(room).emit('new_order', orderNotification);
+        restaurantNamespace.to(room).emit('play_notification_sound', {
+          type: 'new_order',
+          orderId: order.orderId,
+          message: `New order received: ${order.orderId}`
+        });
+        console.log(`📤 Emitted to room ${room} (no sockets found, but room exists for future connections)`);
+      });
+      
+      // Return error instead of success
+      return {
+        success: false,
+        restaurantId,
+        orderId: order.orderId,
+        error: 'Restaurant not connected to Socket.IO',
+        message: `Restaurant ${normalizedRestaurantId} (${order.restaurantName}) is not connected. Order notification not sent.`
+      };
     }
-
-    console.log(`✅ Notified restaurant ${normalizedRestaurantId} about new order ${order.orderId}`);
 
     return {
       success: true,
