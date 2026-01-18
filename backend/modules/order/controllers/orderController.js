@@ -108,6 +108,14 @@ export const createOrder = async (req, res) => {
     assignedRestaurantId = restaurant._id?.toString() || restaurant.restaurantId;
     assignedRestaurantName = restaurant.name;
 
+    // Log restaurant assignment for debugging
+    logger.info('Restaurant assigned to order:', {
+      restaurantId: assignedRestaurantId,
+      restaurantName: assignedRestaurantName,
+      restaurant_id: restaurant._id?.toString(),
+      restaurant_restaurantId: restaurant.restaurantId
+    });
+
     // Generate order ID before creating order
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000);
@@ -141,6 +149,16 @@ export const createOrder = async (req, res) => {
     });
 
     await order.save();
+
+    // Log order creation for debugging
+    logger.info('Order created successfully:', {
+      orderId: order.orderId,
+      orderMongoId: order._id.toString(),
+      restaurantId: order.restaurantId,
+      userId: order.userId,
+      status: order.status,
+      total: order.pricing.total
+    });
 
     // Note: Restaurant notification will be sent after payment verification in verifyOrderPayment
     // This ensures restaurant only receives orders after successful payment
@@ -327,11 +345,29 @@ export const verifyOrderPayment = async (req, res) => {
     // Notify restaurant about confirmed order (payment verified)
     try {
       const restaurantId = order.restaurantId?.toString() || order.restaurantId;
+      
+      // Log notification attempt with detailed info
+      logger.info('Attempting to notify restaurant about confirmed order:', {
+        orderId: order.orderId,
+        orderMongoId: order._id.toString(),
+        restaurantId: restaurantId,
+        restaurantIdType: typeof restaurantId,
+        orderRestaurantId: order.restaurantId,
+        orderRestaurantIdType: typeof order.restaurantId,
+        orderStatus: order.status
+      });
+      
       await notifyRestaurantNewOrder(order, restaurantId);
-      logger.info(`Notified restaurant ${restaurantId} about confirmed order ${order.orderId}`);
+      logger.info(`✅ Successfully notified restaurant ${restaurantId} about confirmed order ${order.orderId}`);
     } catch (notificationError) {
-      logger.error(`Error notifying restaurant after payment verification: ${notificationError.message}`);
+      logger.error(`❌ Error notifying restaurant after payment verification:`, {
+        error: notificationError.message,
+        stack: notificationError.stack,
+        orderId: order.orderId,
+        restaurantId: order.restaurantId
+      });
       // Don't fail payment verification if notification fails
+      // Order is still saved and restaurant can fetch it via API
     }
 
     logger.info(`Order payment verified: ${order.orderId}`, {
