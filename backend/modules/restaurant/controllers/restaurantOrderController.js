@@ -30,21 +30,40 @@ export const getRestaurantOrders = asyncHandler(async (req, res) => {
     // Try multiple restaurantId formats to handle different storage formats
     const restaurantIdVariations = [restaurantIdString];
     
-    // Also add ObjectId string format if valid
+    // Also add ObjectId string format if valid (both directions)
     if (mongoose.Types.ObjectId.isValid(restaurantIdString)) {
       const objectIdString = new mongoose.Types.ObjectId(restaurantIdString).toString();
       if (!restaurantIdVariations.includes(objectIdString)) {
         restaurantIdVariations.push(objectIdString);
       }
+      
+      // Also try the original ObjectId if restaurantIdString is already a string
+      try {
+        const objectId = new mongoose.Types.ObjectId(restaurantIdString);
+        const objectIdStr = objectId.toString();
+        if (!restaurantIdVariations.includes(objectIdStr)) {
+          restaurantIdVariations.push(objectIdStr);
+        }
+      } catch (e) {
+        // Ignore if not a valid ObjectId
+      }
     }
+    
+    // Also try direct match without ObjectId conversion
+    restaurantIdVariations.push(restaurantIdString);
 
     // Build query - search for orders with any matching restaurantId variation
+    // Use $in for multiple variations and also try direct match as fallback
     const query = {
-      restaurantId: { $in: restaurantIdVariations }
+      $or: [
+        { restaurantId: { $in: restaurantIdVariations } },
+        // Direct match fallback
+        { restaurantId: restaurantIdString }
+      ]
     };
 
     // If status filter is provided, add it to query
-    if (status) {
+    if (status && status !== 'all') {
       query.status = status;
     }
 
@@ -54,8 +73,9 @@ export const getRestaurantOrders = asyncHandler(async (req, res) => {
       restaurantId: restaurantIdString,
       restaurant_id: restaurant._id?.toString(),
       restaurant_restaurantId: restaurant.restaurantId,
-      query,
-      status
+      restaurantIdVariations: restaurantIdVariations,
+      query: JSON.stringify(query),
+      status: status || 'all'
     });
 
     const orders = await Order.find(query)
@@ -67,12 +87,45 @@ export const getRestaurantOrders = asyncHandler(async (req, res) => {
 
     const total = await Order.countDocuments(query);
 
+    // Log detailed order info for debugging
     console.log('✅ Found orders:', {
       count: orders.length,
       total,
       restaurantId: restaurantIdString,
-      orders: orders.map(o => ({ orderId: o.orderId, status: o.status, restaurantId: o.restaurantId }))
+      queryUsed: JSON.stringify(query),
+      orders: orders.map(o => ({ 
+        orderId: o.orderId, 
+        status: o.status, 
+        restaurantId: o.restaurantId,
+        restaurantIdType: typeof o.restaurantId,
+        createdAt: o.createdAt
+      }))
     });
+    
+    // If no orders found, log a warning with more details
+    if (orders.length === 0 && total === 0) {
+      console.warn('⚠️ No orders found for restaurant:', {
+        restaurantId: restaurantIdString,
+        restaurant_id: restaurant._id?.toString(),
+        variationsTried: restaurantIdVariations,
+        query: JSON.stringify(query)
+      });
+      
+      // Try to find ANY orders in database for debugging
+      const allOrdersCount = await Order.countDocuments({});
+      console.log(`📊 Total orders in database: ${allOrdersCount}`);
+      
+      // Check if orders exist with similar restaurantId
+      const sampleOrders = await Order.find({}).limit(5).select('orderId restaurantId status').lean();
+      if (sampleOrders.length > 0) {
+        console.log('📊 Sample orders in database (first 5):', sampleOrders.map(o => ({
+          orderId: o.orderId,
+          restaurantId: o.restaurantId,
+          restaurantIdType: typeof o.restaurantId,
+          status: o.status
+        })));
+      }
+    }
 
     return successResponse(res, 200, 'Orders retrieved successfully', {
       orders,
