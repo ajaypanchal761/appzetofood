@@ -14,15 +14,18 @@ if (API_BASE_URL.includes('5173')) {
   console.error('💡 Or remove VITE_API_BASE_URL to use default: http://localhost:5000/api');
 }
 
-// Log API base URL in development for debugging
-if (import.meta.env.DEV) {
-  console.log('🌐 API Base URL:', API_BASE_URL);
-  console.log('🌐 Backend URL:', API_BASE_URL.replace('/api', ''));
-  console.log('🌐 Frontend URL:', window.location.origin);
-  console.log('🌐 Environment:', import.meta.env.MODE);
-  
-  // Backend health check removed - errors handled by axios interceptor
-  // Health check will be performed when actual API calls are made
+// Log API base URL in both development and production for debugging
+console.log('🌐 API Base URL:', API_BASE_URL);
+console.log('🌐 Backend URL:', API_BASE_URL.replace('/api', ''));
+console.log('🌐 Frontend URL:', window.location.origin);
+console.log('🌐 Environment:', import.meta.env.MODE);
+console.log('🌐 VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL || 'Not set (using default)');
+
+// Warn if API_BASE_URL is localhost in production
+if (import.meta.env.MODE === 'production' && API_BASE_URL.includes('localhost')) {
+  console.error('❌ WARNING: API_BASE_URL is set to localhost in production!');
+  console.error('💡 Fix: Set VITE_API_BASE_URL environment variable to your production backend URL');
+  console.error('💡 Example: VITE_API_BASE_URL=https://your-backend-domain.com/api');
 }
 
 // API endpoints

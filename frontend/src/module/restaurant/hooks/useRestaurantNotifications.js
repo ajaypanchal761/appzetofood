@@ -43,7 +43,16 @@ export const useRestaurantNotifications = () => {
     
     console.log('🔌 Attempting to connect to Socket.IO:', socketUrl);
     console.log('🔌 Backend URL:', backendUrl);
+    console.log('🔌 API_BASE_URL:', API_BASE_URL);
     console.log('🔌 Restaurant ID:', restaurantId);
+    console.log('🔌 Environment:', import.meta.env.MODE);
+    
+    // Warn if trying to connect to localhost in production
+    if (import.meta.env.MODE === 'production' && backendUrl.includes('localhost')) {
+      console.error('❌ CRITICAL: Trying to connect Socket.IO to localhost in production!');
+      console.error('💡 Fix: Set VITE_API_BASE_URL to your production backend URL');
+      console.error('💡 Current socketUrl:', socketUrl);
+    }
 
     // Initialize socket connection to restaurant namespace
     // Use polling first as it's more reliable, websocket will upgrade automatically
@@ -103,26 +112,28 @@ export const useRestaurantNotifications = () => {
 
     // Listen for connection errors
     socketRef.current.on('connect_error', (error) => {
-      // Only log if it's not a transport/network error (backend might be down or network issue)
-      // Socket.IO will automatically retry connection
-      if (error.type !== 'TransportError' && 
-          error.message !== 'xhr poll error' && 
-          error.message !== 'xhr post error' &&
-          !error.message?.includes('websocket error')) {
-        console.error('❌ Restaurant Socket connection error:', error);
-        console.error('❌ Error details:', {
-          message: error.message,
-          type: error.type,
-          description: error.description
-        });
-      } else {
-        // Silently handle transport errors - backend might not be running or network issue
-        // Socket.IO will automatically retry with exponential backoff
-        // Only log in development for debugging
-        if (process.env.NODE_ENV === 'development') {
-          console.log('⏳ Restaurant Socket: Waiting for backend server or network issue...');
-        }
+      // Always log connection errors on production to debug issues
+      console.error('❌ Restaurant Socket connection error:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        type: error.type,
+        description: error.description,
+        socketUrl: socketUrl,
+        backendUrl: backendUrl,
+        restaurantId: restaurantId
+      });
+      
+      // Check if error is due to CORS or wrong URL
+      if (error.message?.includes('CORS') || error.message?.includes('Not allowed')) {
+        console.error('🚫 CORS Error: Socket.IO connection blocked by CORS');
+        console.error('💡 Fix: Add frontend URL to CORS_ORIGIN in backend .env');
       }
+      
+      if (error.message?.includes('ECONNREFUSED') || error.message?.includes('Failed to fetch')) {
+        console.error('🚫 Connection Refused: Backend server not reachable at:', socketUrl);
+        console.error('💡 Fix: Check API_BASE_URL is set correctly for production');
+      }
+      
       setIsConnected(false);
     });
 
