@@ -70,18 +70,35 @@ export const useRestaurantNotifications = () => {
     socketRef.current.on('connect', () => {
       console.log('✅ Restaurant Socket connected, restaurantId:', restaurantId);
       console.log('✅ Socket ID:', socketRef.current.id);
+      console.log('✅ Socket URL:', socketUrl);
       setIsConnected(true);
       
-      // Join restaurant room immediately after connection
+      // Join restaurant room immediately after connection with retry
       if (restaurantId) {
-        console.log('📢 Joining restaurant room with ID:', restaurantId);
-        socketRef.current.emit('join-restaurant', restaurantId);
+        const joinRoom = () => {
+          console.log('📢 Joining restaurant room with ID:', restaurantId);
+          socketRef.current.emit('join-restaurant', restaurantId);
+          
+          // Retry join after 2 seconds if no confirmation received
+          setTimeout(() => {
+            if (socketRef.current?.connected) {
+              console.log('🔄 Retrying restaurant room join...');
+              socketRef.current.emit('join-restaurant', restaurantId);
+            }
+          }, 2000);
+        };
+        
+        joinRoom();
+      } else {
+        console.warn('⚠️ Cannot join restaurant room: restaurantId is missing');
       }
     });
 
     // Listen for room join confirmation
     socketRef.current.on('restaurant-room-joined', (data) => {
       console.log('✅ Restaurant room joined successfully:', data);
+      console.log('✅ Room:', data?.room);
+      console.log('✅ Restaurant ID in room:', data?.restaurantId);
     });
 
     // Listen for connection errors

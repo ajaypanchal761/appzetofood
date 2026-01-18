@@ -109,14 +109,26 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
     });
 
     // Also emit to all sockets in the restaurant namespace (fallback if no specific room found)
+    // This ensures order notification reaches restaurant even if room join failed
     if (socketsInRoom.length === 0) {
       console.warn(`⚠️ No sockets connected in any restaurant room, broadcasting to all restaurant sockets`);
+      console.warn(`⚠️ This means restaurant ${normalizedRestaurantId} is not connected to Socket.IO`);
+      console.warn(`⚠️ Restaurant should check Socket.IO connection on frontend`);
+      
+      // Broadcast to all restaurant sockets as fallback
       restaurantNamespace.emit('new_order', orderNotification);
       restaurantNamespace.emit('play_notification_sound', {
         type: 'new_order',
         orderId: order.orderId,
         message: `New order received: ${order.orderId}`
       });
+      
+      // Log all connected restaurant socket IDs for debugging
+      const allSockets = await restaurantNamespace.fetchSockets();
+      console.log(`📊 Total restaurant sockets connected: ${allSockets.length}`);
+      if (allSockets.length > 0) {
+        console.log(`📊 Connected restaurant socket IDs:`, allSockets.map(s => s.id));
+      }
     }
 
     console.log(`✅ Notified restaurant ${normalizedRestaurantId} about new order ${order.orderId}`);
