@@ -27,8 +27,20 @@ export const getRestaurantOrders = asyncHandler(async (req, res) => {
     }
 
     // Query orders by restaurantId (stored as String in Order model)
+    // Try multiple restaurantId formats to handle different storage formats
+    const restaurantIdVariations = [restaurantIdString];
+    
+    // Also add ObjectId string format if valid
+    if (mongoose.Types.ObjectId.isValid(restaurantIdString)) {
+      const objectIdString = new mongoose.Types.ObjectId(restaurantIdString).toString();
+      if (!restaurantIdVariations.includes(objectIdString)) {
+        restaurantIdVariations.push(objectIdString);
+      }
+    }
+
+    // Build query - search for orders with any matching restaurantId variation
     const query = {
-      restaurantId: restaurantIdString
+      restaurantId: { $in: restaurantIdVariations }
     };
 
     // If status filter is provided, add it to query
@@ -41,6 +53,7 @@ export const getRestaurantOrders = asyncHandler(async (req, res) => {
     console.log('🔍 Fetching orders for restaurant:', {
       restaurantId: restaurantIdString,
       restaurant_id: restaurant._id?.toString(),
+      restaurant_restaurantId: restaurant.restaurantId,
       query,
       status
     });
