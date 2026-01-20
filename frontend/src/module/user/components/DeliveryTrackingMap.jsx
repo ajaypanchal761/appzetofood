@@ -46,54 +46,110 @@ const DeliveryTrackingMap = ({
   const drawRoute = useCallback((start, end, updateETA = true) => {
     if (!mapInstance.current || !directionsServiceRef.current || !directionsRendererRef.current) return;
 
-    directionsServiceRef.current.route({
-      origin: { lat: start.lat, lng: start.lng },
-      destination: { lat: end.lat, lng: end.lng },
-      travelMode: window.google.maps.TravelMode.DRIVING
-    }, (result, status) => {
-      if (status === 'OK' && result) {
-        directionsRendererRef.current.setDirections(result);
-        
-        // Limit zoom after polyline is shown (max zoom 16)
-        setTimeout(() => {
-          if (mapInstance.current) {
-            const currentZoom = mapInstance.current.getZoom();
-            const MAX_ZOOM_POLYLINE = 16;
-            if (currentZoom > MAX_ZOOM_POLYLINE) {
-              mapInstance.current.setZoom(MAX_ZOOM_POLYLINE);
+    // Validate coordinates before making API call
+    if (!start || !end) {
+      console.warn('Invalid coordinates: start or end is missing');
+      return;
+    }
+
+    const startLat = Number(start.lat);
+    const startLng = Number(start.lng);
+    const endLat = Number(end.lat);
+    const endLng = Number(end.lng);
+
+    // Check if coordinates are valid numbers
+    if (isNaN(startLat) || isNaN(startLng) || isNaN(endLat) || isNaN(endLng)) {
+      console.warn('Invalid coordinates: coordinates are not valid numbers', { start, end });
+      return;
+    }
+
+    // Check if coordinates are within valid range
+    if (startLat < -90 || startLat > 90 || endLat < -90 || endLat > 90 ||
+        startLng < -180 || startLng > 180 || endLng < -180 || endLng > 180) {
+      console.warn('Invalid coordinates: coordinates are out of valid range', { start, end });
+      return;
+    }
+
+    // Check if start and end are the same (will cause API error)
+    if (startLat === endLat && startLng === endLng) {
+      console.warn('Invalid route: start and end coordinates are the same');
+      // Use fallback calculation for same location
+      if (updateETA) {
+        setDistance('0 km');
+        setEta('0 mins');
+      }
+      return;
+    }
+
+    try {
+      directionsServiceRef.current.route({
+        origin: { lat: startLat, lng: startLng },
+        destination: { lat: endLat, lng: endLng },
+        travelMode: window.google.maps.TravelMode.DRIVING
+      }, (result, status) => {
+        if (status === 'OK' && result) {
+          directionsRendererRef.current.setDirections(result);
+          
+          // Limit zoom after polyline is shown (max zoom 16)
+          setTimeout(() => {
+            if (mapInstance.current) {
+              const currentZoom = mapInstance.current.getZoom();
+              const MAX_ZOOM_POLYLINE = 16;
+              if (currentZoom > MAX_ZOOM_POLYLINE) {
+                mapInstance.current.setZoom(MAX_ZOOM_POLYLINE);
+              }
+            }
+          }, 100);
+          
+          // Calculate ETA and distance
+          if (updateETA) {
+            const route = result.routes[0];
+            if (route.legs && route.legs.length > 0) {
+              const leg = route.legs[0];
+              const durationInMinutes = Math.ceil(leg.duration.value / 60);
+              const distanceInKm = (leg.distance.value / 1000).toFixed(1);
+              setEta(`${durationInMinutes} mins`);
+              setDistance(`${distanceInKm} km`);
             }
           }
-        }, 100);
-        
-        // Calculate ETA and distance
-        if (updateETA) {
-          const route = result.routes[0];
-          if (route.legs && route.legs.length > 0) {
-            const leg = route.legs[0];
-            const durationInMinutes = Math.ceil(leg.duration.value / 60);
-            const distanceInKm = (leg.distance.value / 1000).toFixed(1);
-            setEta(`${durationInMinutes} mins`);
-            setDistance(`${distanceInKm} km`);
+        } else {
+          // Silently handle errors - don't log UNKNOWN_ERROR as it's often a temporary API issue
+          if (status !== 'UNKNOWN_ERROR') {
+            console.warn('Directions request failed:', status);
+          }
+          // Fallback calculation
+          if (updateETA) {
+            const R = 6371;
+            const dLat = (endLat - startLat) * Math.PI / 180;
+            const dLng = (endLng - startLng) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(startLat * Math.PI / 180) * Math.cos(endLat * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distanceKm = R * c;
+            const estimatedMinutes = Math.ceil((distanceKm / 30) * 60);
+            setDistance(`${distanceKm.toFixed(1)} km`);
+            setEta(`${estimatedMinutes} mins`);
           }
         }
-      } else {
-        console.error('Directions request failed:', status);
-        // Fallback calculation
-        if (updateETA) {
-          const R = 6371;
-          const dLat = (end.lat - start.lat) * Math.PI / 180;
-          const dLng = (end.lng - start.lng) * Math.PI / 180;
-          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(start.lat * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180) *
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          const distanceKm = R * c;
-          const estimatedMinutes = Math.ceil((distanceKm / 30) * 60);
-          setDistance(`${distanceKm.toFixed(1)} km`);
-          setEta(`${estimatedMinutes} mins`);
-        }
+      });
+    } catch (error) {
+      console.warn('Error calling Directions API:', error);
+      // Fallback calculation on error
+      if (updateETA) {
+        const R = 6371;
+        const dLat = (endLat - startLat) * Math.PI / 180;
+        const dLng = (endLng - startLng) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(startLat * Math.PI / 180) * Math.cos(endLat * Math.PI / 180) *
+          Math.sin(dLng/2) * Math.sin(dLng/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distanceKm = R * c;
+        const estimatedMinutes = Math.ceil((distanceKm / 30) * 60);
+        setDistance(`${distanceKm.toFixed(1)} km`);
+        setEta(`${estimatedMinutes} mins`);
       }
-    });
+    }
   }, []);
 
   // Determine which route to show based on order phase
@@ -329,7 +385,12 @@ const DeliveryTrackingMap = ({
           maxZoom: 16, // Maximum zoom during live tracking (limit excessive zoom)
           mapTypeId: window.google.maps.MapTypeId.ROADMAP,
           tilt: 45, // 3D view
-          heading: 0
+          heading: 0,
+          mapTypeControl: false, // Hide Map/Satellite selector
+          fullscreenControl: false, // Hide fullscreen button
+          streetViewControl: false, // Hide street view control
+          zoomControl: true, // Keep zoom controls
+          disableDefaultUI: false // Allow custom controls
         });
         
         // Add zoom listener to limit zoom during live tracking

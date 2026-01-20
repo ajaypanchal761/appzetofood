@@ -5,6 +5,9 @@ import Order from '../../order/models/Order.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import DeliveryWallet from '../models/DeliveryWallet.js';
 import DeliveryBoyCommission from '../../admin/models/DeliveryBoyCommission.js';
+import RestaurantWallet from '../../restaurant/models/RestaurantWallet.js';
+import RestaurantCommission from '../../admin/models/RestaurantCommission.js';
+import AdminCommission from '../../admin/models/AdminCommission.js';
 import { calculateRoute } from '../../order/services/routeCalculationService.js';
 import mongoose from 'mongoose';
 import winston from 'winston';
@@ -1095,6 +1098,118 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       logger.error('❌ Error adding earning to wallet:', walletError);
       console.error('❌ Error processing delivery wallet:', walletError);
       // Don't fail the delivery completion if wallet update fails
+      // But log it for investigation
+    }
+
+    // Calculate restaurant commission and update restaurant wallet
+    let restaurantWalletTransaction = null;
+    let adminCommissionRecord = null;
+    try {
+      // Get order total amount (subtotal, excluding delivery fee and tax for commission calculation)
+      const orderTotal = order.pricing?.subtotal || order.pricing?.total || 0;
+      
+      // Find restaurant by restaurantId (can be string or ObjectId)
+      let restaurant = null;
+      if (mongoose.Types.ObjectId.isValid(order.restaurantId)) {
+        restaurant = await Restaurant.findById(order.restaurantId);
+      } else {
+        restaurant = await Restaurant.findOne({ restaurantId: order.restaurantId });
+      }
+
+      if (!restaurant) {
+        console.warn(`⚠️ Restaurant not found for order ${orderIdForLog}, skipping commission calculation`);
+      } else {
+        // Calculate restaurant commission
+        const commissionResult = await RestaurantCommission.calculateCommissionForOrder(
+          restaurant._id,
+          orderTotal
+        );
+
+        const commissionAmount = commissionResult.commission || 0;
+        const restaurantEarning = orderTotal - commissionAmount;
+
+        console.log(`💰 Restaurant commission calculation for order ${orderIdForLog}:`, {
+          orderTotal: orderTotal,
+          commissionPercentage: commissionResult.value,
+          commissionAmount: commissionAmount,
+          restaurantEarning: restaurantEarning
+        });
+
+        // Update restaurant wallet
+        if (restaurant._id) {
+          const restaurantWallet = await RestaurantWallet.findOrCreateByRestaurantId(restaurant._id);
+          
+          // Check if transaction already exists for this order
+          const existingRestaurantTransaction = restaurantWallet.transactions?.find(
+            t => t.orderId && t.orderId.toString() === orderIdForTransaction && t.type === 'payment'
+          );
+
+          if (existingRestaurantTransaction) {
+            console.warn(`⚠️ Restaurant earning already added for order ${orderIdForLog}, skipping wallet update`);
+          } else {
+            // Add payment transaction to restaurant wallet
+            restaurantWalletTransaction = restaurantWallet.addTransaction({
+              amount: restaurantEarning,
+              type: 'payment',
+              status: 'Completed',
+              description: `Order #${orderIdForLog} - Amount: ₹${orderTotal.toFixed(2)}, Commission: ₹${commissionAmount.toFixed(2)}`,
+              orderId: orderMongoId || order._id
+            });
+
+            await restaurantWallet.save();
+
+            logger.info(`💰 Earning added to restaurant wallet: ${restaurant._id}`, {
+              restaurantId: restaurant.restaurantId || restaurant._id.toString(),
+              orderId: orderIdForLog,
+              orderTotal: orderTotal,
+              commissionAmount: commissionAmount,
+              restaurantEarning: restaurantEarning,
+              walletBalance: restaurantWallet.totalBalance
+            });
+
+            console.log(`✅ Restaurant earning ₹${restaurantEarning.toFixed(2)} added to wallet`);
+            console.log(`💰 New restaurant wallet balance: ₹${restaurantWallet.totalBalance.toFixed(2)}`);
+          }
+        }
+
+        // Track admin commission earned
+        try {
+          // Check if commission record already exists
+          const existingCommission = await AdminCommission.findOne({ orderId: orderMongoId || order._id });
+          
+          if (!existingCommission) {
+            adminCommissionRecord = await AdminCommission.create({
+              orderId: orderMongoId || order._id,
+              orderAmount: orderTotal,
+              commissionAmount: commissionAmount,
+              commissionPercentage: commissionResult.value,
+              restaurantId: restaurant._id,
+              restaurantName: restaurant.name || order.restaurantName,
+              restaurantEarning: restaurantEarning,
+              status: 'completed',
+              orderDate: order.createdAt || new Date()
+            });
+
+            logger.info(`💰 Admin commission recorded: ${commissionAmount}`, {
+              orderId: orderIdForLog,
+              commissionAmount: commissionAmount,
+              orderTotal: orderTotal
+            });
+
+            console.log(`✅ Admin commission ₹${commissionAmount.toFixed(2)} recorded`);
+          } else {
+            console.warn(`⚠️ Admin commission already recorded for order ${orderIdForLog}`);
+          }
+        } catch (adminCommissionError) {
+          logger.error('❌ Error recording admin commission:', adminCommissionError);
+          console.error('❌ Error recording admin commission:', adminCommissionError);
+          // Don't fail the delivery completion if commission tracking fails
+        }
+      }
+    } catch (restaurantWalletError) {
+      logger.error('❌ Error processing restaurant wallet:', restaurantWalletError);
+      console.error('❌ Error processing restaurant wallet:', restaurantWalletError);
+      // Don't fail the delivery completion if restaurant wallet update fails
       // But log it for investigation
     }
 

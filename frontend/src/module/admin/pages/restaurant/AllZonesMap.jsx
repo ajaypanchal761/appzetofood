@@ -11,6 +11,7 @@ export default function AllZonesMap() {
   const mapInstanceRef = useRef(null)
   const zonesPolygonsRef = useRef([])
   const infoWindowsRef = useRef([])
+  const restaurantMarkersRef = useRef([])
   
   const [googleMapsApiKey, setGoogleMapsApiKey] = useState("")
   const [mapLoading, setMapLoading] = useState(true)
@@ -51,10 +52,15 @@ export default function AllZonesMap() {
     }
   }, [mapLoading])
 
-  // Draw zones when map and zones are ready
+  // Draw zones and restaurant markers when map and data are ready
   useEffect(() => {
-    if (!mapLoading && mapInstanceRef.current && zones.length > 0 && window.google && restaurants.length > 0) {
-      drawAllZonesOnMap(window.google, mapInstanceRef.current)
+    if (!mapLoading && mapInstanceRef.current && window.google) {
+      if (zones.length > 0 && restaurants.length > 0) {
+        drawAllZonesOnMap(window.google, mapInstanceRef.current)
+      }
+      if (restaurants.length > 0) {
+        drawRestaurantMarkers(window.google, mapInstanceRef.current)
+      }
     }
   }, [zones, mapLoading, restaurants])
 
@@ -75,7 +81,7 @@ export default function AllZonesMap() {
 
   const fetchRestaurants = async () => {
     try {
-      const response = await adminAPI.getRestaurants({ limit: 100 })
+      const response = await adminAPI.getRestaurants({ limit: 1000 })
       if (response.data?.success && response.data.data?.restaurants) {
         setRestaurants(response.data.data.restaurants)
       }
@@ -153,7 +159,14 @@ export default function AllZonesMap() {
 
   // Draw all zones on the map
   const drawAllZonesOnMap = (google, map) => {
-    if (!zones || zones.length === 0) return
+    if (!zones || zones.length === 0) {
+      // Clear zones if no zones exist
+      zonesPolygonsRef.current.forEach(polygon => {
+        if (polygon) polygon.setMap(null)
+      })
+      zonesPolygonsRef.current = []
+      return
+    }
 
     // Clear previous polygons and info windows
     zonesPolygonsRef.current.forEach(polygon => {
@@ -272,6 +285,94 @@ export default function AllZonesMap() {
     }
   }
 
+  // Draw restaurant markers on the map
+  const drawRestaurantMarkers = (google, map) => {
+    if (!restaurants || restaurants.length === 0) return
+
+    // Clear previous markers
+    restaurantMarkersRef.current.forEach(marker => {
+      if (marker) marker.setMap(null)
+    })
+    restaurantMarkersRef.current = []
+
+    restaurants.forEach(restaurant => {
+      if (!restaurant.location) return
+
+      // Get coordinates from restaurant location
+      let lat = null
+      let lng = null
+
+      if (restaurant.location.coordinates && Array.isArray(restaurant.location.coordinates) && restaurant.location.coordinates.length >= 2) {
+        lng = restaurant.location.coordinates[0]
+        lat = restaurant.location.coordinates[1]
+      } else if (restaurant.location.latitude && restaurant.location.longitude) {
+        lat = parseFloat(restaurant.location.latitude)
+        lng = parseFloat(restaurant.location.longitude)
+      }
+
+      // Skip if no valid coordinates
+      if (!lat || !lng || isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) {
+        return
+      }
+
+      // Validate coordinates are in valid range
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return
+      }
+
+      // Create custom icon for restaurant
+      const restaurantIcon = {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 8,
+        fillColor: "#ef4444", // Red color
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 2,
+      }
+
+      // Create marker
+      const marker = new google.maps.Marker({
+        position: { lat, lng },
+        map: map,
+        icon: restaurantIcon,
+        title: restaurant.name || "Restaurant",
+        zIndex: 1000, // Show above zones
+      })
+
+      // Create info window
+      const infoWindow = new google.maps.InfoWindow({
+        content: `
+          <div style="padding: 12px; min-width: 200px;">
+            <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #1e293b;">
+              ${restaurant.name || 'Unnamed Restaurant'}
+            </h3>
+            <div style="font-size: 13px; color: #64748b; line-height: 1.6;">
+              ${restaurant.location?.formattedAddress || restaurant.location?.address || restaurant.location?.area || 'Location not specified'}
+            </div>
+            ${restaurant.ownerName ? `
+              <div style="margin-top: 8px; font-size: 12px; color: #94a3b8;">
+                <strong>Owner:</strong> ${restaurant.ownerName}
+              </div>
+            ` : ''}
+          </div>
+        `
+      })
+
+      // Add click listener to show info window
+      marker.addListener('click', () => {
+        // Close all other info windows
+        infoWindowsRef.current.forEach(iw => {
+          if (iw && iw !== infoWindow) iw.close()
+        })
+        
+        infoWindow.open(map, marker)
+        infoWindowsRef.current.push(infoWindow)
+      })
+
+      restaurantMarkersRef.current.push(marker)
+    })
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="p-4 lg:p-6">
@@ -352,12 +453,21 @@ export default function AllZonesMap() {
           </div>
 
           {/* Legend */}
-          {zones.length > 0 && !mapLoading && (
+          {!mapLoading && (
             <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-900 mb-2">Zone Information</h3>
-              <p className="text-xs text-slate-600">
-                Click on any zone on the map to view details. Total zones: <strong>{zones.length}</strong>
-              </p>
+              <h3 className="text-sm font-semibold text-slate-900 mb-2">Map Information</h3>
+              <div className="text-xs text-slate-600 space-y-1">
+                {zones.length > 0 && (
+                  <p>
+                    Click on any <span className="font-semibold text-blue-600">zone</span> on the map to view details. Total zones: <strong>{zones.length}</strong>
+                  </p>
+                )}
+                {restaurants.length > 0 && (
+                  <p>
+                    Click on any <span className="font-semibold text-red-600">red marker</span> to view restaurant name and details. Total restaurants: <strong>{restaurants.length}</strong>
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>

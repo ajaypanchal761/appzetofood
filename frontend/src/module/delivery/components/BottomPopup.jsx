@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X } from "lucide-react"
+import { X, ChevronDown } from "lucide-react"
 
 /**
  * BottomPopup Component
@@ -15,6 +15,8 @@ import { X } from "lucide-react"
  * @param {string} maxHeight - Maximum height of popup (default: "90vh")
  * @param {boolean} showHandle - Show drag handle (default: true)
  * @param {boolean} disableSwipeToClose - Disable swipe-to-close functionality (default: false)
+ * @param {boolean} showBackdrop - Show backdrop overlay (default: true)
+ * @param {boolean} backdropBlocksInteraction - Whether backdrop blocks pointer events (default: true)
  */
 export default function BottomPopup({
   isOpen,
@@ -25,7 +27,10 @@ export default function BottomPopup({
   closeOnBackdropClick = true,
   maxHeight = "90vh",
   showHandle = true,
-  disableSwipeToClose = false
+  disableSwipeToClose = false,
+  collapsedContent = null, // Content to show when collapsed (e.g., Reached pickup button)
+  showBackdrop = true, // Show backdrop overlay
+  backdropBlocksInteraction = true // Whether backdrop blocks pointer events
 }) {
   const popupRef = useRef(null)
   const handleRef = useRef(null)
@@ -33,6 +38,7 @@ export default function BottomPopup({
   const isSwiping = useRef(false)
   const [dragY, setDragY] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Reset drag state when popup closes
   useEffect(() => {
@@ -40,13 +46,32 @@ export default function BottomPopup({
       setDragY(0)
       setIsDragging(false)
       isSwiping.current = false
+      setIsCollapsed(false)
     }
   }, [isOpen])
+
+  // Handle collapse toggle
+  const handleCollapseToggle = (e) => {
+    if (e) {
+      e.stopPropagation()
+      e.preventDefault()
+    }
+    setIsCollapsed(prev => {
+      const newState = !prev
+      console.log('🔄 Collapse toggle:', prev, '->', newState)
+      return newState
+    })
+  }
 
   // Handle touch start for swipe detection
   const handleTouchStart = (e) => {
     const target = e.target
     const isHandle = handleRef.current?.contains(target)
+    
+    // If clicking on handle, don't start swipe - handle will toggle collapse
+    if (isHandle) {
+      return
+    }
     
     // Check if touch is in handle area or top portion of popup
     const rect = popupRef.current?.getBoundingClientRect()
@@ -55,8 +80,8 @@ export default function BottomPopup({
     const touchY = e.touches[0].clientY
     const handleArea = rect.top + 80 // Top 80px is swipeable area
     
-    // Allow swipe if touching handle or top area
-    if (isHandle || touchY <= handleArea) {
+    // Allow swipe if touching top area (but not handle)
+    if (touchY <= handleArea) {
       e.stopPropagation()
       swipeStartY.current = touchY
       isSwiping.current = true
@@ -114,13 +139,19 @@ export default function BottomPopup({
     const target = e.target
     const isHandle = handleRef.current?.contains(target)
     
+    // If clicking on handle, don't start swipe - handle will toggle collapse
+    if (isHandle) {
+      e.stopPropagation()
+      return
+    }
+    
     const rect = popupRef.current?.getBoundingClientRect()
     if (!rect) return
     
     const mouseY = e.clientY
     const handleArea = rect.top + 80
     
-    if (isHandle || mouseY <= handleArea) {
+    if (mouseY <= handleArea) {
       e.preventDefault()
       e.stopPropagation()
       swipeStartY.current = mouseY
@@ -186,6 +217,10 @@ export default function BottomPopup({
 
   // Prevent clicks inside popup from closing it
   const handlePopupClick = (e) => {
+    // Don't stop propagation if clicking on handle - let handle handle its own click
+    if (handleRef.current && handleRef.current.contains(e.target)) {
+      return
+    }
     e.stopPropagation()
   }
 
@@ -204,6 +239,7 @@ export default function BottomPopup({
       {isOpen && (
         <>
           {/* Backdrop */}
+          {showBackdrop && backdropBlocksInteraction && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -212,6 +248,7 @@ export default function BottomPopup({
             onClick={handleBackdropClick}
             className="fixed inset-0 bg-black/50 z-[100]"
           />
+          )}
 
           {/* Popup */}
           <motion.div
@@ -238,22 +275,61 @@ export default function BottomPopup({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            onClick={handlePopupClick}
+            onClick={(e) => {
+              // Don't stop propagation if clicking on handle
+              if (handleRef.current && handleRef.current.contains(e.target)) {
+                return
+              }
+              handlePopupClick(e)
+            }}
             className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-[110] overflow-hidden flex flex-col"
             style={{ 
-              maxHeight: maxHeight,
+              maxHeight: isCollapsed ? "120px" : maxHeight,
               touchAction: 'none'
             }}
           >
             {/* Top Drag Handle Bar - Always visible for dragging */}
             {showHandle && (
-              <div
+              <button
                 ref={handleRef}
-                className="flex items-center justify-center pt-4 pb-3 cursor-grab active:cursor-grabbing select-none bg-white sticky top-0 z-10"
-                style={{ touchAction: 'none' }}
+                type="button"
+                className="flex flex-col items-center pt-3 pb-2 cursor-pointer select-none bg-white sticky top-0 z-10 w-full border-0 outline-none p-0"
+                onClick={(e) => {
+                  console.log('🖱️ Handle clicked, current collapsed:', isCollapsed)
+                  e.stopPropagation()
+                  e.preventDefault()
+                  handleCollapseToggle(e)
+                }}
+                onTouchStart={(e) => {
+                  // Store touch start for click detection
+                  e.stopPropagation()
+                }}
+                onTouchEnd={(e) => {
+                  // Handle touch end for mobile collapse toggle
+                  console.log('👆 Handle touched, current collapsed:', isCollapsed)
+                  e.stopPropagation()
+                  e.preventDefault()
+                  handleCollapseToggle(e)
+                }}
+                onMouseDown={(e) => {
+                  // Prevent drag when clicking handle
+                  e.stopPropagation()
+                }}
+                style={{ 
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
+                  pointerEvents: 'auto',
+                  userSelect: 'none',
+                  background: 'transparent'
+                }}
               >
-                <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
-              </div>
+                <ChevronDown 
+                  className="w-6 h-6 text-gray-400 mb-1 pointer-events-none"
+                />
+                <div 
+                  className="w-12 h-1.5 bg-gray-300 rounded-full pointer-events-none"
+                />
+              </button>
             )}
 
             {/* Header */}
@@ -277,9 +353,15 @@ export default function BottomPopup({
             )}
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-              {children}
-            </div>
+            {!isCollapsed ? (
+              <div className="flex-1 overflow-y-auto px-4 py-4">
+                {children}
+              </div>
+            ) : (
+              <div className="px-4 py-4 pb-6">
+                {collapsedContent}
+              </div>
+            )}
           </motion.div>
         </>
       )}

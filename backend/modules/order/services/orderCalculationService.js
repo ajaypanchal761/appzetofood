@@ -1,25 +1,88 @@
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import Offer from '../../restaurant/models/Offer.js';
+import FeeSettings from '../../admin/models/FeeSettings.js';
 import mongoose from 'mongoose';
+
+/**
+ * Get active fee settings from database
+ * Returns default values if no settings found
+ */
+const getFeeSettings = async () => {
+  try {
+    const feeSettings = await FeeSettings.findOne({ isActive: true })
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    if (feeSettings) {
+      return feeSettings;
+    }
+    
+    // Return default values if no active settings found
+    return {
+      deliveryFee: 25,
+      freeDeliveryThreshold: 149,
+      platformFee: 5,
+      gstRate: 5,
+    };
+  } catch (error) {
+    console.error('Error fetching fee settings:', error);
+    // Return default values on error
+    return {
+      deliveryFee: 25,
+      freeDeliveryThreshold: 149,
+      platformFee: 5,
+      gstRate: 5,
+    };
+  }
+};
 
 /**
  * Calculate delivery fee based on order value, distance, and restaurant settings
  */
-export const calculateDeliveryFee = (orderValue, restaurant, deliveryAddress = null) => {
-  // Base delivery fee
-  let deliveryFee = 25; // Default ₹25
+export const calculateDeliveryFee = async (orderValue, restaurant, deliveryAddress = null) => {
+  // Get fee settings from database
+  const feeSettings = await getFeeSettings();
   
-  // Check restaurant settings for free delivery threshold
+  // Check restaurant settings for free delivery threshold (takes priority)
   if (restaurant?.freeDeliveryAbove) {
     if (orderValue >= restaurant.freeDeliveryAbove) {
       return 0; // Free delivery
     }
   } else {
-    // Default free delivery threshold
-    if (orderValue >= 149) {
+    // Use admin settings for free delivery threshold
+    const freeDeliveryThreshold = feeSettings.freeDeliveryThreshold || 149;
+    if (orderValue >= freeDeliveryThreshold) {
       return 0;
     }
   }
+  
+  // Check if delivery fee ranges are configured
+  if (feeSettings.deliveryFeeRanges && Array.isArray(feeSettings.deliveryFeeRanges) && feeSettings.deliveryFeeRanges.length > 0) {
+    // Sort ranges by min value to ensure proper checking
+    const sortedRanges = [...feeSettings.deliveryFeeRanges].sort((a, b) => a.min - b.min);
+    
+    // Find matching range (orderValue >= min && orderValue < max)
+    // For the last range, we check orderValue >= min && orderValue <= max
+    for (let i = 0; i < sortedRanges.length; i++) {
+      const range = sortedRanges[i];
+      const isLastRange = i === sortedRanges.length - 1;
+      
+      if (isLastRange) {
+        // Last range: include max value
+        if (orderValue >= range.min && orderValue <= range.max) {
+          return range.fee;
+        }
+      } else {
+        // Other ranges: exclude max value (handled by next range)
+        if (orderValue >= range.min && orderValue < range.max) {
+          return range.fee;
+        }
+      }
+    }
+  }
+  
+  // Fallback to default delivery fee if no range matches
+  const baseDeliveryFee = feeSettings.deliveryFee || 25;
   
   // TODO: Add distance-based calculation when address coordinates are available
   // if (deliveryAddress?.location?.coordinates && restaurant?.location?.coordinates) {
@@ -30,24 +93,25 @@ export const calculateDeliveryFee = (orderValue, restaurant, deliveryAddress = n
   //   deliveryFee = baseFee + (distance * perKmFee);
   // }
   
-  return deliveryFee;
+  return baseDeliveryFee;
 };
 
 /**
  * Calculate platform fee
  */
-export const calculatePlatformFee = () => {
-  return 5; // ₹5 platform fee per order
+export const calculatePlatformFee = async () => {
+  const feeSettings = await getFeeSettings();
+  return feeSettings.platformFee || 5;
 };
 
 /**
  * Calculate GST (Goods and Services Tax)
  * GST is calculated on subtotal after discounts
  */
-export const calculateGST = (subtotal, discount = 0) => {
+export const calculateGST = async (subtotal, discount = 0) => {
   const taxableAmount = subtotal - discount;
-  // GST rate is typically 5% for restaurants
-  const gstRate = 0.05; // 5%
+  const feeSettings = await getFeeSettings();
+  const gstRate = (feeSettings.gstRate || 5) / 100; // Convert percentage to decimal
   return Math.round(taxableAmount * gstRate);
 };
 
@@ -213,7 +277,7 @@ export const calculateOrderPricing = async ({
     }
     
     // Calculate delivery fee
-    const deliveryFee = calculateDeliveryFee(
+    const deliveryFee = await calculateDeliveryFee(
       subtotal,
       restaurant,
       deliveryAddress
@@ -223,10 +287,10 @@ export const calculateOrderPricing = async ({
     const finalDeliveryFee = appliedCoupon?.freeDelivery ? 0 : deliveryFee;
     
     // Calculate platform fee
-    const platformFee = calculatePlatformFee();
+    const platformFee = await calculatePlatformFee();
     
     // Calculate GST on subtotal after discount
-    const gst = calculateGST(subtotal, discount);
+    const gst = await calculateGST(subtotal, discount);
     
     // Calculate total
     const total = subtotal - discount + finalDeliveryFee + platformFee + gst;

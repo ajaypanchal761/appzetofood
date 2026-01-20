@@ -23,6 +23,208 @@ const filterTabs = [
   { id: "completed", label: "Completed" },
 ]
 
+// Completed Orders List Component
+function CompletedOrders({ onSelectOrder }) {
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+    let intervalId = null
+
+    const fetchOrders = async () => {
+      try {
+        const response = await restaurantAPI.getOrders()
+        
+        if (!isMounted) return
+        
+        if (response.data?.success && response.data.data?.orders) {
+          const completedOrders = response.data.data.orders.filter(
+            order => order.status === 'delivered' || order.status === 'completed'
+          )
+          
+          const transformedOrders = completedOrders.map(order => ({
+            orderId: order.orderId || order._id,
+            mongoId: order._id,
+            status: order.status || 'delivered',
+            customerName: order.userId?.name || 'Customer',
+            type: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
+            tableOrToken: null,
+            timePlaced: new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            deliveredAt: order.deliveredAt || order.updatedAt || order.createdAt,
+            itemsSummary: order.items?.map(item => `${item.quantity}x ${item.name}`).join(', ') || 'No items',
+            photoUrl: order.items?.[0]?.image || null,
+            photoAlt: order.items?.[0]?.name || 'Order',
+            amount: order.pricing?.total || order.total || 0
+          }))
+          
+          transformedOrders.sort((a, b) => {
+            const dateA = new Date(a.deliveredAt)
+            const dateB = new Date(b.deliveredAt)
+            return dateB - dateA
+          })
+          
+          if (isMounted) {
+            setOrders(transformedOrders)
+            setLoading(false)
+          }
+        } else {
+          if (isMounted) {
+            setOrders([])
+            setLoading(false)
+          }
+        }
+      } catch (error) {
+        if (!isMounted) return
+        
+        if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
+          console.error('Error fetching completed orders:', error)
+        }
+        
+        if (isMounted) {
+          setOrders([])
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchOrders()
+    intervalId = setInterval(() => {
+      if (isMounted) {
+        fetchOrders()
+      }
+    }, 10000)
+    
+    return () => {
+      isMounted = false
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="pt-4 pb-6">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-base font-semibold text-black">Completed orders</h2>
+          <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+        </div>
+        <div className="text-center py-8 text-gray-500 text-sm">Loading...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="pt-4 pb-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-base font-semibold text-black">
+          Completed orders
+        </h2>
+        <span className="text-xs text-gray-500">{orders.length} total</span>
+      </div>
+      {orders.length === 0 ? (
+        <div className="text-center py-8 text-gray-500 text-sm">
+          No completed orders yet
+        </div>
+      ) : (
+        <div>
+          {orders.map((order) => {
+            const deliveredDate = order.deliveredAt 
+              ? new Date(order.deliveredAt).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })
+              : 'N/A'
+            
+            return (
+              <div key={order.orderId || order.mongoId} className="w-full bg-white rounded-2xl p-4 mb-3 border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSelectOrder?.({
+                      orderId: order.orderId,
+                      status: 'Delivered',
+                      customerName: order.customerName,
+                      type: order.type,
+                      tableOrToken: order.tableOrToken,
+                      timePlaced: deliveredDate,
+                      itemsSummary: order.itemsSummary,
+                    })
+                  }
+                  className="w-full text-left flex gap-3 items-stretch"
+                >
+                  <div className="h-20 w-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 my-auto">
+                    {order.photoUrl ? (
+                      <img
+                        src={order.photoUrl}
+                        alt={order.photoAlt}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center px-2">
+                        <span className="text-[11px] font-medium text-gray-500 text-center leading-tight">
+                          {order.photoAlt}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 flex flex-col justify-between min-h-[80px]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-black leading-tight">
+                          Order #{order.orderId}
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          {order.customerName}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border border-green-500 text-green-600">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                          Delivered
+                        </span>
+                        <span className="text-[11px] text-gray-500 text-right">
+                          {deliveredDate}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-600 line-clamp-1">
+                        {order.itemsSummary}
+                      </p>
+                    </div>
+
+                    <div className="mt-2 flex items-end justify-between gap-2">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[11px] text-gray-500">
+                          {order.type}
+                        </p>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[11px] text-gray-500">Amount</span>
+                        <span className="text-xs font-medium text-black">
+                          ₹{order.amount.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function OrdersMain() {
   const navigate = useNavigate()
   const [activeFilter, setActiveFilter] = useState("preparing")
@@ -647,6 +849,8 @@ export default function OrdersMain() {
         return <OutForDeliveryOrders onSelectOrder={handleSelectOrder} />
       case "scheduled":
         return <EmptyState message="Scheduled orders will appear here" />
+      case "completed":
+        return <CompletedOrders onSelectOrder={handleSelectOrder} />
       default:
         return <EmptyState />
     }

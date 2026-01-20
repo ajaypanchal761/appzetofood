@@ -26,6 +26,7 @@ import Checkout from "../pages/cart/Checkout"
 import Orders from "../pages/orders/Orders"
 import OrderTracking from "../pages/orders/OrderTracking"
 import OrderInvoice from "../pages/orders/OrderInvoice"
+import UserOrderDetails from "../pages/orders/UserOrderDetails"
 
 // Offers
 import Offers from "../pages/Offers"
@@ -146,6 +147,14 @@ export default function UserRouter() {
         element={
           <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
             <OrderInvoice />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/orders/:orderId/details" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <UserOrderDetails />
           </ProtectedRoute>
         } 
       />

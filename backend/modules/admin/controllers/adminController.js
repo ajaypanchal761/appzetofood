@@ -2,6 +2,7 @@ import Admin from '../models/Admin.js';
 import Order from '../../order/models/Order.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import Offer from '../../restaurant/models/Offer.js';
+import AdminCommission from '../models/AdminCommission.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import winston from 'winston';
@@ -51,11 +52,12 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       }
     ]);
 
-    // Get commission earned (assuming 10% commission, adjust as needed)
-    const commissionRate = 0.10;
-    const revenueData = revenueStats[0] || { totalRevenue: 0, last30DaysRevenue: 0 };
-    const totalCommission = revenueData.totalRevenue * commissionRate;
-    const last30DaysCommission = revenueData.last30DaysRevenue * commissionRate;
+    // Get commission earned from AdminCommission model (actual commission from orders)
+    const totalCommissionData = await AdminCommission.getTotalCommission();
+    const last30DaysCommissionData = await AdminCommission.getTotalCommission(last30Days, now);
+    
+    const totalCommission = totalCommissionData.totalCommission || 0;
+    const last30DaysCommission = last30DaysCommissionData.totalCommission || 0;
 
     // Get order statistics
     const orderStats = await Order.aggregate([

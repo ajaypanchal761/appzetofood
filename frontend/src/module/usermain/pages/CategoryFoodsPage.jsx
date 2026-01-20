@@ -304,4 +304,3 @@ export default function CategoryFoodsPage() {
     </div>
   )
 }
-

@@ -11,7 +11,9 @@ import NewRefundRequests from "../pages/refunds/NewRefundRequests";
 import FoodApproval from "../pages/restaurant/FoodApproval";
 import OrdersPage from "../pages/orders/OrdersPage";
 import SubscriptionOrders from "../pages/SubscriptionOrders";
+import OrderDetectDelivery from "../pages/OrderDetectDelivery";
 import Category from "../pages/categories/Category";
+import FeeSettings from "../pages/fee-settings/FeeSettings";
 // Restaurant Management
 import ZoneSetup from "../pages/restaurant/ZoneSetup";
 import AddZone from "../pages/restaurant/AddZone";
@@ -157,6 +159,7 @@ export default function AdminRouter() {
         <Route path="orders/dine-in" element={<OrdersPage statusKey="dine-in" />} />
         <Route path="orders/offline-payments" element={<OrdersPage statusKey="offline-payments" />} />
         <Route path="subscription-orders" element={<SubscriptionOrders />} />
+        <Route path="order-detect-delivery" element={<OrderDetectDelivery />} />
         {/* Dispatch Management */}
         <Route path="dispatch/searching" element={<SearchingDeliveryMan />} />
         <Route path="dispatch/ongoing" element={<OngoingOrders />} />
@@ -180,6 +183,8 @@ export default function AdminRouter() {
         {/* FOOD MANAGEMENT */}
         {/* Categories */}
         <Route path="categories" element={<Category />} />
+        {/* Fee Settings */}
+        <Route path="fee-settings" element={<FeeSettings />} />
         {/* Foods */}
         <Route path="foods" element={<FoodsList />} />
         <Route path="food/list" element={<FoodsList />} />

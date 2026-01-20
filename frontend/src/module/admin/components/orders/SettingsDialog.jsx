@@ -13,6 +13,7 @@ export default function SettingsDialog({ isOpen, onOpenChange, visibleColumns, t
     orderDate: "Order Date",
     customer: "Customer Information",
     restaurant: "Restaurant",
+    foodItems: "Food Items",
     totalAmount: "Total Amount",
     orderStatus: "Order Status",
     actions: "Actions",

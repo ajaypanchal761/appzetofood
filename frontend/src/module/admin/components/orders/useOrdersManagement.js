@@ -22,6 +22,7 @@ export function useOrdersManagement(orders, statusKey, title) {
     orderDate: true,
     customer: true,
     restaurant: true,
+    foodItems: true,
     totalAmount: true,
     orderStatus: true,
     actions: true,
@@ -155,6 +156,39 @@ export function useOrdersManagement(orders, statusKey, title) {
 
   const handlePrintOrder = (order) => {
     const printWindow = window.open("", "_blank")
+    
+    // Generate items table HTML
+    const itemsHtml = order.items && Array.isArray(order.items) && order.items.length > 0
+      ? `
+        <div style="margin: 30px 0;">
+          <h2 style="margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 10px;">Order Items</h2>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <thead>
+              <tr style="background-color: #f5f5f5; border-bottom: 2px solid #333;">
+                <th style="text-align: left; padding: 12px; border: 1px solid #ddd;">Qty</th>
+                <th style="text-align: left; padding: 12px; border: 1px solid #ddd;">Item Name</th>
+                <th style="text-align: right; padding: 12px; border: 1px solid #ddd;">Price</th>
+                <th style="text-align: right; padding: 12px; border: 1px solid #ddd;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${order.items.map((item, idx) => {
+                const itemTotal = (item.quantity || 1) * (item.price || 0)
+                return `
+                  <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${item.quantity || 1}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">${item.name || 'Unknown Item'}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">$${(item.price || 0).toFixed(2)}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${itemTotal.toFixed(2)}</td>
+                  </tr>
+                `
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `
+      : '<div style="margin: 20px 0; color: #999; font-style: italic;">No items found</div>'
+    
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -166,7 +200,10 @@ export function useOrdersManagement(orders, statusKey, title) {
             .order-info { margin-bottom: 20px; }
             .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
             .label { font-weight: bold; }
-            @media print { body { padding: 20px; } }
+            @media print { 
+              body { padding: 20px; }
+              table { page-break-inside: avoid; }
+            }
           </style>
         </head>
         <body>
@@ -203,10 +240,11 @@ export function useOrdersManagement(orders, statusKey, title) {
               <span class="label">Payment Status:</span>
               <span>${order.paymentStatus}</span>
             </div>
-            <div class="info-row" style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #333;">
-              <span class="label" style="font-size: 18px;">Total Amount:</span>
-              <span style="font-size: 18px; font-weight: bold;">$${order.totalAmount.toFixed(2)}</span>
-            </div>
+          </div>
+          ${itemsHtml}
+          <div class="info-row" style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #333;">
+            <span class="label" style="font-size: 18px;">Total Amount:</span>
+            <span style="font-size: 18px; font-weight: bold;">$${order.totalAmount.toFixed(2)}</span>
           </div>
           <script>
             window.onload = function() {
@@ -235,6 +273,7 @@ export function useOrdersManagement(orders, statusKey, title) {
       orderDate: true,
       customer: true,
       restaurant: true,
+      foodItems: true,
       totalAmount: true,
       orderStatus: true,
       actions: true,

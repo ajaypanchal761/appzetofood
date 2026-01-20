@@ -141,6 +141,13 @@ import {
   getOrders,
   getOrderById
 } from '../controllers/orderController.js';
+import {
+  getFeeSettings,
+  createOrUpdateFeeSettings,
+  updateFeeSettings,
+  getFeeSettingsHistory,
+  getPublicFeeSettings
+} from '../controllers/feeSettingsController.js';
 import zoneRoutes from './zoneRoutes.js';
 import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
@@ -189,6 +196,12 @@ router.put('/categories/:id', uploadMiddleware.single('image'), updateCategory);
 router.delete('/categories/:id', deleteCategory);
 router.patch('/categories/:id/status', toggleCategoryStatus);
 router.patch('/categories/:id/priority', updateCategoryPriority);
+
+// Fee Settings Management (Delivery & Platform Fee)
+router.get('/fee-settings', getFeeSettings);
+router.post('/fee-settings', createOrUpdateFeeSettings);
+router.put('/fee-settings/:id', updateFeeSettings);
+router.get('/fee-settings/history', getFeeSettingsHistory);
 
 // Delivery Partner Management
 router.get('/delivery-partners/requests', getJoinRequests);

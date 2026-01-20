@@ -6,6 +6,7 @@ import restaurantAuthRoutes from './routes/restaurantAuthRoutes.js';
 import { getOnboarding, upsertOnboarding, createRestaurantFromOnboardingManual } from './controllers/restaurantOnboardingController.js';
 import { getRestaurants, getRestaurantById, getRestaurantByOwner, updateRestaurantProfile, uploadProfileImage, uploadMenuImage, deleteRestaurantAccount, updateDeliveryStatus, getRestaurantsWithDishesUnder250 } from './controllers/restaurantController.js';
 import { getRestaurantFinance } from './controllers/restaurantFinanceController.js';
+import { getWallet, getWalletTransactions, getWalletStats } from './controllers/restaurantWalletController.js';
 import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection, addAddon, getAddons, getAddonsByRestaurantId, updateAddon, deleteAddon } from './controllers/menuController.js';
 import { scheduleItemAvailability, cancelScheduledAvailability, getItemSchedule } from './controllers/menuScheduleController.js';
 import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
@@ -73,6 +74,12 @@ router.use('/', restaurantOrderRoutes);
 // Finance routes (authenticated - for restaurant module)
 // Must come BEFORE /:id route to avoid route conflicts (/:id would match /finance)
 router.get('/finance', authenticate, getRestaurantFinance);
+
+// Wallet routes (authenticated - for restaurant module)
+// Must come BEFORE /:id route to avoid route conflicts (/:id would match /wallet)
+router.get('/wallet', authenticate, getWallet);
+router.get('/wallet/transactions', authenticate, getWalletTransactions);
+router.get('/wallet/stats', authenticate, getWalletStats);
 
 // Restaurant routes (public - for user module)
 router.get('/list', getRestaurants);

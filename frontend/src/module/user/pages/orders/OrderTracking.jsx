@@ -28,6 +28,7 @@ import { useProfile } from "../../context/ProfileContext"
 import { useLocation as useUserLocation } from "../../hooks/useLocation"
 import DeliveryTrackingMap from "../../components/DeliveryTrackingMap"
 import { orderAPI } from "@/lib/api"
+import circleIcon from "@/assets/circleicon.png"
 
 // Animated checkmark component
 const AnimatedCheckmark = ({ delay = 0 }) => (
@@ -143,77 +144,6 @@ const DeliveryMap = ({ orderId, order, isVisible }) => {
   );
 }
 
-// Tip selection component
-const TipSection = () => {
-  const [selectedTip, setSelectedTip] = useState(null)
-  const [customTip, setCustomTip] = useState('')
-  const tips = [20, 30, 50]
-
-  return (
-    <motion.div 
-      className="bg-white rounded-xl p-4 shadow-sm"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.5 }}
-    >
-      <p className="text-gray-700 text-sm mb-3">
-        Make their day by leaving a tip. 100% of the amount will go to them after delivery
-      </p>
-      <div className="flex gap-3">
-        {tips.map((tip) => (
-          <motion.button
-            key={tip}
-            onClick={() => {
-              setSelectedTip(tip)
-              setCustomTip('')
-            }}
-            className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
-              selectedTip === tip 
-                ? 'border-green-600 bg-green-50 text-green-700' 
-                : 'border-gray-200 text-gray-700 hover:border-gray-300'
-            }`}
-            whileTap={{ scale: 0.95 }}
-          >
-            ₹{tip}
-          </motion.button>
-        ))}
-        <motion.button
-          onClick={() => {
-            setSelectedTip('other')
-          }}
-          className={`flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all ${
-            selectedTip === 'other' 
-              ? 'border-green-600 bg-green-50 text-green-700' 
-              : 'border-gray-200 text-gray-700 hover:border-gray-300'
-          }`}
-          whileTap={{ scale: 0.95 }}
-        >
-          Other
-        </motion.button>
-      </div>
-      
-      <AnimatePresence>
-        {selectedTip === 'other' && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <input
-              type="number"
-              placeholder="Enter custom amount"
-              value={customTip}
-              onChange={(e) => setCustomTip(e.target.value)}
-              className="mt-3 w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  )
-}
-
 // Section item component
 const SectionItem = ({ icon: Icon, title, subtitle, onClick, showArrow = true, rightContent }) => (
   <motion.button
@@ -277,6 +207,8 @@ export default function OrderTracking() {
             id: apiOrder.orderId || apiOrder._id,
             restaurant: apiOrder.restaurantName || 'Restaurant',
             userId: apiOrder.userId || null, // Include user data for phone number
+            userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || '',
+            userPhone: apiOrder.userPhone || apiOrder.userId?.phone || '',
             address: {
               street: apiOrder.address?.street || '',
               city: apiOrder.address?.city || '',
@@ -390,6 +322,8 @@ export default function OrderTracking() {
           id: apiOrder.orderId || apiOrder._id,
           restaurant: apiOrder.restaurantName || 'Restaurant',
           userId: apiOrder.userId || null, // Include user data for phone number
+          userName: apiOrder.userName || apiOrder.userId?.name || apiOrder.userId?.fullName || '',
+          userPhone: apiOrder.userPhone || apiOrder.userId?.phone || '',
           address: {
             street: apiOrder.address?.street || '',
             city: apiOrder.address?.city || '',
@@ -609,23 +543,41 @@ export default function OrderTracking() {
 
       {/* Scrollable Content */}
       <div className="max-w-4xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 space-y-4 md:space-y-6 pb-24 md:pb-32">
-        {/* Delivery Partner Assignment */}
-        <motion.div 
-          className="bg-white rounded-xl p-4 shadow-sm"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
-              <span className="text-2xl">👨‍🍳</span>
-            </div>
-            <p className="font-semibold text-gray-900">Assigning delivery partner shortly</p>
-          </div>
-        </motion.div>
-
-        {/* Tip Section */}
-        <TipSection />
+        {/* Food Cooking Status - Show until delivery partner accepts pickup */}
+        {(() => {
+          // Check if delivery partner has accepted pickup
+          // Delivery partner accepts when status is 'ready' or 'out_for_delivery' or tracking shows outForDelivery
+          const hasAcceptedPickup = order?.tracking?.outForDelivery?.status === true || 
+                                    order?.tracking?.out_for_delivery?.status === true ||
+                                    order?.status === 'out_for_delivery' ||
+                                    order?.status === 'ready'
+          
+          // Show "Food is Cooking" until delivery partner accepts pickup
+          if (!hasAcceptedPickup) {
+            return (
+              <motion.div 
+                className="bg-white rounded-xl p-4 shadow-sm"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center overflow-hidden">
+                    <img 
+                      src={circleIcon} 
+                      alt="Food cooking" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <p className="font-semibold text-gray-900">Food is Cooking</p>
+                </div>
+              </motion.div>
+            )
+          }
+          
+          // Don't show card if delivery partner has accepted pickup
+          return null
+        })()}
 
         {/* Delivery Partner Safety */}
         <motion.button
@@ -663,8 +615,21 @@ export default function OrderTracking() {
         >
           <SectionItem 
             icon={Phone}
-            title={`${profile?.fullName || profile?.name || 'Customer'}, ${profile?.phone || order?.userId?.phone || defaultAddress?.phone || 'Phone number not available'}`}
-            subtitle="Delivery partner may call this number"
+            title={
+              order?.userName ||
+              order?.userId?.fullName ||
+              order?.userId?.name ||
+              profile?.fullName ||
+              profile?.name ||
+              'Customer'
+            }
+            subtitle={
+              order?.userPhone ||
+              order?.userId?.phone ||
+              profile?.phone ||
+              defaultAddress?.phone ||
+              'Phone number not available'
+            }
             rightContent={
               <span className="text-green-600 font-medium text-sm">Edit</span>
             }

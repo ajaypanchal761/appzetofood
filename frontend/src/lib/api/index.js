@@ -645,11 +645,12 @@ export const deliveryAPI = {
   confirmReachedPickup: (orderId) => {
     return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_REACHED_PICKUP.replace(':orderId', orderId));
   },
-  confirmOrderId: (orderId, confirmedOrderId, currentLocation = {}) => {
+  confirmOrderId: (orderId, confirmedOrderId, currentLocation = {}, additionalData = {}) => {
     return apiClient.patch(API_ENDPOINTS.DELIVERY.ORDER_CONFIRM_ID.replace(':orderId', orderId), {
       confirmedOrderId,
       currentLat: currentLocation.lat,
-      currentLng: currentLocation.lng
+      currentLng: currentLocation.lng,
+      ...additionalData
     });
   },
   confirmReachedDrop: (orderId) => {
@@ -978,6 +979,27 @@ export const adminAPI = {
 
   updateCategoryPriority: (id, priority) => {
     return apiClient.patch(API_ENDPOINTS.ADMIN.CATEGORY_PRIORITY.replace(':id', id), { priority });
+  },
+
+  // Fee Settings Management (Delivery & Platform Fee)
+  getFeeSettings: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.FEE_SETTINGS);
+  },
+
+  getPublicFeeSettings: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.FEE_SETTINGS_PUBLIC);
+  },
+
+  getFeeSettingsHistory: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.FEE_SETTINGS_HISTORY, { params });
+  },
+
+  createOrUpdateFeeSettings: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.FEE_SETTINGS, data);
+  },
+
+  updateFeeSettings: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.FEE_SETTINGS_BY_ID.replace(':id', id), data);
   },
 
   // Zone Management

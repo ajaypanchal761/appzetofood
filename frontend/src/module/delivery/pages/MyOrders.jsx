@@ -1,626 +1,428 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { motion, AnimatePresence } from "framer-motion"
 import { 
-  Play,
-  ChevronRight,
-  ShoppingBag,
-  Bike,
-  Coins,
-  Shield,
   ArrowLeft,
-  ThumbsUp,
-  ThumbsDown,
-  Eye
+  Search,
+  Mic,
+  MoreVertical,
+  ChevronRight,
+  Star,
+  RotateCcw,
+  AlertCircle,
+  Loader2,
+  Package
 } from "lucide-react"
-import FeedNavbar from "../components/FeedNavbar"
-import { useGigStore } from "../store/gigStore"
-
-// Top carousel data
-const topCarouselSlides = [
-  {
-    id: 1,
-    title: "Be Winter Ready",
-    subtitle: "Get winter collections at up to 80% off",
-    background: "bg-gradient-to-br from-blue-200 via-blue-300 to-blue-400",
-    buttonText: "Shop now",
-    image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=300&fit=crop"
-  },
-  {
-    id: 2,
-    title: "Summer Sale",
-    subtitle: "Up to 70% off on summer essentials",
-    background: "bg-gradient-to-br from-orange-200 via-orange-300 to-orange-400",
-    buttonText: "Shop now",
-    image: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=400&h=300&fit=crop"
-  },
-  {
-    id: 3,
-    title: "New Arrivals",
-    subtitle: "Check out the latest collection",
-    background: "bg-gradient-to-br from-purple-200 via-purple-300 to-purple-400",
-    buttonText: "Shop now",
-    image: "https://images.unsplash.com/photo-1445205170230-053b83016050?w=400&h=300&fit=crop"
-  }
-]
-
-// Shopping products
-const shoppingProducts = [
-  {
-    id: 1,
-    title: "Croma 32 inch LED Smart Goo...",
-    image: "https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=300&h=300&fit=crop",
-    price: 11400,
-    originalPrice: 19000,
-    discount: 40
-  },
-  {
-    id: 2,
-    title: "Rechargeable Gun Massager",
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&h=300&fit=crop",
-    price: 528,
-    originalPrice: 1599,
-    discount: 67
-  },
-  {
-    id: 3,
-    title: "Handle Lock Bike/Scoote",
-    image: "https://images.unsplash.com/photo-1522869635100-9f4c5e86aa37?w=300&h=300&fit=crop",
-    price: 348,
-    originalPrice: 600,
-    discount: 42
-  },
-  {
-    id: 4,
-    title: "Wireless Earbuds",
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&h=300&fit=crop",
-    price: 1299,
-    originalPrice: 2999,
-    discount: 57
-  }
-]
-
-// Appzeto store clothes
-const AppzetoStoreClothes = [
-  {
-    id: 1,
-    title: "Light Winter Jacket",
-    image: "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=300&h=300&fit=crop",
-    price: 350,
-    originalPrice: 999,
-    discount: 65
-  },
-  {
-    id: 2,
-    title: "T-shirt with pocket (Pack of 2)",
-    image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=300&h=300&fit=crop",
-    price: 400,
-    originalPrice: 500,
-    discount: 20
-  },
-  {
-    id: 3,
-    title: "Fleece Winter Jacket",
-    image: "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=300&h=300&fit=crop",
-    price: 549,
-    originalPrice: 999,
-    discount: 45
-  },
-  {
-    id: 4,
-    title: "Appzeto Hoodie",
-    image: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=300&h=300&fit=crop",
-    price: 699,
-    originalPrice: 1299,
-    discount: 46
-  }
-]
-
-// EV Bikes
-const evBikes = [
-  {
-    id: 1,
-    name: "Boltly Ebike",
-    price: 155,
-    image: "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=400&h=300&fit=crop"
-  },
-  {
-    id: 2,
-    name: "NXTE Alfa-Swap",
-    price: 196,
-    image: "https://images.unsplash.com/photo-1558980664-1db506751c6c?w=400&h=300&fit=crop"
-  },
-  {
-    id: 3,
-    name: "Gem",
-    price: 211,
-    image: "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=400&h=300&fit=crop"
-  }
-]
+import { deliveryAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 export default function MyOrders() {
   const navigate = useNavigate()
-  const { isOnline, goOnline, goOffline } = useGigStore()
-  const [currentCarouselSlide, setCurrentCarouselSlide] = useState(0)
-  const [selectedVideo, setSelectedVideo] = useState(null)
-  const [videoLikes, setVideoLikes] = useState({})
-  const [videoDislikes, setVideoDislikes] = useState({})
-  const [userReactions, setUserReactions] = useState({})
-  const videoRef = useRef(null)
-  const touchStartY = useRef(0)
-  const touchEndY = useRef(0)
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
 
-  // Auto-rotate carousel
-  const carouselIntervalRef = useRef(null)
-  
-  // Handle online toggle
-  const handleToggleOnline = () => {
-    if (isOnline) {
-      goOffline()
-    } else {
-      goOnline()
-    }
-  }
-
-  // Carousel auto-rotate
+  // Fetch orders from API
   useEffect(() => {
-    carouselIntervalRef.current = setInterval(() => {
-      setCurrentCarouselSlide((prev) => (prev + 1) % topCarouselSlides.length)
-    }, 4000)
-    return () => {
-      if (carouselIntervalRef.current) {
-        clearInterval(carouselIntervalRef.current)
+    const fetchOrders = async () => {
+      try {
+        setLoading(true)
+        
+        // Check authentication token
+        const deliveryToken = localStorage.getItem('delivery_accessToken') || localStorage.getItem('accessToken')
+        console.log('🔐 Delivery Token exists:', !!deliveryToken)
+        
+        console.log('🔄 Fetching orders using Trip History API (includes all completed orders)...')
+        
+        // Use Trip History API which includes all orders including delivered/completed
+        // Fetch from last 1 year to get all orders
+        const oneYearAgo = new Date()
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+        
+        const response = await deliveryAPI.getTripHistory({
+          period: 'monthly',
+          date: new Date().toISOString().split('T')[0],
+          status: 'ALL TRIPS', // Get all trips including completed
+          limit: 1000 // Get more orders
+        })
+        
+        console.log('📦 Trip History API Response:', response?.data)
+        
+        // Trip History API returns: { success: true, data: { trips: [...] } }
+        let ordersData = []
+        
+        if (response?.data?.success && response?.data?.data?.trips) {
+          // Trip History returns trips array
+          ordersData = response.data.data.trips || []
+          console.log('✅ Using Trip History API, found orders:', ordersData.length)
+        } else if (response?.data?.data?.orders) {
+          // Fallback to orders structure
+          ordersData = response.data.data.orders || []
+          console.log('✅ Using orders structure, found orders:', ordersData.length)
+        } else if (Array.isArray(response?.data?.data)) {
+          // Direct array
+          ordersData = response.data.data
+          console.log('✅ Using direct array, found orders:', ordersData.length)
+        }
+        
+        console.log('✅ Final orders to set:', ordersData.length)
+        console.log('✅ Orders sample:', ordersData.slice(0, 2))
+        
+        if (ordersData && ordersData.length > 0) {
+          setOrders(ordersData)
+          console.log('✅ Orders state updated successfully')
+        } else {
+          console.warn('⚠️ No orders found - trying getOrders API as fallback...')
+          // Fallback to getOrders API
+          try {
+            const fallbackResponse = await deliveryAPI.getOrders({ 
+              includeDelivered: 'true', 
+              limit: 100 
+            })
+            if (fallbackResponse?.data?.success && fallbackResponse?.data?.data?.orders) {
+              const fallbackOrders = fallbackResponse.data.data.orders || []
+              console.log('✅ Fallback API found orders:', fallbackOrders.length)
+              setOrders(fallbackOrders)
+    } else {
+              setOrders([])
+            }
+          } catch (fallbackError) {
+            console.error('❌ Fallback API also failed:', fallbackError)
+            setOrders([])
+          }
+        }
+      } catch (error) {
+        console.error('❌ ========== ERROR DETAILS ==========')
+        console.error('❌ Error fetching orders:', error)
+        console.error('❌ Error name:', error?.name)
+        console.error('❌ Error message:', error?.message)
+        console.error('❌ Error stack:', error?.stack)
+        console.error('❌ Error response:', error?.response)
+        console.error('❌ Error response data:', error?.response?.data)
+        console.error('❌ Error response status:', error?.response?.status)
+        console.error('❌ Error response statusText:', error?.response?.statusText)
+        console.error('❌ Error response headers:', error?.response?.headers)
+        console.error('❌ Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+        console.error('❌ ========== END ERROR DETAILS ==========')
+        
+        const errorMessage = error?.response?.data?.message || error?.message || 'Failed to load orders'
+        toast.error(errorMessage)
+        setOrders([])
+      } finally {
+        console.log('🏁 Setting loading to false')
+        setLoading(false)
       }
     }
+
+    fetchOrders()
   }, [])
 
-  const handleVideoClick = (video) => {
-    setSelectedVideo(video)
-    if (!videoLikes[video.id]) {
-      setVideoLikes(prev => ({ ...prev, [video.id]: video.likes || 0 }))
-      setVideoDislikes(prev => ({ ...prev, [video.id]: video.dislikes || 0 }))
-    }
+  // Format date like "06 Jan, 11:57AM"
+  const formatOrderDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    const date = new Date(dateString)
+    const day = date.getDate().toString().padStart(2, '0')
+    const month = date.toLocaleDateString('en-IN', { month: 'short' })
+    const hours = date.getHours()
+    const minutes = date.getMinutes().toString().padStart(2, '0')
+    const ampm = hours >= 12 ? 'PM' : 'AM'
+    const displayHours = hours % 12 || 12
+    return `${day} ${month}, ${displayHours}:${minutes}${ampm}`
   }
 
-  const handleLike = (videoId) => {
-    const currentReaction = userReactions[videoId]
-    if (currentReaction === 'like') {
-      setVideoLikes(prev => ({ ...prev, [videoId]: prev[videoId] - 1 }))
-      setUserReactions(prev => {
-        const newReactions = { ...prev }
-        delete newReactions[videoId]
-        return newReactions
-      })
-    } else {
-      setVideoLikes(prev => ({ ...prev, [videoId]: (prev[videoId] || 0) + 1 }))
-      if (currentReaction === 'dislike') {
-        setVideoDislikes(prev => ({ ...prev, [videoId]: prev[videoId] - 1 }))
+  // Get restaurant location/address
+  const getRestaurantLocation = (order) => {
+    // Try restaurant address first
+    if (order.restaurantId?.location?.formattedAddress) {
+      const addr = order.restaurantId.location.formattedAddress
+      // Extract area/city from formatted address
+      const parts = addr.split(',')
+      if (parts.length >= 2) {
+        return parts[parts.length - 2].trim() + ', ' + parts[parts.length - 1].trim()
       }
-      setUserReactions(prev => ({ ...prev, [videoId]: 'like' }))
+      return addr
     }
-  }
-
-  const handleDislike = (videoId) => {
-    const currentReaction = userReactions[videoId]
-    if (currentReaction === 'dislike') {
-      setVideoDislikes(prev => ({ ...prev, [videoId]: prev[videoId] - 1 }))
-      setUserReactions(prev => {
-        const newReactions = { ...prev }
-        delete newReactions[videoId]
-        return newReactions
-      })
-    } else {
-      setVideoDislikes(prev => ({ ...prev, [videoId]: (prev[videoId] || 0) + 1 }))
-      if (currentReaction === 'like') {
-        setVideoLikes(prev => ({ ...prev, [videoId]: prev[videoId] - 1 }))
-      }
-      setUserReactions(prev => ({ ...prev, [videoId]: 'dislike' }))
+    if (order.restaurantId?.location?.area) {
+      return order.restaurantId.location.area + ', ' + (order.restaurantId.location.city || '')
     }
-  }
-
-  const handleCloseVideo = () => {
-    if (videoRef.current) {
-      videoRef.current.pause()
+    // Fallback to order address city
+    if (order.address?.city) {
+      return order.address.city + (order.address.state ? ', ' + order.address.state : '')
     }
-    setSelectedVideo(null)
+    return 'Location not available'
   }
 
-  // Touch handlers for vertical swipe
-  const handleTouchStart = (e) => {
-    touchStartY.current = e.touches[0].clientY
+  // Get restaurant image (first item image or placeholder)
+  const getRestaurantImage = (order) => {
+    if (order.items && order.items.length > 0 && order.items[0].image) {
+      return order.items[0].image
+    }
+    if (order.restaurantId?.profileImage?.url) {
+      return order.restaurantId.profileImage.url
+    }
+    return "https://images.unsplash.com/photo-1555949258-eb67b1ef0ceb?auto=format&fit=crop&w=100&q=80"
   }
 
-  const handleTouchMove = (e) => {
-    touchEndY.current = e.touches[0].clientY
+  // Check if payment failed
+  const isPaymentFailed = (order) => {
+    return order.payment?.status === 'failed' || order.payment?.status === 'pending'
   }
 
-  const handleTouchEnd = () => {
-    if (!touchStartY.current || !touchEndY.current) return
-    touchStartY.current = 0
-    touchEndY.current = 0
+  // Get order status text
+  const getOrderStatus = (order) => {
+    const status = order.status || order.orderStatus
+    if (status === 'delivered') return 'Delivered'
+    if (status === 'completed') return 'Delivered'
+    if (status === 'out_for_delivery') return 'Out for Delivery'
+    if (status === 'ready') return 'Ready'
+    if (status === 'preparing') return 'Preparing'
+    if (status === 'accepted') return 'Accepted'
+    return status || 'Pending'
   }
 
-  const formatCurrency = (amount) => {
-    return `₹${amount.toLocaleString('en-IN')}`
-  }
+  // Debug: Log orders state changes
+  useEffect(() => {
+    console.log('📊 Orders state changed:', {
+      ordersCount: orders.length,
+      orders: orders,
+      isArray: Array.isArray(orders),
+      firstOrder: orders[0]
+    })
+  }, [orders])
 
-  // Lifestyle store video
-  const lifestyleStoreVideo = {
-    id: 1,
-    title: "Lifestyle store",
-    subtitle: "Heavy discounts on top brands",
-    thumbnail: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    views: 12500,
-    likes: 890,
-    dislikes: 12
-  }
+  // Filter orders by search query
+  const filteredOrders = orders.filter(order => {
+    if (!searchQuery) return true
+    const query = searchQuery.toLowerCase()
+    const restaurantName = (order.restaurantName || order.restaurantId?.name || '').toLowerCase()
+    const itemNames = (order.items || []).map(item => item.name?.toLowerCase() || '').join(' ')
+    return restaurantName.includes(query) || itemNames.includes(query)
+  })
 
-  // Rent EV bikes video
-  const rentEvBikesVideo = {
-    id: 2,
-    title: "Benefits of EV",
-    subtitle: "Cost saving, Less repair, Easy charging",
-    thumbnail: "https://images.unsplash.com/photo-1558980664-1db506751c6c?w=800&h=600&fit=crop",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-    views: 9800,
-    likes: 650,
-    dislikes: 8
-  }
+  // Debug: Log filtered orders
+  useEffect(() => {
+    console.log('🔍 Filtered orders changed:', {
+      searchQuery,
+      filteredCount: filteredOrders.length,
+      filteredOrders: filteredOrders
+    })
+  }, [filteredOrders, searchQuery])
 
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden pb-24 pt-8">
-      {/* Feed Navbar */}
-      <FeedNavbar
-        isOnline={isOnline}
-        onToggleOnline={handleToggleOnline}
-        onEmergencyClick={() => {}}
-        onHelpClick={() => {}}
-        className=""
-      />
-
-      {/* Top Carousel */}
-      <div className="relative my-6">
-        <div className="overflow-hidden">
-          <div 
-            className="flex transition-transform duration-500 ease-in-out"
-            style={{ transform: `translateX(-${currentCarouselSlide * 100}%)` }}
-          >
-            {topCarouselSlides.map((slide) => (
-              <div key={slide.id} className="min-w-full">
-                <div className={`mx-4 rounded-2xl ${slide.background} p-6 relative overflow-hidden`}>
-                  <div className="relative z-10">
-                    <h2 className="text-white text-2xl font-bold mb-2">{slide.title}</h2>
-                    <p className="text-white text-sm mb-4 opacity-90">{slide.subtitle}</p>
-                    <button className="bg-white text-gray-800 px-6 py-2 rounded-lg font-medium text-sm hover:bg-gray-100 transition-colors">
-                      {slide.buttonText}
-                    </button>
-                  </div>
-                  <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-20">
-                    <img 
-                      src={slide.image} 
-                      alt={slide.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        {/* Dots Indicator */}
-        <div className="flex justify-center gap-2 mt-4">
-          {topCarouselSlides.map((_, index) => (
+    <div className="min-h-screen bg-gray-50 pb-10 font-sans">
+      {/* Header */}
+      <div className="bg-white p-4 flex items-center shadow-sm sticky top-0 z-10">
         <button
-              key={index}
-              onClick={() => setCurrentCarouselSlide(index)}
-              className={`w-2 h-2 rounded-full transition-all ${
-                index === currentCarouselSlide
-                  ? "bg-gray-800 w-6"
-                  : "bg-gray-300 hover:bg-gray-400"
-              }`}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Quick Links */}
-      <div className="px-4 mb-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">Quick links</h2>
-        <div className="grid grid-cols-3 gap-3">
-          {/* Shopping */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow">
-            <div className="text-gray-900 font-semibold text-sm mb-3">Shopping</div>
-            <div className="w-full h-24 bg-gray-50 rounded-lg flex items-center justify-center">
-              <ShoppingBag className="w-12 h-12 text-gray-400" />
-            </div>
-          </div>
-          
-          {/* Rent EV */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow">
-            <div className="text-gray-900 font-semibold text-sm mb-3">Rent EV</div>
-            <div className="w-full h-24 bg-gray-50 rounded-lg flex items-center justify-center">
-              <Bike className="w-12 h-12 text-gray-400" />
-            </div>
-          </div>
-          
-          {/* Financial welfare */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow">
-            <div className="text-gray-900 font-semibold text-sm mb-3">Financial welfare</div>
-            <div className="w-full h-24 bg-gray-50 rounded-lg flex items-center justify-center">
-              <Coins className="w-12 h-12 text-gray-400" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Lifestyle Store Video */}
-      <div className="px-4 mb-6">
-        <div 
-          className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-blue-400 to-blue-600 cursor-pointer"
-          onClick={() => handleVideoClick(lifestyleStoreVideo)}
+          onClick={() => navigate(-1)}
+          className="p-1 hover:bg-gray-100 rounded-full transition-colors"
         >
-          <div className="p-6 relative z-10">
-            <h2 className="text-white text-2xl font-bold mb-2">{lifestyleStoreVideo.title}</h2>
-            <p className="text-white text-sm opacity-90">{lifestyleStoreVideo.subtitle}</p>
-          </div>
-          <div className="absolute right-6 top-1/2 -translate-y-1/2 z-10">
-            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-              <Play className="w-10 h-10 text-white ml-1" fill="white" />
-            </div>
-          </div>
-          <div className="absolute inset-0 opacity-20">
-            <img 
-              src={lifestyleStoreVideo.thumbnail}
-              alt={lifestyleStoreVideo.title}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Shopping Cards - Horizontal Scroll */}
-      <div className="mb-6">
-        <div className="px-4 mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Shopping</h2>
-        </div>
-        <div className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth px-4">
-          {shoppingProducts.map((product) => (
-            <div key={product.id} className="flex-shrink-0 w-48 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="w-full h-48 bg-white flex items-center justify-center">
-                <img 
-                  src={product.image}
-                  alt={product.title}
-                  className="w-full h-full object-contain p-2"
-                />
-              </div>
-              <div className="p-3">
-                <h3 className="text-sm font-medium text-gray-900 mb-2 line-clamp-2">{product.title}</h3>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg font-bold text-gray-900">{formatCurrency(product.price)}</span>
-                  <span className="text-xs text-gray-500 line-through">{formatCurrency(product.originalPrice)}</span>
-                </div>
-                <span className="text-xs font-medium text-green-600">{product.discount}% Off</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Appzeto Store - Horizontal Scroll */}
-      <div className="mb-6 bg-blue-50 py-6">
-        <div className="px-4 mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">Appzeto store</h2>
-          <button className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 transition-colors">
-            <span>See all</span>
-            <ChevronRight className="w-4 h-4" />
-            </button>
-        </div>
-        <div className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth px-4">
-          {AppzetoStoreClothes.map((item) => (
-            <div key={item.id} className="flex-shrink-0 w-48 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="w-full h-48 bg-white flex items-center justify-center">
-                <img 
-                  src={item.image}
-                  alt={item.title}
-                  className="w-full h-full object-contain p-2"
-                />
-              </div>
-              <div className="p-3">
-                <h3 className="text-sm font-medium text-gray-900 mb-2 line-clamp-2">{item.title}</h3>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg font-bold text-gray-900">{formatCurrency(item.price)}</span>
-                  <span className="text-xs text-gray-500 line-through">{formatCurrency(item.originalPrice)}</span>
-                </div>
-                <span className="text-xs font-medium text-green-600">{item.discount}% Off</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Rent EV Bikes Video */}
-      <div className="px-4 mb-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">Rent EV bikes</h2>
-          <button className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 transition-colors">
-            <span>See all</span>
-            <ChevronRight className="w-4 h-4" />
-            </button>
-        </div>
-        <div 
-          className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-green-400 to-green-600 cursor-pointer"
-          onClick={() => handleVideoClick(rentEvBikesVideo)}
-        >
-          <div className="p-6 relative z-10">
-            <h2 className="text-white text-2xl font-bold mb-2">{rentEvBikesVideo.title}</h2>
-            <p className="text-white text-sm opacity-90 mb-4">{rentEvBikesVideo.subtitle}</p>
-          </div>
-          <div className="absolute right-6 top-1/2 -translate-y-1/2 z-10">
-            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-              <Play className="w-10 h-10 text-white ml-1" fill="white" />
-            </div>
-          </div>
-          <div className="absolute inset-0 opacity-20">
-            <img 
-              src={rentEvBikesVideo.thumbnail}
-              alt={rentEvBikesVideo.title}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
-        {/* EV Bikes Carousel */}
-        <div className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth mt-4">
-          {evBikes.map((bike) => (
-            <div key={bike.id} className="flex-shrink-0 w-40 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="w-full h-32 bg-gray-50 flex items-center justify-center">
-                <img 
-                  src={bike.image}
-                  alt={bike.name}
-                  className="w-full h-full object-contain p-2"
-                />
-              </div>
-              <div className="p-3">
-                <h3 className="text-sm font-medium text-gray-900 mb-1">{bike.name}</h3>
-                <p className="text-lg font-bold text-gray-900">{formatCurrency(bike.price)} <span className="text-xs font-normal text-gray-600">per day</span></p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Financial Welfare */}
-      <div className="px-4 mb-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">Financial welfare</h2>
-          <button className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 transition-colors">
-            <span>See all</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-                    </div>
-        <div className="grid grid-cols-3 gap-3">
-          {/* Insurance */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow">
-            <div className="text-gray-900 font-semibold text-sm mb-3">Insurance</div>
-            <div className="w-full h-24 bg-red-50 rounded-lg flex items-center justify-center">
-              <Shield className="w-12 h-12 text-red-500" />
-                      </div>
-                    </div>
-          
-          {/* Recurring deposits */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow">
-            <div className="text-gray-900 font-semibold text-sm mb-3">Recurring deposits</div>
-            <div className="w-full h-24 bg-yellow-50 rounded-lg flex items-center justify-center">
-              <Coins className="w-12 h-12 text-yellow-600" />
-                    </div>
-                  </div>
-          
-          {/* Fixed deposits */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow">
-            <div className="text-gray-900 font-semibold text-sm mb-3">Fixed deposits</div>
-            <div className="w-full h-24 bg-green-50 rounded-lg flex items-center justify-center">
-              <Coins className="w-12 h-12 text-green-600" />
-                </div>
-          </div>
-        </div>
-              </div>
-
-      {/* Video Player Modal */}
-      <AnimatePresence>
-        {selectedVideo && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black z-[60]"
-            />
-            
-              <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[60] flex items-center justify-center bg-black"
-            >
-              {/* Back Button */}
-              <button
-                onClick={handleCloseVideo}
-                className="absolute top-4 left-4 z-10 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+          <ArrowLeft className="w-6 h-6 text-gray-700" />
+                    </button>
+        <h1 className="ml-4 text-xl font-semibold text-gray-800">Your Orders</h1>
+        {/* Debug: Show orders count and state */}
+        {!loading && (
+          <div className="ml-auto text-xs text-gray-500 flex flex-col items-end">
+            <span>({orders.length} orders, {filteredOrders.length} filtered)</span>
+            {process.env.NODE_ENV === 'development' && (
+        <button
+                onClick={() => {
+                  console.log('🔍 Current State:', {
+                    orders,
+                    filteredOrders,
+                    loading,
+                    searchQuery
+                  })
+                  toast.info(`Orders: ${orders.length}, Filtered: ${filteredOrders.length}`)
+                }}
+                className="text-[10px] mt-1 px-2 py-0.5 bg-gray-200 rounded"
               >
-                <ArrowLeft className="w-6 h-6 text-white" />
+                Debug
               </button>
+            )}
+        </div>
+        )}
+      </div>
 
-              {/* Video Container */}
-              <div 
-                className="w-full h-full flex items-center justify-center"
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-              >
-                <div className="relative w-full h-full flex flex-col items-center justify-center">
-                  <video
-                    ref={videoRef}
-                    src={selectedVideo.videoUrl}
-                    className="w-full h-full object-contain"
-                    controls
-                    autoPlay
-                    playsInline
-                    onError={(e) => {
-                      console.error("Video load error:", e)
-                    }}
-                  />
+      {/* Search Bar */}
+      <div className="p-4 bg-white mt-1">
+        <div className="flex items-center bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
+          <Search className="w-5 h-5 text-red-500" />
+          <input 
+            type="text" 
+            placeholder="Search by restaurant or dish" 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1 ml-3 outline-none text-gray-600 placeholder-gray-400"
+          />
+          <Mic className="w-5 h-5 text-red-500 border-l pl-2 box-content border-gray-300" />
+            </div>
+          </div>
+          
+      {/* Orders List */}
+      <div className="px-4 py-2">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-red-500 animate-spin mb-4" />
+            <p className="text-gray-600">Loading orders...</p>
+            </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Package className="w-16 h-16 text-gray-300 mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {searchQuery ? "No orders found" : "You haven't placed any orders yet"}
+            </h3>
+            <p className="text-gray-600 text-sm text-center mb-6">
+              {searchQuery 
+                ? "Try searching with different keywords"
+                : "Start accepting orders to see them here"}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredOrders.map((order) => {
+              const restaurantName = order.restaurantName || order.restaurantId?.name || 'Restaurant'
+              const restaurantLocation = getRestaurantLocation(order)
+              const restaurantImage = getRestaurantImage(order)
+              const orderDate = formatOrderDate(order.createdAt)
+              const orderStatus = getOrderStatus(order)
+              const orderPrice = order.pricing?.total || order.total || 0
+              const paymentFailed = isPaymentFailed(order)
+              const isDelivered = order.status === 'delivered' || order.status === 'completed'
+              // Rating - check if available in order data (might be in deliveryState or separate field)
+              const rating = order.rating || order.deliveryState?.rating || null
 
-                  {/* Video Info Overlay */}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent p-6">
-                    <h3 className="text-white font-bold text-lg mb-4">{selectedVideo.title}</h3>
-                  </div>
+              const orderKey = order.orderId || order._id || `order-${Math.random()}`
+              
+              return (
+                <div key={orderKey} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  {/* Card Header: Restaurant Info */}
+                  <div className="flex items-start justify-between p-4 pb-2">
+                    <div className="flex gap-3">
+                      {/* Restaurant/Food Image */}
+                      <div className="w-14 h-14 rounded-lg bg-gray-200 overflow-hidden shrink-0">
+            <img 
+                          src={restaurantImage} 
+                          alt={restaurantName}
+              className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.src = "https://images.unsplash.com/photo-1555949258-eb67b1ef0ceb?auto=format&fit=crop&w=100&q=80"
+                          }}
+            />
+      </div>
 
-                  {/* Actions Bar - Bottom Right Column */}
-                  <div className="absolute bottom-6 right-6 flex flex-col items-center gap-4">
-                    {/* Like Button */}
-                    <button
-                      onClick={() => handleLike(selectedVideo.id)}
-                      className={`flex flex-col items-center gap-1 transition-colors ${
-                        userReactions[selectedVideo.id] === 'like'
-                          ? 'text-blue-500'
-                          : 'text-white hover:text-blue-400'
-                      }`}
-                    >
-                      <ThumbsUp className="w-6 h-6" fill={userReactions[selectedVideo.id] === 'like' ? 'currentColor' : 'none'} />
-                      <span className="text-xs font-medium">
-                        {videoLikes[selectedVideo.id] || selectedVideo.likes || 0}
-                    </span>
-                    </button>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-800 text-lg leading-tight">{restaurantName}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">{restaurantLocation}</p>
+                        <button 
+                          onClick={() => navigate(`/restaurant/${order.restaurantId?.slug || order.restaurantId?._id || order.restaurantId}`)}
+                          className="text-xs text-red-500 font-medium flex items-center mt-1 hover:text-red-600"
+                        >
+                          View menu <span className="ml-0.5">▸</span>
+                        </button>
+        </div>
+      </div>
 
-                    {/* Dislike Button */}
-                    <button
-                      onClick={() => handleDislike(selectedVideo.id)}
-                      className={`flex flex-col items-center gap-1 transition-colors ${
-                        userReactions[selectedVideo.id] === 'dislike'
-                          ? 'text-red-500'
-                          : 'text-white hover:text-red-400'
-                      }`}
-                    >
-                      <ThumbsDown className="w-6 h-6" fill={userReactions[selectedVideo.id] === 'dislike' ? 'currentColor' : 'none'} />
-                      <span className="text-xs font-medium">
-                        {videoDislikes[selectedVideo.id] || selectedVideo.dislikes || 0}
-                      </span>
-                    </button>
+                    <button className="p-1 hover:bg-gray-100 rounded-full">
+                      <MoreVertical className="w-5 h-5 text-gray-400" />
+            </button>
+        </div>
 
-                    {/* Views */}
-                    <div className="flex flex-col items-center gap-1 text-white">
-                      <Eye className="w-6 h-6" />
-                      <span className="text-xs font-medium">
-                        {selectedVideo.views?.toLocaleString() || 0}
-                      </span>
+                  {/* Separator */}
+                  <div className="border-t border-dashed border-gray-200 mx-4 my-1"></div>
+
+                  {/* Items List */}
+                  <div className="px-4 py-2">
+                    {order.items && order.items.map((item, idx) => (
+                      <div key={item._id || item.itemId || idx} className="flex items-center gap-2 mt-1">
+                        {/* Veg/Non-Veg Icon */}
+                        <div className={`w-4 h-4 border ${item.isVeg ? 'border-green-600' : 'border-red-600'} flex items-center justify-center p-[2px] shrink-0`}>
+                          <div className={`w-full h-full rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`}></div>
+              </div>
+                        <span className="text-sm text-gray-700 font-medium">
+                          {item.quantity || 1} x {item.name}
+                        </span>
+            </div>
+          ))}
+      </div>
+
+                  {/* Date and Price */}
+                  <div className="px-4 py-2 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-400">Order placed on {orderDate}</p>
+                      {!paymentFailed && isDelivered && (
+                        <p className="text-xs font-medium text-gray-500 mt-1">{orderStatus}</p>
+                      )}
+        </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-semibold text-gray-800">₹{orderPrice.toFixed(2)}</span>
+                      <ChevronRight className="w-4 h-4 text-gray-400 ml-1" />
+        </div>
+      </div>
+
+                  {/* Separator */}
+                  <div className="border-t border-gray-100 mx-4"></div>
+
+                  {/* Card Footer: Actions */}
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    {/* Left Side: Rating or Error */}
+                    {paymentFailed ? (
+                      <div className="flex items-center gap-2">
+                        <div className="bg-red-100 p-1 rounded-full">
+                          <AlertCircle className="w-4 h-4 text-red-500" />
+                    </div>
+                        <span className="text-xs font-semibold text-red-500">Payment failed</span>
+                      </div>
+                    ) : isDelivered && rating ? (
+                      <div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm text-gray-800">You rated</span>
+                          <div className="flex bg-yellow-400 text-white px-1 rounded text-[10px] items-center gap-0.5 h-4">
+                            {rating}<Star className="w-2 h-2 fill-current" />
                     </div>
                   </div>
-                  </div>
+                        <button className="text-xs text-red-500 font-medium mt-0.5 flex items-center hover:text-red-600">
+                          View your feedback <span className="ml-0.5">▸</span>
+                        </button>
                 </div>
-              </motion.div>
-          </>
+                    ) : isDelivered ? (
+                      <div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm text-gray-800">Order {orderStatus}</span>
+          </div>
+                        <button className="text-xs text-red-500 font-medium mt-0.5 flex items-center hover:text-red-600">
+                          View details <span className="ml-0.5">▸</span>
+                        </button>
+        </div>
+                    ) : (
+                      <div>
+                        <span className="text-sm text-gray-800">{orderStatus}</span>
+              </div>
+                    )}
+
+                    {/* Right Side: Reorder Button */}
+              <button
+                      onClick={() => {
+                        // Navigate to restaurant or reorder functionality
+                        if (order.restaurantId) {
+                          navigate(`/restaurant/${order.restaurantId?.slug || order.restaurantId?._id || order.restaurantId}`)
+                        }
+                      }}
+                      className="bg-[#E23744] hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1 shadow-sm transition-colors"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reorder
+                    </button>
+                    </div>
+                  </div>
+              )
+            })}
+          </div>
         )}
-      </AnimatePresence>
+      </div>
+
+      {/* Footer Branding */}
+      <div className="flex justify-center mt-8 mb-4">
+        <h1 className="text-4xl font-black text-gray-200 tracking-tighter italic">appzeto</h1>
+                  </div>
     </div>
   )
 }

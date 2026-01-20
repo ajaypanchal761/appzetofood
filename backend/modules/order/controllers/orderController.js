@@ -489,15 +489,47 @@ export const verifyOrderPayment = async (req, res) => {
  */
 export const getUserOrders = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id || req.user?._id;
     const { status, limit = 20, page = 1 } = req.query;
 
+    if (!userId) {
+      logger.error('User ID not found in request');
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    // Build query - MongoDB should handle string/ObjectId conversion automatically
+    // But we'll try both formats to be safe
+    const mongoose = (await import('mongoose')).default;
     const query = { userId };
+    
+    // If userId is a string that looks like ObjectId, also try ObjectId format
+    if (typeof userId === 'string' && mongoose.Types.ObjectId.isValid(userId)) {
+      query.$or = [
+        { userId: userId },
+        { userId: new mongoose.Types.ObjectId(userId) }
+      ];
+      delete query.userId; // Remove direct userId since we're using $or
+    }
+    
+    // Add status filter if provided
+    if (status) {
+      if (query.$or) {
+        // Add status to each $or condition
+        query.$or = query.$or.map(condition => ({ ...condition, status }));
+      } else {
+        query.status = status;
+      }
+    }
     if (status) {
       query.status = status;
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    logger.info(`Fetching orders for user: ${userId}, query: ${JSON.stringify(query)}`);
 
     const orders = await Order.find(query)
       .sort({ createdAt: -1 })
@@ -507,6 +539,8 @@ export const getUserOrders = async (req, res) => {
       .lean();
 
     const total = await Order.countDocuments(query);
+
+    logger.info(`Found ${orders.length} orders for user ${userId} (total: ${total})`);
 
     res.json({
       success: true,
@@ -522,6 +556,7 @@ export const getUserOrders = async (req, res) => {
     });
   } catch (error) {
     logger.error(`Error fetching user orders: ${error.message}`);
+    logger.error(`Error stack: ${error.stack}`);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch orders'
@@ -547,6 +582,7 @@ export const getOrderDetails = async (req, res) => {
         userId
       })
         .populate('deliveryPartnerId', 'name email phone')
+        .populate('userId', 'name fullName phone email')
         .lean();
     }
     
@@ -557,6 +593,7 @@ export const getOrderDetails = async (req, res) => {
         userId
       })
         .populate('deliveryPartnerId', 'name email phone')
+        .populate('userId', 'name fullName phone email')
         .lean();
     }
 

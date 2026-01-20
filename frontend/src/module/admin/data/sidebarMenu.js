@@ -24,6 +24,12 @@ export const sidebarMenuData = [
           { label: "Category", path: "/admin/categories" },
         ],
       },
+      {
+        type: "link",
+        label: "Delivery & Platform Fee",
+        path: "/admin/fee-settings",
+        icon: "DollarSign",
+      },
     ],
   },
   {
@@ -92,6 +98,12 @@ export const sidebarMenuData = [
         label: "Subscription Orders",
         path: "/admin/subscription-orders",
         icon: "Calendar",
+      },
+      {
+        type: "link",
+        label: "Order Detect Delivery",
+        path: "/admin/order-detect-delivery",
+        icon: "Truck",
       },
       {
         type: "expandable",

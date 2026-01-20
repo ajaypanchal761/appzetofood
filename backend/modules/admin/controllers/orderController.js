@@ -178,11 +178,8 @@ export const getOrders = asyncHandler(async (req, res) => {
         hour12: true 
       }).toUpperCase();
 
-      // Get customer phone (masked)
+      // Get customer phone (unmasked - show full number for admin)
       const customerPhone = order.userId?.phone || '';
-      const maskedPhone = customerPhone ? 
-        `+${customerPhone.slice(-2)}*********` : 
-        '+8*********';
 
       // Map payment status
       const paymentStatusMap = {
@@ -244,7 +241,7 @@ export const getOrders = asyncHandler(async (req, res) => {
         date: dateStr,
         time: timeStr,
         customerName: order.userId?.name || 'Unknown',
-        customerPhone: maskedPhone,
+        customerPhone: customerPhone,
         customerEmail: order.userId?.email || '',
         restaurant: order.restaurantName || order.restaurantId?.name || 'Unknown Restaurant',
         restaurantId: order.restaurantId?.toString() || order.restaurantId || '',
@@ -270,6 +267,7 @@ export const getOrders = asyncHandler(async (req, res) => {
         deliveredAt: order.deliveredAt,
         cancelledAt: order.cancelledAt,
         tracking: order.tracking || {},
+        deliveryState: order.deliveryState || {},
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
         // Zone info from assignmentInfo

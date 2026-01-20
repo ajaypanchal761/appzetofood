@@ -10,7 +10,7 @@ import { useCart } from "../../context/CartContext"
 import { useProfile } from "../../context/ProfileContext"
 import { useOrders } from "../../context/OrdersContext"
 import { useLocation as useUserLocation } from "../../hooks/useLocation"
-import { orderAPI, restaurantAPI, API_ENDPOINTS } from "@/lib/api"
+import { orderAPI, restaurantAPI, adminAPI, API_ENDPOINTS } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
 
@@ -112,6 +112,14 @@ export default function Cart() {
   // Coupons state - fetched from backend
   const [availableCoupons, setAvailableCoupons] = useState([])
   const [loadingCoupons, setLoadingCoupons] = useState(false)
+  
+  // Fee settings from database (used as fallback if pricing not available)
+  const [feeSettings, setFeeSettings] = useState({
+    deliveryFee: 25,
+    freeDeliveryThreshold: 149,
+    platformFee: 5,
+    gstRate: 5,
+  })
   
 
   const cartCount = getCartCount()
@@ -554,11 +562,32 @@ export default function Cart() {
     calculatePricing()
   }, [cart, defaultAddress, appliedCoupon, couponCode, deliveryFleet, restaurantId])
 
-  // Use backend pricing if available, otherwise fallback to frontend calculation
+  // Fetch fee settings on mount
+  useEffect(() => {
+    const fetchFeeSettings = async () => {
+      try {
+        const response = await adminAPI.getPublicFeeSettings()
+        if (response.data.success && response.data.data.feeSettings) {
+          setFeeSettings({
+            deliveryFee: response.data.data.feeSettings.deliveryFee || 25,
+            freeDeliveryThreshold: response.data.data.feeSettings.freeDeliveryThreshold || 149,
+            platformFee: response.data.data.feeSettings.platformFee || 5,
+            gstRate: response.data.data.feeSettings.gstRate || 5,
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching fee settings:', error)
+        // Keep default values on error
+      }
+    }
+    fetchFeeSettings()
+  }, [])
+
+  // Use backend pricing if available, otherwise fallback to database settings
   const subtotal = pricing?.subtotal || cart.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0)
-  const deliveryFee = pricing?.deliveryFee ?? (subtotal > 149 && appliedCoupon?.freeDelivery ? 0 : 25)
-  const platformFee = pricing?.platformFee || 5
-  const gstCharges = pricing?.tax || Math.round(subtotal * 0.05)
+  const deliveryFee = pricing?.deliveryFee ?? (subtotal >= feeSettings.freeDeliveryThreshold || appliedCoupon?.freeDelivery ? 0 : feeSettings.deliveryFee)
+  const platformFee = pricing?.platformFee || feeSettings.platformFee
+  const gstCharges = pricing?.tax || Math.round(subtotal * (feeSettings.gstRate / 100))
   const discount = pricing?.discount || (appliedCoupon ? Math.min(appliedCoupon.discount, subtotal * 0.5) : 0)
   const totalBeforeDiscount = subtotal + deliveryFee + platformFee + gstCharges
   const total = pricing?.total || (totalBeforeDiscount - discount)

@@ -58,8 +58,8 @@ function getTokenForCurrentRoute() {
     return localStorage.getItem('restaurant_accessToken');
   } else if (path.startsWith('/delivery')) {
     return localStorage.getItem('delivery_accessToken');
-  } else if (path.startsWith('/user') || path === '/' || (!path.startsWith('/admin') && !(path.startsWith('/restaurant') && !path.startsWith('/restaurants')) && !path.startsWith('/delivery'))) {
-    // User module includes /restaurants/* paths
+  } else if (path.startsWith('/user') || path.startsWith('/usermain') || path === '/' || (!path.startsWith('/admin') && !(path.startsWith('/restaurant') && !path.startsWith('/restaurants')) && !path.startsWith('/delivery'))) {
+    // User module includes /restaurants/* and /usermain/* paths
     return localStorage.getItem('user_accessToken');
   }
 
@@ -232,8 +232,8 @@ apiClient.interceptors.response.use(
       } else if (currentPath.startsWith('/delivery')) {
         tokenKey = 'delivery_accessToken';
         expectedRole = 'delivery';
-      } else if (currentPath.startsWith('/user') || currentPath === '/' || currentPath.startsWith('/restaurants')) {
-        // User module includes /restaurants/* paths
+      } else if (currentPath.startsWith('/user') || currentPath.startsWith('/usermain') || currentPath === '/' || currentPath.startsWith('/restaurants')) {
+        // User module includes /restaurants/* and /usermain/* paths
         tokenKey = 'user_accessToken';
         expectedRole = 'user';
       }
