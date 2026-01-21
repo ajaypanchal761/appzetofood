@@ -4,9 +4,13 @@ import LandingPageExploreMore from '../models/LandingPageExploreMore.js';
 import LandingPageSettings from '../models/LandingPageSettings.js';
 import Under250Banner from '../models/Under250Banner.js';
 import DiningBanner from '../models/DiningBanner.js';
+import Top10Restaurant from '../models/Top10Restaurant.js';
+import GourmetRestaurant from '../models/GourmetRestaurant.js';
+import Restaurant from '../../restaurant/models/Restaurant.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { uploadToCloudinary } from '../../../shared/utils/cloudinaryService.js';
 import { cloudinary } from '../../../config/cloudinary.js';
+import mongoose from 'mongoose';
 
 /**
  * Get all active hero banners (public endpoint)
@@ -1173,5 +1177,414 @@ export const toggleDiningBannerStatus = async (req, res) => {
   } catch (error) {
     console.error('Error toggling dining banner status:', error);
     return errorResponse(res, 500, 'Failed to update banner status');
+  }
+};
+
+// ==================== TOP 10 RESTAURANTS ====================
+
+/**
+ * Get all Top 10 restaurants (admin endpoint)
+ */
+export const getAllTop10Restaurants = async (req, res) => {
+  try {
+    const restaurants = await Top10Restaurant.find()
+      .populate('restaurant', 'name restaurantId slug profileImage coverImages menuImages rating estimatedDeliveryTime distance offer featuredDish featuredPrice')
+      .sort({ rank: 1, order: 1 })
+      .lean();
+
+    return successResponse(res, 200, 'Top 10 restaurants retrieved successfully', {
+      restaurants
+    });
+  } catch (error) {
+    console.error('Error fetching Top 10 restaurants:', error);
+    return errorResponse(res, 500, 'Failed to fetch Top 10 restaurants');
+  }
+};
+
+/**
+ * Get all active Top 10 restaurants (public endpoint)
+ */
+export const getTop10Restaurants = async (req, res) => {
+  try {
+    const restaurants = await Top10Restaurant.find({ isActive: true })
+      .populate('restaurant', 'name restaurantId slug profileImage coverImages menuImages rating estimatedDeliveryTime distance offer featuredDish featuredPrice')
+      .sort({ rank: 1, order: 1 })
+      .lean();
+
+    return successResponse(res, 200, 'Top 10 restaurants retrieved successfully', {
+      restaurants: restaurants.map(r => ({
+        ...r.restaurant,
+        rank: r.rank,
+        _id: r._id
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching Top 10 restaurants:', error);
+    return errorResponse(res, 500, 'Failed to fetch Top 10 restaurants');
+  }
+};
+
+/**
+ * Add a restaurant to Top 10
+ */
+export const createTop10Restaurant = async (req, res) => {
+  try {
+    const { restaurantId, rank } = req.body;
+
+    if (!restaurantId) {
+      return errorResponse(res, 400, 'Restaurant ID is required');
+    }
+
+    if (!rank || rank < 1 || rank > 10) {
+      return errorResponse(res, 400, 'Rank must be between 1 and 10');
+    }
+
+    // Check if restaurant exists
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    // Check if rank is already taken
+    const existingRank = await Top10Restaurant.findOne({ rank, isActive: true });
+    if (existingRank) {
+      return errorResponse(res, 400, `Rank ${rank} is already taken`);
+    }
+
+    // Check if restaurant is already in Top 10
+    const existingRestaurant = await Top10Restaurant.findOne({ restaurant: restaurantId });
+    if (existingRestaurant) {
+      return errorResponse(res, 400, 'Restaurant is already in Top 10');
+    }
+
+    // Get the highest order number
+    const lastRestaurant = await Top10Restaurant.findOne()
+      .sort({ order: -1 })
+      .select('order')
+      .lean();
+
+    const newOrder = lastRestaurant ? lastRestaurant.order + 1 : 0;
+
+    // Create Top 10 restaurant record
+    const top10Restaurant = new Top10Restaurant({
+      restaurant: restaurantId,
+      rank,
+      order: newOrder,
+      isActive: true
+    });
+
+    await top10Restaurant.save();
+
+    // Populate restaurant data
+    await top10Restaurant.populate('restaurant', 'name restaurantId slug profileImage rating estimatedDeliveryTime distance offer featuredDish featuredPrice');
+
+    return successResponse(res, 201, 'Restaurant added to Top 10 successfully', {
+      restaurant: top10Restaurant
+    });
+  } catch (error) {
+    console.error('Error creating Top 10 restaurant:', error);
+    if (error.message.includes('Maximum 10 restaurants')) {
+      return errorResponse(res, 400, error.message);
+    }
+    return errorResponse(res, 500, 'Failed to add restaurant to Top 10');
+  }
+};
+
+/**
+ * Delete a restaurant from Top 10
+ */
+export const deleteTop10Restaurant = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const top10Restaurant = await Top10Restaurant.findById(id);
+    if (!top10Restaurant) {
+      return errorResponse(res, 404, 'Top 10 restaurant not found');
+    }
+
+    await Top10Restaurant.findByIdAndDelete(id);
+
+    return successResponse(res, 200, 'Restaurant removed from Top 10 successfully');
+  } catch (error) {
+    console.error('Error deleting Top 10 restaurant:', error);
+    return errorResponse(res, 500, 'Failed to remove restaurant from Top 10');
+  }
+};
+
+/**
+ * Update Top 10 restaurant rank
+ */
+export const updateTop10RestaurantRank = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rank } = req.body;
+
+    if (!rank || rank < 1 || rank > 10) {
+      return errorResponse(res, 400, 'Rank must be between 1 and 10');
+    }
+
+    const top10Restaurant = await Top10Restaurant.findById(id);
+    if (!top10Restaurant) {
+      return errorResponse(res, 404, 'Top 10 restaurant not found');
+    }
+
+    // Check if rank is already taken by another restaurant
+    const existingRank = await Top10Restaurant.findOne({ rank, isActive: true, _id: { $ne: id } });
+    if (existingRank) {
+      return errorResponse(res, 400, `Rank ${rank} is already taken`);
+    }
+
+    top10Restaurant.rank = rank;
+    top10Restaurant.updatedAt = new Date();
+    await top10Restaurant.save();
+
+    await top10Restaurant.populate('restaurant', 'name restaurantId slug profileImage rating estimatedDeliveryTime distance offer featuredDish featuredPrice');
+
+    return successResponse(res, 200, 'Top 10 restaurant rank updated successfully', {
+      restaurant: top10Restaurant
+    });
+  } catch (error) {
+    console.error('Error updating Top 10 restaurant rank:', error);
+    return errorResponse(res, 500, 'Failed to update Top 10 restaurant rank');
+  }
+};
+
+/**
+ * Update Top 10 restaurant order
+ */
+export const updateTop10RestaurantOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { order } = req.body;
+
+    if (typeof order !== 'number') {
+      return errorResponse(res, 400, 'Order must be a number');
+    }
+
+    const top10Restaurant = await Top10Restaurant.findByIdAndUpdate(
+      id,
+      { order, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!top10Restaurant) {
+      return errorResponse(res, 404, 'Top 10 restaurant not found');
+    }
+
+    return successResponse(res, 200, 'Top 10 restaurant order updated successfully', {
+      restaurant: top10Restaurant
+    });
+  } catch (error) {
+    console.error('Error updating Top 10 restaurant order:', error);
+    return errorResponse(res, 500, 'Failed to update Top 10 restaurant order');
+  }
+};
+
+/**
+ * Toggle Top 10 restaurant active status
+ */
+export const toggleTop10RestaurantStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const top10Restaurant = await Top10Restaurant.findById(id);
+    if (!top10Restaurant) {
+      return errorResponse(res, 404, 'Top 10 restaurant not found');
+    }
+
+    // Check if activating would exceed 10 active restaurants
+    if (!top10Restaurant.isActive) {
+      const activeCount = await Top10Restaurant.countDocuments({ isActive: true });
+      if (activeCount >= 10) {
+        return errorResponse(res, 400, 'Maximum 10 restaurants can be active in Top 10');
+      }
+    }
+
+    top10Restaurant.isActive = !top10Restaurant.isActive;
+    top10Restaurant.updatedAt = new Date();
+    await top10Restaurant.save();
+
+    await top10Restaurant.populate('restaurant', 'name restaurantId slug profileImage rating estimatedDeliveryTime distance offer featuredDish featuredPrice');
+
+    return successResponse(res, 200, 'Top 10 restaurant status updated successfully', {
+      restaurant: top10Restaurant
+    });
+  } catch (error) {
+    console.error('Error toggling Top 10 restaurant status:', error);
+    return errorResponse(res, 500, 'Failed to update Top 10 restaurant status');
+  }
+};
+
+// ==================== GOURMET RESTAURANTS ====================
+
+/**
+ * Get all Gourmet restaurants (admin endpoint)
+ */
+export const getAllGourmetRestaurants = async (req, res) => {
+  try {
+    const restaurants = await GourmetRestaurant.find()
+      .populate('restaurant', 'name restaurantId slug profileImage coverImages menuImages rating estimatedDeliveryTime distance offer featuredDish featuredPrice')
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+
+    return successResponse(res, 200, 'Gourmet restaurants retrieved successfully', {
+      restaurants
+    });
+  } catch (error) {
+    console.error('Error fetching Gourmet restaurants:', error);
+    return errorResponse(res, 500, 'Failed to fetch Gourmet restaurants');
+  }
+};
+
+/**
+ * Get all active Gourmet restaurants (public endpoint)
+ */
+export const getGourmetRestaurants = async (req, res) => {
+  try {
+    const restaurants = await GourmetRestaurant.find({ isActive: true })
+      .populate('restaurant', 'name restaurantId slug profileImage coverImages menuImages rating estimatedDeliveryTime distance offer featuredDish featuredPrice')
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+
+    return successResponse(res, 200, 'Gourmet restaurants retrieved successfully', {
+      restaurants: restaurants.map(r => ({
+        ...r.restaurant,
+        _id: r._id
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching Gourmet restaurants:', error);
+    return errorResponse(res, 500, 'Failed to fetch Gourmet restaurants');
+  }
+};
+
+/**
+ * Add a restaurant to Gourmet
+ */
+export const createGourmetRestaurant = async (req, res) => {
+  try {
+    const { restaurantId } = req.body;
+
+    if (!restaurantId) {
+      return errorResponse(res, 400, 'Restaurant ID is required');
+    }
+
+    // Check if restaurant exists
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    // Check if restaurant is already in Gourmet
+    const existingRestaurant = await GourmetRestaurant.findOne({ restaurant: restaurantId });
+    if (existingRestaurant) {
+      return errorResponse(res, 400, 'Restaurant is already in Gourmet');
+    }
+
+    // Get the highest order number
+    const lastRestaurant = await GourmetRestaurant.findOne()
+      .sort({ order: -1 })
+      .select('order')
+      .lean();
+
+    const newOrder = lastRestaurant ? lastRestaurant.order + 1 : 0;
+
+    // Create Gourmet restaurant record
+    const gourmetRestaurant = new GourmetRestaurant({
+      restaurant: restaurantId,
+      order: newOrder,
+      isActive: true
+    });
+
+    await gourmetRestaurant.save();
+
+    // Populate restaurant data
+    await gourmetRestaurant.populate('restaurant', 'name restaurantId slug profileImage rating estimatedDeliveryTime distance offer featuredDish featuredPrice');
+
+    return successResponse(res, 201, 'Restaurant added to Gourmet successfully', {
+      restaurant: gourmetRestaurant
+    });
+  } catch (error) {
+    console.error('Error creating Gourmet restaurant:', error);
+    return errorResponse(res, 500, 'Failed to add restaurant to Gourmet');
+  }
+};
+
+/**
+ * Delete a restaurant from Gourmet
+ */
+export const deleteGourmetRestaurant = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const gourmetRestaurant = await GourmetRestaurant.findById(id);
+    if (!gourmetRestaurant) {
+      return errorResponse(res, 404, 'Gourmet restaurant not found');
+    }
+
+    await GourmetRestaurant.findByIdAndDelete(id);
+
+    return successResponse(res, 200, 'Restaurant removed from Gourmet successfully');
+  } catch (error) {
+    console.error('Error deleting Gourmet restaurant:', error);
+    return errorResponse(res, 500, 'Failed to remove restaurant from Gourmet');
+  }
+};
+
+/**
+ * Update Gourmet restaurant order
+ */
+export const updateGourmetRestaurantOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { order } = req.body;
+
+    if (typeof order !== 'number') {
+      return errorResponse(res, 400, 'Order must be a number');
+    }
+
+    const gourmetRestaurant = await GourmetRestaurant.findByIdAndUpdate(
+      id,
+      { order, updatedAt: new Date() },
+      { new: true }
+    );
+
+    if (!gourmetRestaurant) {
+      return errorResponse(res, 404, 'Gourmet restaurant not found');
+    }
+
+    return successResponse(res, 200, 'Gourmet restaurant order updated successfully', {
+      restaurant: gourmetRestaurant
+    });
+  } catch (error) {
+    console.error('Error updating Gourmet restaurant order:', error);
+    return errorResponse(res, 500, 'Failed to update Gourmet restaurant order');
+  }
+};
+
+/**
+ * Toggle Gourmet restaurant active status
+ */
+export const toggleGourmetRestaurantStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const gourmetRestaurant = await GourmetRestaurant.findById(id);
+    if (!gourmetRestaurant) {
+      return errorResponse(res, 404, 'Gourmet restaurant not found');
+    }
+
+    gourmetRestaurant.isActive = !gourmetRestaurant.isActive;
+    gourmetRestaurant.updatedAt = new Date();
+    await gourmetRestaurant.save();
+
+    await gourmetRestaurant.populate('restaurant', 'name restaurantId slug profileImage rating estimatedDeliveryTime distance offer featuredDish featuredPrice');
+
+    return successResponse(res, 200, 'Gourmet restaurant status updated successfully', {
+      restaurant: gourmetRestaurant
+    });
+  } catch (error) {
+    console.error('Error toggling Gourmet restaurant status:', error);
+    return errorResponse(res, 500, 'Failed to update Gourmet restaurant status');
   }
 };

@@ -364,3 +364,104 @@ export const getCouponsByItemIdPublic = asyncHandler(async (req, res) => {
   });
 });
 
+// Get all active offers with restaurant and dish details (PUBLIC - for user offers page)
+export const getPublicOffers = asyncHandler(async (req, res) => {
+  try {
+    console.log('[PUBLIC-OFFERS] Request received');
+    const now = new Date();
+    
+    // Find all active offers
+    const offers = await Offer.find({
+      status: 'active',
+    })
+      .populate('restaurant', 'name restaurantId slug profileImage rating estimatedDeliveryTime distance')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    console.log(`[PUBLIC-OFFERS] Found ${offers.length} active offers`);
+
+    // Filter by date validity and flatten to show dishes with offers
+    const offerDishes = [];
+    
+    offers.forEach((offer) => {
+      // Check if offer is valid (date-wise)
+      const startDate = offer.startDate ? new Date(offer.startDate) : null;
+      const endDate = offer.endDate ? new Date(offer.endDate) : null;
+      
+      const startValid = !startDate || startDate <= now;
+      const endOfToday = new Date(now);
+      endOfToday.setHours(23, 59, 59, 999);
+      const endValid = !endDate || endDate >= endOfToday;
+      
+      if (!startValid || !endValid) {
+        return; // Skip expired or not yet started offers
+      }
+
+      // Skip if restaurant is not found or not active
+      if (!offer.restaurant || !offer.restaurant.name) {
+        return;
+      }
+
+      // Process each item in the offer
+      if (offer.items && offer.items.length > 0) {
+        offer.items.forEach((item) => {
+          // Format offer text based on discount type
+          let offerText = '';
+          if (offer.discountType === 'percentage') {
+            offerText = `Flat ${item.discountPercentage}% OFF`;
+          } else if (offer.discountType === 'flat-price') {
+            const discountAmount = item.originalPrice - item.discountedPrice;
+            offerText = `Flat ₹${Math.round(discountAmount)} OFF`;
+          } else if (offer.discountType === 'bogo') {
+            offerText = 'Buy 1 Get 1 Free';
+          } else {
+            offerText = 'Special Offer';
+          }
+
+          offerDishes.push({
+            id: `${offer._id}_${item.itemId}`,
+            restaurantId: offer.restaurant._id.toString(),
+            restaurantName: offer.restaurant.name,
+            restaurantSlug: offer.restaurant.slug || offer.restaurant.name.toLowerCase().replace(/\s+/g, '-'),
+            restaurantImage: offer.restaurant.profileImage?.url || '',
+            restaurantRating: offer.restaurant.rating || 0,
+            deliveryTime: offer.restaurant.estimatedDeliveryTime || '25-30 mins',
+            distance: offer.restaurant.distance || '1.2 km',
+            dishId: item.itemId,
+            dishName: item.itemName,
+            dishImage: item.image || '',
+            originalPrice: item.originalPrice,
+            discountedPrice: item.discountedPrice,
+            discountPercentage: item.discountPercentage,
+            offer: offerText,
+            couponCode: item.couponCode,
+            isVeg: item.isVeg || false,
+            minOrderValue: offer.minOrderValue || 0,
+          });
+        });
+      }
+    });
+
+    // Group by offer text for the "FLAT 50% OFF" section
+    const groupedByOffer = {};
+    offerDishes.forEach((dish) => {
+      if (!groupedByOffer[dish.offer]) {
+        groupedByOffer[dish.offer] = [];
+      }
+      groupedByOffer[dish.offer].push(dish);
+    });
+
+    console.log(`[PUBLIC-OFFERS] Returning ${offerDishes.length} offer dishes`);
+    
+    return successResponse(res, 200, 'Offers retrieved successfully', {
+      allOffers: offerDishes,
+      groupedByOffer,
+      total: offerDishes.length,
+    });
+  } catch (error) {
+    console.error('[PUBLIC-OFFERS] Error fetching public offers:', error);
+    console.error('[PUBLIC-OFFERS] Error stack:', error.stack);
+    return errorResponse(res, 500, error.message || 'Failed to fetch offers');
+  }
+});
+

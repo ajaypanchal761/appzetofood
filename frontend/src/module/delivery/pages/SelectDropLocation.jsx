@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import { MapPin, CheckCircle, X } from "lucide-react"
 import { useGigStore } from "../store/gigStore"
-import dropLocationBanner from "../../../assets/droplocationbanner.png"
+// import dropLocationBanner from "../../../assets/droplocationbanner.png" // File not found - using fallback
+import deliveryLoginBanner from "../../../assets/deliveryloginbanner.png"
 
 const LOCATIONS = [
   { name: "New Palasia", available: true },
@@ -45,7 +46,7 @@ export default function SelectDropLocation() {
       {/* Top Banner Section - Extended height to show behind rounded corners */}
       <div className="absolute top-0 left-0 right-0 w-full" style={{ height: '45vh' }}>
         <img 
-          src={dropLocationBanner} 
+          src={deliveryLoginBanner} 
           alt="Drop Location Banner" 
           className="w-full h-full object-cover"
         />

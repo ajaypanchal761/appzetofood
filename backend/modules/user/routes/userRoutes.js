@@ -12,6 +12,7 @@ import {
 } from '../controllers/userController.js';
 import { authenticate } from '../../auth/middleware/auth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
+import userWalletRoutes from './userWalletRoutes.js';
 
 const router = express.Router();
 
@@ -38,6 +39,9 @@ router.get('/addresses', getUserAddresses);
 router.post('/addresses', addUserAddress);
 router.put('/addresses/:id', updateUserAddress);
 router.delete('/addresses/:id', deleteUserAddress);
+
+// Wallet routes
+router.use('/wallet', userWalletRoutes);
 
 export default router;
 

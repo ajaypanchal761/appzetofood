@@ -88,40 +88,17 @@ export const initRazorpayPayment = async (options) => {
           if (options.onClose) {
             options.onClose();
           }
-        }
+        },
+        // Ensure modal is clickable
+        escape: true,
+        animation: true
+      },
+      // Ensure proper z-index
+      retry: {
+        enabled: true,
+        max_count: 3
       }
     };
-
-    // Mobile-specific options for better UX
-    if (window.innerWidth <= 768) {
-      razorpayOptions.config = {
-        display: {
-          blocks: {
-            banks: {
-              name: 'All payment methods',
-              instruments: [
-                {
-                  method: 'upi'
-                },
-                {
-                  method: 'card'
-                },
-                {
-                  method: 'netbanking'
-                },
-                {
-                  method: 'wallet'
-                }
-              ]
-            }
-          },
-          sequence: ['block.banks'],
-          preferences: {
-            show_default_blocks: true
-          }
-        }
-      };
-    }
 
     const razorpay = new window.Razorpay(razorpayOptions);
     
@@ -141,9 +118,15 @@ export const initRazorpayPayment = async (options) => {
       }
     });
 
+    // Open Razorpay modal
     razorpay.open();
     
     console.log('✅ Razorpay checkout opened successfully');
+    console.log('Razorpay options:', {
+      key: razorpayOptions.key ? 'Present' : 'Missing',
+      amount: razorpayOptions.amount,
+      order_id: razorpayOptions.order_id
+    });
 
     return razorpay;
   } catch (error) {

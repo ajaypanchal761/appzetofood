@@ -11,7 +11,7 @@ import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSectio
 import { scheduleItemAvailability, cancelScheduledAvailability, getItemSchedule } from './controllers/menuScheduleController.js';
 import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
 import { addStaff, getStaff, getStaffById, updateStaff, deleteStaff } from './controllers/staffManagementController.js';
-import { createOffer, getOffers, getOfferById, updateOfferStatus, deleteOffer, getCouponsByItemId, getCouponsByItemIdPublic } from './controllers/offerController.js';
+import { createOffer, getOffers, getOfferById, updateOfferStatus, deleteOffer, getCouponsByItemId, getCouponsByItemIdPublic, getPublicOffers } from './controllers/offerController.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import restaurantOrderRoutes from './routes/restaurantOrderRoutes.js';
 
@@ -55,6 +55,8 @@ router.use('/categories', categoryRoutes);
 router.post('/offers', authenticate, createOffer);
 router.get('/offers', authenticate, getOffers);
 router.get('/offers/item/:itemId/coupons', authenticate, getCouponsByItemId);
+// Public offers route - must come before /offers/:id to avoid route conflict
+router.get('/offers/public', getPublicOffers);
 router.get('/offers/:id', authenticate, getOfferById);
 router.put('/offers/:id/status', authenticate, updateOfferStatus);
 router.delete('/offers/:id', authenticate, deleteOffer);

@@ -507,7 +507,7 @@ export default function Profile() {
             <div className="w-1 h-4 bg-green-600 rounded"></div>
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">Collections</h3>
           </div>
-          <Link to="/user/collections">
+          <Link to="/user/profile/favorites">
             <motion.div
               whileHover={{ x: 4, scale: 1.01 }}
               transition={{ duration: 0.2, type: "spring", stiffness: 300 }}

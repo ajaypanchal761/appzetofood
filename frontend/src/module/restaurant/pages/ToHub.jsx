@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react"
+import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { DateRangeCalendar } from "@/components/ui/date-range-calendar"
@@ -342,7 +342,7 @@ export default function ToHub() {
     { id: "complaints", label: "Complaints", icon: FaExclamationTriangle, route: "/restaurant/feedback?tab=complaints" },
     { id: "reviews", label: "Reviews", icon: FaStar, route: "/restaurant/feedback" },
     { id: "feedback", label: "Share your feedback", icon: FaCommentDots, route: "/restaurant/Share-Feedback" },
-    { id: "smart-link", label: "Smart link", icon: FaLink, route: "/restaurant/smart-link" },
+    { id: "order-history-2", label: "Order History", icon: FaHistory, route: "/restaurant/orders/all" },
     { id: "settings", label: "Settings", icon: FaCog, route: "/restaurant/delivery-settings" },
     { id: "show-all", label: "Show all", icon: FaThLarge, route: "/restaurant/explore" },
   ]
@@ -359,6 +359,14 @@ export default function ToHub() {
 
   const [totalSales, setTotalSales] = useState("₹ 0")
   const [totalOrders, setTotalOrders] = useState("0")
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const [mealtimeMetrics, setMealtimeMetrics] = useState([
+    { title: "Breakfast", window: "7:00 am - 11:00 am", value: "0", change: "- 0%", color: "#111827" },
+    { title: "Lunch", window: "11:00 am - 4:00 pm", value: "0", change: "- 0%", color: "#ef4444" },
+    { title: "Evening snacks", window: "4:00 pm - 7:00 pm", value: "0", change: "- 0%", color: "#2563eb" },
+    { title: "Dinner", window: "7:00 pm - 11:00 pm", value: "0", change: "- 0%", color: "#f59e0b" },
+    { title: "Late night", window: "11:00 pm - 7:00 am", value: "0", change: "- 0%", color: "#10b981" },
+  ])
   const [funnelFindView, setFunnelFindView] = useState("menu")
   const [impressionsCustomerView, setImpressionsCustomerView] = useState("affinity")
   const [menuOpensCustomerView, setMenuOpensCustomerView] = useState("affinity")
@@ -627,8 +635,108 @@ export default function ToHub() {
     }
   }
   
+  // Calculate mealtime data from orders
+  const calculateMealtimeData = (orders, startDate, endDate) => {
+    // Initialize mealtime buckets
+    const mealtimeBuckets = {
+      breakfast: { count: 0, color: "#111827" },
+      lunch: { count: 0, color: "#ef4444" },
+      eveningSnacks: { count: 0, color: "#2563eb" },
+      dinner: { count: 0, color: "#f59e0b" },
+      lateNight: { count: 0, color: "#10b981" },
+    }
+    
+    // Filter orders by date range
+    const start = new Date(startDate)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(endDate)
+    end.setHours(23, 59, 59, 999)
+    
+    const filteredOrders = orders.filter(order => {
+      if (!order.createdAt) return false
+      const orderDate = new Date(order.createdAt)
+      return orderDate >= start && orderDate <= end
+    })
+    
+    // Group orders by mealtime
+    filteredOrders.forEach(order => {
+      const orderDate = new Date(order.createdAt)
+      const hour = orderDate.getHours()
+      const minute = orderDate.getMinutes()
+      const timeInMinutes = hour * 60 + minute
+      
+      // Breakfast: 7:00 am - 11:00 am (420 - 660 minutes)
+      if (timeInMinutes >= 420 && timeInMinutes < 660) {
+        mealtimeBuckets.breakfast.count++
+      }
+      // Lunch: 11:00 am - 4:00 pm (660 - 960 minutes)
+      else if (timeInMinutes >= 660 && timeInMinutes < 960) {
+        mealtimeBuckets.lunch.count++
+      }
+      // Evening snacks: 4:00 pm - 7:00 pm (960 - 1140 minutes)
+      else if (timeInMinutes >= 960 && timeInMinutes < 1140) {
+        mealtimeBuckets.eveningSnacks.count++
+      }
+      // Dinner: 7:00 pm - 11:00 pm (1140 - 1380 minutes, or 1140 - 1440)
+      else if (timeInMinutes >= 1140 && timeInMinutes < 1380) {
+        mealtimeBuckets.dinner.count++
+      }
+      // Late night: 11:00 pm - 7:00 am (1380 - 1440 and 0 - 420 minutes)
+      else if (timeInMinutes >= 1380 || timeInMinutes < 420) {
+        mealtimeBuckets.lateNight.count++
+      }
+    })
+    
+    const totalOrdersCount = filteredOrders.length
+    
+    // Calculate percentages and format data
+    const calculatePercentage = (count, total) => {
+      if (total === 0) return "- 0%"
+      const percentage = ((count / total) * 100).toFixed(1)
+      return `${percentage}%`
+    }
+    
+    return [
+      { 
+        title: "Breakfast", 
+        window: "7:00 am - 11:00 am", 
+        value: mealtimeBuckets.breakfast.count.toString(), 
+        change: calculatePercentage(mealtimeBuckets.breakfast.count, totalOrdersCount), 
+        color: mealtimeBuckets.breakfast.color 
+      },
+      { 
+        title: "Lunch", 
+        window: "11:00 am - 4:00 pm", 
+        value: mealtimeBuckets.lunch.count.toString(), 
+        change: calculatePercentage(mealtimeBuckets.lunch.count, totalOrdersCount), 
+        color: mealtimeBuckets.lunch.color 
+      },
+      { 
+        title: "Evening snacks", 
+        window: "4:00 pm - 7:00 pm", 
+        value: mealtimeBuckets.eveningSnacks.count.toString(), 
+        change: calculatePercentage(mealtimeBuckets.eveningSnacks.count, totalOrdersCount), 
+        color: mealtimeBuckets.eveningSnacks.color 
+      },
+      { 
+        title: "Dinner", 
+        window: "7:00 pm - 11:00 pm", 
+        value: mealtimeBuckets.dinner.count.toString(), 
+        change: calculatePercentage(mealtimeBuckets.dinner.count, totalOrdersCount), 
+        color: mealtimeBuckets.dinner.color 
+      },
+      { 
+        title: "Late night", 
+        window: "11:00 pm - 7:00 am", 
+        value: mealtimeBuckets.lateNight.count.toString(), 
+        change: calculatePercentage(mealtimeBuckets.lateNight.count, totalOrdersCount), 
+        color: mealtimeBuckets.lateNight.color 
+      },
+    ]
+  }
+  
   // Fetch orders and update chart data
-  const fetchOrdersAndUpdateChart = async (rangeId) => {
+  const fetchOrdersAndUpdateChart = useCallback(async (rangeId) => {
     try {
       setIsDateLoading(true)
       
@@ -679,19 +787,77 @@ export default function ToHub() {
           endDate = ranges.yesterday
       }
       
-      // Fetch all orders (we'll filter by date on frontend)
-      const response = await restaurantAPI.getOrders({ page: 1, limit: 10000 })
+      // Format dates for API (ISO format)
+      const startDateISO = new Date(startDate)
+      startDateISO.setHours(0, 0, 0, 0)
+      const endDateISO = new Date(endDate)
+      endDateISO.setHours(23, 59, 59, 999)
       
-      if (response.data?.success && response.data.data?.orders) {
-        const orders = response.data.data.orders
+      // Fetch all orders with pagination to get all orders
+      let allOrders = []
+      let page = 1
+      let hasMore = true
+      const limit = 1000 // Fetch in batches
+      const maxPages = 50 // Safety limit to prevent infinite loops
+      
+      while (hasMore && page <= maxPages) {
+        try {
+          const response = await restaurantAPI.getOrders({ 
+            page, 
+            limit
+          })
+          
+          if (response.data?.success && response.data.data?.orders) {
+            const orders = response.data.data.orders
+            allOrders = [...allOrders, ...orders]
+            
+            // Check if there are more pages
+            const totalPages = response.data.data.totalPages || response.data.data.pagination?.totalPages || 1
+            const totalCount = response.data.data.total || response.data.data.pagination?.total || 0
+            
+            // Stop if we got fewer orders than the limit (last page) or if we've reached total pages
+            if (orders.length < limit || (totalPages > 0 && page >= totalPages)) {
+              hasMore = false
+            } else {
+              page++
+            }
+          } else {
+            hasMore = false
+          }
+        } catch (pageError) {
+          console.error(`Error fetching orders page ${page}:`, pageError)
+          hasMore = false
+        }
+      }
+      
+      console.log(`📊 Fetched ${allOrders.length} orders for date range:`, {
+        startDate: startDateISO.toISOString(),
+        endDate: endDateISO.toISOString(),
+        rangeId
+      })
+      
+      if (allOrders.length > 0) {
         const { chartData: newChartData, totalSales: newTotalSales, totalOrders: newTotalOrders } = 
-          calculateChartDataFromOrders(orders, startDate, endDate)
+          calculateChartDataFromOrders(allOrders, startDate, endDate)
+        
+        // Calculate mealtime data
+        const mealtimeData = calculateMealtimeData(allOrders, startDate, endDate)
+        
+        console.log('📈 Chart data calculated:', {
+          totalSales: newTotalSales,
+          totalOrders: newTotalOrders,
+          chartDataPoints: newChartData.length,
+          mealtimeData
+        })
         
         setChartData(newChartData)
         setTotalSales(`₹ ${newTotalSales.toLocaleString("en-IN")}`)
         setTotalOrders(newTotalOrders.toString())
+        setMealtimeMetrics(mealtimeData)
+        setLastUpdated(new Date())
       } else {
         // No orders found
+        console.log('⚠️ No orders found for the selected date range')
         setChartData([
           { hour: "12am", orders: 0, sales: 0 },
           { hour: "4am", orders: 0, sales: 0 },
@@ -703,6 +869,14 @@ export default function ToHub() {
         ])
         setTotalSales("₹ 0")
         setTotalOrders("0")
+        // Reset mealtime metrics to zero
+        setMealtimeMetrics([
+          { title: "Breakfast", window: "7:00 am - 11:00 am", value: "0", change: "- 0%", color: "#111827" },
+          { title: "Lunch", window: "11:00 am - 4:00 pm", value: "0", change: "- 0%", color: "#ef4444" },
+          { title: "Evening snacks", window: "4:00 pm - 7:00 pm", value: "0", change: "- 0%", color: "#2563eb" },
+          { title: "Dinner", window: "7:00 pm - 11:00 pm", value: "0", change: "- 0%", color: "#f59e0b" },
+          { title: "Late night", window: "11:00 pm - 7:00 am", value: "0", change: "- 0%", color: "#10b981" },
+        ])
       }
     } catch (error) {
       // Suppress 401 errors as they're handled by axios interceptor
@@ -713,7 +887,7 @@ export default function ToHub() {
     } finally {
       setIsDateLoading(false)
     }
-  }
+  }, [customDateRange])
 
   const handleDateRangeSelect = (id) => {
     if (id === "custom") {
@@ -738,12 +912,30 @@ export default function ToHub() {
   useEffect(() => {
     if (!restaurantData) return // Don't fetch if restaurant data is not loaded yet
     fetchOrdersAndUpdateChart(selectedDateRange)
-  }, [restaurantData, selectedDateRange])
+  }, [restaurantData, selectedDateRange, fetchOrdersAndUpdateChart])
 
   const formatDateShort = (date) =>
     date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
   const formatDateLong = (date) =>
     date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" })
+  
+  const formatTimeAgo = (date) => {
+    const now = new Date()
+    const diffInSeconds = Math.floor((now - date) / 1000)
+    
+    if (diffInSeconds < 60) {
+      return "few seconds ago"
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60)
+      return `${minutes} minute${minutes > 1 ? 's' : ''} ago`
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600)
+      return `${hours} hour${hours > 1 ? 's' : ''} ago`
+    } else {
+      const days = Math.floor(diffInSeconds / 86400)
+      return `${days} day${days > 1 ? 's' : ''} ago`
+    }
+  }
 
   const selectedRangeLabel = useMemo(() => {
     const r = getDateRanges()
@@ -912,13 +1104,6 @@ export default function ToHub() {
     { title: "Between 4 and 6 km", value: "0", change: "- 0%", color: "#ef4444" },
     { title: "Between 6 and 10 km", value: "0", change: "- 0%", color: "#2563eb" },
     { title: "Above 10 km", value: "0", change: "- 0%", color: "#f59e0b" },
-  ]
-  const mealtimeMetrics = [
-    { title: "Breakfast", window: "7:00 am - 11:00 am", value: "0", change: "- 0%", color: "#111827" },
-    { title: "Lunch", window: "11:00 am - 4:00 pm", value: "0", change: "- 0%", color: "#ef4444" },
-    { title: "Evening snacks", window: "4:00 pm - 7:00 pm", value: "0", change: "- 0%", color: "#2563eb" },
-    { title: "Dinner", window: "7:00 pm - 11:00 pm", value: "0", change: "- 0%", color: "#f59e0b" },
-    { title: "Late night", window: "11:00 pm - 7:00 am", value: "0", change: "- 0%", color: "#10b981" },
   ]
   const { headerPrimary, compareLabel } = useMemo(() => {
     const ranges = getDateRanges()
@@ -1477,7 +1662,11 @@ export default function ToHub() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-base font-bold text-gray-900">Orders by mealtime</p>
-              <p className="text-xs text-gray-500">Last updated: a day ago</p>
+              <p className="text-xs text-gray-500">
+                {lastUpdated 
+                  ? `Last updated: ${formatTimeAgo(lastUpdated)}`
+                  : "Last updated: a day ago"}
+              </p>
             </div>
             <div className="relative">
               <button 
@@ -1934,7 +2123,11 @@ export default function ToHub() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-base font-bold text-gray-900">Orders by mealtime</p>
-                <p className="text-xs text-gray-500">Last updated: a day ago</p>
+                <p className="text-xs text-gray-500">
+                  {lastUpdated 
+                    ? `Last updated: ${formatTimeAgo(lastUpdated)}`
+                    : "Last updated: a day ago"}
+                </p>
               </div>
               <div className="relative">
                 <button 

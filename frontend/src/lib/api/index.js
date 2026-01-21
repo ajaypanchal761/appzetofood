@@ -177,6 +177,26 @@ export const userAPI = {
     return apiClient.get(API_ENDPOINTS.USER.WALLET);
   },
 
+  // Get wallet transactions
+  getWalletTransactions: (params = {}) => {
+    return apiClient.get(`${API_ENDPOINTS.USER.WALLET}/transactions`, { params });
+  },
+
+  // Create Razorpay order for wallet top-up
+  createWalletTopupOrder: (amount) => {
+    return apiClient.post(`${API_ENDPOINTS.USER.WALLET}/create-topup-order`, { amount });
+  },
+
+  // Verify payment and add money to wallet
+  verifyWalletTopupPayment: (data) => {
+    return apiClient.post(`${API_ENDPOINTS.USER.WALLET}/verify-topup-payment`, data);
+  },
+
+  // Add money to wallet (direct - internal use)
+  addMoneyToWallet: (data) => {
+    return apiClient.post(`${API_ENDPOINTS.USER.WALLET}/add-money`, data);
+  },
+
   // Get user orders
   getOrders: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.USER.ORDERS, { params });
@@ -436,6 +456,10 @@ export const restaurantAPI = {
         .replace(':restaurantId', restaurantId)
         .replace(':itemId', itemId)
     );
+  },
+  // Get public offers (for user offers page)
+  getPublicOffers: () => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.OFFERS_PUBLIC);
   },
 
   // Get restaurant by owner (for restaurant module)
@@ -1241,6 +1265,19 @@ export const diningAPI = {
   // Get dining stories
   getStories: () => {
     return apiClient.get(API_ENDPOINTS.DINING.STORIES);
+  },
+};
+
+// Export hero banner API helper functions
+export const heroBannerAPI = {
+  // Get Top 10 restaurants (public)
+  getTop10Restaurants: () => {
+    return apiClient.get(API_ENDPOINTS.HERO_BANNER.TOP_10_PUBLIC);
+  },
+
+  // Get Gourmet restaurants (public)
+  getGourmetRestaurants: () => {
+    return apiClient.get(API_ENDPOINTS.HERO_BANNER.GOURMET_PUBLIC);
   },
 };
 

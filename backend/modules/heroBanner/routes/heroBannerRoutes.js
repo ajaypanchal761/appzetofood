@@ -35,7 +35,20 @@ import {
   createMultipleDiningBanners,
   deleteDiningBanner,
   updateDiningBannerOrder,
-  toggleDiningBannerStatus
+  toggleDiningBannerStatus,
+  getAllTop10Restaurants,
+  getTop10Restaurants,
+  createTop10Restaurant,
+  deleteTop10Restaurant,
+  updateTop10RestaurantRank,
+  updateTop10RestaurantOrder,
+  toggleTop10RestaurantStatus,
+  getAllGourmetRestaurants,
+  getGourmetRestaurants,
+  createGourmetRestaurant,
+  deleteGourmetRestaurant,
+  updateGourmetRestaurantOrder,
+  toggleGourmetRestaurantStatus
 } from '../controllers/heroBannerController.js';
 
 const router = express.Router();
@@ -46,6 +59,8 @@ router.get('/landing/public', getLandingConfig);
 
 router.get('/under-250/public', getUnder250Banners);
 router.get('/dining/public', getDiningBanners);
+router.get('/top-10/public', getTop10Restaurants);
+router.get('/gourmet/public', getGourmetRestaurants);
 
 // Admin routes - Hero Banners
 router.get('/', authenticateAdmin, getAllHeroBanners);
@@ -130,6 +145,21 @@ router.post(
 router.delete('/dining/:id', authenticateAdmin, deleteDiningBanner);
 router.patch('/dining/:id/order', authenticateAdmin, updateDiningBannerOrder);
 router.patch('/dining/:id/status', authenticateAdmin, toggleDiningBannerStatus);
+
+// Admin routes - Top 10 Restaurants
+router.get('/top-10', authenticateAdmin, getAllTop10Restaurants);
+router.post('/top-10', authenticateAdmin, createTop10Restaurant);
+router.delete('/top-10/:id', authenticateAdmin, deleteTop10Restaurant);
+router.patch('/top-10/:id/rank', authenticateAdmin, updateTop10RestaurantRank);
+router.patch('/top-10/:id/order', authenticateAdmin, updateTop10RestaurantOrder);
+router.patch('/top-10/:id/status', authenticateAdmin, toggleTop10RestaurantStatus);
+
+// Admin routes - Gourmet Restaurants
+router.get('/gourmet', authenticateAdmin, getAllGourmetRestaurants);
+router.post('/gourmet', authenticateAdmin, createGourmetRestaurant);
+router.delete('/gourmet/:id', authenticateAdmin, deleteGourmetRestaurant);
+router.patch('/gourmet/:id/order', authenticateAdmin, updateGourmetRestaurantOrder);
+router.patch('/gourmet/:id/status', authenticateAdmin, toggleGourmetRestaurantStatus);
 
 export default router;
 

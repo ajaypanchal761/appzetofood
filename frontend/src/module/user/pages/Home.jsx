@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import Footer from "../components/Footer"
 import AddToCartButton from "../components/AddToCartButton"
 import StickyCartCard from "../components/StickyCartCard"
+import OrderTrackingCard from "../components/OrderTrackingCard"
 import { useProfile } from "../context/ProfileContext"
 import { useCart } from "../context/CartContext"
 import { HorizontalCarousel } from "@/components/ui/horizontal-carousel"
@@ -41,7 +42,6 @@ import exploreOffers from "@/assets/explore more icons/offers.png"
 import exploreGourmet from "@/assets/explore more icons/gourmet.png"
 import exploreTop10 from "@/assets/explore more icons/top 10.png"
 import exploreCollection from "@/assets/explore more icons/collection.png"
-import exploreGiftCard from "@/assets/explore more icons/gift catrd.png"
 
 // Banner images for hero carousel - will be fetched from API
 
@@ -1401,13 +1401,7 @@ export default function Home() {
                   id: 'collection',
                   label: 'Collections',
                   image: exploreCollection,
-                  href: '/user/collections'
-                },
-                {
-                  id: 'giftcard',
-                  label: 'Gift Card',
-                  image: exploreGiftCard,
-                  href: '/user/gift-card'
+                  href: '/user/profile/favorites'
                 },
               ].map((item, index) => (
                 <motion.div
@@ -1444,7 +1438,9 @@ export default function Home() {
                 </motion.div>
               ))
             ) : (
-              landingExploreMore.map((item, index) => (
+              landingExploreMore
+                .filter(item => item.id !== 'giftcard' && item.label?.toLowerCase() !== 'gift card')
+                .map((item, index) => (
                 <motion.div
                   key={item._id}
                   initial={{ opacity: 0, y: 20, scale: 0.9 }}
@@ -2698,6 +2694,7 @@ export default function Home() {
         )}
 
       <StickyCartCard />
+      <OrderTrackingCard />
     </div>
   )
 }

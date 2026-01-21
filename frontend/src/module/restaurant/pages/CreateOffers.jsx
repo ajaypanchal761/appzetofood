@@ -74,17 +74,45 @@ export default function CreateOffers() {
                 <ChevronDown className="w-4 h-4 text-gray-500" />
               </div>
               <p className="text-xs text-gray-500 mt-0.5">
-                {loadingRestaurant 
-                  ? "Loading..." 
-                  : restaurant?.location 
-                    ? [
-                        restaurant.location.addressLine1,
-                        restaurant.location.addressLine2,
-                        restaurant.location.area,
-                        restaurant.location.city
-                      ].filter(Boolean).join(", ") || "Location not available"
-                    : "Location not available"
-                }
+                {(() => {
+                  if (loadingRestaurant) return "Loading..."
+                  
+                  if (!restaurant?.location) return "Location not available"
+                  
+                  const loc = restaurant.location
+                  
+                  // Priority 1: Use formattedAddress if available
+                  if (loc.formattedAddress && 
+                      loc.formattedAddress.trim() !== "" && 
+                      loc.formattedAddress !== "Select location") {
+                    // Check if it's just coordinates (latitude, longitude format)
+                    const isCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(loc.formattedAddress.trim())
+                    if (!isCoordinates) {
+                      return loc.formattedAddress.trim()
+                    }
+                  }
+                  
+                  // Priority 2: Use address field if available
+                  if (loc.address && loc.address.trim() !== "") {
+                    return loc.address.trim()
+                  }
+                  
+                  // Priority 3: Build from individual components
+                  const addressParts = [
+                    loc.addressLine1,
+                    loc.addressLine2,
+                    loc.area,
+                    loc.city,
+                    loc.state,
+                    loc.zipCode || loc.pincode || loc.postalCode
+                  ].filter(Boolean)
+                  
+                  if (addressParts.length > 0) {
+                    return addressParts.join(", ")
+                  }
+                  
+                  return "Location not available"
+                })()}
               </p>
             </div>
           </div>

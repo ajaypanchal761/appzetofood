@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
-import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Layout, Link as LinkIcon, Tag, UtensilsCrossed } from "lucide-react"
+import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Layout, Tag, UtensilsCrossed, Trophy, ChefHat } from "lucide-react"
 import api from "@/lib/api"
+import { adminAPI } from "@/lib/api"
 import { getModuleToken } from "@/lib/utils/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button"
 
 export default function LandingPageManagement() {
   const [activeTab, setActiveTab] = useState('banners')
+  const [exploreMoreSubTab, setExploreMoreSubTab] = useState('top-10')
 
   // Hero Banners
   const [banners, setBanners] = useState([])
@@ -54,6 +56,21 @@ export default function LandingPageManagement() {
   const [settings, setSettings] = useState({ exploreMoreHeading: "Explore More" })
   const [settingsLoading, setSettingsLoading] = useState(true)
   const [settingsSaving, setSettingsSaving] = useState(false)
+
+  // Top 10 Restaurants
+  const [top10Restaurants, setTop10Restaurants] = useState([])
+  const [top10Loading, setTop10Loading] = useState(true)
+  const [top10Deleting, setTop10Deleting] = useState(null)
+  const [selectedRestaurantTop10, setSelectedRestaurantTop10] = useState("")
+  const [selectedRank, setSelectedRank] = useState(1)
+  const [allRestaurants, setAllRestaurants] = useState([])
+  const [restaurantsLoading, setRestaurantsLoading] = useState(false)
+
+  // Gourmet Restaurants
+  const [gourmetRestaurants, setGourmetRestaurants] = useState([])
+  const [gourmetLoading, setGourmetLoading] = useState(true)
+  const [gourmetDeleting, setGourmetDeleting] = useState(null)
+  const [selectedRestaurantGourmet, setSelectedRestaurantGourmet] = useState("")
 
   // Common
   const [error, setError] = useState(null)
@@ -112,10 +129,21 @@ export default function LandingPageManagement() {
   // Fetch data on mount (authentication is handled by ProtectedRoute)
   useEffect(() => {
     fetchBanners()
-    fetchExploreMore()
     fetchUnder250Banners()
     fetchDiningBanners()
+    fetchAllRestaurants()
   }, [])
+
+  // Fetch Top 10 and Gourmet when Explore More tab is active
+  useEffect(() => {
+    if (activeTab === 'explore-more') {
+      if (exploreMoreSubTab === 'top-10') {
+        fetchTop10Restaurants()
+      } else if (exploreMoreSubTab === 'gourmet') {
+        fetchGourmetRestaurants()
+      }
+    }
+  }, [activeTab, exploreMoreSubTab])
 
   // ==================== HERO BANNERS ====================
   const fetchBanners = async () => {
@@ -903,12 +931,246 @@ export default function LandingPageManagement() {
     }
   }
 
+  // ==================== ALL RESTAURANTS ====================
+  const fetchAllRestaurants = async () => {
+    try {
+      setRestaurantsLoading(true)
+      setError(null)
+      const response = await adminAPI.getRestaurants({ limit: 1000 })
+      if (response.data && response.data.success && response.data.data) {
+        const restaurants = response.data.data.restaurants || response.data.data || []
+        setAllRestaurants(restaurants)
+      }
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 404) {
+        setAllRestaurants([])
+        setError(null)
+      } else {
+        const errorMessage = err.response?.data?.message || 'Failed to load restaurants'
+        setErrorSafely(errorMessage)
+      }
+    } finally {
+      setRestaurantsLoading(false)
+    }
+  }
+
+  // ==================== TOP 10 RESTAURANTS ====================
+  const fetchTop10Restaurants = async () => {
+    try {
+      setTop10Loading(true)
+      setError(null)
+      const response = await api.get('/hero-banners/top-10', getAuthConfig())
+      if (response.data.success) {
+        setTop10Restaurants(response.data.data.restaurants || [])
+      }
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 404) {
+        setTop10Restaurants([])
+        setError(null)
+      } else {
+        const errorMessage = err.response?.data?.message || 'Failed to load Top 10 restaurants'
+        setErrorSafely(errorMessage)
+      }
+    } finally {
+      setTop10Loading(false)
+    }
+  }
+
+  const handleAddTop10Restaurant = async () => {
+    if (!selectedRestaurantTop10 || !selectedRank) {
+      setError('Please select a restaurant and rank')
+      return
+    }
+
+    try {
+      setError(null)
+      setSuccess(null)
+      const response = await api.post('/hero-banners/top-10', {
+        restaurantId: selectedRestaurantTop10,
+        rank: parseInt(selectedRank)
+      }, getAuthConfig())
+      if (response.data.success) {
+        setSuccess('Restaurant added to Top 10 successfully!')
+        setSelectedRestaurantTop10("")
+        setSelectedRank(1)
+        await fetchTop10Restaurants()
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      setErrorSafely(err.response?.data?.message || 'Failed to add restaurant to Top 10.')
+    }
+  }
+
+  const handleDeleteTop10Restaurant = async (id) => {
+    if (!window.confirm('Are you sure you want to remove this restaurant from Top 10?')) return
+    try {
+      setTop10Deleting(id)
+      setError(null)
+      setSuccess(null)
+      const response = await api.delete(`/hero-banners/top-10/${id}`, getAuthConfig())
+      if (response.data.success) {
+        setSuccess('Restaurant removed from Top 10 successfully!')
+        await fetchTop10Restaurants()
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      setErrorSafely(err.response?.data?.message || 'Failed to remove restaurant.')
+    } finally {
+      setTop10Deleting(null)
+    }
+  }
+
+  const handleTop10OrderChange = async (id, direction) => {
+    const restaurant = top10Restaurants.find(r => r._id === id)
+    if (!restaurant) return
+    const newOrder = direction === 'up' ? restaurant.order - 1 : restaurant.order + 1
+    const otherRestaurant = top10Restaurants.find(r => r.order === newOrder && r._id !== id)
+    if (!otherRestaurant && newOrder < 0) return
+    try {
+      setError(null)
+      await api.patch(`/hero-banners/top-10/${id}/order`, { order: newOrder }, getAuthConfig())
+      if (otherRestaurant) {
+        await api.patch(`/hero-banners/top-10/${otherRestaurant._id}/order`, { order: restaurant.order }, getAuthConfig())
+      }
+      await fetchTop10Restaurants()
+    } catch (err) {
+      setErrorSafely('Failed to update Top 10 restaurant order.')
+    }
+  }
+
+  const handleTop10RankChange = async (id, newRank) => {
+    try {
+      setError(null)
+      await api.patch(`/hero-banners/top-10/${id}/rank`, { rank: parseInt(newRank) }, getAuthConfig())
+      await fetchTop10Restaurants()
+    } catch (err) {
+      setErrorSafely('Failed to update Top 10 restaurant rank.')
+    }
+  }
+
+  const handleToggleTop10Status = async (id, currentStatus) => {
+    try {
+      setError(null)
+      setSuccess(null)
+      const response = await api.patch(`/hero-banners/top-10/${id}/status`, {}, getAuthConfig())
+      if (response.data.success) {
+        setSuccess(`Restaurant ${currentStatus ? 'deactivated' : 'activated'} successfully!`)
+        await fetchTop10Restaurants()
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      setErrorSafely(err.response?.data?.message || 'Failed to update restaurant status.')
+    }
+  }
+
+  // ==================== GOURMET RESTAURANTS ====================
+  const fetchGourmetRestaurants = async () => {
+    try {
+      setGourmetLoading(true)
+      setError(null)
+      const response = await api.get('/hero-banners/gourmet', getAuthConfig())
+      if (response.data.success) {
+        setGourmetRestaurants(response.data.data.restaurants || [])
+      }
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 404) {
+        setGourmetRestaurants([])
+        setError(null)
+      } else {
+        const errorMessage = err.response?.data?.message || 'Failed to load Gourmet restaurants'
+        setErrorSafely(errorMessage)
+      }
+    } finally {
+      setGourmetLoading(false)
+    }
+  }
+
+  const handleAddGourmetRestaurant = async () => {
+    if (!selectedRestaurantGourmet) {
+      setError('Please select a restaurant')
+      return
+    }
+
+    try {
+      setError(null)
+      setSuccess(null)
+      const response = await api.post('/hero-banners/gourmet', {
+        restaurantId: selectedRestaurantGourmet
+      }, getAuthConfig())
+      if (response.data.success) {
+        setSuccess('Restaurant added to Gourmet successfully!')
+        setSelectedRestaurantGourmet("")
+        await fetchGourmetRestaurants()
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      setErrorSafely(err.response?.data?.message || 'Failed to add restaurant to Gourmet.')
+    }
+  }
+
+  const handleDeleteGourmetRestaurant = async (id) => {
+    if (!window.confirm('Are you sure you want to remove this restaurant from Gourmet?')) return
+    try {
+      setGourmetDeleting(id)
+      setError(null)
+      setSuccess(null)
+      const response = await api.delete(`/hero-banners/gourmet/${id}`, getAuthConfig())
+      if (response.data.success) {
+        setSuccess('Restaurant removed from Gourmet successfully!')
+        await fetchGourmetRestaurants()
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      setErrorSafely(err.response?.data?.message || 'Failed to remove restaurant.')
+    } finally {
+      setGourmetDeleting(null)
+    }
+  }
+
+  const handleGourmetOrderChange = async (id, direction) => {
+    const restaurant = gourmetRestaurants.find(r => r._id === id)
+    if (!restaurant) return
+    const newOrder = direction === 'up' ? restaurant.order - 1 : restaurant.order + 1
+    const otherRestaurant = gourmetRestaurants.find(r => r.order === newOrder && r._id !== id)
+    if (!otherRestaurant && newOrder < 0) return
+    try {
+      setError(null)
+      await api.patch(`/hero-banners/gourmet/${id}/order`, { order: newOrder }, getAuthConfig())
+      if (otherRestaurant) {
+        await api.patch(`/hero-banners/gourmet/${otherRestaurant._id}/order`, { order: restaurant.order }, getAuthConfig())
+      }
+      await fetchGourmetRestaurants()
+    } catch (err) {
+      setErrorSafely('Failed to update Gourmet restaurant order.')
+    }
+  }
+
+  const handleToggleGourmetStatus = async (id, currentStatus) => {
+    try {
+      setError(null)
+      setSuccess(null)
+      const response = await api.patch(`/hero-banners/gourmet/${id}/status`, {}, getAuthConfig())
+      if (response.data.success) {
+        setSuccess(`Restaurant ${currentStatus ? 'deactivated' : 'activated'} successfully!`)
+        await fetchGourmetRestaurants()
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      setErrorSafely(err.response?.data?.message || 'Failed to update restaurant status.')
+    }
+  }
+
   // ==================== RENDER ====================
   const tabs = [
     { id: 'banners', label: 'Hero Banners', icon: ImageIcon },
-    { id: 'explore-more', label: 'Explore More', icon: LinkIcon },
     { id: 'under-250', label: '250 Banner', icon: Tag },
     { id: 'dining', label: 'Dining', icon: UtensilsCrossed },
+    { id: 'explore-more', label: 'Explore More', icon: Layout },
+  ]
+
+  const exploreMoreTabs = [
+    { id: 'top-10', label: 'Top 10', icon: Trophy },
+    { id: 'gourmet', label: 'Gourmet', icon: ChefHat },
   ]
 
   return (
@@ -922,7 +1184,7 @@ export default function LandingPageManagement() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Landing Page Management</h1>
-              <p className="text-sm text-slate-600 mt-1">Manage hero banners and explore more items</p>
+              <p className="text-sm text-slate-600 mt-1">Manage hero banners</p>
             </div>
           </div>
         </div>
@@ -1069,111 +1331,6 @@ export default function LandingPageManagement() {
                           </button>
                           <button onClick={() => handleDeleteBanner(banner._id)} disabled={bannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
                             {bannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Explore More Tab */}
-        {activeTab === 'explore-more' && (
-          <>
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Add New Explore More Item</h2>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="explore-label">Label</Label>
-                  <Input
-                    id="explore-label"
-                    value={exploreMoreLabel}
-                    onChange={(e) => setExploreMoreLabel(e.target.value)}
-                    placeholder="e.g., Offers"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="explore-link">Link</Label>
-                  <Input
-                    id="explore-link"
-                    value={exploreMoreLink}
-                    onChange={(e) => setExploreMoreLink(e.target.value)}
-                    placeholder="e.g., /user/offers"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label>Image</Label>
-                  <div
-                    className="border-2 border-dashed border-blue-300 rounded-lg p-6 text-center bg-blue-50/30 cursor-pointer hover:border-blue-400"
-                    onClick={() => exploreMoreFileInputRef.current?.click()}
-                  >
-                    <input
-                      ref={exploreMoreFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleExploreMoreFileSelect}
-                      className="hidden"
-                      disabled={exploreMoreUploading}
-                    />
-                    {exploreMoreUploading ? (
-                      <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
-                    ) : (
-                      <>
-                        <Upload className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                        <p className="text-sm text-slate-600">Click to upload image</p>
-                        <p className="text-xs text-slate-500 mt-1">PNG, JPG, WEBP up to 5MB</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Explore More Items ({exploreMore.length})</h2>
-              {exploreMoreLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                </div>
-              ) : exploreMore.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  <LinkIcon className="w-12 h-12 mx-auto mb-3 text-slate-400" />
-                  <p>No explore more items added yet.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {exploreMore.map((item, index) => (
-                    <div key={item._id} className="border border-slate-200 rounded-lg overflow-hidden">
-                      <div className="relative aspect-square bg-slate-100">
-                        <img src={item.imageUrl} alt={item.label} className="w-full h-full object-cover" />
-                        <div className="absolute top-2 right-2">
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${item.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {item.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <h3 className="font-semibold text-slate-900 mb-1">{item.label}</h3>
-                        <p className="text-xs text-slate-500 mb-2">{item.link}</p>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleExploreMoreOrderChange(item._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowUp className="w-4 h-4 text-slate-600" />
-                            </button>
-                            <button onClick={() => handleExploreMoreOrderChange(item._id, 'down')} disabled={index === exploreMore.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowDown className="w-4 h-4 text-slate-600" />
-                            </button>
-                          </div>
-                          <button onClick={() => handleToggleExploreMoreStatus(item._id, item.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${item.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                            {item.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button onClick={() => handleDeleteExploreMore(item._id)} disabled={exploreMoreDeleting === item._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
-                            {exploreMoreDeleting === item._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                           </button>
                         </div>
                       </div>
@@ -1414,6 +1571,249 @@ export default function LandingPageManagement() {
                 </div>
               )}
             </div>
+          </>
+        )}
+
+        {/* Explore More Tab */}
+        {activeTab === 'explore-more' && (
+          <>
+            {/* Sub-tabs for Explore More */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-2 mb-6">
+              <div className="flex gap-2 overflow-x-auto">
+                {exploreMoreTabs.map((tab) => {
+                  const Icon = tab.icon
+                  const isActive = activeTab === 'explore-more' && (tab.id === 'top-10' ? top10Restaurants.length > 0 : tab.id === 'gourmet' ? gourmetRestaurants.length > 0 : false)
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setExploreMoreSubTab(tab.id)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
+                        exploreMoreSubTab === tab.id
+                          ? 'bg-blue-500 text-white'
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {tab.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Top 10 Tab Content */}
+            {exploreMoreSubTab === 'top-10' && (
+              <>
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                  <h2 className="text-lg font-bold text-slate-900 mb-4">Add Restaurant to Top 10</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="restaurant-top10">Select Restaurant</Label>
+                      <select
+                        id="restaurant-top10"
+                        value={selectedRestaurantTop10}
+                        onChange={(e) => setSelectedRestaurantTop10(e.target.value)}
+                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={restaurantsLoading}
+                      >
+                        <option value="">Select a restaurant...</option>
+                        {allRestaurants
+                          .filter(r => !top10Restaurants.some(tr => tr.restaurant?._id === r._id))
+                          .map((restaurant) => (
+                            <option key={restaurant._id} value={restaurant._id}>
+                              {restaurant.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="rank">Rank (1-10)</Label>
+                      <Input
+                        id="rank"
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={selectedRank}
+                        onChange={(e) => setSelectedRank(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <Button 
+                      onClick={handleAddTop10Restaurant} 
+                      disabled={!selectedRestaurantTop10 || !selectedRank}
+                      className="bg-blue-500 hover:bg-blue-600 text-white"
+                    >
+                      Add to Top 10
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <h2 className="text-lg font-bold text-slate-900 mb-4">Top 10 Restaurants ({top10Restaurants.length})</h2>
+                  {top10Loading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                    </div>
+                  ) : top10Restaurants.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500">
+                      <Trophy className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+                      <p>No restaurants added to Top 10 yet.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {top10Restaurants
+                        .sort((a, b) => a.rank - b.rank)
+                        .map((item, index) => (
+                          <div key={item._id} className="border border-slate-200 rounded-lg p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-4 flex-1">
+                              <div className="w-12 h-12 rounded-lg bg-orange-500 text-white flex items-center justify-center font-bold text-lg">
+                                {item.rank}
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-slate-900">{item.restaurant?.name || 'N/A'}</h3>
+                                <p className="text-xs text-slate-500">Rating: {item.restaurant?.rating || 0}★</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Label className="text-xs">Rank:</Label>
+                                <select
+                                  value={item.rank}
+                                  onChange={(e) => handleTop10RankChange(item._id, e.target.value)}
+                                  className="px-2 py-1 border border-slate-300 rounded text-sm"
+                                >
+                                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(r => (
+                                    <option key={r} value={r}>{r}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => handleTop10OrderChange(item._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                  <ArrowUp className="w-4 h-4 text-slate-600" />
+                                </button>
+                                <button onClick={() => handleTop10OrderChange(item._id, 'down')} disabled={index === top10Restaurants.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                  <ArrowDown className="w-4 h-4 text-slate-600" />
+                                </button>
+                              </div>
+                              <button onClick={() => handleToggleTop10Status(item._id, item.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${item.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                {item.isActive ? 'Deactivate' : 'Activate'}
+                              </button>
+                              <button onClick={() => handleDeleteTop10Restaurant(item._id)} disabled={top10Deleting === item._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
+                                {top10Deleting === item._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Gourmet Tab Content */}
+            {exploreMoreSubTab === 'gourmet' && (
+              <>
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                  <h2 className="text-lg font-bold text-slate-900 mb-4">Add Restaurant to Gourmet</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="restaurant-gourmet">Select Restaurant</Label>
+                      <select
+                        id="restaurant-gourmet"
+                        value={selectedRestaurantGourmet}
+                        onChange={(e) => setSelectedRestaurantGourmet(e.target.value)}
+                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={restaurantsLoading}
+                      >
+                        <option value="">Select a restaurant...</option>
+                        {allRestaurants
+                          .filter(r => !gourmetRestaurants.some(gr => gr.restaurant?._id === r._id))
+                          .map((restaurant) => (
+                            <option key={restaurant._id} value={restaurant._id}>
+                              {restaurant.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <Button 
+                      onClick={handleAddGourmetRestaurant} 
+                      disabled={!selectedRestaurantGourmet}
+                      className="bg-blue-500 hover:bg-blue-600 text-white"
+                    >
+                      Add to Gourmet
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <h2 className="text-lg font-bold text-slate-900 mb-4">Gourmet Restaurants ({gourmetRestaurants.length})</h2>
+                  {gourmetLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                    </div>
+                  ) : gourmetRestaurants.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500">
+                      <ChefHat className="w-12 h-12 mx-auto mb-3 text-slate-400" />
+                      <p>No restaurants added to Gourmet yet.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {gourmetRestaurants
+                        .sort((a, b) => a.order - b.order)
+                        .map((item, index) => {
+                          // Get restaurant cover image with priority: coverImages > menuImages > profileImage
+                          const coverImages = item.restaurant?.coverImages && item.restaurant.coverImages.length > 0
+                            ? item.restaurant.coverImages.map(img => img.url || img).filter(Boolean)
+                            : []
+                          
+                          const menuImages = item.restaurant?.menuImages && item.restaurant.menuImages.length > 0
+                            ? item.restaurant.menuImages.map(img => img.url || img).filter(Boolean)
+                            : []
+                          
+                          const restaurantImage = coverImages.length > 0
+                            ? coverImages[0]
+                            : (menuImages.length > 0
+                                ? menuImages[0]
+                                : (item.restaurant?.profileImage?.url || "https://via.placeholder.com/400"))
+
+                          return (
+                            <div key={item._id} className="border border-slate-200 rounded-lg overflow-hidden">
+                              <div className="relative h-32 bg-slate-100">
+                                <img src={restaurantImage} alt={item.restaurant?.name} className="w-full h-full object-cover" />
+                                <div className="absolute top-1 right-1">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${item.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                    {item.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="p-2">
+                                <h3 className="font-semibold text-slate-900 mb-0.5 text-sm line-clamp-1">{item.restaurant?.name || 'N/A'}</h3>
+                                <p className="text-[10px] text-slate-500 mb-2">Rating: {item.restaurant?.rating || 0}★</p>
+                                <div className="flex items-center justify-between gap-1">
+                                  <div className="flex items-center gap-0.5">
+                                    <button onClick={() => handleGourmetOrderChange(item._id, 'up')} disabled={index === 0} className="p-1 rounded hover:bg-slate-100 disabled:opacity-50">
+                                      <ArrowUp className="w-3 h-3 text-slate-600" />
+                                    </button>
+                                    <button onClick={() => handleGourmetOrderChange(item._id, 'down')} disabled={index === gourmetRestaurants.length - 1} className="p-1 rounded hover:bg-slate-100 disabled:opacity-50">
+                                      <ArrowDown className="w-3 h-3 text-slate-600" />
+                                    </button>
+                                  </div>
+                                  <button onClick={() => handleToggleGourmetStatus(item._id, item.isActive)} className={`px-2 py-1 rounded text-[10px] font-medium ${item.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                    {item.isActive ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                  <button onClick={() => handleDeleteGourmetRestaurant(item._id)} disabled={gourmetDeleting === item._id} className="p-1 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
+                                    {gourmetDeleting === item._id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </>
         )}
 

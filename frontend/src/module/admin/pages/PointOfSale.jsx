@@ -1,795 +1,586 @@
-import { useState, useMemo } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { CheckCircle2 } from 'lucide-react'
-
-// Dummy data
-const dummyZones = [
-  { id: 1, name: 'North Zone' },
-  { id: 2, name: 'South Zone' },
-  { id: 3, name: 'East Zone' },
-  { id: 4, name: 'West Zone' },
-  { id: 5, name: 'Central Zone' }
-]
-
-const dummyRestaurants = [
-  { id: 1, name: 'Spice Garden', zoneId: 1 },
-  { id: 2, name: 'Tandoor Express', zoneId: 1 },
-  { id: 3, name: 'Coastal Delights', zoneId: 2 },
-  { id: 4, name: 'Punjabi Dhaba', zoneId: 2 },
-  { id: 5, name: 'Chinese Wok', zoneId: 3 },
-  { id: 6, name: 'Italian Bistro', zoneId: 3 },
-  { id: 7, name: 'Burger House', zoneId: 4 },
-  { id: 8, name: 'Pizza Corner', zoneId: 4 },
-  { id: 9, name: 'Sweet Treats', zoneId: 5 },
-  { id: 10, name: 'Cafe Mocha', zoneId: 5 }
-]
-
-const dummyCategories = [
-  { id: 1, name: 'Biryani' },
-  { id: 2, name: 'Starters' },
-  { id: 3, name: 'Main Course' },
-  { id: 4, name: 'Desserts' },
-  { id: 5, name: 'Beverages' },
-  { id: 6, name: 'Fast Food' }
-]
-
-const dummyFoodItems = [
-  { id: 1, name: 'Chicken Biryani', categoryId: 1, restaurantId: 1, price: 250, addonPrice: 50 },
-  { id: 2, name: 'Mutton Biryani', categoryId: 1, restaurantId: 1, price: 350, addonPrice: 50 },
-  { id: 3, name: 'Veg Biryani', categoryId: 1, restaurantId: 1, price: 180, addonPrice: 30 },
-  { id: 4, name: 'Paneer Tikka', categoryId: 2, restaurantId: 1, price: 220, addonPrice: 40 },
-  { id: 5, name: 'Chicken Wings', categoryId: 2, restaurantId: 2, price: 280, addonPrice: 50 },
-  { id: 6, name: 'Butter Chicken', categoryId: 3, restaurantId: 2, price: 320, addonPrice: 60 },
-  { id: 7, name: 'Dal Makhani', categoryId: 3, restaurantId: 2, price: 200, addonPrice: 30 },
-  { id: 8, name: 'Gulab Jamun', categoryId: 4, restaurantId: 9, price: 80, addonPrice: 0 },
-  { id: 9, name: 'Ice Cream', categoryId: 4, restaurantId: 9, price: 120, addonPrice: 0 },
-  { id: 10, name: 'Coca Cola', categoryId: 5, restaurantId: 10, price: 50, addonPrice: 0 },
-  { id: 11, name: 'Coffee', categoryId: 5, restaurantId: 10, price: 100, addonPrice: 20 },
-  { id: 12, name: 'Burger', categoryId: 6, restaurantId: 7, price: 150, addonPrice: 30 },
-  { id: 13, name: 'French Fries', categoryId: 6, restaurantId: 7, price: 80, addonPrice: 20 },
-  { id: 14, name: 'Margherita Pizza', categoryId: 6, restaurantId: 8, price: 300, addonPrice: 50 },
-  { id: 15, name: 'Pepperoni Pizza', categoryId: 6, restaurantId: 8, price: 350, addonPrice: 50 }
-]
-
-const dummyCustomers = [
-  { id: 1, name: 'John Doe', phone: '+1234567890' },
-  { id: 2, name: 'Jane Smith', phone: '+1234567891' },
-  { id: 3, name: 'Mike Johnson', phone: '+1234567892' },
-  { id: 4, name: 'Sarah Williams', phone: '+1234567893' },
-  { id: 5, name: 'David Brown', phone: '+1234567894' }
-]
+import { useState, useEffect } from 'react'
+import { Search, TrendingUp, TrendingDown, DollarSign, ShoppingCart, XCircle, Star, Calendar, BarChart3, Users, Award, Package } from 'lucide-react'
+import { adminAPI } from '@/lib/api'
 
 export default function PointOfSale() {
-  // State management
-  const [selectedZone, setSelectedZone] = useState('')
+  const [restaurants, setRestaurants] = useState([])
   const [selectedRestaurant, setSelectedRestaurant] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCustomer, setSelectedCustomer] = useState('')
-  const [orderType, setOrderType] = useState('takeaway')
-  const [paymentMethod, setPaymentMethod] = useState('cash')
-  const [cart, setCart] = useState([])
-  const [customers, setCustomers] = useState(dummyCustomers)
-  const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false)
-  const [orderDetails, setOrderDetails] = useState(null)
-  const [newCustomer, setNewCustomer] = useState({
-    name: '',
-    phone: '',
-    email: ''
+  const [loading, setLoading] = useState(false)
+  const [restaurantData, setRestaurantData] = useState(null)
+  const [showSearchResults, setShowSearchResults] = useState(false)
+
+  // Dummy data structure - replace with actual API calls
+  const [analyticsData, setAnalyticsData] = useState({
+    totalOrders: 0,
+    cancelledOrders: 0,
+    completedOrders: 0,
+    averageRating: 0,
+    totalRatings: 0,
+    commissionPercentage: 0,
+    monthlyProfit: 0,
+    yearlyProfit: 0,
+    averageOrderValue: 0,
+    totalRevenue: 0,
+    totalCommission: 0,
+    restaurantEarning: 0,
+    monthlyOrders: 0,
+    yearlyOrders: 0,
+    averageMonthlyProfit: 0,
+    averageYearlyProfit: 0,
+    status: 'active',
+    joinDate: '',
+    totalCustomers: 0,
+    repeatCustomers: 0,
+    cancellationRate: 0,
+    completionRate: 0
   })
 
-  // Filter restaurants based on selected zone
-  const filteredRestaurants = useMemo(() => {
-    if (!selectedZone) return []
-    return dummyRestaurants.filter(r => r.zoneId === parseInt(selectedZone))
-  }, [selectedZone])
+  // Fetch restaurants list
+  useEffect(() => {
+    fetchRestaurants()
+  }, [])
 
-  // Filter food items based on restaurant, category, and search
-  const filteredFoodItems = useMemo(() => {
-    if (!selectedRestaurant) return []
-    
-    let items = dummyFoodItems.filter(item => 
-      item.restaurantId === parseInt(selectedRestaurant)
-    )
-
-    if (selectedCategory) {
-      items = items.filter(item => item.categoryId === parseInt(selectedCategory))
+  // Fetch restaurant analytics when restaurant is selected
+  useEffect(() => {
+    if (selectedRestaurant) {
+      fetchRestaurantAnalytics(selectedRestaurant)
+    } else {
+      setRestaurantData(null)
+      setAnalyticsData({
+        totalOrders: 0,
+        cancelledOrders: 0,
+        completedOrders: 0,
+        averageRating: 0,
+        totalRatings: 0,
+        commissionPercentage: 0,
+        monthlyProfit: 0,
+        yearlyProfit: 0,
+        averageOrderValue: 0,
+        totalRevenue: 0,
+        totalCommission: 0,
+        restaurantEarning: 0,
+        monthlyOrders: 0,
+        yearlyOrders: 0,
+        averageMonthlyProfit: 0,
+        averageYearlyProfit: 0,
+        status: 'active',
+        joinDate: '',
+        totalCustomers: 0,
+        repeatCustomers: 0,
+        cancellationRate: 0,
+        completionRate: 0
+      })
     }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      items = items.filter(item => 
-        item.name.toLowerCase().includes(query)
-      )
-    }
-
-    return items
-  }, [selectedRestaurant, selectedCategory, searchQuery])
-
-  // Filter categories based on selected restaurant
-  const availableCategories = useMemo(() => {
-    if (!selectedRestaurant) return []
-    const restaurantItems = dummyFoodItems.filter(item => 
-      item.restaurantId === parseInt(selectedRestaurant)
-    )
-    const categoryIds = [...new Set(restaurantItems.map(item => item.categoryId))]
-    return dummyCategories.filter(cat => categoryIds.includes(cat.id))
   }, [selectedRestaurant])
 
-  // Cart calculations
-  const cartCalculations = useMemo(() => {
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-    const addonTotal = cart.reduce((sum, item) => sum + (item.addonPrice * item.quantity), 0)
-    const discount = subtotal * 0.1 // 10% discount
-    const deliveryFee = orderType === 'delivery' ? 50 : 0
-    const vatTax = (subtotal - discount) * 0.05 // 5% VAT
-    const serviceCharge = (subtotal - discount) * 0.02 // 2% service charge
-    const extraPackaging = cart.length * 10 // $10 per item
-    const total = subtotal + addonTotal - discount + deliveryFee + vatTax + serviceCharge + extraPackaging
-
-    return {
-      addon: addonTotal,
-      subtotal,
-      discount,
-      deliveryFee,
-      vatTax,
-      serviceCharge,
-      extraPackaging,
-      total
-    }
-  }, [cart, orderType])
-
-  // Handlers
-  const handleZoneChange = (e) => {
-    setSelectedZone(e.target.value)
-    setSelectedRestaurant('')
-    setSelectedCategory('')
-    setSearchQuery('')
-  }
-
-  const handleRestaurantChange = (e) => {
-    setSelectedRestaurant(e.target.value)
-    setSelectedCategory('')
-    setSearchQuery('')
-  }
-
-  const handleAddToCart = (item) => {
-    const existingItem = cart.find(cartItem => cartItem.id === item.id)
-    if (existingItem) {
-      setCart(cart.map(cartItem =>
-        cartItem.id === item.id
-          ? { ...cartItem, quantity: cartItem.quantity + 1 }
-          : cartItem
-      ))
-    } else {
-      setCart([...cart, { ...item, quantity: 1 }])
-    }
-  }
-
-  const handleQuantityChange = (itemId, change) => {
-    setCart(cart.map(item => {
-      if (item.id === itemId) {
-        const newQuantity = item.quantity + change
-        return { ...item, quantity: Math.max(1, newQuantity) }
+  const fetchRestaurants = async () => {
+    try {
+      setLoading(true)
+      const response = await adminAPI.getRestaurants({ limit: 1000, isActive: true })
+      if (response?.data?.success) {
+        setRestaurants(response.data.data?.restaurants || response.data.data || [])
       }
-      return item
-    }))
-  }
-
-  const handleRemoveFromCart = (itemId) => {
-    setCart(cart.filter(item => item.id !== itemId))
-  }
-
-  const handleClearCart = () => {
-    setCart([])
-  }
-
-  const handlePlaceOrder = () => {
-    if (cart.length === 0) {
-      alert('Please add items to cart before placing order')
-      return
+    } catch (error) {
+      console.error('Error fetching restaurants:', error)
+      // Fallback to dummy data for development
+      setRestaurants([
+        { _id: '1', name: 'Spice Garden', restaurantId: 'RST001' },
+        { _id: '2', name: 'Tandoor Express', restaurantId: 'RST002' },
+        { _id: '3', name: 'Coastal Delights', restaurantId: 'RST003' }
+      ])
+    } finally {
+      setLoading(false)
     }
-    if (!selectedCustomer) {
-      alert('Please select a customer')
-      return
-    }
-    
-    // Store order details for success modal
-    const customer = customers.find(c => c.id === parseInt(selectedCustomer))
-    setOrderDetails({
-      orderId: `ORD-${Date.now()}`,
-      customerName: customer?.name || 'Unknown',
-      total: cartCalculations.total,
-      paymentMethod: paymentMethod,
-      itemCount: cart.reduce((sum, item) => sum + item.quantity, 0)
-    })
-    
-    // Show success modal
-    setShowSuccessModal(true)
-    
-    // Clear cart and reset
-    handleClearCart()
-    setSelectedCustomer('')
   }
 
-  const handleAddCustomer = (e) => {
-    e.preventDefault()
-    if (!newCustomer.name.trim() || !newCustomer.phone.trim()) {
-      alert('Please fill in name and phone number')
-      return
+  const fetchRestaurantAnalytics = async (restaurantId) => {
+    try {
+      setLoading(true)
+      
+      // Fetch restaurant details
+      const restaurantResponse = await adminAPI.getRestaurantById(restaurantId)
+      if (restaurantResponse?.data?.success) {
+        setRestaurantData(restaurantResponse.data.data)
+      }
+
+      // Fetch commission data
+      const commissionResponse = await adminAPI.getCommissionByRestaurantId(restaurantId)
+      const commissionData = commissionResponse?.data?.data || {}
+
+      // TODO: Fetch order statistics, ratings, and profit data from backend
+      // For now, using calculated dummy data structure
+      // Replace these with actual API calls:
+      // - Get orders count (total, cancelled, completed)
+      // - Get ratings average
+      // - Get monthly/yearly profit
+      // - Get commission details
+
+      // Simulated data - replace with actual API response
+      const simulatedData = {
+        totalOrders: 1245,
+        cancelledOrders: 87,
+        completedOrders: 1158,
+        averageRating: 4.5,
+        totalRatings: 892,
+        commissionPercentage: commissionData.commissionPercentage || 15,
+        monthlyProfit: 125000,
+        yearlyProfit: 1450000,
+        averageOrderValue: 850,
+        totalRevenue: 1058250,
+        totalCommission: 158737.5,
+        restaurantEarning: 899512.5,
+        monthlyOrders: 103,
+        yearlyOrders: 1158,
+        averageMonthlyProfit: 120833.33,
+        averageYearlyProfit: 1450000,
+        status: restaurantData?.isActive ? 'active' : 'inactive',
+        joinDate: restaurantData?.createdAt || '2023-01-15',
+        totalCustomers: 456,
+        repeatCustomers: 234,
+        cancellationRate: 6.99,
+        completionRate: 93.01
+      }
+
+      setAnalyticsData(simulatedData)
+    } catch (error) {
+      console.error('Error fetching restaurant analytics:', error)
+    } finally {
+      setLoading(false)
     }
-    
-    // Add new customer
-    const newId = Math.max(...customers.map(c => c.id), 0) + 1
-    const customerToAdd = {
-      id: newId,
-      name: newCustomer.name.trim(),
-      phone: newCustomer.phone.trim(),
-      email: newCustomer.email.trim() || ''
-    }
-    
-    setCustomers([...customers, customerToAdd])
-    setSelectedCustomer(newId.toString())
-    setNewCustomer({ name: '', phone: '', email: '' })
-    setShowAddCustomerModal(false)
   }
 
-  const handleCloseSuccessModal = () => {
-    setShowSuccessModal(false)
-    setOrderDetails(null)
+  const filteredRestaurants = restaurants.filter(restaurant => {
+    if (!searchQuery.trim()) return true
+    const query = searchQuery.toLowerCase()
+    return (
+      restaurant.name?.toLowerCase().includes(query) ||
+      restaurant.restaurantId?.toLowerCase().includes(query) ||
+      restaurant._id?.toLowerCase().includes(query)
+    )
+  })
+
+  // Handle restaurant selection from search
+  const handleRestaurantSelect = (restaurantId) => {
+    setSelectedRestaurant(restaurantId)
+    const selected = restaurants.find(r => r._id === restaurantId)
+    if (selected) {
+      setSearchQuery(`${selected.name} (${selected.restaurantId || selected._id})`)
+    }
+    setShowSearchResults(false)
+  }
+
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    const value = e.target.value
+    setSearchQuery(value)
+    setShowSearchResults(value.trim().length > 0)
+    
+    // If search is cleared, clear selection
+    if (!value.trim()) {
+      setSelectedRestaurant('')
+      setShowSearchResults(false)
+    }
   }
 
   const formatCurrency = (amount) => {
-    return `$ ${amount.toFixed(2)}`
+    return `₹ ${amount?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}`
+  }
+
+  const formatNumber = (num) => {
+    return num?.toLocaleString('en-IN') || '0'
+  }
+
+  const getSelectedRestaurantName = () => {
+    const restaurant = restaurants.find(r => r._id === selectedRestaurant)
+    return restaurant?.name || 'Select Restaurant'
   }
 
   return (
     <div className="min-h-[calc(100vh-5rem)] bg-neutral-200 overflow-x-hidden w-full" style={{ maxWidth: '100vw', boxSizing: 'border-box' }}>
       <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 w-full overflow-hidden" style={{ maxWidth: '100%', boxSizing: 'border-box' }}>
-        <div className="w-full mx-auto grid grid-cols-1 lg:grid-cols-3 gap-4 max-w-full overflow-hidden">
-        {/* Food Section Card */}
-        <div className="lg:col-span-2 w-full overflow-hidden" style={{ maxWidth: '100%' }}>
-          <div className="rounded-lg bg-white shadow-sm border border-[#e3e6ef] overflow-hidden w-full" style={{ maxWidth: '100%' }}>
-            <div className="px-6 py-4 border-b border-[#e3e6ef]">
-              <h2 className="text-base font-semibold text-[#334257]">
-                Food Section
-              </h2>
-            </div>
+        
+        {/* Header Section */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-[#334257] mb-2">Restaurant Analytics & Benefits</h1>
+          <p className="text-sm text-[#8a94aa]">Track restaurant performance, profits, and commission details</p>
+        </div>
 
-            <div className="bg-[#f9fafc] px-6 py-5">
-              {/* First row: Zone & Restaurant */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#334257] mb-2">
-                    Zone<span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select 
-                      value={selectedZone}
-                      onChange={handleZoneChange}
-                      className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
-                    >
-                      <option value="">Select Zone *</option>
-                      {dummyZones.map(zone => (
-                        <option key={zone.id} value={zone.id}>{zone.name}</option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">
-                      ▼
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-[#334257] mb-2">
-                    Restaurant<span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select 
-                      value={selectedRestaurant}
-                      onChange={handleRestaurantChange}
-                      disabled={!selectedZone}
-                      className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="">Select Restaurant</option>
-                      {filteredRestaurants.map(restaurant => (
-                        <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">
-                      ▼
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Second row: Categories & Search */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#334257] mb-2">
-                    Categories
-                  </label>
-                  <div className="relative">
-                    <select 
-                      value={selectedCategory}
-                      onChange={(e) => setSelectedCategory(e.target.value)}
-                      disabled={!selectedRestaurant}
-                      className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    >
-                      <option value="">All Categories</option>
-                      {availableCategories.map(category => (
-                        <option key={category.id} value={category.id}>{category.name}</option>
-                      ))}
-                    </select>
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">
-                      ▼
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-transparent mb-2">
-                    Search
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 text-sm">
-                      🔍
-                    </span>
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Ex: Search Food Name"
-                      disabled={!selectedRestaurant}
-                      className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white pl-9 pr-3 text-sm text-[#4a5671] placeholder-[#9aa2b6] focus:outline-none focus:ring-1 focus:ring-[#006fbd] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Food Items Grid */}
-              {selectedRestaurant ? (
-                filteredFoodItems.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-4">
-                    {filteredFoodItems.map(item => (
-                      <div 
-                        key={item.id}
-                        className="border border-[#e3e6ef] rounded-md bg-white p-4 hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => handleAddToCart(item)}
+        {/* Restaurant Selection Card */}
+        <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6 mb-6">
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[#334257] mb-2">
+                Search Restaurant by Name or ID <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 z-10" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onFocus={() => {
+                    if (searchQuery.trim()) {
+                      setShowSearchResults(true)
+                    }
+                  }}
+                  onBlur={() => {
+                    // Delay to allow click on results
+                    setTimeout(() => setShowSearchResults(false), 200)
+                  }}
+                  placeholder="Type restaurant name or ID to search..."
+                  className="w-full h-11 pl-10 pr-3 rounded-md border border-[#e3e6ef] bg-white text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
+                />
+                
+                {/* Search Results Dropdown */}
+                {showSearchResults && filteredRestaurants.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-[#e3e6ef] rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {filteredRestaurants.map(restaurant => (
+                      <div
+                        key={restaurant._id}
+                        onClick={() => handleRestaurantSelect(restaurant._id)}
+                        className="px-4 py-3 hover:bg-[#f9fafc] cursor-pointer border-b border-[#e3e6ef] last:border-b-0 transition-colors"
                       >
-                        <div className="flex flex-col">
-                          <h3 className="text-sm font-semibold text-[#334257] mb-1">{item.name}</h3>
-                          <p className="text-xs text-[#8a94aa] mb-2">
-                            {dummyCategories.find(c => c.id === item.categoryId)?.name}
-                          </p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-bold text-[#006fbd]">
-                              {formatCurrency(item.price)}
-                            </span>
-                            <button className="px-3 py-1 text-xs bg-[#006fbd] text-white rounded-md hover:bg-[#00589a]">
-                              Add
-                            </button>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-[#334257]">{restaurant.name}</p>
+                            <p className="text-xs text-[#8a94aa]">ID: {restaurant.restaurantId || restaurant._id}</p>
                           </div>
+                          {selectedRestaurant === restaurant._id && (
+                            <div className="w-2 h-2 bg-[#006fbd] rounded-full"></div>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <div className="w-16 h-16 rounded-full border-2 border-dashed border-[#d1d7e6] flex items-center justify-center mb-4">
-                      <span className="text-2xl">🔍</span>
-                    </div>
-                    <p className="max-w-md text-[13px] text-[#8a94aa]">
-                      No food items found matching your criteria.
-                    </p>
+                )}
+                
+                {/* No Results Message */}
+                {showSearchResults && searchQuery.trim() && filteredRestaurants.length === 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-[#e3e6ef] rounded-md shadow-lg p-4">
+                    <p className="text-sm text-[#8a94aa] text-center">No restaurants found matching "{searchQuery}"</p>
                   </div>
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="w-16 h-16 rounded-full border-2 border-dashed border-[#d1d7e6] flex items-center justify-center mb-4">
-                    <span className="text-2xl">🔍</span>
-                  </div>
-                  <p className="max-w-md text-[13px] text-[#8a94aa]">
-                    To get accurate search results, first select a zone, then choose a
-                    restaurant. You can then browse food by category or search
-                    manually within that restaurant.
-                  </p>
-                </div>
+                )}
+              </div>
+              {selectedRestaurant && (
+                <p className="text-xs text-green-600 mt-2">
+                  ✓ Selected: {getSelectedRestaurantName()}
+                </p>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Billing Section Card */}
-        <div className="flex flex-col h-full w-full overflow-hidden" style={{ maxWidth: '100%' }}>
-          <div className="rounded-lg bg-white shadow-sm border border-[#e3e6ef] overflow-hidden flex flex-col h-full w-full" style={{ maxWidth: '100%' }}>
-            <div className="px-6 py-4 border-b border-[#e3e6ef] flex items-center justify-between w-full overflow-hidden">
-              <h2 className="text-base font-semibold text-[#334257]">
-                Billing Section
-              </h2>
-            </div>
-
-            <div className="bg-[#f9fafc] px-6 py-5 w-full overflow-hidden" style={{ maxWidth: '100%' }}>
-              {/* Content - no scrolling */}
-              <div className="space-y-4 w-full overflow-hidden" style={{ maxWidth: '100%' }}>
-                {/* Customer + Add button */}
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-[#334257] mb-2">
-                      Select Customer
-                    </label>
-                    <div className="relative">
-                      <select 
-                        value={selectedCustomer}
-                        onChange={(e) => setSelectedCustomer(e.target.value)}
-                        className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
-                      >
-                        <option value="">Select Customer</option>
-                        {customers.map(customer => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.name} ({customer.phone})
-                          </option>
-                        ))}
-                      </select>
-                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">
-                        ▼
-                      </span>
-                    </div>
-                  </div>
-                  <div className="pt-7">
-                    <button 
-                      type="button"
-                      onClick={() => setShowAddCustomerModal(true)}
-                      className="h-11 whitespace-nowrap px-4 rounded-md bg-[#006fbd] text-white text-sm font-semibold shadow-sm hover:bg-[#00589a]"
-                    >
-                      Add New Customer
-                    </button>
-                  </div>
-                </div>
-
-                {/* Order type */}
-                <div>
-                  <p className="text-sm font-semibold text-[#334257] mb-2">
-                    Select Order Type
-                  </p>
-                  <div className="rounded-md border border-[#e3e6ef] bg-white px-4 py-3 flex flex-wrap gap-6 text-sm text-[#4a5671]">
-                    <label className="inline-flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="orderType" 
-                        value="takeaway"
-                        checked={orderType === 'takeaway'}
-                        onChange={(e) => setOrderType(e.target.value)}
-                      />
-                      <span>Take Away</span>
-                    </label>
-                    <label className="inline-flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="orderType" 
-                        value="delivery"
-                        checked={orderType === 'delivery'}
-                        onChange={(e) => setOrderType(e.target.value)}
-                      />
-                      <span>Home Delivery</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Items table */}
-                <div className="border border-[#e3e6ef] rounded-md overflow-hidden bg-white">
-                  <div className="grid grid-cols-4 text-xs font-semibold text-[#334257] bg-[#f5f6fb] px-4 py-2">
-                    <div>Item</div>
-                    <div className="text-center">Qty</div>
-                    <div className="text-right">Price</div>
-                    <div className="text-center">Delete</div>
-                  </div>
-                  {cart.length > 0 ? (
-                    <div className="divide-y divide-[#e3e6ef]">
-                      {cart.map(item => (
-                        <div key={item.id} className="grid grid-cols-4 px-4 py-3 text-sm text-[#4a5671] items-center">
-                          <div className="font-medium">{item.name}</div>
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleQuantityChange(item.id, -1)
-                              }}
-                              className="w-6 h-6 rounded border border-[#e3e6ef] bg-white hover:bg-gray-50 flex items-center justify-center"
-                            >
-                              -
-                            </button>
-                            <span className="w-8 text-center">{item.quantity}</span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleQuantityChange(item.id, 1)
-                              }}
-                              className="w-6 h-6 rounded border border-[#e3e6ef] bg-white hover:bg-gray-50 flex items-center justify-center"
-                            >
-                              +
-                            </button>
-                          </div>
-                          <div className="text-right font-medium">
-                            {formatCurrency(item.price * item.quantity)}
-                          </div>
-                          <div className="flex justify-center">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleRemoveFromCart(item.id)
-                              }}
-                              className="text-red-500 hover:text-red-700 text-sm"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-center text-[#8a94aa] text-sm">
-                      <div className="w-10 h-10 rounded-full border-2 border-dashed border-[#d1d7e6] flex items-center justify-center mb-3">
-                        <span className="text-lg">🧾</span>
-                      </div>
-                      <p>No Items added yet</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Totals */}
-                <div className="space-y-2 text-sm text-[#4a5671]">
-                  <div className="flex justify-between">
-                    <span>Addon :</span>
-                    <span>{formatCurrency(cartCalculations.addon)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Subtotal :</span>
-                    <span>{formatCurrency(cartCalculations.subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Discount :</span>
-                    <span>- {formatCurrency(cartCalculations.discount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Delivery fee :</span>
-                    <span>{formatCurrency(cartCalculations.deliveryFee)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Vat/tax :</span>
-                    <span>{formatCurrency(cartCalculations.vatTax)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Service Charge :</span>
-                    <span>{formatCurrency(cartCalculations.serviceCharge)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Extra Packaging Amount :</span>
-                    <span>{formatCurrency(cartCalculations.extraPackaging)}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-dashed border-[#d1d7e6] mt-2">
-                    <span className="font-semibold">Total:</span>
-                    <span className="font-bold text-lg text-[#334257]">
-                      {formatCurrency(cartCalculations.total)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Paid by */}
-                <div className="pt-2">
-                  <p className="text-sm font-semibold text-[#334257] mb-2">
-                    Paid by
-                  </p>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => setPaymentMethod('cash')}
-                      className={`px-5 py-2 rounded-md text-sm font-semibold border ${
-                        paymentMethod === 'cash'
-                          ? 'bg-black text-white border-black'
-                          : 'bg-white text-[#334257] border-[#d1d7e6] hover:bg-gray-50'
-                      }`}
-                    >
-                      Cash
-                    </button>
-                    <button 
-                      onClick={() => setPaymentMethod('card')}
-                      className={`px-5 py-2 rounded-md text-sm font-semibold border ${
-                        paymentMethod === 'card'
-                          ? 'bg-black text-white border-black'
-                          : 'bg-white text-[#334257] border-[#d1d7e6] hover:bg-gray-50'
-                      }`}
-                    >
-                      Card
-                    </button>
-                    <button 
-                      onClick={() => setPaymentMethod('wallet')}
-                      className={`px-5 py-2 rounded-md text-sm font-semibold border ${
-                        paymentMethod === 'wallet'
-                          ? 'bg-black text-white border-black'
-                          : 'bg-white text-[#334257] border-[#d1d7e6] hover:bg-gray-50'
-                      }`}
-                    >
-                      Wallet
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Fixed footer buttons */}
-              <div className="pt-4 mt-4 border-t border-[#e3e6ef] bg-[#f9fafc]">
-                <div className="grid grid-cols-2 gap-4">
-                  <button 
-                    onClick={handlePlaceOrder}
-                    className="h-11 rounded-md bg-[#006fbd] text-white text-sm font-semibold shadow-sm hover:bg-[#00589a]"
-                  >
-                    Place Order
-                  </button>
-                  <button 
-                    onClick={handleClearCart}
-                    className="h-11 rounded-md bg-[#f4f5f7] text-[#334257] text-sm font-semibold border border-[#e3e6ef] hover:bg-[#e6e7eb]"
-                  >
-                    Clear Cart
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        </div>
-      </div>
-
-      {/* Success Modal */}
-      <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
-        <DialogContent className="max-w-md p-0 bg-white">
-          <div className="p-8 text-center">
-            {/* Success Icon with Animation */}
-            <div className="flex justify-center mb-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-75"></div>
-                <div className="relative bg-green-500 rounded-full p-4">
-                  <CheckCircle2 className="w-12 h-12 text-white" />
-                </div>
-              </div>
-            </div>
             
-            {/* Success Message */}
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-[#334257] mb-2">
-                Order Placed Successfully!
-              </DialogTitle>
-              <DialogDescription className="text-sm text-[#8a94aa]">
-                Your order has been confirmed and is being processed.
-              </DialogDescription>
-            </DialogHeader>
+            {/* Alternative: Dropdown Selector */}
+            <div>
+              <label className="block text-sm font-medium text-[#334257] mb-2">
+                Or Select from Dropdown
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedRestaurant}
+                  onChange={(e) => {
+                    setSelectedRestaurant(e.target.value)
+                    const selected = restaurants.find(r => r._id === e.target.value)
+                    if (selected) {
+                      setSearchQuery(`${selected.name} (${selected.restaurantId || selected._id})`)
+                    }
+                  }}
+                  className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
+                >
+                  <option value="">Select Restaurant</option>
+                  {restaurants.map(restaurant => (
+                    <option key={restaurant._id} value={restaurant._id}>
+                      {restaurant.name} ({restaurant.restaurantId || restaurant._id})
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">
+                  ▼
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-            {/* Order Details */}
-            {orderDetails && (
-              <div className="mt-6 p-4 bg-[#f9fafc] rounded-lg border border-[#e3e6ef] text-left">
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-[#8a94aa]">Order ID:</span>
-                    <span className="font-semibold text-[#334257]">{orderDetails.orderId}</span>
+        {/* Analytics Dashboard */}
+        {selectedRestaurant && !loading ? (
+          <div className="space-y-6">
+            {/* Restaurant Header Info */}
+            <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-[#334257] mb-1">{getSelectedRestaurantName()}</h2>
+                  <p className="text-sm text-[#8a94aa]">
+                    Restaurant ID: {restaurants.find(r => r._id === selectedRestaurant)?.restaurantId || selectedRestaurant}
+                  </p>
+                </div>
+                <div className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                  analyticsData.status === 'active' 
+                    ? 'bg-green-100 text-green-700' 
+                    : 'bg-red-100 text-red-700'
+                }`}>
+                  {analyticsData.status === 'active' ? 'Active' : 'Inactive'}
+                </div>
+              </div>
+            </div>
+
+            {/* Key Metrics Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Total Orders */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-blue-100 rounded-lg">
+                    <ShoppingCart className="w-6 h-6 text-blue-600" />
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8a94aa]">Customer:</span>
-                    <span className="font-semibold text-[#334257]">{orderDetails.customerName}</span>
+                  <TrendingUp className="w-5 h-5 text-green-500" />
+                </div>
+                <h3 className="text-sm font-medium text-[#8a94aa] mb-1">Total Orders</h3>
+                <p className="text-2xl font-bold text-[#334257]">{formatNumber(analyticsData.totalOrders)}</p>
+                <p className="text-xs text-[#8a94aa] mt-2">Completed: {formatNumber(analyticsData.completedOrders)}</p>
+              </div>
+
+              {/* Cancelled Orders */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-red-100 rounded-lg">
+                    <XCircle className="w-6 h-6 text-red-600" />
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8a94aa]">Items:</span>
-                    <span className="font-semibold text-[#334257]">{orderDetails.itemCount}</span>
+                  <span className="text-sm font-semibold text-red-600">{analyticsData.cancellationRate.toFixed(1)}%</span>
+                </div>
+                <h3 className="text-sm font-medium text-[#8a94aa] mb-1">Cancelled Orders</h3>
+                <p className="text-2xl font-bold text-[#334257]">{formatNumber(analyticsData.cancelledOrders)}</p>
+                <p className="text-xs text-[#8a94aa] mt-2">Cancellation Rate</p>
+              </div>
+
+              {/* Average Rating */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-yellow-100 rounded-lg">
+                    <Star className="w-6 h-6 text-yellow-600 fill-yellow-600" />
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#8a94aa]">Payment Method:</span>
-                    <span className="font-semibold text-[#334257] capitalize">{orderDetails.paymentMethod}</span>
+                  <span className="text-sm font-semibold text-green-600">+{analyticsData.averageRating}</span>
+                </div>
+                <h3 className="text-sm font-medium text-[#8a94aa] mb-1">Average Rating</h3>
+                <p className="text-2xl font-bold text-[#334257]">{analyticsData.averageRating.toFixed(1)}</p>
+                <p className="text-xs text-[#8a94aa] mt-2">From {formatNumber(analyticsData.totalRatings)} reviews</p>
+              </div>
+
+              {/* Commission Rate */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 bg-purple-100 rounded-lg">
+                    <Award className="w-6 h-6 text-purple-600" />
                   </div>
-                  <div className="flex justify-between pt-2 border-t border-[#e3e6ef] mt-2">
-                    <span className="text-[#334257] font-semibold">Total Amount:</span>
-                    <span className="font-bold text-lg text-[#006fbd]">
-                      {formatCurrency(orderDetails.total)}
+                  <span className="text-sm font-semibold text-purple-600">{analyticsData.commissionPercentage}%</span>
+                </div>
+                <h3 className="text-sm font-medium text-[#8a94aa] mb-1">Commission Rate</h3>
+                <p className="text-2xl font-bold text-[#334257]">{analyticsData.commissionPercentage}%</p>
+                <p className="text-xs text-[#8a94aa] mt-2">Set Commission</p>
+              </div>
+            </div>
+
+            {/* Profit & Revenue Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Monthly Profit */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-green-100 rounded-lg">
+                      <Calendar className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-[#334257]">Monthly Profit</h3>
+                      <p className="text-xs text-[#8a94aa]">Current Month</p>
+                    </div>
+                  </div>
+                  <TrendingUp className="w-5 h-5 text-green-500" />
+                </div>
+                <div className="mt-4">
+                  <p className="text-3xl font-bold text-[#334257] mb-2">{formatCurrency(analyticsData.monthlyProfit)}</p>
+                  <div className="flex items-center gap-4 mt-4 text-sm">
+                    <div>
+                      <span className="text-[#8a94aa]">Orders: </span>
+                      <span className="font-semibold text-[#334257]">{formatNumber(analyticsData.monthlyOrders)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#8a94aa]">Avg/Month: </span>
+                      <span className="font-semibold text-[#334257]">{formatCurrency(analyticsData.averageMonthlyProfit)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Yearly Profit */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-blue-100 rounded-lg">
+                      <BarChart3 className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-[#334257]">Yearly Profit</h3>
+                      <p className="text-xs text-[#8a94aa]">Current Year</p>
+                    </div>
+                  </div>
+                  <TrendingUp className="w-5 h-5 text-green-500" />
+                </div>
+                <div className="mt-4">
+                  <p className="text-3xl font-bold text-[#334257] mb-2">{formatCurrency(analyticsData.yearlyProfit)}</p>
+                  <div className="flex items-center gap-4 mt-4 text-sm">
+                    <div>
+                      <span className="text-[#8a94aa]">Orders: </span>
+                      <span className="font-semibold text-[#334257]">{formatNumber(analyticsData.yearlyOrders)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#8a94aa]">Avg/Year: </span>
+                      <span className="font-semibold text-[#334257]">{formatCurrency(analyticsData.averageYearlyProfit)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed Financial Breakdown */}
+            <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+              <h3 className="text-lg font-semibold text-[#334257] mb-4">Financial Breakdown</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center py-3 border-b border-[#e3e6ef]">
+                    <span className="text-sm text-[#8a94aa]">Total Revenue</span>
+                    <span className="text-base font-semibold text-[#334257]">{formatCurrency(analyticsData.totalRevenue)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 border-b border-[#e3e6ef]">
+                    <span className="text-sm text-[#8a94aa]">Total Commission (Admin)</span>
+                    <span className="text-base font-semibold text-[#006fbd]">{formatCurrency(analyticsData.totalCommission)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 border-b border-[#e3e6ef]">
+                    <span className="text-sm text-[#8a94aa]">Restaurant Earning</span>
+                    <span className="text-base font-semibold text-green-600">{formatCurrency(analyticsData.restaurantEarning)}</span>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center py-3 border-b border-[#e3e6ef]">
+                    <span className="text-sm text-[#8a94aa]">Average Order Value</span>
+                    <span className="text-base font-semibold text-[#334257]">{formatCurrency(analyticsData.averageOrderValue)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 border-b border-[#e3e6ef]">
+                    <span className="text-sm text-[#8a94aa]">Completion Rate</span>
+                    <span className="text-base font-semibold text-green-600">{analyticsData.completionRate.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 border-b border-[#e3e6ef]">
+                    <span className="text-sm text-[#8a94aa]">Commission Percentage</span>
+                    <span className="text-base font-semibold text-[#334257]">{analyticsData.commissionPercentage}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Customer Statistics */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <Users className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <h3 className="text-base font-semibold text-[#334257]">Customer Statistics</h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-[#8a94aa]">Total Customers</span>
+                    <span className="text-sm font-semibold text-[#334257]">{formatNumber(analyticsData.totalCustomers)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-[#8a94aa]">Repeat Customers</span>
+                    <span className="text-sm font-semibold text-[#334257]">{formatNumber(analyticsData.repeatCustomers)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-[#8a94aa]">Customer Retention</span>
+                    <span className="text-sm font-semibold text-green-600">
+                      {analyticsData.totalCustomers > 0 
+                        ? ((analyticsData.repeatCustomers / analyticsData.totalCustomers) * 100).toFixed(1) 
+                        : '0'}%
                     </span>
                   </div>
                 </div>
               </div>
-            )}
 
-            {/* Close Button */}
-            <DialogFooter className="mt-6">
-              <button
-                onClick={handleCloseSuccessModal}
-                className="w-full h-11 rounded-md bg-[#006fbd] text-white text-sm font-semibold shadow-sm hover:bg-[#00589a] transition-colors"
-              >
-                Close
-              </button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add New Customer Modal */}
-      <Dialog open={showAddCustomerModal} onOpenChange={setShowAddCustomerModal}>
-        <DialogContent className="max-w-md p-0 bg-white">
-          <DialogHeader className="p-6 pb-4 border-b border-[#e3e6ef]">
-            <DialogTitle className="text-xl font-semibold text-[#334257]">
-              Add New Customer
-            </DialogTitle>
-            <DialogDescription className="text-sm text-[#8a94aa] mt-1">
-              Fill in the customer details to add them to the system.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={handleAddCustomer} className="p-6">
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="customerName" className="block text-sm font-medium text-[#334257] mb-2">
-                  Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="customerName"
-                  type="text"
-                  value={newCustomer.name}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                  placeholder="Enter customer name"
-                  required
-                  className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="customerPhone" className="block text-sm font-medium text-[#334257] mb-2">
-                  Phone Number <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="customerPhone"
-                  type="tel"
-                  value={newCustomer.phone}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  placeholder="Enter phone number"
-                  required
-                  className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="customerEmail" className="block text-sm font-medium text-[#334257] mb-2">
-                  Email (Optional)
-                </Label>
-                <Input
-                  id="customerEmail"
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                  placeholder="Enter email address"
-                  className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
-                />
+              {/* Restaurant Details */}
+              <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <Package className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <h3 className="text-base font-semibold text-[#334257]">Restaurant Details</h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-[#8a94aa]">Join Date</span>
+                    <span className="text-sm font-semibold text-[#334257]">
+                      {new Date(analyticsData.joinDate).toLocaleDateString('en-IN', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-[#8a94aa]">Status</span>
+                    <span className={`text-sm font-semibold px-2 py-1 rounded ${
+                      analyticsData.status === 'active' 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-red-100 text-red-700'
+                    }`}>
+                      {analyticsData.status === 'active' ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-[#8a94aa]">Total Reviews</span>
+                    <span className="text-sm font-semibold text-[#334257]">{formatNumber(analyticsData.totalRatings)}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <DialogFooter className="mt-6 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAddCustomerModal(false)
-                  setNewCustomer({ name: '', phone: '', email: '' })
-                }}
-                className="flex-1 h-11 rounded-md bg-[#f4f5f7] text-[#334257] text-sm font-semibold border border-[#e3e6ef] hover:bg-[#e6e7eb] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="flex-1 h-11 rounded-md bg-[#006fbd] text-white text-sm font-semibold shadow-sm hover:bg-[#00589a] transition-colors"
-              >
-                Add Customer
-              </button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            {/* Order Statistics Summary */}
+            <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
+              <h3 className="text-lg font-semibold text-[#334257] mb-4">Order Statistics Summary</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <p className="text-2xl font-bold text-blue-600">{formatNumber(analyticsData.totalOrders)}</p>
+                  <p className="text-xs text-[#8a94aa] mt-1">Total Orders</p>
+                </div>
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <p className="text-2xl font-bold text-green-600">{formatNumber(analyticsData.completedOrders)}</p>
+                  <p className="text-xs text-[#8a94aa] mt-1">Completed</p>
+                </div>
+                <div className="text-center p-4 bg-red-50 rounded-lg">
+                  <p className="text-2xl font-bold text-red-600">{formatNumber(analyticsData.cancelledOrders)}</p>
+                  <p className="text-xs text-[#8a94aa] mt-1">Cancelled</p>
+                </div>
+                <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                  <p className="text-2xl font-bold text-yellow-600">{analyticsData.completionRate.toFixed(1)}%</p>
+                  <p className="text-xs text-[#8a94aa] mt-1">Success Rate</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : selectedRestaurant && loading ? (
+          <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-12 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#006fbd] mx-auto mb-4"></div>
+            <p className="text-sm text-[#8a94aa]">Loading restaurant analytics...</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-12 text-center">
+            <div className="w-16 h-16 rounded-full border-2 border-dashed border-[#d1d7e6] flex items-center justify-center mx-auto mb-4">
+              <Search className="w-8 h-8 text-[#8a94aa]" />
+            </div>
+            <p className="text-base font-medium text-[#334257] mb-2">Select a Restaurant</p>
+            <p className="text-sm text-[#8a94aa] max-w-md mx-auto">
+              Please select a restaurant from the dropdown above to view detailed analytics, profit information, and commission details.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
-
-

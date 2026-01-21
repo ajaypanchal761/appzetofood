@@ -56,7 +56,7 @@ import {
   calculateDistance
 } from "../utils/liveTrackingPolyline"
 import referralBonusBg from "../../../assets/referralbonuscardbg.png"
-import dropLocationBanner from "../../../assets/droplocationbanner.png"
+// import dropLocationBanner from "../../../assets/droplocationbanner.png" // File not found - commented out
 import alertSound from "../../../assets/audio/alert.mp3"
 import originalSound from "../../../assets/audio/original.mp3"
 import bikeLogo from "../../../assets/bikelogo.png"
@@ -1881,8 +1881,12 @@ export default function DeliveryHome() {
                 phone: order.restaurantId?.phone || order.restaurantId?.ownerPhone || null, // Restaurant phone number (prefer phone, fallback to ownerPhone)
                 ownerPhone: order.restaurantId?.ownerPhone || null, // Owner phone number (separate field for direct access)
                 orderStatus: order.status || 'preparing', // Store order status (pending, preparing, ready, out_for_delivery, delivered)
-                deliveryState: order.deliveryState || {}, // Store delivery state (currentPhase, status, etc.)
-                deliveryPhase: order.deliveryState?.currentPhase || 'assigned' // Store current delivery phase
+                deliveryState: {
+                  ...(order.deliveryState || {}),
+                  currentPhase: 'en_route_to_pickup', // CRITICAL: Set to en_route_to_pickup after order acceptance
+                  status: 'accepted' // Set status to accepted
+                }, // Store delivery state (currentPhase, status, etc.)
+                deliveryPhase: 'en_route_to_pickup' // CRITICAL: Set to en_route_to_pickup after order acceptance so Reached Pickup popup can show
               }
               
               console.log('🏪 Updated restaurant info from backend:', restaurantInfo)
@@ -2027,6 +2031,14 @@ export default function DeliveryHome() {
             
             // Ensure route path is visible
             setShowRoutePath(true);
+            
+            // Show Reached Pickup popup immediately after order acceptance (no distance check)
+            setTimeout(() => {
+              console.log('✅ Order accepted - showing Reached Pickup popup immediately');
+              setShowreachedPickupPopup(true);
+              // Close directions map if open
+              setShowDirectionsMap(false);
+            }, 500); // Wait 500ms for state to update
             
             // Show route on main map instead of opening full-screen directions map
             setTimeout(() => {
@@ -4853,6 +4865,18 @@ export default function DeliveryHome() {
 
   // Handle directionsResponse updates - Show route on main map when directions are calculated
   useEffect(() => {
+    // Only show route if there's an active order (selectedRestaurant)
+    if (!selectedRestaurant) {
+      // Clear route if no active order
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+      if (directionsRendererRef.current) {
+        directionsRendererRef.current.setMap(null);
+      }
+      return;
+    }
+
     if (!directionsResponse || !directionsResponse.routes || directionsResponse.routes.length === 0) {
       return;
     }
@@ -4992,7 +5016,7 @@ export default function DeliveryHome() {
       console.error('❌ directionsResponse type:', typeof directionsResponse);
       console.error('❌ directionsResponse:', directionsResponse);
     }
-  }, [directionsResponse])
+  }, [directionsResponse, selectedRestaurant])
 
   // Restore active order from localStorage on page load/refresh
   useEffect(() => {
@@ -5143,6 +5167,31 @@ export default function DeliveryHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Run only on mount - calculateRouteWithDirectionsAPI is stable
 
+  // Clear any default/mock routes on mount if there's no active order
+  useEffect(() => {
+    // Wait a bit for restoreActiveOrder to complete, then check if we should clear routes
+    const timer = setTimeout(() => {
+      if (!selectedRestaurant) {
+        console.log('🧹 No active order - clearing any default/mock routes');
+        // Clear route polyline
+        if (routePolylineRef.current) {
+          routePolylineRef.current.setMap(null);
+        }
+        // Clear directions renderer
+        if (directionsRendererRef.current) {
+          directionsRendererRef.current.setMap(null);
+        }
+        // Clear state
+        setDirectionsResponse(null);
+        directionsResponseRef.current = null;
+        setRoutePolyline([]);
+        setShowRoutePath(false);
+      }
+    }, 1000); // Wait 1 second for restoreActiveOrder to complete
+
+    return () => clearTimeout(timer);
+  }, [selectedRestaurant])
+
   // Utility function to clear order data when order is deleted or cancelled
   const clearOrderData = useCallback(() => {
     console.log('🧹 Clearing order data...');
@@ -5159,6 +5208,17 @@ export default function DeliveryHome() {
     clearOrderReady();
     // Clear accepted orders list when going offline
     acceptedOrderIdsRef.current.clear();
+    // Clear route polyline and directions response when order is cleared
+    if (routePolylineRef.current) {
+      routePolylineRef.current.setMap(null);
+    }
+    if (directionsRendererRef.current) {
+      directionsRendererRef.current.setMap(null);
+    }
+    setDirectionsResponse(null);
+    directionsResponseRef.current = null;
+    setRoutePolyline([]);
+    setShowRoutePath(false);
   }, [clearNewOrder, clearOrderReady])
 
   // Periodically verify order still exists (every 30 seconds) to catch deletions
@@ -5227,6 +5287,18 @@ export default function DeliveryHome() {
   // Handle route polyline visibility toggle
   // Only show fallback polyline if DirectionsRenderer is NOT active
   useEffect(() => {
+    // Only show route if there's an active order (selectedRestaurant)
+    if (!selectedRestaurant) {
+      // Clear route if no active order
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+      if (directionsRendererRef.current && directionsRendererRef.current.getMap()) {
+        directionsRendererRef.current.setMap(null);
+      }
+      return;
+    }
+
     // DirectionsRenderer is never used - we always use custom polyline
     // Remove DirectionsRenderer if it somehow got attached
     if (directionsRendererRef.current && directionsRendererRef.current.getMap()) {
@@ -5244,7 +5316,7 @@ export default function DeliveryHome() {
         routePolylineRef.current.setMap(null);
       }
     }
-  }, [showRoutePath, routePolyline, directionsResponse])
+  }, [showRoutePath, routePolyline, directionsResponse, selectedRestaurant])
 
   // Listen for order ready event from backend (when restaurant marks order ready)
   useEffect(() => {
@@ -5630,19 +5702,9 @@ export default function DeliveryHome() {
       return
     }
 
-    // Calculate distance to restaurant location
-    const distanceInMeters = calculateDistanceInMeters(
-      riderLocation[0], // lat
-      riderLocation[1], // lng
-      selectedRestaurant.lat,
-      selectedRestaurant.lng
-    )
-
-    console.log(`📍 Distance to restaurant: ${distanceInMeters.toFixed(2)} meters`)
-
-    // Show "Reached Pickup" popup when within 500 meters of restaurant location
-    if (distanceInMeters <= 500 && !showreachedPickupPopup) {
-      console.log('✅ Delivery boy reached pickup location (within 500m), showing popup')
+    // Show "Reached Pickup" popup immediately when order is in pickup phase (no distance check)
+    if (!showreachedPickupPopup) {
+      console.log('✅ Order is in pickup phase, showing Reached Pickup popup immediately')
       setShowreachedPickupPopup(true)
       
       // Close directions map if open
@@ -6163,6 +6225,15 @@ export default function DeliveryHome() {
   // Accepts optional coordinates parameter to draw route immediately without waiting for state update
   // This is a FALLBACK polyline - should only be used when DirectionsRenderer is NOT available
   const updateRoutePolyline = (coordinates = null) => {
+    // Only show route if there's an active order (selectedRestaurant)
+    if (!selectedRestaurant) {
+      // Clear route if no active order
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+      return;
+    }
+
     // Don't show fallback polyline if DirectionsRenderer is active (it handles road-snapped routes)
     if (directionsRendererRef.current && directionsRendererRef.current.getDirections()) {
       // DirectionsRenderer is active, hide fallback polyline

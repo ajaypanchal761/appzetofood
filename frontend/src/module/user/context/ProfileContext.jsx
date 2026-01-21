@@ -64,6 +64,12 @@ export function ProfileProvider({ children }) {
     return saved ? JSON.parse(saved) : []
   })
 
+  // Dish favorites state - stored in localStorage for persistence
+  const [dishFavorites, setDishFavorites] = useState(() => {
+    const saved = localStorage.getItem("userDishFavorites")
+    return saved ? JSON.parse(saved) : []
+  })
+
   // VegMode state - stored in localStorage for persistence
   const [vegMode, setVegMode] = useState(() => {
     const saved = localStorage.getItem("userVegMode")
@@ -87,6 +93,10 @@ export function ProfileProvider({ children }) {
   useEffect(() => {
     localStorage.setItem("userFavorites", JSON.stringify(favorites))
   }, [favorites])
+
+  useEffect(() => {
+    localStorage.setItem("userDishFavorites", JSON.stringify(dishFavorites))
+  }, [dishFavorites])
 
   useEffect(() => {
     localStorage.setItem("userVegMode", vegMode.toString())
@@ -308,6 +318,30 @@ export function ProfileProvider({ children }) {
     return favorites
   }, [favorites])
 
+  // Dish favorites functions - memoized with useCallback
+  const addDishFavorite = useCallback((dish) => {
+    setDishFavorites((prev) => {
+      if (!prev.find(fav => fav.id === dish.id && fav.restaurantId === dish.restaurantId)) {
+        return [...prev, dish]
+      }
+      return prev
+    })
+  }, [])
+
+  const removeDishFavorite = useCallback((dishId, restaurantId) => {
+    setDishFavorites((prev) => 
+      prev.filter(fav => !(fav.id === dishId && fav.restaurantId === restaurantId))
+    )
+  }, [])
+
+  const isDishFavorite = useCallback((dishId, restaurantId) => {
+    return dishFavorites.some(fav => fav.id === dishId && fav.restaurantId === restaurantId)
+  }, [dishFavorites])
+
+  const getDishFavorites = useCallback(() => {
+    return dishFavorites
+  }, [dishFavorites])
+
   // User profile functions - memoized with useCallback
   const updateUserProfile = useCallback((updatedProfile) => {
     setUserProfile((prev) => ({ ...prev, ...updatedProfile }))
@@ -340,6 +374,11 @@ export function ProfileProvider({ children }) {
       removeFavorite,
       isFavorite,
       getFavorites,
+      dishFavorites,
+      addDishFavorite,
+      removeDishFavorite,
+      isDishFavorite,
+      getDishFavorites,
     }),
     [
       userProfile,
@@ -348,6 +387,7 @@ export function ProfileProvider({ children }) {
       addresses,
       paymentMethods,
       favorites,
+      dishFavorites,
       vegMode,
       setVegMode,
       addAddress,
@@ -366,6 +406,10 @@ export function ProfileProvider({ children }) {
       removeFavorite,
       isFavorite,
       getFavorites,
+      addDishFavorite,
+      removeDishFavorite,
+      isDishFavorite,
+      getDishFavorites,
     ]
   )
 
@@ -401,6 +445,11 @@ export function useProfile() {
       removeFavorite: () => console.warn("ProfileProvider not available"),
       isFavorite: () => false,
       getFavorites: () => [],
+      dishFavorites: [],
+      addDishFavorite: () => console.warn("ProfileProvider not available"),
+      removeDishFavorite: () => console.warn("ProfileProvider not available"),
+      isDishFavorite: () => false,
+      getDishFavorites: () => [],
       vegMode: true,
       setVegMode: () => console.warn("ProfileProvider not available")
     }

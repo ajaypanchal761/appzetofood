@@ -116,22 +116,72 @@ export default function RestaurantNavbar({
   // Get restaurant name (use prop if provided, otherwise use fetched data)
   const restaurantName = propRestaurantName || restaurantData?.name || "Restaurant"
 
-  // Get location - ONLY from stored data, NO live fetching
-  // Priority: propLocation > stored formattedAddress > formatted address from location fields
-  let location = ""
-  
-  if (propLocation) {
-    // Explicit prop takes highest priority
-    location = propLocation
-  } else if (restaurantData?.location) {
-    // Use stored formattedAddress first (from database)
-    if (restaurantData.location.formattedAddress && restaurantData.location.formattedAddress.trim() !== "") {
-      location = restaurantData.location.formattedAddress.trim()
-    } else {
-      // Fallback to formatted address from location fields (also stored in database)
-      location = formatAddress(restaurantData.location)
+  const [location, setLocation] = useState("")
+
+  // Update location when restaurantData or propLocation changes
+  useEffect(() => {
+    let newLocation = ""
+    
+    // Priority 1: Explicit prop takes highest priority
+    if (propLocation && propLocation.trim() !== "") {
+      newLocation = propLocation.trim()
     }
-  }
+    // Priority 2: Check restaurantData location
+    else if (restaurantData) {
+      console.log('🔍 Checking restaurant data for address:', {
+        hasLocation: !!restaurantData.location,
+        locationKeys: restaurantData.location ? Object.keys(restaurantData.location) : [],
+        formattedAddress: restaurantData.location?.formattedAddress,
+        address: restaurantData.location?.address,
+        directAddress: restaurantData.address,
+        fullLocation: restaurantData.location
+      })
+      
+      if (restaurantData.location) {
+        // Use stored formattedAddress first (from database)
+        if (restaurantData.location.formattedAddress && 
+            restaurantData.location.formattedAddress.trim() !== "" && 
+            restaurantData.location.formattedAddress !== "Select location") {
+          // Check if it's just coordinates (latitude, longitude format)
+          const isCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(restaurantData.location.formattedAddress.trim())
+          if (!isCoordinates) {
+            newLocation = restaurantData.location.formattedAddress.trim()
+            console.log('✅ Using formattedAddress:', newLocation)
+          }
+        }
+        
+        // If formattedAddress is not available or is coordinates, try formatAddress function
+        if (!newLocation) {
+          const formatted = formatAddress(restaurantData.location)
+          if (formatted && formatted.trim() !== "") {
+            newLocation = formatted.trim()
+            console.log('✅ Using formatAddress result:', newLocation)
+          }
+        }
+        
+        // Additional fallback: check if address is directly on location
+        if (!newLocation && restaurantData.location.address && restaurantData.location.address.trim() !== "") {
+          newLocation = restaurantData.location.address.trim()
+          console.log('✅ Using location.address:', newLocation)
+        }
+      }
+      
+      // Priority 3: Fallback - check if address is directly on restaurantData (not in location object)
+      if (!newLocation && restaurantData.address && restaurantData.address.trim() !== "") {
+        newLocation = restaurantData.address.trim()
+        console.log('✅ Using restaurantData.address:', newLocation)
+      }
+    }
+    
+    setLocation(newLocation)
+    
+    // Debug log
+    if (newLocation) {
+      console.log('📍 Restaurant address displayed:', newLocation)
+    } else if (restaurantData) {
+      console.log('⚠️ Restaurant data available but no address found')
+    }
+  }, [restaurantData, propLocation])
 
   // Load status from localStorage on mount and listen for changes
   useEffect(() => {
@@ -234,7 +284,7 @@ export default function RestaurantNavbar({
         </h1>
         
         {/* Location */}
-        {location && (
+        {!loading && location && location.trim() !== "" && (
           <div className="flex items-center gap-1.5 mt-0.5">
             <MapPin className="w-3 h-3 text-gray-500 shrink-0" />
             <p className="text-xs text-gray-600 truncate" title={location}>

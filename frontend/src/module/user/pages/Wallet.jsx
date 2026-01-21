@@ -1,9 +1,12 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, IndianRupee, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw } from "lucide-react"
+import { ArrowLeft, IndianRupee, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import AnimatedPage from "../components/AnimatedPage"
+import AddMoneyModal from "../components/AddMoneyModal"
+import { userAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 // Transaction types
 const TRANSACTION_TYPES = {
@@ -13,105 +16,50 @@ const TRANSACTION_TYPES = {
   REFUNDS: 'refunds'
 }
 
-// Mock transaction data
-const mockTransactions = [
-  {
-    id: 1,
-    type: 'addition',
-    amount: 500,
-    description: 'Added money via UPI',
-    date: '2024-01-15',
-    time: '10:30 AM',
-    status: 'completed'
-  },
-  {
-    id: 2,
-    type: 'deduction',
-    amount: 250,
-    description: 'Order payment - Pizza Paradise',
-    date: '2024-01-14',
-    time: '08:15 PM',
-    status: 'completed'
-  },
-  {
-    id: 3,
-    type: 'refund',
-    amount: 150,
-    description: 'Refund - Order cancelled',
-    date: '2024-01-13',
-    time: '02:45 PM',
-    status: 'completed'
-  },
-  {
-    id: 4,
-    type: 'deduction',
-    amount: 180,
-    description: 'Order payment - Biryani House',
-    date: '2024-01-12',
-    time: '07:20 PM',
-    status: 'completed'
-  },
-  {
-    id: 5,
-    type: 'addition',
-    amount: 1000,
-    description: 'Added money via Card',
-    date: '2024-01-10',
-    time: '11:00 AM',
-    status: 'completed'
-  },
-  {
-    id: 6,
-    type: 'deduction',
-    amount: 320,
-    description: 'Order payment - Chinese Wok',
-    date: '2024-01-09',
-    time: '06:30 PM',
-    status: 'completed'
-  },
-  {
-    id: 7,
-    type: 'refund',
-    amount: 80,
-    description: 'Refund - Partial refund',
-    date: '2024-01-08',
-    time: '03:15 PM',
-    status: 'completed'
-  },
-  {
-    id: 8,
-    type: 'addition',
-    amount: 300,
-    description: 'Added money via Wallet',
-    date: '2024-01-07',
-    time: '09:45 AM',
-    status: 'completed'
-  },
-]
-
-// Calculate current balance
-const calculateBalance = (transactions) => {
-  return transactions.reduce((balance, transaction) => {
-    if (transaction.type === 'addition' || transaction.type === 'refund') {
-      return balance + transaction.amount
-    } else if (transaction.type === 'deduction') {
-      return balance - transaction.amount
-    }
-    return balance
-  }, 0)
-}
-
 export default function Wallet() {
   const navigate = useNavigate()
   const [selectedFilter, setSelectedFilter] = useState(TRANSACTION_TYPES.ALL)
-  const currentBalance = calculateBalance(mockTransactions)
+  const [wallet, setWallet] = useState(null)
+  const [transactions, setTransactions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [addMoneyModalOpen, setAddMoneyModalOpen] = useState(false)
+
+  // Fetch wallet data
+  const fetchWalletData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await userAPI.getWallet()
+      const walletData = response?.data?.data?.wallet || response?.data?.wallet
+      
+      if (walletData) {
+        setWallet(walletData)
+        setTransactions(walletData.transactions || [])
+      }
+    } catch (err) {
+      console.error('Error fetching wallet:', err)
+      setError(err?.response?.data?.message || 'Failed to load wallet')
+      toast.error('Failed to load wallet data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchWalletData()
+  }, [])
+
+  // Get current balance from wallet
+  const currentBalance = wallet?.balance || 0
 
   // Filter transactions based on selected filter
   const filteredTransactions = useMemo(() => {
     if (selectedFilter === TRANSACTION_TYPES.ALL) {
-      return mockTransactions
+      return transactions
     }
-    return mockTransactions.filter(transaction => {
+    return transactions.filter(transaction => {
       if (selectedFilter === TRANSACTION_TYPES.ADDITIONS) {
         return transaction.type === 'addition'
       } else if (selectedFilter === TRANSACTION_TYPES.DEDUCTIONS) {
@@ -121,10 +69,26 @@ export default function Wallet() {
       }
       return true
     })
-  }, [selectedFilter])
+  }, [selectedFilter, transactions])
 
   const formatAmount = (amount) => {
     return `₹${amount.toLocaleString('en-IN')}`
+  }
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    const date = new Date(dateString)
+    const formattedDate = date.toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    })
+    const formattedTime = date.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
+    return `${formattedDate} • ${formattedTime}`
   }
 
   const getTransactionIcon = (type) => {
@@ -172,6 +136,23 @@ export default function Wallet() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8">
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-12 md:py-16 lg:py-20">
+            <Loader2 className="h-8 w-8 md:h-10 md:w-10 animate-spin text-gray-600 dark:text-gray-400" />
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 md:p-6">
+            <p className="text-red-600 dark:text-red-400 text-sm md:text-base">{error}</p>
+          </div>
+        )}
+
+        {/* Wallet Content - Only show if not loading and no error */}
+        {!loading && !error && (
+          <>
         {/* Wallet Info Section - Desktop: Side by side, Mobile: Stacked */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 md:gap-8 lg:gap-10">
           {/* Left: Wallet Icon & Info */}
@@ -208,10 +189,7 @@ export default function Wallet() {
           <div className="flex-shrink-0 w-full md:w-auto">
             <Button 
               className="w-full md:w-auto md:min-w-[200px] lg:min-w-[240px] h-12 md:h-14 lg:h-16 bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white font-semibold text-sm md:text-base lg:text-lg rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-              onClick={() => {
-                // Navigate to add money page or show modal
-                console.log('Add money clicked')
-              }}
+              onClick={() => setAddMoneyModalOpen(true)}
             >
               <Plus className="h-4 w-4 md:h-5 md:w-5 lg:h-6 lg:w-6" />
               Add money
@@ -274,7 +252,7 @@ export default function Wallet() {
                             {transaction.description}
                           </p>
                           <p className="text-gray-500 dark:text-gray-400 text-xs md:text-sm lg:text-base">
-                            {transaction.date} • {transaction.time}
+                            {formatDate(transaction.date || transaction.createdAt)}
                           </p>
                         </div>
                       </div>
@@ -317,7 +295,16 @@ export default function Wallet() {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
+
+      {/* Add Money Modal */}
+      <AddMoneyModal
+        open={addMoneyModalOpen}
+        onOpenChange={setAddMoneyModalOpen}
+        onSuccess={fetchWalletData}
+      />
     </AnimatedPage>
   )
 }

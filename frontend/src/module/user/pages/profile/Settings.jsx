@@ -41,24 +41,6 @@ export default function Settings() {
               </div>
               <Switch defaultChecked />
             </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>SMS Notifications</Label>
-                <p className="text-sm text-muted-foreground">
-                  Receive order updates via SMS
-                </p>
-              </div>
-              <Switch />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Marketing Emails</Label>
-                <p className="text-sm text-muted-foreground">
-                  Receive promotional offers and updates
-                </p>
-              </div>
-              <Switch />
-            </div>
           </CardContent>
         </Card>
       </div>

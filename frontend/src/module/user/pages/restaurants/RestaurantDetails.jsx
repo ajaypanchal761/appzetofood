@@ -49,14 +49,11 @@ export default function RestaurantDetails() {
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
-  const { vegMode } = useProfile()
+  const { vegMode, addDishFavorite, removeDishFavorite, isDishFavorite, getDishFavorites, getFavorites } = useProfile()
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [quantities, setQuantities] = useState({})
-  const [bookmarkedItems, setBookmarkedItems] = useState(new Set())
-  const [showToast, setShowToast] = useState(false)
   const [showManageCollections, setShowManageCollections] = useState(false)
-  const [selectedItemId, setSelectedItemId] = useState(null)
   const [showItemDetail, setShowItemDetail] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [showFilterSheet, setShowFilterSheet] = useState(false)
@@ -622,24 +619,99 @@ export default function RestaurantDetails() {
   const activeFilterCount = getActiveFilterCount()
 
   // Handle bookmark click
-  const handleBookmarkClick = (itemId) => {
-    setBookmarkedItems((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(itemId)) {
-        // If already bookmarked, show Manage Collections modal
-        setSelectedItemId(itemId)
-        setShowManageCollections(true)
-        return newSet // Don't remove bookmark
-      } else {
-        newSet.add(itemId)
-        // Show toast notification
-        setShowToast(true)
-        setTimeout(() => {
-          setShowToast(false)
-        }, 3000)
-        return newSet
+  const handleBookmarkClick = (item) => {
+    const restaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
+    if (!restaurantId) {
+      toast.error("Restaurant information is missing")
+      return
+    }
+
+    const dishId = item.id || item._id
+    if (!dishId) {
+      toast.error("Dish information is missing")
+      return
+    }
+
+    const isFavorite = isDishFavorite(dishId, restaurantId)
+    
+    if (isFavorite) {
+      // If already bookmarked, remove it
+      removeDishFavorite(dishId, restaurantId)
+      toast.success("Dish removed from favorites")
+    } else {
+      // Add to favorites
+      const dishData = {
+        id: dishId,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        originalPrice: item.originalPrice,
+        image: item.image,
+        restaurantId: restaurantId,
+        restaurantName: restaurant?.name || "",
+        restaurantSlug: restaurant?.slug || slug || "",
+        foodType: item.foodType,
+        isSpicy: item.isSpicy,
+        customisable: item.customisable,
       }
-    })
+      addDishFavorite(dishData)
+      toast.success("Dish added to favorites")
+    }
+  }
+
+  // Handle share click
+  const handleShareClick = async (item) => {
+    const restaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
+    const dishId = item.id || item._id
+    const restaurantSlug = restaurant?.slug || slug || ""
+    
+    // Create share URL
+    const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}?dish=${dishId}`
+    const shareText = `Check out ${item.name} from ${restaurant?.name || "this restaurant"}! ${shareUrl}`
+    
+    // Try Web Share API first (mobile)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${item.name} - ${restaurant?.name || ""}`,
+          text: shareText,
+          url: shareUrl,
+        })
+        toast.success("Dish shared successfully")
+      } catch (error) {
+        // User cancelled or error occurred
+        if (error.name !== "AbortError") {
+          // Fallback to copy to clipboard
+          await copyToClipboard(shareUrl)
+        }
+      }
+    } else {
+      // Fallback to copy to clipboard
+      await copyToClipboard(shareUrl)
+    }
+  }
+
+  // Copy to clipboard helper
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("Link copied to clipboard!")
+    } catch (error) {
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea")
+      textArea.value = text
+      textArea.style.position = "fixed"
+      textArea.style.opacity = "0"
+      document.body.appendChild(textArea)
+      textArea.select()
+      try {
+        document.execCommand("copy")
+        toast.success("Link copied to clipboard!")
+      } catch (err) {
+        toast.error("Failed to copy link")
+      }
+      document.body.removeChild(textArea)
+    }
   }
 
   // Handle item card click
@@ -1248,20 +1320,24 @@ export default function RestaurantDetails() {
                                   onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
-                                    handleBookmarkClick(item.id)
+                                    handleBookmarkClick(item)
                                   }}
-                                  className={`p-1.5 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${bookmarkedItems.has(item.id)
+                                  className={`p-1.5 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
                                     ? "border-red-500 text-red-500 bg-red-50 dark:bg-red-900/20"
                                     : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
                                     }`}
                                 >
                                   <Bookmark
                                     size={18}
-                                    className={bookmarkedItems.has(item.id) ? "fill-red-500" : ""}
+                                    className={isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500" : ""}
                                   />
                                 </button>
                                 <button
-                                  onClick={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handleShareClick(item)
+                                  }}
                                   className="p-1.5 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                                 >
                                   <Share2 size={18} />
@@ -1431,16 +1507,16 @@ export default function RestaurantDetails() {
                                             onClick={(e) => {
                                               e.preventDefault()
                                               e.stopPropagation()
-                                              handleBookmarkClick(item.id)
+                                              handleBookmarkClick(item)
                                             }}
-                                            className={`p-1.5 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${bookmarkedItems.has(item.id)
+                                            className={`p-1.5 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
                                               ? "border-red-500 text-red-500 bg-red-50 dark:bg-red-900/20"
                                               : "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400"
                                               }`}
                                           >
                                             <Bookmark
                                               size={18}
-                                              className={bookmarkedItems.has(item.id) ? "fill-red-500" : ""}
+                                              className={isDishFavorite(item.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500" : ""}
                                             />
                                           </button>
                                           <button
@@ -1925,25 +2001,6 @@ export default function RestaurantDetails() {
           document.body
         )}
 
-      {/* Toast Notification - Fixed to viewport bottom */}
-      {typeof window !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {showToast && (
-              <motion.div
-                initial={{ y: 100, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 100, opacity: 0 }}
-                transition={{ duration: 0.3, type: "spring", damping: 25 }}
-                className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[10001] bg-black text-white px-6 py-3 rounded-lg shadow-2xl"
-              >
-                <p className="text-sm font-medium">Added to bookmark</p>
-              </motion.div>
-            )}
-          </AnimatePresence>,
-          document.body
-        )}
-
       {/* Manage Collections Modal */}
       {typeof window !== "undefined" &&
         createPortal(
@@ -1995,17 +2052,13 @@ export default function RestaurantDetails() {
                       <div className="flex-1 text-left">
                         <div className="flex items-center justify-between">
                           <span className="text-base font-medium text-gray-900 dark:text-white">Bookmarks</span>
-                          {selectedItemId && (
+                          {selectedItem && (
                             <Checkbox
-                              checked={bookmarkedItems.has(selectedItemId)}
+                              checked={isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)}
                               onCheckedChange={(checked) => {
-                                if (!checked) {
-                                  setBookmarkedItems((prev) => {
-                                    const newSet = new Set(prev)
-                                    newSet.delete(selectedItemId)
-                                    return newSet
-                                  })
-                                  setSelectedItemId(null)
+                                if (!checked && selectedItem) {
+                                  const restaurantId = restaurant?.restaurantId || restaurant?._id || restaurant?.id
+                                  removeDishFavorite(selectedItem.id, restaurantId)
                                   setShowManageCollections(false)
                                 }
                               }}
@@ -2013,14 +2066,14 @@ export default function RestaurantDetails() {
                               onClick={(e) => e.stopPropagation()}
                             />
                           )}
-                          {!selectedItemId && (
+                          {!selectedItem && (
                             <div className="h-5 w-5 rounded border-2 border-red-500 bg-red-500 flex items-center justify-center">
                               <Check className="h-3 w-3 text-white" />
                             </div>
                           )}
                         </div>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                          {bookmarkedItems.size} dishes • 0 restaurant
+                          {getDishFavorites().length} dishes • {getFavorites().length} restaurant
                         </p>
                       </div>
                     </button>
@@ -2046,7 +2099,6 @@ export default function RestaurantDetails() {
                     <Button
                       className="w-full bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg font-medium"
                       onClick={() => {
-                        setSelectedItemId(null)
                         setShowManageCollections(false)
                       }}
                     >
@@ -2117,15 +2169,15 @@ export default function RestaurantDetails() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleBookmarkClick(selectedItem.id)
+                          handleBookmarkClick(selectedItem)
                         }}
-                        className={`h-10 w-10 rounded-full border flex items-center justify-center transition-all duration-300 ${bookmarkedItems.has(selectedItem.id)
+                        className={`h-10 w-10 rounded-full border flex items-center justify-center transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
                           ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
                           : "border-white dark:border-gray-800 bg-white/90 dark:bg-[#1a1a1a]/90 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-[#2a2a2a]"
                           }`}
                       >
                         <Bookmark
-                          className={`h-5 w-5 transition-all duration-300 ${bookmarkedItems.has(selectedItem.id) ? "fill-red-500 dark:fill-red-400" : ""
+                          className={`h-5 w-5 transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500 dark:fill-red-400" : ""
                             }`}
                         />
                       </button>
@@ -2152,15 +2204,15 @@ export default function RestaurantDetails() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleBookmarkClick(selectedItem.id)
+                            handleBookmarkClick(selectedItem)
                           }}
-                          className={`h-8 w-8 rounded-full border flex items-center justify-center transition-all duration-300 ${bookmarkedItems.has(selectedItem.id)
+                          className={`h-8 w-8 rounded-full border flex items-center justify-center transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id)
                             ? "border-red-500 dark:border-red-400 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400"
                             : "border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                             }`}
                         >
                           <Bookmark
-                            className={`h-4 w-4 transition-all duration-300 ${bookmarkedItems.has(selectedItem.id) ? "fill-red-500 dark:fill-red-400" : ""
+                            className={`h-4 w-4 transition-all duration-300 ${isDishFavorite(selectedItem.id, restaurant?.restaurantId || restaurant?._id || restaurant?.id) ? "fill-red-500 dark:fill-red-400" : ""
                               }`}
                           />
                         </button>

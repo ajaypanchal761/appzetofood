@@ -157,6 +157,7 @@ export const API_ENDPOINTS = {
     INVENTORY: '/restaurant/inventory',
     INVENTORY_BY_RESTAURANT_ID: '/restaurant/:id/inventory',
     OFFERS: '/restaurant/offers',
+    OFFERS_PUBLIC: '/restaurant/offers/public',
     OFFER_BY_ID: '/restaurant/offers/:id',
     OFFER_STATUS: '/restaurant/offers/:id/status',
     COUPONS_BY_ITEM_ID: '/restaurant/offers/item/:itemId/coupons',
@@ -336,6 +337,8 @@ export const API_ENDPOINTS = {
     DELETE: '/hero-banners/:id',
     UPDATE_ORDER: '/hero-banners/:id/order',
     TOGGLE_STATUS: '/hero-banners/:id/status',
+    TOP_10_PUBLIC: '/hero-banners/top-10/public',
+    GOURMET_PUBLIC: '/hero-banners/gourmet/public',
   },
   // Dining endpoints
   DINING: {

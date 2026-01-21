@@ -17,24 +17,45 @@ const logger = winston.createLogger({
 let razorpayInstance = null;
 
 const initializeRazorpay = async () => {
-  const credentials = await getRazorpayCredentials();
-  const keyId = credentials.keyId;
-  const keySecret = credentials.keySecret;
-
-  if (!keyId || !keySecret) {
-    logger.warn('Razorpay credentials not found. Payment gateway will not work.');
-    return null;
-  }
-
   try {
-    razorpayInstance = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret
+    const credentials = await getRazorpayCredentials();
+    const keyId = credentials.keyId;
+    const keySecret = credentials.keySecret;
+
+    logger.info('Razorpay credentials check:', {
+      hasKeyId: !!keyId,
+      hasKeySecret: !!keySecret,
+      keyIdLength: keyId?.length || 0,
+      keySecretLength: keySecret?.length || 0
     });
-    logger.info('Razorpay initialized successfully');
-    return razorpayInstance;
+
+    if (!keyId || !keySecret) {
+      logger.warn('Razorpay credentials not found. Payment gateway will not work.', {
+        keyId: keyId ? 'present' : 'missing',
+        keySecret: keySecret ? 'present' : 'missing'
+      });
+      return null;
+    }
+
+    try {
+      razorpayInstance = new Razorpay({
+        key_id: keyId,
+        key_secret: keySecret
+      });
+      logger.info('Razorpay initialized successfully');
+      return razorpayInstance;
+    } catch (error) {
+      logger.error(`Error initializing Razorpay: ${error.message}`, {
+        error: error.message,
+        stack: error.stack
+      });
+      return null;
+    }
   } catch (error) {
-    logger.error(`Error initializing Razorpay: ${error.message}`);
+    logger.error(`Error fetching Razorpay credentials: ${error.message}`, {
+      error: error.message,
+      stack: error.stack
+    });
     return null;
   }
 };
@@ -57,8 +78,15 @@ const getRazorpayInstance = async () => {
  * @returns {Promise<Object>} Razorpay order object
  */
 const createOrder = async (options) => {
+  logger.info('Creating Razorpay order with options:', {
+    amount: options.amount,
+    currency: options.currency,
+    receipt: options.receipt
+  });
+
   const razorpay = await getRazorpayInstance();
   if (!razorpay) {
+    logger.error('Razorpay instance is null - credentials may be missing or invalid');
     throw new Error('Razorpay is not initialized. Please check your credentials.');
   }
 
@@ -70,20 +98,40 @@ const createOrder = async (options) => {
       notes: options.notes || {}
     };
 
+    logger.info('Calling Razorpay API to create order...');
     const order = await razorpay.orders.create(orderOptions);
-    logger.info(`Razorpay order created: ${order.id}`, {
+    
+    logger.info(`Razorpay order created successfully: ${order.id}`, {
       orderId: order.id,
       amount: order.amount,
-      receipt: order.receipt
+      receipt: order.receipt,
+      status: order.status
     });
 
     return order;
   } catch (error) {
-    logger.error(`Error creating Razorpay order: ${error.message}`, {
-      error: error.message,
-      options
+    logger.error(`Error creating Razorpay order:`, {
+      message: error.message,
+      error: error.error || error.description || error,
+      statusCode: error.statusCode,
+      status: error.status,
+      options: {
+        amount: options.amount,
+        currency: options.currency,
+        receipt: options.receipt
+      },
+      stack: error.stack
     });
-    throw error;
+    
+    // Return more descriptive error message
+    let errorMessage = 'Failed to create payment order';
+    if (error.error && error.error.description) {
+      errorMessage = error.error.description;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    throw new Error(errorMessage);
   }
 };
 
