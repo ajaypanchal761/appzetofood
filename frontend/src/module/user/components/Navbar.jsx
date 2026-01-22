@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import { useState, useEffect } from "react"
 import { MapPin, ShoppingCart, Trophy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -11,13 +12,63 @@ import {
 import { useLocation } from "../hooks/useLocation"
 import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
-import appzetoLogo from "@/assets/appzetologo.png"
+import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
 
 export default function Navbar() {
   const { location, loading } = useLocation()
   const { getCartCount } = useCart()
   const { openLocationSelector } = useLocationSelector()
   const cartCount = getCartCount()
+  const [logoUrl, setLogoUrl] = useState(null)
+  const [companyName, setCompanyName] = useState(null)
+
+  // Load business settings logo
+  useEffect(() => {
+    const loadLogo = async () => {
+      try {
+        const cached = getCachedSettings()
+        if (cached) {
+          if (cached.logo?.url) {
+            setLogoUrl(cached.logo.url)
+          }
+          if (cached.companyName) {
+            setCompanyName(cached.companyName)
+          }
+        } else {
+          const settings = await loadBusinessSettings()
+          if (settings) {
+            if (settings.logo?.url) {
+              setLogoUrl(settings.logo.url)
+            }
+            if (settings.companyName) {
+              setCompanyName(settings.companyName)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading logo:', error)
+      }
+    }
+    loadLogo()
+
+    // Listen for business settings updates
+    const handleSettingsUpdate = () => {
+      const cached = getCachedSettings()
+      if (cached) {
+        if (cached.logo?.url) {
+          setLogoUrl(cached.logo.url)
+        }
+        if (cached.companyName) {
+          setCompanyName(cached.companyName)
+        }
+      }
+    }
+    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate)
+    
+    return () => {
+      window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate)
+    }
+  }, [])
 
   // Show area if available, otherwise show city
   const areaName = location?.area && location?.area !== location?.city ? location.area : null
@@ -64,13 +115,23 @@ export default function Navbar() {
             </Button>
           </div>
 
-          {/* Appzeto Logo - Centered between sections */}
+          {/* Company Logo or Name - Centered between sections */}
           <Link to="/user" className="flex items-center justify-center flex-shrink-0">
-            <img
-              src={appzetoLogo}
-              alt="Appzeto Logo"
-              className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain"
-            />
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="Company Logo"
+                className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain"
+                onError={(e) => {
+                  // Hide image if it fails to load
+                  e.target.style.display = 'none'
+                }}
+              />
+            ) : companyName ? (
+              <span className="text-sm sm:text-base md:text-lg font-bold text-gray-900">
+                {companyName}
+              </span>
+            ) : null}
           </Link>
 
           {/* Right Side Actions - Profile, Points, Cart */}

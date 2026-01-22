@@ -332,3 +332,870 @@ export const getOrderById = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Get orders searching for deliveryman (ready orders without delivery partner)
+ * GET /api/admin/orders/searching-deliveryman
+ * Query params: page, limit, search
+ */
+export const getSearchingDeliverymanOrders = asyncHandler(async (req, res) => {
+  try {
+    console.log('🔍 Fetching searching deliveryman orders...');
+    const { 
+      page = 1, 
+      limit = 50,
+      search
+    } = req.query;
+    
+    console.log('📋 Query params:', { page, limit, search });
+
+    // Build base conditions for orders that are ready but don't have delivery partner assigned
+    // deliveryPartnerId is ObjectId, so we only check for null or missing
+    const baseConditions = {
+      status: { $in: ['ready', 'preparing'] },
+      $or: [
+        { deliveryPartnerId: { $exists: false } },
+        { deliveryPartnerId: null }
+      ]
+    };
+
+    // Build search conditions if search is provided
+    let searchConditions = null;
+    if (search) {
+      const searchOrConditions = [
+        { orderId: { $regex: search, $options: 'i' } }
+      ];
+
+      // If search looks like a phone number, search in customer data
+      const phoneRegex = /[\d\s\+\-()]+/;
+      if (phoneRegex.test(search)) {
+        const User = (await import('../../auth/models/User.js')).default;
+        const cleanSearch = search.replace(/\D/g, '');
+        const userSearchQuery = { phone: { $regex: cleanSearch, $options: 'i' } };
+        if (mongoose.Types.ObjectId.isValid(search)) {
+          userSearchQuery._id = search;
+        }
+        const users = await User.find(userSearchQuery).select('_id').lean();
+        const userIds = users.map(u => u._id);
+        if (userIds.length > 0) {
+          searchOrConditions.push({ userId: { $in: userIds } });
+        }
+      }
+
+      // Also search by customer name
+      const User = (await import('../../auth/models/User.js')).default;
+      const usersByName = await User.find({
+        name: { $regex: search, $options: 'i' }
+      }).select('_id').lean();
+      const userIdsByName = usersByName.map(u => u._id);
+      if (userIdsByName.length > 0) {
+        searchOrConditions.push({ userId: { $in: userIdsByName } });
+      }
+
+      if (searchOrConditions.length > 0) {
+        searchConditions = { $or: searchOrConditions };
+      }
+    }
+
+    // Combine all conditions
+    const finalQuery = searchConditions 
+      ? { $and: [baseConditions, searchConditions] }
+      : baseConditions;
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    console.log('🔎 Final query:', JSON.stringify(finalQuery, null, 2));
+
+    // Fetch orders with population
+    const orders = await Order.find(finalQuery)
+      .populate('userId', 'name email phone')
+      .populate('restaurantId', 'name slug')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip)
+      .lean();
+
+    // Get total count
+    const total = await Order.countDocuments(finalQuery);
+    
+    console.log(`✅ Found ${orders.length} orders (total: ${total})`);
+
+    // Transform orders to match frontend format
+    const transformedOrders = orders.map((order, index) => {
+      const orderDate = new Date(order.createdAt);
+      const dateStr = orderDate.toLocaleDateString('en-GB', { 
+        day: '2-digit', 
+        month: 'short', 
+        year: 'numeric' 
+      }).toUpperCase();
+      const timeStr = orderDate.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }).toUpperCase();
+
+      // Get customer phone (masked for display)
+      const customerPhone = order.userId?.phone || '';
+      let maskedPhone = '';
+      if (customerPhone && customerPhone.length > 2) {
+        maskedPhone = `+${customerPhone.slice(0, 1)}${'*'.repeat(Math.max(0, customerPhone.length - 2))}${customerPhone.slice(-1)}`;
+      } else if (customerPhone) {
+        maskedPhone = customerPhone; // If too short, show as is
+      }
+
+      // Map payment status
+      const paymentStatusMap = {
+        'completed': 'Paid',
+        'pending': 'Unpaid',
+        'failed': 'Failed',
+        'refunded': 'Refunded',
+        'processing': 'Processing'
+      };
+      const paymentStatusDisplay = paymentStatusMap[order.payment?.status] || 'Unpaid';
+
+      // Map order status for display
+      const statusMap = {
+        'pending': 'Pending',
+        'confirmed': 'Accepted',
+        'preparing': 'Pending',
+        'ready': 'Pending',
+        'out_for_delivery': 'Food On The Way',
+        'delivered': 'Delivered',
+        'cancelled': 'Canceled',
+        'scheduled': 'Scheduled',
+        'dine_in': 'Dine In'
+      };
+      const orderStatusDisplay = statusMap[order.status] || 'Pending';
+
+      // Determine delivery type
+      const deliveryType = order.deliveryFleet === 'standard' ? 
+        'Home Delivery' : 
+        (order.deliveryFleet === 'fast' ? 'Fast Delivery' : 'Home Delivery');
+
+      // Format total amount
+      const totalAmount = order.pricing?.total || 0;
+      const formattedTotal = `$ ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      return {
+        id: order.orderId || order._id.toString(),
+        sl: skip + index + 1,
+        date: dateStr,
+        time: timeStr,
+        customerName: order.userId?.name || 'Unknown',
+        customerPhone: maskedPhone,
+        restaurant: order.restaurantName || order.restaurantId?.name || 'Unknown Restaurant',
+        total: formattedTotal,
+        paymentStatus: paymentStatusDisplay,
+        orderStatus: orderStatusDisplay,
+        deliveryType: deliveryType,
+        // Additional fields for view order dialog
+        orderId: order.orderId,
+        _id: order._id.toString(),
+        customerEmail: order.userId?.email || '',
+        restaurantId: order.restaurantId?.toString() || order.restaurantId || '',
+        items: order.items || [],
+        address: order.address || {},
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
+        status: order.status,
+        pricing: order.pricing || {}
+      };
+    });
+
+    return successResponse(res, 200, 'Searching deliveryman orders retrieved successfully', {
+      orders: transformedOrders,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching searching deliveryman orders:', error);
+    console.error('Error stack:', error.stack);
+    return errorResponse(res, 500, error.message || 'Failed to fetch searching deliveryman orders');
+  }
+});
+
+/**
+ * Get ongoing orders (orders with delivery partner assigned but not delivered)
+ * GET /api/admin/orders/ongoing
+ * Query params: page, limit, search
+ */
+export const getOngoingOrders = asyncHandler(async (req, res) => {
+  try {
+    console.log('🔍 Fetching ongoing orders...');
+    const { 
+      page = 1, 
+      limit = 50,
+      search
+    } = req.query;
+    
+    console.log('📋 Query params:', { page, limit, search });
+
+    // Build base conditions for ongoing orders
+    // Orders that have deliveryPartnerId assigned but are not delivered/cancelled
+    const baseConditions = {
+      deliveryPartnerId: { $exists: true, $ne: null },
+      status: { $nin: ['delivered', 'cancelled'] }
+    };
+
+    // Build search conditions if search is provided
+    let searchConditions = null;
+    if (search) {
+      const searchOrConditions = [
+        { orderId: { $regex: search, $options: 'i' } }
+      ];
+
+      // If search looks like a phone number, search in customer data
+      const phoneRegex = /[\d\s\+\-()]+/;
+      if (phoneRegex.test(search)) {
+        const User = (await import('../../auth/models/User.js')).default;
+        const cleanSearch = search.replace(/\D/g, '');
+        const userSearchQuery = { phone: { $regex: cleanSearch, $options: 'i' } };
+        if (mongoose.Types.ObjectId.isValid(search)) {
+          userSearchQuery._id = search;
+        }
+        const users = await User.find(userSearchQuery).select('_id').lean();
+        const userIds = users.map(u => u._id);
+        if (userIds.length > 0) {
+          searchOrConditions.push({ userId: { $in: userIds } });
+        }
+      }
+
+      // Also search by customer name
+      const User = (await import('../../auth/models/User.js')).default;
+      const usersByName = await User.find({
+        name: { $regex: search, $options: 'i' }
+      }).select('_id').lean();
+      const userIdsByName = usersByName.map(u => u._id);
+      if (userIdsByName.length > 0) {
+        searchOrConditions.push({ userId: { $in: userIdsByName } });
+      }
+
+      if (searchOrConditions.length > 0) {
+        searchConditions = { $or: searchOrConditions };
+      }
+    }
+
+    // Combine all conditions
+    const finalQuery = searchConditions 
+      ? { $and: [baseConditions, searchConditions] }
+      : baseConditions;
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    console.log('🔎 Final query:', JSON.stringify(finalQuery, null, 2));
+
+    // Fetch orders with population
+    const orders = await Order.find(finalQuery)
+      .populate('userId', 'name email phone')
+      .populate('restaurantId', 'name slug')
+      .populate('deliveryPartnerId', 'name phone')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip)
+      .lean();
+
+    // Get total count
+    const total = await Order.countDocuments(finalQuery);
+    
+    console.log(`✅ Found ${orders.length} ongoing orders (total: ${total})`);
+
+    // Transform orders to match frontend format
+    const transformedOrders = orders.map((order, index) => {
+      const orderDate = new Date(order.createdAt);
+      const dateStr = orderDate.toLocaleDateString('en-GB', { 
+        day: '2-digit', 
+        month: 'short', 
+        year: 'numeric' 
+      }).toUpperCase();
+      const timeStr = orderDate.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }).toUpperCase();
+
+      // Get customer phone (masked for display)
+      const customerPhone = order.userId?.phone || '';
+      let maskedPhone = '';
+      if (customerPhone && customerPhone.length > 2) {
+        maskedPhone = `+${customerPhone.slice(0, 1)}${'*'.repeat(Math.max(0, customerPhone.length - 2))}${customerPhone.slice(-1)}`;
+      } else if (customerPhone) {
+        maskedPhone = customerPhone; // If too short, show as is
+      }
+
+      // Map payment status
+      const paymentStatusMap = {
+        'completed': 'Paid',
+        'pending': 'Unpaid',
+        'failed': 'Failed',
+        'refunded': 'Refunded',
+        'processing': 'Processing'
+      };
+      const paymentStatusDisplay = paymentStatusMap[order.payment?.status] || 'Unpaid';
+
+      // Map order status for display with colors
+      const statusMap = {
+        'pending': { text: 'Pending', color: 'bg-gray-100 text-gray-600' },
+        'confirmed': { text: 'Confirmed', color: 'bg-blue-50 text-blue-600' },
+        'preparing': { text: 'Preparing', color: 'bg-yellow-50 text-yellow-600' },
+        'ready': { text: 'Ready', color: 'bg-green-50 text-green-600' },
+        'out_for_delivery': { text: 'Out For Delivery', color: 'bg-orange-100 text-orange-600' },
+        'delivered': { text: 'Delivered', color: 'bg-green-100 text-green-600' },
+        'cancelled': { text: 'Cancelled', color: 'bg-red-50 text-red-600' },
+        'scheduled': { text: 'Scheduled', color: 'bg-purple-50 text-purple-600' },
+        'dine_in': { text: 'Dine In', color: 'bg-indigo-50 text-indigo-600' }
+      };
+      
+      // Check for handover status (when delivery partner has reached pickup)
+      let orderStatusDisplay = statusMap[order.status]?.text || 'Pending';
+      let orderStatusColor = statusMap[order.status]?.color || 'bg-gray-100 text-gray-600';
+      
+      // If delivery partner has reached pickup, show as "Handover"
+      if (order.deliveryState?.currentPhase === 'at_pickup' || 
+          order.deliveryState?.currentPhase === 'en_route_to_delivery' ||
+          order.deliveryState?.currentPhase === 'at_delivery') {
+        orderStatusDisplay = 'Handover';
+        orderStatusColor = 'bg-blue-50 text-blue-600';
+      }
+
+      // Determine delivery type
+      const deliveryType = order.deliveryFleet === 'standard' ? 
+        'Home Delivery' : 
+        (order.deliveryFleet === 'fast' ? 'Fast Delivery' : 'Home Delivery');
+
+      // Format total amount
+      const totalAmount = order.pricing?.total || 0;
+      const formattedTotal = `$ ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      return {
+        id: order.orderId || order._id.toString(),
+        sl: skip + index + 1,
+        date: dateStr,
+        time: timeStr,
+        customerName: order.userId?.name || 'Unknown',
+        customerPhone: maskedPhone,
+        restaurant: order.restaurantName || order.restaurantId?.name || 'Unknown Restaurant',
+        total: formattedTotal,
+        paymentStatus: paymentStatusDisplay,
+        orderStatus: orderStatusDisplay,
+        orderStatusColor: orderStatusColor,
+        deliveryType: deliveryType,
+        // Additional fields for view order dialog
+        orderId: order.orderId,
+        _id: order._id.toString(),
+        customerEmail: order.userId?.email || '',
+        restaurantId: order.restaurantId?.toString() || order.restaurantId || '',
+        items: order.items || [],
+        address: order.address || {},
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
+        status: order.status,
+        pricing: order.pricing || {},
+        deliveryPartnerName: order.deliveryPartnerId?.name || null,
+        deliveryPartnerPhone: order.deliveryPartnerId?.phone || null
+      };
+    });
+
+    return successResponse(res, 200, 'Ongoing orders retrieved successfully', {
+      orders: transformedOrders,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ongoing orders:', error);
+    console.error('Error stack:', error.stack);
+    return errorResponse(res, 500, error.message || 'Failed to fetch ongoing orders');
+  }
+});
+
+/**
+ * Get transaction report with summary statistics and order transactions
+ * GET /api/admin/orders/transaction-report
+ * Query params: page, limit, search, zone, restaurant, fromDate, toDate
+ */
+export const getTransactionReport = asyncHandler(async (req, res) => {
+  try {
+    console.log('🔍 Fetching transaction report...');
+    const { 
+      page = 1, 
+      limit = 50,
+      search,
+      zone,
+      restaurant,
+      fromDate,
+      toDate
+    } = req.query;
+    
+    console.log('📋 Query params:', { page, limit, search, zone, restaurant, fromDate, toDate });
+
+    // Build query for orders
+    const query = {};
+
+    // Date range filter
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) {
+        const startDate = new Date(fromDate);
+        startDate.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = startDate;
+      }
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = endDate;
+      }
+    }
+
+    // Restaurant filter
+    if (restaurant && restaurant !== 'All restaurants') {
+      const Restaurant = (await import('../../restaurant/models/Restaurant.js')).default;
+      const restaurantDoc = await Restaurant.findOne({
+        $or: [
+          { name: { $regex: restaurant, $options: 'i' } },
+          { _id: mongoose.Types.ObjectId.isValid(restaurant) ? restaurant : null },
+          { restaurantId: restaurant }
+        ]
+      }).select('_id restaurantId').lean();
+
+      if (restaurantDoc) {
+        query.restaurantId = restaurantDoc._id?.toString() || restaurantDoc.restaurantId;
+      }
+    }
+
+    // Zone filter
+    if (zone && zone !== 'All Zones') {
+      const Zone = (await import('../models/Zone.js')).default;
+      const zoneDoc = await Zone.findOne({
+        name: { $regex: zone, $options: 'i' }
+      }).select('_id name').lean();
+
+      if (zoneDoc) {
+        query['assignmentInfo.zoneId'] = zoneDoc._id?.toString();
+      }
+    }
+
+    // Search filter (orderId)
+    if (search) {
+      query.orderId = { $regex: search, $options: 'i' };
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Fetch orders with population
+    const orders = await Order.find(query)
+      .populate('userId', 'name email phone')
+      .populate('restaurantId', 'name slug')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip)
+      .lean();
+
+    // Get total count
+    const total = await Order.countDocuments(query);
+
+    // Calculate summary statistics
+    const AdminCommission = (await import('../models/AdminCommission.js')).default;
+    
+    // Build date query for summary stats
+    const summaryDateQuery = {};
+    if (fromDate || toDate) {
+      summaryDateQuery.orderDate = {};
+      if (fromDate) {
+        const startDate = new Date(fromDate);
+        startDate.setHours(0, 0, 0, 0);
+        summaryDateQuery.orderDate.$gte = startDate;
+      }
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999);
+        summaryDateQuery.orderDate.$lte = endDate;
+      }
+    }
+
+    // Build restaurant filter for summary
+    let summaryRestaurantQuery = {};
+    if (restaurant && restaurant !== 'All restaurants') {
+      const Restaurant = (await import('../../restaurant/models/Restaurant.js')).default;
+      const restaurantDoc = await Restaurant.findOne({
+        $or: [
+          { name: { $regex: restaurant, $options: 'i' } },
+          { _id: mongoose.Types.ObjectId.isValid(restaurant) ? restaurant : null },
+          { restaurantId: restaurant }
+        ]
+      }).select('_id restaurantId').lean();
+
+      if (restaurantDoc) {
+        summaryRestaurantQuery.restaurantId = restaurantDoc._id || restaurantDoc.restaurantId;
+      }
+    }
+
+    // Get all orders for summary calculation (without pagination)
+    const summaryQuery = { ...query };
+    const allOrdersForSummary = await Order.find(summaryQuery)
+      .populate('userId', 'name')
+      .populate('restaurantId', 'name')
+      .lean();
+
+    // Calculate completed transactions (delivered orders)
+    const completedOrders = allOrdersForSummary.filter(order => 
+      order.status === 'delivered' && order.payment?.status === 'completed'
+    );
+    const completedTransaction = completedOrders.reduce((sum, order) => 
+      sum + (order.pricing?.total || 0), 0
+    );
+
+    // Calculate refunded transactions
+    const refundedOrders = allOrdersForSummary.filter(order => 
+      order.payment?.status === 'refunded' || order.status === 'cancelled'
+    );
+    const refundedTransaction = refundedOrders.reduce((sum, order) => 
+      sum + (order.pricing?.total || 0), 0
+    );
+
+    // Get admin earning from AdminCommission
+    const adminCommissionQuery = {
+      status: 'completed',
+      ...summaryDateQuery,
+      ...summaryRestaurantQuery
+    };
+    const adminCommissions = await AdminCommission.find(adminCommissionQuery).lean();
+    const adminEarning = adminCommissions.reduce((sum, comm) => sum + (comm.commissionAmount || 0), 0);
+
+    // Calculate restaurant earning (order total - admin commission - delivery commission)
+    // For simplicity, we'll use restaurantEarning from AdminCommission if available
+    const restaurantEarning = adminCommissions.reduce((sum, comm) => sum + (comm.restaurantEarning || 0), 0);
+
+    // Calculate deliveryman earning (from delivery commissions)
+    // This would need to be calculated from delivery wallet transactions or order assignment info
+    // For now, we'll estimate based on delivery fee or use a placeholder
+    const deliverymanEarning = completedOrders.reduce((sum, order) => {
+      // Delivery commission is typically calculated from distance
+      // For now, we'll use a simple estimate or fetch from delivery wallet
+      return sum + (order.pricing?.deliveryFee || 0) * 0.8; // Estimate 80% of delivery fee goes to deliveryman
+    }, 0);
+
+    // Transform orders to match frontend format
+    const transformedTransactions = orders.map((order, index) => {
+      const subtotal = order.pricing?.subtotal || 0;
+      const discount = order.pricing?.discount || 0;
+      const deliveryFee = order.pricing?.deliveryFee || 0;
+      const tax = order.pricing?.tax || 0;
+      const couponCode = order.pricing?.couponCode || null;
+      
+      // For report: itemDiscount is the discount applied to items
+      const itemDiscount = discount;
+      // Discounted amount is subtotal after discount
+      const discountedAmount = Math.max(0, subtotal - discount);
+      // Coupon discount (if coupon was applied, it's part of discount)
+      const couponDiscount = couponCode ? discount : 0;
+      // Referral discount (not currently in model, default to 0)
+      const referralDiscount = 0;
+      // VAT/Tax
+      const vatTax = tax;
+      // Delivery charge
+      const deliveryCharge = deliveryFee;
+      // Total item amount (subtotal before discounts)
+      const totalItemAmount = subtotal;
+      // Order amount (final total)
+      const orderAmount = order.pricing?.total || 0;
+
+      return {
+        id: order._id.toString(),
+        orderId: order.orderId,
+        restaurant: order.restaurantName || order.restaurantId?.name || 'Unknown Restaurant',
+        customerName: order.userId?.name || 'Invalid Customer Data',
+        totalItemAmount: totalItemAmount,
+        itemDiscount: itemDiscount,
+        couponDiscount: couponDiscount,
+        referralDiscount: referralDiscount,
+        discountedAmount: discountedAmount,
+        vatTax: vatTax,
+        deliveryCharge: deliveryCharge,
+        orderAmount: orderAmount,
+      };
+    });
+
+    return successResponse(res, 200, 'Transaction report retrieved successfully', {
+      summary: {
+        completedTransaction,
+        refundedTransaction,
+        adminEarning,
+        restaurantEarning,
+        deliverymanEarning
+      },
+      transactions: transformedTransactions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching transaction report:', error);
+    console.error('Error stack:', error.stack);
+    return errorResponse(res, 500, error.message || 'Failed to fetch transaction report');
+  }
+});
+
+/**
+ * Get restaurant report with statistics for each restaurant
+ * GET /api/admin/orders/restaurant-report
+ * Query params: zone, all (active/inactive), type (commission/subscription), time, search
+ */
+export const getRestaurantReport = asyncHandler(async (req, res) => {
+  try {
+    console.log('🔍 Fetching restaurant report...');
+    const { 
+      zone,
+      all,
+      type,
+      time,
+      search
+    } = req.query;
+    
+    console.log('📋 Query params:', { zone, all, type, time, search });
+
+    const Restaurant = (await import('../../restaurant/models/Restaurant.js')).default;
+    const AdminCommission = (await import('../models/AdminCommission.js')).default;
+    const FeedbackExperience = (await import('../models/FeedbackExperience.js')).default;
+
+    // Build restaurant query
+    const restaurantQuery = {};
+
+    // Zone filter
+    if (zone && zone !== 'All Zones') {
+      const Zone = (await import('../models/Zone.js')).default;
+      const zoneDoc = await Zone.findOne({
+        name: { $regex: zone, $options: 'i' }
+      }).select('_id name').lean();
+
+      if (zoneDoc) {
+        // Find restaurants in this zone by checking orders with this zoneId
+        const ordersInZone = await Order.find({
+          'assignmentInfo.zoneId': zoneDoc._id?.toString()
+        }).distinct('restaurantId').lean();
+
+        if (ordersInZone.length > 0) {
+          restaurantQuery.$or = [
+            { _id: { $in: ordersInZone } },
+            { restaurantId: { $in: ordersInZone } }
+          ];
+        } else {
+          // No restaurants found in this zone
+          return successResponse(res, 200, 'Restaurant report retrieved successfully', {
+            restaurants: [],
+            pagination: {
+              page: 1,
+              limit: 1000,
+              total: 0,
+              pages: 0
+            }
+          });
+        }
+      }
+    }
+
+    // Active/Inactive filter
+    if (all && all !== 'All') {
+      restaurantQuery.isActive = all === 'Active';
+    }
+
+    // Search filter
+    if (search) {
+      restaurantQuery.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { restaurantId: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Get all restaurants matching the query
+    const restaurants = await Restaurant.find(restaurantQuery)
+      .select('_id restaurantId name profileImage rating totalRatings isActive')
+      .lean();
+
+    console.log(`📊 Found ${restaurants.length} restaurants`);
+
+    // Date range filter for orders
+    let dateQuery = {};
+    if (time && time !== 'All Time') {
+      const now = new Date();
+      dateQuery.createdAt = {};
+      
+      if (time === 'Today') {
+        const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        dateQuery.createdAt.$gte = startDate;
+        dateQuery.createdAt.$lte = endDate;
+      } else if (time === 'This Week') {
+        const dayOfWeek = now.getDay();
+        const diff = now.getDate() - dayOfWeek;
+        const startDate = new Date(now.getFullYear(), now.getMonth(), diff);
+        const endDate = new Date(now.getFullYear(), now.getMonth(), diff + 6, 23, 59, 59);
+        dateQuery.createdAt.$gte = startDate;
+        dateQuery.createdAt.$lte = endDate;
+      } else if (time === 'This Month') {
+        const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        dateQuery.createdAt.$gte = startDate;
+        dateQuery.createdAt.$lte = endDate;
+      } else if (time === 'This Year') {
+        const startDate = new Date(now.getFullYear(), 0, 1);
+        const endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        dateQuery.createdAt.$gte = startDate;
+        dateQuery.createdAt.$lte = endDate;
+      }
+    }
+
+    // Process each restaurant
+    const restaurantReports = await Promise.all(
+      restaurants.map(async (restaurant) => {
+        const restaurantId = restaurant._id?.toString();
+        const restaurantIdField = restaurant.restaurantId;
+
+        // Build order query for this restaurant
+        const orderQuery = {
+          ...dateQuery,
+          $or: [
+            { restaurantId: restaurantId },
+            { restaurantId: restaurantIdField }
+          ]
+        };
+
+        // Get orders for this restaurant
+        const orders = await Order.find(orderQuery).lean();
+
+        // Calculate statistics
+        const totalOrder = orders.length;
+        
+        // Total order amount
+        const totalOrderAmount = orders.reduce((sum, order) => 
+          sum + (order.pricing?.total || 0), 0
+        );
+
+        // Total discount given
+        const totalDiscountGiven = orders.reduce((sum, order) => 
+          sum + (order.pricing?.discount || 0), 0
+        );
+
+        // Total VAT/TAX
+        const totalVATTAX = orders.reduce((sum, order) => 
+          sum + (order.pricing?.tax || 0), 0
+        );
+
+        // Get unique food items (count distinct itemIds from all orders)
+        const uniqueItemIds = new Set();
+        orders.forEach(order => {
+          if (order.items && Array.isArray(order.items)) {
+            order.items.forEach(item => {
+              if (item.itemId) {
+                uniqueItemIds.add(item.itemId);
+              }
+            });
+          }
+        });
+        const totalFood = uniqueItemIds.size;
+
+        // Get admin commission for this restaurant
+        const restaurantObjectId = restaurant._id instanceof mongoose.Types.ObjectId 
+          ? restaurant._id 
+          : new mongoose.Types.ObjectId(restaurant._id);
+
+        const commissionQuery = {
+          restaurantId: restaurantObjectId,
+          status: 'completed'
+        };
+
+        if (dateQuery.createdAt) {
+          commissionQuery.orderDate = dateQuery.createdAt;
+        }
+
+        const commissions = await AdminCommission.find(commissionQuery).lean();
+        const totalAdminCommission = commissions.reduce((sum, comm) => 
+          sum + (comm.commissionAmount || 0), 0
+        );
+
+        // Get ratings from FeedbackExperience
+        const ratingStats = await FeedbackExperience.aggregate([
+          {
+            $match: {
+              restaurantId: restaurantObjectId,
+              rating: { $exists: true, $ne: null, $gt: 0 }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              averageRating: { $avg: '$rating' },
+              totalRatings: { $sum: 1 }
+            }
+          }
+        ]);
+
+        const averageRatings = ratingStats[0]?.averageRating || restaurant.rating || 0;
+        const reviews = ratingStats[0]?.totalRatings || restaurant.totalRatings || 0;
+
+        // Format currency values
+        const formatCurrency = (amount) => {
+          return `₹${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        };
+
+        return {
+          sl: 0, // Will be set in frontend
+          id: restaurantId,
+          restaurantName: restaurant.name,
+          icon: restaurant.profileImage?.url || restaurant.profileImage || null,
+          totalFood,
+          totalOrder,
+          totalOrderAmount: formatCurrency(totalOrderAmount),
+          totalDiscountGiven: formatCurrency(totalDiscountGiven),
+          totalAdminCommission: formatCurrency(totalAdminCommission),
+          totalVATTAX: formatCurrency(totalVATTAX),
+          averageRatings: parseFloat(averageRatings.toFixed(1)),
+          reviews
+        };
+      })
+    );
+
+    // Filter by type (Commission/Subscription) if needed
+    let filteredReports = restaurantReports;
+    if (type && type !== 'All types') {
+      // This would require checking restaurant subscription status
+      // For now, we'll return all restaurants
+      // You can add subscription filtering logic here if needed
+    }
+
+    // Sort by restaurant name
+    filteredReports.sort((a, b) => a.restaurantName.localeCompare(b.restaurantName));
+
+    // Add serial numbers
+    filteredReports = filteredReports.map((report, index) => ({
+      ...report,
+      sl: index + 1
+    }));
+
+    return successResponse(res, 200, 'Restaurant report retrieved successfully', {
+      restaurants: filteredReports,
+      pagination: {
+        page: 1,
+        limit: 1000,
+        total: filteredReports.length,
+        pages: 1
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching restaurant report:', error);
+    console.error('Error stack:', error.stack);
+    return errorResponse(res, 500, error.message || 'Failed to fetch restaurant report');
+  }
+});
+

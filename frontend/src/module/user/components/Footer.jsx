@@ -1,9 +1,45 @@
 import { Link } from "react-router-dom"
 import { Facebook, Twitter, Instagram, Mail, Phone, MapPin, Heart } from "lucide-react"
+import { useState, useEffect } from "react"
+import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
 import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
+  const [logoUrl, setLogoUrl] = useState(appzetoFoodLogo)
+
+  // Load business settings logo
+  useEffect(() => {
+    const loadLogo = async () => {
+      try {
+        const cached = getCachedSettings()
+        if (cached?.logo?.url) {
+          setLogoUrl(cached.logo.url)
+        } else {
+          const settings = await loadBusinessSettings()
+          if (settings?.logo?.url) {
+            setLogoUrl(settings.logo.url)
+          }
+        }
+      } catch (error) {
+        // Silently fail, use default logo
+      }
+    }
+    loadLogo()
+
+    // Listen for business settings updates
+    const handleSettingsUpdate = () => {
+      const cached = getCachedSettings()
+      if (cached?.logo?.url) {
+        setLogoUrl(cached.logo.url)
+      }
+    }
+    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate)
+    
+    return () => {
+      window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate)
+    }
+  }, [])
 
   const footerLinks = {
     company: [
@@ -44,9 +80,13 @@ export default function Footer() {
             >
               <div className="flex items-center gap-2 mb-4">
                 <img
-                  src={appzetoFoodLogo}
-                  alt="Appzeto  Food Logo"
+                  src={logoUrl}
+                  alt="Company Logo"
                   className="h-10 w-10 rounded-full object-cover"
+                  onError={(e) => {
+                    // Fallback to default logo if business logo fails to load
+                    e.target.src = appzetoFoodLogo
+                  }}
                 />
                 <span className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
                   Appzeto  Food

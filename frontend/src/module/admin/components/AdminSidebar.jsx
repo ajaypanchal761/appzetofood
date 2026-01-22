@@ -44,6 +44,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { sidebarMenuData } from "../data/sidebarMenu"
+import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
 import appzetoLogo from "@/assets/appzetologo.png"
 
 // Icon mapping
@@ -87,6 +88,66 @@ const iconMap = {
 export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange }) {
   const location = useLocation()
   const [searchQuery, setSearchQuery] = useState("")
+  const [logoUrl, setLogoUrl] = useState(null)
+  const [companyName, setCompanyName] = useState(null)
+
+  // Load business settings logo
+  useEffect(() => {
+    const loadLogo = async () => {
+      try {
+        // First check cache
+        let cached = getCachedSettings()
+        if (cached) {
+          if (cached.logo?.url) {
+            setLogoUrl(cached.logo.url)
+          }
+          if (cached.companyName) {
+            setCompanyName(cached.companyName)
+          }
+        }
+        
+        // Always try to load fresh data to ensure we have the latest
+        const settings = await loadBusinessSettings()
+        if (settings) {
+          if (settings.logo?.url) {
+            setLogoUrl(settings.logo.url)
+          }
+          if (settings.companyName) {
+            setCompanyName(settings.companyName)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading logo:', error)
+      }
+    }
+    
+    // Load immediately
+    loadLogo()
+    
+    // Also try after a small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      loadLogo()
+    }, 100)
+
+    // Listen for business settings updates
+    const handleSettingsUpdate = () => {
+      const cached = getCachedSettings()
+      if (cached) {
+        if (cached.logo?.url) {
+          setLogoUrl(cached.logo.url)
+        }
+        if (cached.companyName) {
+          setCompanyName(cached.companyName)
+        }
+      }
+    }
+    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate)
+    
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate)
+    }
+  }, [])
   
   // Get initial collapsed state from localStorage
   const getInitialCollapsedState = () => {
@@ -459,14 +520,48 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
           {!isCollapsed && (
             <div className="flex items-center gap-2 animate-[slideIn_0.3s_ease-out]">
               <div className="w-24 h-12 rounded-lg flex items-center justify-center shadow-black/20">
-                <img src={appzetoLogo} alt="Appzeto" className="w-24 h-10 object-contain" loading="lazy" />
+                {logoUrl ? (
+                  <img 
+                    src={logoUrl} 
+                    alt={companyName || "Company"} 
+                    className="w-24 h-10 object-contain" 
+                    loading="lazy"
+                    onError={(e) => {
+                      // Hide image if it fails to load
+                      e.target.style.display = 'none'
+                    }}
+                  />
+                ) : companyName ? (
+                  <span className="text-xs font-semibold text-white px-2 truncate">
+                    {companyName}
+                  </span>
+                ) : (
+                  <img src={appzetoLogo} alt="Appzeto" className="w-24 h-10 object-contain" loading="lazy" />
+                )}
               </div>
             </div>
           )}
           {isCollapsed && (
             <div className="w-full flex items-center justify-center">
               <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center shadow-lg shadow-black/20 ring-1 ring-white/10">
-                <img src={appzetoLogo} alt="Appzeto" className="w-10 h-10 object-contain" loading="lazy" />
+                {logoUrl ? (
+                  <img 
+                    src={logoUrl} 
+                    alt={companyName || "Company"} 
+                    className="w-10 h-10 object-contain" 
+                    loading="lazy"
+                    onError={(e) => {
+                      // Hide image if it fails to load
+                      e.target.style.display = 'none'
+                    }}
+                  />
+                ) : companyName ? (
+                  <span className="text-[10px] font-semibold text-white truncate px-1">
+                    {companyName.charAt(0).toUpperCase()}
+                  </span>
+                ) : (
+                  <img src={appzetoLogo} alt="Appzeto" className="w-10 h-10 object-contain" loading="lazy" />
+                )}
               </div>
             </div>
           )}

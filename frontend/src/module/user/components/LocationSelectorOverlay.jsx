@@ -1962,6 +1962,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       label: "Home",
       phone: "",
     })
+    navigate("/")
   }
 
   const handleSelectSavedAddress = async (address) => {
@@ -2067,7 +2068,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         </div>
 
         {/* Map Section - Google Maps */}
-        <div className="flex-1 relative" style={{ height: '40vh', minHeight: '300px' }}>
+        <div className="flex-shrink-0 relative" style={{ height: '40vh', minHeight: '300px' }}>
           {/* Google Maps Container */}
               <div 
                 ref={mapContainerRef} 
@@ -2118,8 +2119,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         </div>
 
         {/* Form Section - Scrollable */}
-        <div className="flex-1 overflow-y-auto bg-white dark:bg-[#0a0a0a]">
-          <div className="px-4 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto bg-white dark:bg-[#0a0a0a] min-h-0">
+          <div className="px-4 py-4 space-y-4 pb-6">
             {/* Delivery Details */}
             <div>
               <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
@@ -2254,7 +2255,10 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
               type="button"
               variant="ghost"
               size="icon"
-              onClick={onClose}
+              onClick={() => {
+                onClose()
+                navigate("/")
+              }}
               className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 -ml-2"
             >
               <ChevronLeft className="h-6 w-6 text-gray-700 dark:text-gray-300" />
@@ -2279,8 +2283,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide">
-        <div className="max-w-7xl mx-auto w-full">
+      <div className="flex-1 overflow-y-auto scrollbar-hide min-h-0">
+        <div className="max-w-7xl mx-auto w-full pb-6">
           {/* Use Current Location */}
           <div
             className="px-4 sm:px-6 lg:px-8 py-2 bg-white dark:bg-[#1a1a1a]"

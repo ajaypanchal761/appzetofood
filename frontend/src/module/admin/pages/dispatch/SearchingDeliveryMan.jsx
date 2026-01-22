@@ -1,145 +1,17 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import OrdersTopbar from "../../components/orders/OrdersTopbar"
 import DispatchOrdersTable from "../../components/orders/DispatchOrdersTable"
 import DispatchFilterPanel from "../../components/orders/DispatchFilterPanel"
 import ViewOrderDialog from "../../components/orders/ViewOrderDialog"
 import SettingsDialog from "../../components/orders/SettingsDialog"
 import { useGenericTableManagement } from "../../components/orders/useGenericTableManagement"
-
-const MOCK_ORDERS = [
-  {
-    id: "100160",
-    sl: 1,
-    date: "05 APR 2025",
-    time: "10:13 PM",
-    customerName: "Jane Doe",
-    customerPhone: "+8***********",
-    restaurant: "Hungry Puppets",
-    total: "$ 1,402.49",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100158",
-    sl: 2,
-    date: "02 JAN 2024",
-    time: "06:48 AM",
-    customerName: "Brooklyn Simmons",
-    customerPhone: "+8***********",
-    restaurant: "The Great Impasta",
-    total: "$ 1,911.20",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100149",
-    sl: 3,
-    date: "11 JUN 2023",
-    time: "03:24 PM",
-    customerName: "Jdjidj Dhhdhd",
-    customerPhone: "+8***********",
-    restaurant: "Café Monarch",
-    total: "$ 275.41",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100147",
-    sl: 4,
-    date: "11 JUN 2023",
-    time: "03:22 PM",
-    customerName: "Munam ShahariEr Test",
-    customerPhone: "+8***********",
-    restaurant: "Hungry Puppets",
-    total: "$ 3,327.56",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100145",
-    sl: 5,
-    date: "06 JUN 2023",
-    time: "12:49 PM",
-    customerName: "Munam ShahariEr Test",
-    customerPhone: "+8***********",
-    restaurant: "Hungry Puppets",
-    total: "$ 1,521.92",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100144",
-    sl: 6,
-    date: "06 JUN 2023",
-    time: "12:49 PM",
-    customerName: "Munam ShahariEr Test",
-    customerPhone: "+8***********",
-    restaurant: "Cheese Burger",
-    total: "$ 367.20",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100143",
-    sl: 7,
-    date: "05 JUN 2023",
-    time: "10:35 PM",
-    customerName: "Ghhxh jgjvjv",
-    customerPhone: "+8***********",
-    restaurant: "Hungry Puppets",
-    total: "$ 786.95",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100142",
-    sl: 8,
-    date: "05 JUN 2023",
-    time: "10:28 PM",
-    customerName: "Jane Cooper",
-    customerPhone: "+8***********",
-    restaurant: "Café Monarch",
-    total: "$ 2,504.47",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100141",
-    sl: 9,
-    date: "04 JUN 2023",
-    time: "10:51 AM",
-    customerName: "Jvjgjgj Ffjhghgh",
-    customerPhone: "+8***********",
-    restaurant: "Café Monarch",
-    total: "$ 2,504.46",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100140",
-    sl: 10,
-    date: "04 JUN 2023",
-    time: "11:30 AM",
-    customerName: "Jvjgjgj Ffjhghgh",
-    customerPhone: "+8***********",
-    restaurant: "Café Monarch",
-    total: "$ 786.91",
-    paymentStatus: "Unpaid",
-    orderStatus: "Pending",
-    deliveryType: "Home Delivery",
-  },
-]
+import { adminAPI } from "@/lib/api"
+import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
 
 export default function SearchingDeliveryMan() {
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
   const [visibleColumns, setVisibleColumns] = useState({
     sl: true,
     order: true,
@@ -150,10 +22,83 @@ export default function SearchingDeliveryMan() {
     status: true,
     actions: true,
   })
+  const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 500) // 500ms delay
+
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Fetch orders from API
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        setLoading(true)
+        const response = await adminAPI.getSearchingDeliverymanOrders({
+          search: debouncedSearchQuery || undefined,
+          limit: 1000 // Get all orders
+        })
+
+        if (response?.data?.success && response.data.data?.orders) {
+          setOrders(response.data.data.orders)
+        } else {
+          setOrders([])
+          if (response?.data?.message) {
+            toast.error(response.data.message)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching searching deliveryman orders:", error)
+        console.error("Error details:", {
+          message: error.message,
+          code: error.code,
+          response: error.response ? {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data
+          } : null,
+          request: error.request ? {
+            url: error.config?.url,
+            method: error.config?.method,
+            baseURL: error.config?.baseURL
+          } : null
+        })
+        
+        if (error.response) {
+          const status = error.response.status
+          const errorData = error.response.data
+          
+          if (status === 401) {
+            toast.error('Authentication required. Please login again.')
+          } else if (status === 403) {
+            toast.error('Access denied. You do not have permission.')
+          } else if (status === 404) {
+            toast.error('Endpoint not found. Please check backend server.')
+          } else if (status >= 500) {
+            toast.error('Server error. Please try again later.')
+          } else {
+            toast.error(errorData?.message || `Error ${status}: Failed to fetch orders`)
+          }
+        } else if (error.request) {
+          toast.error('Cannot connect to server. Please check if backend is running.')
+        } else {
+          toast.error(error.message || 'Failed to fetch orders')
+        }
+        setOrders([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchOrders()
+  }, [debouncedSearchQuery])
 
   const {
-    searchQuery,
-    setSearchQuery,
     isFilterOpen,
     setIsFilterOpen,
     isSettingsOpen,
@@ -173,7 +118,7 @@ export default function SearchingDeliveryMan() {
     handlePrintOrder,
     toggleColumn,
   } = useGenericTableManagement(
-    MOCK_ORDERS,
+    orders,
     "Searching For Deliverymen Orders",
     ["id", "customerName", "restaurant", "customerPhone"]
   )
@@ -189,6 +134,17 @@ export default function SearchingDeliveryMan() {
       status: true,
       actions: true,
     })
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 lg:p-6 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-gray-600">Loading orders...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

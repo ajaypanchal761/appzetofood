@@ -19,8 +19,14 @@ import {
   rejectRestaurant,
   reverifyRestaurant,
   deleteRestaurant,
-  getAllOffers
+  getAllOffers,
+  getRestaurantAnalytics,
+  getCustomerWalletReport
 } from '../controllers/adminController.js';
+import {
+  getBusinessSettings,
+  updateBusinessSettings
+} from '../controllers/businessSettingsController.js';
 import {
   getCategories,
   getCategoryById,
@@ -139,7 +145,11 @@ import {
 } from '../controllers/safetyEmergencyController.js';
 import {
   getOrders,
-  getOrderById
+  getOrderById,
+  getSearchingDeliverymanOrders,
+  getOngoingOrders,
+  getTransactionReport,
+  getRestaurantReport
 } from '../controllers/orderController.js';
 import {
   getFeeSettings,
@@ -178,10 +188,12 @@ router.put('/settings/change-password', changeAdminPassword);
 router.get('/users', getUsers);
 router.get('/users/:id', getUserById);
 router.put('/users/:id/status', updateUserStatus);
+router.get('/customer-wallet-report', getCustomerWalletReport);
 
 // Restaurant Management
 router.get('/restaurants', getRestaurants);
 router.get('/restaurants/requests', getRestaurantJoinRequests);
+router.get('/restaurant-analytics/:restaurantId', getRestaurantAnalytics);
 router.post('/restaurants/:id/approve', approveRestaurant);
 router.post('/restaurants/:id/reject', rejectRestaurant);
 router.post('/restaurants/:id/reverify', reverifyRestaurant);
@@ -316,7 +328,18 @@ router.delete('/safety-emergency/:id', deleteSafetyEmergency);
 
 // Order Management
 router.get('/orders', getOrders);
+router.get('/orders/searching-deliveryman', getSearchingDeliverymanOrders);
+router.get('/orders/ongoing', getOngoingOrders);
+router.get('/orders/transaction-report', getTransactionReport);
+router.get('/orders/restaurant-report', getRestaurantReport);
 router.get('/orders/:id', getOrderById);
+
+// Business Settings Management
+router.get('/business-settings', getBusinessSettings);
+router.put('/business-settings', uploadMiddleware.fields([
+  { name: 'logo', maxCount: 1 },
+  { name: 'favicon', maxCount: 1 }
+]), updateBusinessSettings);
 
 export default router;
 

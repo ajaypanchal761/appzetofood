@@ -190,8 +190,24 @@ export default function RestaurantCommission() {
       if (commissionData) {
         setSelectedCommission(commissionData)
         setSelectedRestaurant(commissionData.restaurant)
+        
+        // Handle restaurant ID - it can be an object with _id or just an ID string
+        let restaurantId = ""
+        if (commissionData.restaurant) {
+          if (typeof commissionData.restaurant === 'object' && commissionData.restaurant._id) {
+            restaurantId = commissionData.restaurant._id
+          } else if (typeof commissionData.restaurant === 'string') {
+            restaurantId = commissionData.restaurant
+          } else {
+            restaurantId = commissionData.restaurantId || commissionData.restaurant?._id || ""
+          }
+        } else {
+          // Fallback to restaurantId field if restaurant object is not populated
+          restaurantId = commissionData.restaurantId || commissionData.restaurant || ""
+        }
+        
         setFormData({
-          restaurantId: commissionData.restaurant._id || commissionData.restaurant,
+          restaurantId: restaurantId,
           defaultCommission: {
             type: commissionData.defaultCommission?.type || "percentage",
             value: commissionData.defaultCommission?.value?.toString() || "10"

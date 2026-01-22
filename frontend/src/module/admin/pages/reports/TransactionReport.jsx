@@ -1,8 +1,10 @@
-import { useState, useMemo } from "react"
-import { BarChart3, ChevronDown, Info, Settings, FileText, FileSpreadsheet, Code } from "lucide-react"
+import { useState, useMemo, useEffect } from "react"
+import { BarChart3, ChevronDown, Info, Settings, FileText, FileSpreadsheet, Code, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { exportTransactionReportToCSV, exportTransactionReportToExcel, exportTransactionReportToPDF, exportTransactionReportToJSON } from "../../components/reports/reportsExportUtils"
+import { adminAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 // Import icons from Transaction-report-icons
 import completedIcon from "../../assets/Transaction-report-icons/trx1.png"
@@ -15,180 +17,113 @@ import deliverymanEarningIcon from "../../assets/Transaction-report-icons/delive
 import searchIcon from "../../assets/Dashboard-icons/image8.png"
 import exportIcon from "../../assets/Dashboard-icons/image9.png"
 
-const transactionsDummy = [
-  {
-    id: 1,
-    orderId: "100164",
-    restaurant: "Café Monarch",
-    customerName: "Jane Doe",
-    totalItemAmount: 370.00,
-    itemDiscount: 18.50,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 18.50,
-    vatTax: 35.15,
-    deliveryCharge: 2187.69,
-    orderAmount: 2584.34,
-  },
-  {
-    id: 2,
-    orderId: "100163",
-    restaurant: "Café Monarch",
-    customerName: "Jane Doe",
-    totalItemAmount: 255.00,
-    itemDiscount: 12.75,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 12.75,
-    vatTax: 24.23,
-    deliveryCharge: 2187.69,
-    orderAmount: 2464.17,
-  },
-  {
-    id: 3,
-    orderId: "100162",
-    restaurant: "Hungry Puppets",
-    customerName: "Jane Doe",
-    totalItemAmount: 640.00,
-    itemDiscount: 0.00,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 0.00,
-    vatTax: 64.00,
-    deliveryCharge: 686.86,
-    orderAmount: 1400.86,
-  },
-  {
-    id: 4,
-    orderId: "100161",
-    restaurant: "Café Monarch",
-    customerName: "Jane Doe",
-    totalItemAmount: 255.00,
-    itemDiscount: 12.75,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 12.75,
-    vatTax: 24.23,
-    deliveryCharge: 2187.69,
-    orderAmount: 2464.17,
-  },
-  {
-    id: 5,
-    orderId: "100160",
-    restaurant: "Hungry Puppets",
-    customerName: "Jane Doe",
-    totalItemAmount: 640.00,
-    itemDiscount: 0.00,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 0.00,
-    vatTax: 64.00,
-    deliveryCharge: 686.86,
-    orderAmount: 1400.86,
-  },
-  {
-    id: 6,
-    orderId: "100159",
-    restaurant: "Café Monarch",
-    customerName: "Invalid Customer Data",
-    totalItemAmount: 255.00,
-    itemDiscount: 12.75,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 12.75,
-    vatTax: 24.23,
-    deliveryCharge: 2187.69,
-    orderAmount: 2464.17,
-  },
-  {
-    id: 7,
-    orderId: "100158",
-    restaurant: "Hungry Puppets",
-    customerName: "Invalid Customer Data",
-    totalItemAmount: 640.00,
-    itemDiscount: 0.00,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 0.00,
-    vatTax: 64.00,
-    deliveryCharge: 686.86,
-    orderAmount: 1400.86,
-  },
-  {
-    id: 8,
-    orderId: "100157",
-    restaurant: "Café Monarch",
-    customerName: "John Doe",
-    totalItemAmount: 25150.00,
-    itemDiscount: 940.00,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 940.00,
-    vatTax: 3631.50,
-    deliveryCharge: 0.00,
-    orderAmount: 27851.50,
-  },
-  {
-    id: 9,
-    orderId: "100156",
-    restaurant: "Pizza Restaurant",
-    customerName: "Invalid Customer Data",
-    totalItemAmount: 248.00,
-    itemDiscount: 20.61,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 20.61,
-    vatTax: 56.85,
-    deliveryCharge: 0.00,
-    orderAmount: 284.24,
-  },
-  {
-    id: 10,
-    orderId: "100155",
-    restaurant: "Hungry Puppets",
-    customerName: "Invalid Customer Data",
-    totalItemAmount: 95.00,
-    itemDiscount: 0.00,
-    couponDiscount: 0.00,
-    referralDiscount: 0.00,
-    discountedAmount: 0.00,
-    vatTax: 4.75,
-    deliveryCharge: 0.00,
-    orderAmount: 99.75,
-  },
-]
-
 export default function TransactionReport() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [transactions, setTransactions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState({
+    completedTransaction: 0,
+    refundedTransaction: 0,
+    adminEarning: 0,
+    restaurantEarning: 0,
+    deliverymanEarning: 0
+  })
   const [filters, setFilters] = useState({
     zone: "All Zones",
     restaurant: "All restaurants",
     time: "All Time",
   })
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [zones, setZones] = useState([])
+  const [restaurants, setRestaurants] = useState([])
+
+  // Fetch zones and restaurants for filters
+  useEffect(() => {
+    const fetchFilterData = async () => {
+      try {
+        // Fetch zones
+        const zonesResponse = await adminAPI.getZones({ limit: 1000 })
+        if (zonesResponse?.data?.success && zonesResponse.data.data?.zones) {
+          setZones(zonesResponse.data.data.zones)
+        }
+
+        // Fetch restaurants
+        const restaurantsResponse = await adminAPI.getRestaurants({ limit: 1000 })
+        if (restaurantsResponse?.data?.success && restaurantsResponse.data.data?.restaurants) {
+          setRestaurants(restaurantsResponse.data.data.restaurants)
+        }
+      } catch (error) {
+        console.error("Error fetching filter data:", error)
+      }
+    }
+    fetchFilterData()
+  }, [])
+
+  // Fetch transaction report data
+  useEffect(() => {
+    const fetchTransactionReport = async () => {
+      try {
+        setLoading(true)
+        
+        // Build date range based on time filter
+        let fromDate = null
+        let toDate = null
+        const now = new Date()
+        
+        if (filters.time === "Today") {
+          fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+        } else if (filters.time === "This Week") {
+          const dayOfWeek = now.getDay()
+          const diff = now.getDate() - dayOfWeek
+          fromDate = new Date(now.getFullYear(), now.getMonth(), diff)
+          toDate = new Date(now.getFullYear(), now.getMonth(), diff + 6, 23, 59, 59)
+        } else if (filters.time === "This Month") {
+          fromDate = new Date(now.getFullYear(), now.getMonth(), 1)
+          toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+        }
+
+        const params = {
+          search: searchQuery || undefined,
+          zone: filters.zone !== "All Zones" ? filters.zone : undefined,
+          restaurant: filters.restaurant !== "All restaurants" ? filters.restaurant : undefined,
+          fromDate: fromDate ? fromDate.toISOString() : undefined,
+          toDate: toDate ? toDate.toISOString() : undefined,
+          limit: 1000
+        }
+
+        const response = await adminAPI.getTransactionReport(params)
+
+        if (response?.data?.success && response.data.data) {
+          setTransactions(response.data.data.transactions || [])
+          setSummary(response.data.data.summary || {
+            completedTransaction: 0,
+            refundedTransaction: 0,
+            adminEarning: 0,
+            restaurantEarning: 0,
+            deliverymanEarning: 0
+          })
+        } else {
+          setTransactions([])
+          if (response?.data?.message) {
+            toast.error(response.data.message)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching transaction report:", error)
+        toast.error("Failed to fetch transaction report")
+        setTransactions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTransactionReport()
+  }, [searchQuery, filters])
 
   const filteredTransactions = useMemo(() => {
-    let result = [...transactionsDummy]
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      result = result.filter(transaction =>
-        transaction.orderId.toLowerCase().includes(query) ||
-        transaction.restaurant.toLowerCase().includes(query) ||
-        transaction.customerName.toLowerCase().includes(query)
-      )
-    }
-
-    if (filters.zone !== "All Zones") {
-      // Filter by zone if needed
-    }
-
-    if (filters.restaurant !== "All restaurants") {
-      result = result.filter(t => t.restaurant === filters.restaurant)
-    }
-
-    return result
-  }, [searchQuery, filters])
+    return transactions // Backend already filters, so just return transactions
+  }, [transactions])
 
   const handleExport = (format) => {
     if (filteredTransactions.length === 0) {
@@ -228,12 +163,16 @@ export default function TransactionReport() {
     return `$ ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
 
-  // Summary values
-  const completedTransaction = 145490.00
-  const refundedTransaction = 0.00
-  const adminEarning = 3110.00
-  const restaurantEarning = 71680.00
-  const deliverymanEarning = 157040.00
+  if (loading) {
+    return (
+      <div className="p-2 lg:p-3 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-gray-600">Loading transaction report...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-2 lg:p-3 bg-slate-50 min-h-screen">
@@ -258,9 +197,9 @@ export default function TransactionReport() {
                 className="w-full px-2.5 py-1.5 pr-5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs appearance-none cursor-pointer"
               >
                 <option value="All Zones">All Zones</option>
-                <option value="Zone 1">Zone 1</option>
-                <option value="Zone 2">Zone 2</option>
-                <option value="Zone 3">Zone 3</option>
+                {zones.map(zone => (
+                  <option key={zone._id} value={zone.name}>{zone.name}</option>
+                ))}
               </select>
               <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
             </div>
@@ -272,9 +211,9 @@ export default function TransactionReport() {
                 className="w-full px-2.5 py-1.5 pr-5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs appearance-none cursor-pointer"
               >
                 <option value="All restaurants">All restaurants</option>
-                <option value="Café Monarch">Café Monarch</option>
-                <option value="Hungry Puppets">Hungry Puppets</option>
-                <option value="Pizza Restaurant">Pizza Restaurant</option>
+                {restaurants.map(restaurant => (
+                  <option key={restaurant._id} value={restaurant.name}>{restaurant.name}</option>
+                ))}
               </select>
               <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
             </div>
@@ -330,7 +269,7 @@ export default function TransactionReport() {
                 </div>
               </div>
               <div className="text-center">
-                <p className="text-xl font-bold text-green-600 mb-1">{formatCurrency(completedTransaction)}</p>
+                <p className="text-xl font-bold text-green-600 mb-1">{formatCurrency(summary.completedTransaction)}</p>
                 <p className="text-sm text-slate-600 leading-tight">Completed Transaction</p>
               </div>
             </div>
@@ -346,7 +285,7 @@ export default function TransactionReport() {
                 </div>
               </div>
               <div className="text-center">
-                <p className="text-xl font-bold text-red-600 mb-1">{formatFullCurrency(refundedTransaction)}</p>
+                <p className="text-xl font-bold text-red-600 mb-1">{formatFullCurrency(summary.refundedTransaction)}</p>
                 <p className="text-sm text-slate-600 leading-tight">Refunded Transaction</p>
               </div>
             </div>
@@ -368,7 +307,7 @@ export default function TransactionReport() {
                     </div>
                   </div>
                 </div>
-                <p className="text-base font-bold text-slate-900">{formatCurrency(adminEarning)}</p>
+                <p className="text-base font-bold text-slate-900">{formatCurrency(summary.adminEarning)}</p>
               </div>
             </div>
 
@@ -386,7 +325,7 @@ export default function TransactionReport() {
                     </div>
                   </div>
                 </div>
-                <p className="text-base font-bold text-green-600">{formatCurrency(restaurantEarning)}</p>
+                <p className="text-base font-bold text-green-600">{formatCurrency(summary.restaurantEarning)}</p>
               </div>
             </div>
 
@@ -404,7 +343,7 @@ export default function TransactionReport() {
                     </div>
                   </div>
                 </div>
-                <p className="text-base font-bold text-orange-600">{formatCurrency(deliverymanEarning)}</p>
+                <p className="text-base font-bold text-orange-600">{formatCurrency(summary.deliverymanEarning)}</p>
               </div>
             </div>
           </div>

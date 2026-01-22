@@ -3899,6 +3899,8 @@ export default function DeliveryHome() {
       // Check if already loaded
       if (window.google && window.google.maps) {
         console.log('✅ Google Maps already loaded');
+        // Wait a bit to ensure ref is available
+        await new Promise(resolve => setTimeout(resolve, 100));
         initializeGoogleMap();
         return;
       }
@@ -3917,7 +3919,7 @@ export default function DeliveryHome() {
         
         if (window.google && window.google.maps) {
           console.log('✅ Google Maps loaded via script tag');
-          initializeGoogleMap();
+          await initializeGoogleMap();
           return;
         }
       }
@@ -3938,7 +3940,7 @@ export default function DeliveryHome() {
             console.log('✅ Google Maps loaded via Loader');
             window.__googleMapsLoaded = true;
             window.__googleMapsLoading = false;
-            initializeGoogleMap();
+            await initializeGoogleMap();
           } else {
             console.error('❌ No Google Maps API key found');
             window.__googleMapsLoading = false;
@@ -3962,7 +3964,7 @@ export default function DeliveryHome() {
         
         if (window.google && window.google.maps) {
           console.log('✅ Google Maps loaded via script tag');
-          initializeGoogleMap();
+          await initializeGoogleMap();
         } else {
           console.error('❌ Google Maps failed to load');
           setMapLoading(false);
@@ -3988,7 +3990,7 @@ export default function DeliveryHome() {
         if (!window.google.maps.MapTypeId) {
           console.warn('⚠️ MapTypeId not available, will use string fallback');
         }
-        initializeGoogleMap();
+        await initializeGoogleMap();
       } else {
         console.error('❌ Google Maps API still not available or not fully loaded');
         console.error('❌ API status:', {
@@ -4002,12 +4004,24 @@ export default function DeliveryHome() {
 
     loadGoogleMapsIfNeeded();
 
-    function initializeGoogleMap() {
+    async function initializeGoogleMap() {
       try {
+        // Wait for map container ref to be available
         if (!mapContainerRef.current) {
-          console.error('❌ Map container ref is null');
-          setMapLoading(false);
-          return;
+          console.log('📍 Map container ref not available yet, waiting...');
+          let attempts = 0;
+          const maxAttempts = 50; // 5 seconds max wait
+          
+          while (!mapContainerRef.current && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+          }
+          
+          if (!mapContainerRef.current) {
+            console.error('❌ Map container ref is still null after waiting');
+            setMapLoading(false);
+            return;
+          }
         }
 
         if (!window.google || !window.google.maps) {

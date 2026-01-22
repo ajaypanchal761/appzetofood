@@ -1,11 +1,12 @@
 import { Link } from "react-router-dom"
+import { useState, useEffect } from "react"
 import { ChevronDown, ShoppingCart, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useLocation } from "../hooks/useLocation"
 import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
 import { FaLocationDot } from "react-icons/fa6"
-import appzetoLogo from "@/assets/appzetologo.png"
+import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
 
 export default function PageNavbar({ 
   textColor = "white", 
@@ -17,6 +18,66 @@ export default function PageNavbar({
   const { getCartCount } = useCart()
   const { openLocationSelector } = useLocationSelector()
   const cartCount = getCartCount()
+  const [logoUrl, setLogoUrl] = useState(null)
+  const [companyName, setCompanyName] = useState(null)
+
+  // Load business settings logo
+  useEffect(() => {
+    const loadLogo = async () => {
+      try {
+        // First check cache
+        let cached = getCachedSettings()
+        if (cached) {
+          if (cached.logo?.url) {
+            setLogoUrl(cached.logo.url)
+          }
+          if (cached.companyName) {
+            setCompanyName(cached.companyName)
+          }
+        }
+        
+        // Always try to load fresh data to ensure we have the latest
+        const settings = await loadBusinessSettings()
+        if (settings) {
+          if (settings.logo?.url) {
+            setLogoUrl(settings.logo.url)
+          }
+          if (settings.companyName) {
+            setCompanyName(settings.companyName)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading logo:', error)
+      }
+    }
+    
+    // Load immediately
+    loadLogo()
+    
+    // Also try after a small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      loadLogo()
+    }, 100)
+
+    // Listen for business settings updates
+    const handleSettingsUpdate = () => {
+      const cached = getCachedSettings()
+      if (cached) {
+        if (cached.logo?.url) {
+          setLogoUrl(cached.logo.url)
+        }
+        if (cached.companyName) {
+          setCompanyName(cached.companyName)
+        }
+      }
+    }
+    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate)
+    
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate)
+    }
+  }, [])
 
   // Function to extract location parts for display
   // Main location: First 2 parts only (e.g., "Mama Loca, G-2")
@@ -840,13 +901,23 @@ export default function PageNavbar({
           </Button>
         </div>
 
-        {/* Center: Appzeto Logo */}
-        <Link to="/user" className="flex items-center justify-center lg:hidden">
-          <img
-            src={appzetoLogo}
-            alt="Appzeto Logo"
-            className="h-12 w-20 mr-3 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain"
-          />
+        {/* Center: Company Logo or Name - Show on all screen sizes */}
+        <Link to="/user" className="flex items-center justify-center">
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="Company Logo"
+              className="h-12 w-20 mr-3 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain"
+              onError={(e) => {
+                // Hide image if it fails to load
+                e.target.style.display = 'none'
+              }}
+            />
+          ) : companyName ? (
+            <span className={`text-lg sm:text-xl font-bold ${textColor === "white" ? "text-white" : "text-gray-900"} drop-shadow-lg`}>
+              {companyName}
+            </span>
+          ) : null}
         </Link>
 
         {/* Right: Actions - Hidden on desktop, shown on mobile */}

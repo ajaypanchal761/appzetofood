@@ -222,33 +222,15 @@ export const sidebarMenuData = [
       },
       {
         type: "link",
-        label: "Expense Report",
-        path: "/admin/expense-report",
-        icon: "FileText",
-      },
-      {
-        type: "expandable",
-        label: "Disbursement Report",
-        icon: "FileText",
-        subItems: [
-          { label: "Restaurants", path: "/admin/disbursement-report/restaurants" },
-          { label: "Delivery Men", path: "/admin/disbursement-report/deliverymen" },
-        ],
-      },
-      {
-        type: "link",
         label: "Food Report",
         path: "/admin/food-report",
         icon: "Utensils",
       },
       {
-        type: "expandable",
+        type: "link",
         label: "Order Report",
+        path: "/admin/order-report/regular",
         icon: "FileText",
-        subItems: [
-          { label: "Regular Order Report", path: "/admin/order-report/regular" },
-          { label: "Campaign Order Report", path: "/admin/order-report/campaign" },
-        ],
       },
       {
         type: "expandable",
@@ -310,13 +292,6 @@ export const sidebarMenuData = [
         label: "Dining Management",
         path: "/admin/dining-management",
         icon: "UtensilsCrossed",
-      },
-
-      {
-        type: "link",
-        label: "Addon Activation",
-        path: "/admin/addon-activation",
-        icon: "Zap",
       },
     ],
   },

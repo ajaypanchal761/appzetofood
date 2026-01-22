@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react"
-import { Search, Download, ChevronDown, Filter, Wallet, RefreshCw, Calendar, Plus, ArrowUpDown, Settings, FileText, FileSpreadsheet, Code } from "lucide-react"
-import { customerWalletReportDummy, walletStats } from "../../data/customerWalletReportDummy"
+import { useState, useMemo, useEffect } from "react"
+import { Search, Download, ChevronDown, Filter, Wallet, RefreshCw, Calendar, Plus, ArrowUpDown, Settings, FileText, FileSpreadsheet, Code, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { exportReportsToCSV, exportReportsToExcel, exportReportsToPDF, exportReportsToJSON } from "../../components/reports/reportsExportUtils"
+import { adminAPI } from "@/lib/api"
+import { toast } from "sonner"
 
 // Import icons from Dashboard-icons
 import debitIcon from "../../assets/Dashboard-icons/image2.png"
@@ -12,7 +13,14 @@ import balanceIcon from "../../assets/Dashboard-icons/image6.png"
 
 export default function CustomerWalletReport() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [transactions, setTransactions] = useState(customerWalletReportDummy)
+  const [transactions, setTransactions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [walletStats, setWalletStats] = useState({
+    debit: "₹ 0.00",
+    credit: "₹ 0.00",
+    balance: "₹ 0.00"
+  })
+  const [customers, setCustomers] = useState([])
   const [filters, setFilters] = useState({
     fromDate: "",
     toDate: "",
@@ -20,48 +28,53 @@ export default function CustomerWalletReport() {
     customer: "Select Customer",
   })
   const [isFilterOpen, setIsFilterOpen] = useState(true)
-
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
+  // Fetch customer wallet report data
+  useEffect(() => {
+    const fetchCustomerWalletReport = async () => {
+      try {
+        setLoading(true)
+        
+        const params = {
+          fromDate: filters.fromDate || undefined,
+          toDate: filters.toDate || undefined,
+          all: filters.all !== "All" ? filters.all : undefined,
+          customer: filters.customer !== "Select Customer" ? filters.customer : undefined,
+          search: searchQuery || undefined
+        }
+
+        const response = await adminAPI.getCustomerWalletReport(params)
+
+        if (response?.data?.success && response.data.data) {
+          setTransactions(response.data.data.transactions || [])
+          setWalletStats(response.data.data.stats || {
+            debit: "₹ 0.00",
+            credit: "₹ 0.00",
+            balance: "₹ 0.00"
+          })
+          setCustomers(response.data.data.customers || [])
+        } else {
+          setTransactions([])
+          if (response?.data?.message) {
+            toast.error(response.data.message)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching customer wallet report:", error)
+        toast.error("Failed to fetch customer wallet report")
+        setTransactions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCustomerWalletReport()
+  }, [filters, searchQuery])
+
   const filteredTransactions = useMemo(() => {
-    let result = [...transactions]
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim()
-      result = result.filter(transaction =>
-        transaction.transactionId.toLowerCase().includes(query) ||
-        transaction.customer.toLowerCase().includes(query) ||
-        transaction.reference.toLowerCase().includes(query)
-      )
-    }
-
-    if (filters.fromDate) {
-      result = result.filter(t => {
-        const tDate = new Date(t.createdAt)
-        const fromDate = new Date(filters.fromDate)
-        return tDate >= fromDate
-      })
-    }
-
-    if (filters.toDate) {
-      result = result.filter(t => {
-        const tDate = new Date(t.createdAt)
-        const toDate = new Date(filters.toDate)
-        toDate.setHours(23, 59, 59, 999)
-        return tDate <= toDate
-      })
-    }
-
-    if (filters.all !== "All") {
-      // Filter by credit/debit if needed
-    }
-
-    if (filters.customer !== "Select Customer") {
-      result = result.filter(t => t.customer === filters.customer)
-    }
-
-    return result
-  }, [transactions, searchQuery, filters])
+    return transactions // Backend already filters, so just return transactions
+  }, [transactions])
 
   const totalTransactions = filteredTransactions.length
 
@@ -104,6 +117,17 @@ export default function CustomerWalletReport() {
   }
 
   const activeFiltersCount = (filters.fromDate ? 1 : 0) + (filters.toDate ? 1 : 0) + (filters.all !== "All" ? 1 : 0) + (filters.customer !== "Select Customer" ? 1 : 0)
+
+  if (loading) {
+    return (
+      <div className="p-4 lg:p-6 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-gray-600">Loading customer wallet report...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen overflow-x-hidden">
@@ -193,10 +217,9 @@ export default function CustomerWalletReport() {
                     className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Select Customer">Select Customer</option>
-                    <option value="Jane Doe">Jane Doe</option>
-                    <option value="Mehedi Hasan">Mehedi Hasan</option>
-                    <option value="John Doe">John Doe</option>
-                    <option value="PG test">PG test</option>
+                    {customers.map(customer => (
+                      <option key={customer} value={customer}>{customer}</option>
+                    ))}
                   </select>
                   <ChevronDown className="absolute right-2 bottom-2.5 w-4 h-4 text-slate-500 pointer-events-none" />
                 </div>

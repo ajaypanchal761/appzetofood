@@ -821,6 +821,11 @@ export const adminAPI = {
     return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_BY_ID.replace(':id', id));
   },
 
+  // Get restaurant analytics
+  getRestaurantAnalytics: (restaurantId) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_ANALYTICS.replace(':restaurantId', restaurantId));
+  },
+
   // Update restaurant status
   updateRestaurantStatus: (id, isActive) => {
     return apiClient.put(API_ENDPOINTS.ADMIN.RESTAURANT_STATUS.replace(':id', id), { isActive });
@@ -960,6 +965,61 @@ export const adminAPI = {
   // Get orders
   getOrders: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.ORDERS, { params });
+  },
+
+  // Get orders searching for deliveryman
+  getSearchingDeliverymanOrders: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ORDERS_SEARCHING_DELIVERYMAN, { params });
+  },
+
+  // Get ongoing orders
+  getOngoingOrders: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ORDERS_ONGOING, { params });
+  },
+
+  // Get transaction report
+  getTransactionReport: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ORDERS_TRANSACTION_REPORT, { params });
+  },
+
+  // Get restaurant report
+  getRestaurantReport: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.ORDERS_RESTAURANT_REPORT, { params });
+  },
+
+  // Get customer wallet report
+  getCustomerWalletReport: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.CUSTOMER_WALLET_REPORT, { params });
+  },
+
+  // Business Settings Management
+  getBusinessSettings: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.BUSINESS_SETTINGS);
+  },
+
+  updateBusinessSettings: (data, files = {}) => {
+    const formData = new FormData();
+    
+    // Add text fields
+    Object.keys(data).forEach(key => {
+      if (key !== 'logo' && key !== 'favicon') {
+        formData.append(key, data[key]);
+      }
+    });
+
+    // Add files
+    if (files.logo) {
+      formData.append('logo', files.logo);
+    }
+    if (files.favicon) {
+      formData.append('favicon', files.favicon);
+    }
+
+    return apiClient.put(API_ENDPOINTS.ADMIN.BUSINESS_SETTINGS, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
   },
 
   // Get analytics

@@ -98,53 +98,131 @@ export default function PointOfSale() {
     try {
       setLoading(true)
       
-      // Fetch restaurant details
-      const restaurantResponse = await adminAPI.getRestaurantById(restaurantId)
-      if (restaurantResponse?.data?.success) {
-        setRestaurantData(restaurantResponse.data.data)
+      // Validate restaurantId
+      if (!restaurantId) {
+        console.error('Restaurant ID is required')
+        return
       }
-
-      // Fetch commission data
-      const commissionResponse = await adminAPI.getCommissionByRestaurantId(restaurantId)
-      const commissionData = commissionResponse?.data?.data || {}
-
-      // TODO: Fetch order statistics, ratings, and profit data from backend
-      // For now, using calculated dummy data structure
-      // Replace these with actual API calls:
-      // - Get orders count (total, cancelled, completed)
-      // - Get ratings average
-      // - Get monthly/yearly profit
-      // - Get commission details
-
-      // Simulated data - replace with actual API response
-      const simulatedData = {
-        totalOrders: 1245,
-        cancelledOrders: 87,
-        completedOrders: 1158,
-        averageRating: 4.5,
-        totalRatings: 892,
-        commissionPercentage: commissionData.commissionPercentage || 15,
-        monthlyProfit: 125000,
-        yearlyProfit: 1450000,
-        averageOrderValue: 850,
-        totalRevenue: 1058250,
-        totalCommission: 158737.5,
-        restaurantEarning: 899512.5,
-        monthlyOrders: 103,
-        yearlyOrders: 1158,
-        averageMonthlyProfit: 120833.33,
-        averageYearlyProfit: 1450000,
-        status: restaurantData?.isActive ? 'active' : 'inactive',
-        joinDate: restaurantData?.createdAt || '2023-01-15',
-        totalCustomers: 456,
-        repeatCustomers: 234,
-        cancellationRate: 6.99,
-        completionRate: 93.01
+      
+      console.log('Fetching analytics for restaurant:', restaurantId)
+      
+      // Fetch comprehensive restaurant analytics from backend
+      const analyticsResponse = await adminAPI.getRestaurantAnalytics(restaurantId)
+      
+      console.log('Analytics response:', analyticsResponse)
+      
+      if (analyticsResponse?.data?.success && analyticsResponse.data.data) {
+        const { restaurant, analytics } = analyticsResponse.data.data
+        
+        console.log('Analytics data received:', analytics)
+        console.log('Commission percentage from API:', analytics.commissionPercentage)
+        console.log('Commission percentage type:', typeof analytics.commissionPercentage)
+        
+        // Set restaurant data
+        setRestaurantData(restaurant)
+        
+        // Parse commission percentage - handle both number and string
+        const commissionPercentage = analytics.commissionPercentage !== undefined && analytics.commissionPercentage !== null
+          ? parseFloat(analytics.commissionPercentage) || 0
+          : 0;
+        
+        console.log('Parsed commission percentage:', commissionPercentage)
+        
+        // Set analytics data - ensure all values are numbers, not null/undefined
+        setAnalyticsData({
+          totalOrders: Number(analytics.totalOrders) || 0,
+          cancelledOrders: Number(analytics.cancelledOrders) || 0,
+          completedOrders: Number(analytics.completedOrders) || 0,
+          averageRating: Number(analytics.averageRating) || 0,
+          totalRatings: Number(analytics.totalRatings) || 0,
+          commissionPercentage: commissionPercentage,
+          monthlyProfit: analytics.monthlyProfit || 0,
+          yearlyProfit: analytics.yearlyProfit || 0,
+          averageOrderValue: analytics.averageOrderValue || 0,
+          totalRevenue: analytics.totalRevenue || 0,
+          totalCommission: analytics.totalCommission || 0,
+          restaurantEarning: analytics.restaurantEarning || 0,
+          monthlyOrders: analytics.monthlyOrders || 0,
+          yearlyOrders: analytics.yearlyOrders || 0,
+          averageMonthlyProfit: analytics.averageMonthlyProfit || 0,
+          averageYearlyProfit: analytics.averageYearlyProfit || 0,
+          status: analytics.status || 'inactive',
+          joinDate: analytics.joinDate || restaurant.createdAt || new Date(),
+          totalCustomers: analytics.totalCustomers || 0,
+          repeatCustomers: analytics.repeatCustomers || 0,
+          cancellationRate: analytics.cancellationRate || 0,
+          completionRate: analytics.completionRate || 0
+        })
+      } else {
+        // Fallback to empty data if API fails
+        setAnalyticsData({
+          totalOrders: 0,
+          cancelledOrders: 0,
+          completedOrders: 0,
+          averageRating: 0,
+          totalRatings: 0,
+          commissionPercentage: 0,
+          monthlyProfit: 0,
+          yearlyProfit: 0,
+          averageOrderValue: 0,
+          totalRevenue: 0,
+          totalCommission: 0,
+          restaurantEarning: 0,
+          monthlyOrders: 0,
+          yearlyOrders: 0,
+          averageMonthlyProfit: 0,
+          averageYearlyProfit: 0,
+          status: 'inactive',
+          joinDate: new Date(),
+          totalCustomers: 0,
+          repeatCustomers: 0,
+          cancellationRate: 0,
+          completionRate: 0
+        })
       }
-
-      setAnalyticsData(simulatedData)
     } catch (error) {
       console.error('Error fetching restaurant analytics:', error)
+      console.error('Error details:', {
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status,
+        restaurantId: selectedRestaurant
+      })
+      
+      // Show user-friendly error message
+      if (error?.response?.status === 404) {
+        console.warn('Restaurant not found')
+      } else if (error?.response?.status === 400) {
+        console.warn('Invalid restaurant ID')
+      } else {
+        console.warn('Failed to fetch analytics. Please try again.')
+      }
+      
+      // Set empty data on error
+      setAnalyticsData({
+        totalOrders: 0,
+        cancelledOrders: 0,
+        completedOrders: 0,
+        averageRating: 0,
+        totalRatings: 0,
+        commissionPercentage: 0,
+        monthlyProfit: 0,
+        yearlyProfit: 0,
+        averageOrderValue: 0,
+        totalRevenue: 0,
+        totalCommission: 0,
+        restaurantEarning: 0,
+        monthlyOrders: 0,
+        yearlyOrders: 0,
+        averageMonthlyProfit: 0,
+        averageYearlyProfit: 0,
+        status: 'inactive',
+        joinDate: new Date(),
+        totalCustomers: 0,
+        repeatCustomers: 0,
+        cancellationRate: 0,
+        completionRate: 0
+      })
     } finally {
       setLoading(false)
     }
@@ -202,22 +280,22 @@ export default function PointOfSale() {
         
         {/* Header Section */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-[#334257] mb-2">Restaurant Analytics & Benefits</h1>
+          <h1 className="text-2xl font-bold text-[#334257] mb-2">Restaurant POS Analytics & Benefits</h1>
           <p className="text-sm text-[#8a94aa]">Track restaurant performance, profits, and commission details</p>
-        </div>
+                </div>
 
         {/* Restaurant Selection Card */}
         <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6 mb-6">
           <div className="flex flex-col gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[#334257] mb-2">
+                <div>
+                  <label className="block text-sm font-medium text-[#334257] mb-2">
                 Search Restaurant by Name or ID <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
+                  </label>
+                  <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 z-10" />
-                <input
-                  type="text"
-                  value={searchQuery}
+                    <input
+                      type="text"
+                      value={searchQuery}
                   onChange={handleSearchChange}
                   onFocus={() => {
                     if (searchQuery.trim()) {
@@ -241,7 +319,7 @@ export default function PointOfSale() {
                         onClick={() => handleRestaurantSelect(restaurant._id)}
                         className="px-4 py-3 hover:bg-[#f9fafc] cursor-pointer border-b border-[#e3e6ef] last:border-b-0 transition-colors"
                       >
-                        <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-[#334257]">{restaurant.name}</p>
                             <p className="text-xs text-[#8a94aa]">ID: {restaurant.restaurantId || restaurant._id}</p>
@@ -261,21 +339,21 @@ export default function PointOfSale() {
                     <p className="text-sm text-[#8a94aa] text-center">No restaurants found matching "{searchQuery}"</p>
                   </div>
                 )}
-              </div>
+                  </div>
               {selectedRestaurant && (
                 <p className="text-xs text-green-600 mt-2">
                   ✓ Selected: {getSelectedRestaurantName()}
                 </p>
               )}
-            </div>
-            
+        </div>
+
             {/* Alternative: Dropdown Selector */}
             <div>
-              <label className="block text-sm font-medium text-[#334257] mb-2">
+                    <label className="block text-sm font-medium text-[#334257] mb-2">
                 Or Select from Dropdown
-              </label>
-              <div className="relative">
-                <select
+                    </label>
+                    <div className="relative">
+                      <select 
                   value={selectedRestaurant}
                   onChange={(e) => {
                     setSelectedRestaurant(e.target.value)
@@ -284,22 +362,22 @@ export default function PointOfSale() {
                       setSearchQuery(`${selected.name} (${selected.restaurantId || selected._id})`)
                     }
                   }}
-                  className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
-                >
+                        className="w-full h-11 rounded-md border border-[#e3e6ef] bg-white px-3 pr-10 text-sm text-[#4a5671] focus:outline-none focus:ring-1 focus:ring-[#006fbd]"
+                      >
                   <option value="">Select Restaurant</option>
                   {restaurants.map(restaurant => (
                     <option key={restaurant._id} value={restaurant._id}>
                       {restaurant.name} ({restaurant.restaurantId || restaurant._id})
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">
-                  ▼
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">
+                        ▼
+                      </span>
+                    </div>
+                  </div>
+                  </div>
+                </div>
 
         {/* Analytics Dashboard */}
         {selectedRestaurant && !loading ? (
@@ -336,7 +414,7 @@ export default function PointOfSale() {
                 <h3 className="text-sm font-medium text-[#8a94aa] mb-1">Total Orders</h3>
                 <p className="text-2xl font-bold text-[#334257]">{formatNumber(analyticsData.totalOrders)}</p>
                 <p className="text-xs text-[#8a94aa] mt-2">Completed: {formatNumber(analyticsData.completedOrders)}</p>
-              </div>
+                </div>
 
               {/* Cancelled Orders */}
               <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
@@ -349,7 +427,7 @@ export default function PointOfSale() {
                 <h3 className="text-sm font-medium text-[#8a94aa] mb-1">Cancelled Orders</h3>
                 <p className="text-2xl font-bold text-[#334257]">{formatNumber(analyticsData.cancelledOrders)}</p>
                 <p className="text-xs text-[#8a94aa] mt-2">Cancellation Rate</p>
-              </div>
+                </div>
 
               {/* Average Rating */}
               <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
@@ -371,12 +449,12 @@ export default function PointOfSale() {
                     <Award className="w-6 h-6 text-purple-600" />
                   </div>
                   <span className="text-sm font-semibold text-purple-600">{analyticsData.commissionPercentage}%</span>
-                </div>
+                  </div>
                 <h3 className="text-sm font-medium text-[#8a94aa] mb-1">Commission Rate</h3>
                 <p className="text-2xl font-bold text-[#334257]">{analyticsData.commissionPercentage}%</p>
                 <p className="text-xs text-[#8a94aa] mt-2">Set Commission</p>
-              </div>
-            </div>
+                  </div>
+                  </div>
 
             {/* Profit & Revenue Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -386,11 +464,11 @@ export default function PointOfSale() {
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-green-100 rounded-lg">
                       <Calendar className="w-6 h-6 text-green-600" />
-                    </div>
+                  </div>
                     <div>
                       <h3 className="text-base font-semibold text-[#334257]">Monthly Profit</h3>
                       <p className="text-xs text-[#8a94aa]">Current Month</p>
-                    </div>
+                  </div>
                   </div>
                   <TrendingUp className="w-5 h-5 text-green-500" />
                 </div>
@@ -429,15 +507,15 @@ export default function PointOfSale() {
                     <div>
                       <span className="text-[#8a94aa]">Orders: </span>
                       <span className="font-semibold text-[#334257]">{formatNumber(analyticsData.yearlyOrders)}</span>
-                    </div>
+              </div>
                     <div>
                       <span className="text-[#8a94aa]">Avg/Year: </span>
                       <span className="font-semibold text-[#334257]">{formatCurrency(analyticsData.averageYearlyProfit)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
+          </div>
+        </div>
+        </div>
+      </div>
 
             {/* Detailed Financial Breakdown */}
             <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">
@@ -468,12 +546,16 @@ export default function PointOfSale() {
                   </div>
                   <div className="flex justify-between items-center py-3 border-b border-[#e3e6ef]">
                     <span className="text-sm text-[#8a94aa]">Commission Percentage</span>
-                    <span className="text-base font-semibold text-[#334257]">{analyticsData.commissionPercentage}%</span>
+                    <span className="text-base font-semibold text-[#334257]">
+                      {analyticsData.commissionPercentage !== undefined && analyticsData.commissionPercentage !== null
+                        ? `${analyticsData.commissionPercentage}%`
+                        : '0%'}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
-
+            
             {/* Additional Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Customer Statistics */}
@@ -483,7 +565,7 @@ export default function PointOfSale() {
                     <Users className="w-5 h-5 text-indigo-600" />
                   </div>
                   <h3 className="text-base font-semibold text-[#334257]">Customer Statistics</h3>
-                </div>
+                  </div>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-[#8a94aa]">Total Customers</span>
@@ -537,9 +619,9 @@ export default function PointOfSale() {
                     <span className="text-sm text-[#8a94aa]">Total Reviews</span>
                     <span className="text-sm font-semibold text-[#334257]">{formatNumber(analyticsData.totalRatings)}</span>
                   </div>
-                </div>
+          </div>
               </div>
-            </div>
+              </div>
 
             {/* Order Statistics Summary */}
             <div className="bg-white rounded-lg shadow-sm border border-[#e3e6ef] p-6">

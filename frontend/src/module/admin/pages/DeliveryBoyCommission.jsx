@@ -30,7 +30,6 @@ export default function DeliveryBoyCommission() {
     maxDistance: true,
     commissionPerKm: true,
     basePayout: true,
-    totalCommission: true,
     status: true,
     actions: true,
   })
@@ -381,7 +380,6 @@ export default function DeliveryBoyCommission() {
     maxDistance: "Max Distance",
     commissionPerKm: "Commission/Km",
     basePayout: "Base Payout",
-    totalCommission: "Example Total",
     status: "Status",
     actions: "Actions",
   }
@@ -461,9 +459,6 @@ export default function DeliveryBoyCommission() {
                   {visibleColumns.basePayout && (
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Base Payout (₹)</th>
                   )}
-                  {visibleColumns.totalCommission && (
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Example Total* (₹)</th>
-                  )}
                   {visibleColumns.status && (
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Status</th>
                   )}
@@ -527,13 +522,6 @@ export default function DeliveryBoyCommission() {
                           <span className="text-sm font-semibold text-blue-700">₹{commission.basePayout}</span>
                         </td>
                       )}
-                      {visibleColumns.totalCommission && (
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-bold text-slate-900">
-                            ₹{getExampleCommission(commission).toFixed(2)}
-                          </span>
-                        </td>
-                      )}
                       {visibleColumns.status && (
                         <td className="px-6 py-4 whitespace-nowrap">
                           <button
@@ -579,11 +567,6 @@ export default function DeliveryBoyCommission() {
             </table>
           </div>
           
-          {filteredCommissions.length > 0 && (
-            <div className="mt-4 text-xs text-slate-500">
-              * Example Total is calculated using the midpoint of the distance range (or 5km beyond min for unlimited ranges)
-            </div>
-          )}
         </div>
       </div>
 

@@ -35,12 +35,14 @@ import { Input } from "@/components/ui/input";
 import appzetoLogo from "@/assets/appzetologo.png";
 import { adminAPI } from "@/lib/api";
 import { clearModuleAuth } from "@/lib/utils/auth";
+import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings";
 
 export default function AdminNavbar({ onMenuClick }) {
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [adminData, setAdminData] = useState(null);
+  const [businessSettings, setBusinessSettings] = useState(null);
   const searchInputRef = useRef(null);
 
   // Load admin data from localStorage
@@ -67,6 +69,38 @@ export default function AdminNavbar({ onMenuClick }) {
     
     return () => {
       window.removeEventListener('adminAuthChanged', handleAuthChange);
+    };
+  }, []);
+
+  // Load business settings
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settings = await loadBusinessSettings();
+        if (settings) {
+          setBusinessSettings(settings);
+        } else {
+          // Try to get from cache
+          const cached = getCachedSettings();
+          if (cached) {
+            setBusinessSettings(cached);
+          }
+        }
+      } catch (error) {
+        console.warn('Error loading business settings in navbar:', error);
+      }
+    };
+
+    loadSettings();
+
+    // Listen for business settings updates
+    const handleSettingsUpdate = () => {
+      loadSettings();
+    };
+    window.addEventListener('businessSettingsUpdated', handleSettingsUpdate);
+    
+    return () => {
+      window.removeEventListener('businessSettingsUpdated', handleSettingsUpdate);
     };
   }, []);
 
@@ -178,7 +212,26 @@ export default function AdminNavbar({ onMenuClick }) {
             {/* Logo */}
             <div className="flex items-center gap-2">
               <div className="w-24 h-12 rounded-lg bg-white flex items-center justify-center ring-neutral-200">
-                <img src={appzetoLogo} alt="Appzeto" className="w-24 h-10 object-contain" loading="lazy" />
+                {businessSettings?.logo?.url ? (
+                  <img 
+                    src={businessSettings.logo.url} 
+                    alt={businessSettings.companyName || "Company"} 
+                    className="w-24 h-10 object-contain" 
+                    loading="lazy"
+                    onError={(e) => {
+                      // Fallback to default logo if company logo fails to load
+                      e.target.src = appzetoLogo;
+                    }}
+                  />
+                ) : (
+                  businessSettings?.companyName ? (
+                    <span className="text-sm font-semibold text-neutral-700 px-2 truncate">
+                      {businessSettings.companyName}
+                    </span>
+                  ) : (
+                    <img src={appzetoLogo} alt="Appzeto" className="w-24 h-10 object-contain" loading="lazy" />
+                  )
+                )}
               </div>
             </div>
           </div>

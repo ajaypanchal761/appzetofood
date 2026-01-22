@@ -6,6 +6,7 @@ import AdminCommission from '../models/AdminCommission.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import winston from 'winston';
+import mongoose from 'mongoose';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -1357,6 +1358,710 @@ export const getAllOffers = asyncHandler(async (req, res) => {
   } catch (error) {
     logger.error(`Error fetching offers: ${error.message}`, { error: error.stack });
     return errorResponse(res, 500, 'Failed to fetch offers');
+  }
+});
+
+/**
+ * Get Restaurant Analytics for POS
+ * GET /api/admin/restaurant-analytics/:restaurantId
+ */
+export const getRestaurantAnalytics = asyncHandler(async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    
+    logger.info(`Fetching restaurant analytics for: ${restaurantId}`);
+    
+    if (!restaurantId) {
+      return errorResponse(res, 400, 'Restaurant ID is required');
+    }
+    
+    if (!mongoose.Types.ObjectId.isValid(restaurantId)) {
+      logger.warn(`Invalid restaurant ID format: ${restaurantId}`);
+      return errorResponse(res, 400, 'Invalid restaurant ID format');
+    }
+
+    // Get restaurant details
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+      logger.warn(`Restaurant not found: ${restaurantId}`);
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+    
+    logger.info(`Restaurant found: ${restaurant.name} (${restaurant.restaurantId})`);
+
+    // Calculate date ranges
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    // Get order statistics - restaurantId can be _id or restaurantId field (both as String in Order model)
+    // Match by both restaurant._id and restaurant.restaurantId
+    const restaurantIdString = restaurantId.toString();
+    const restaurantIdField = restaurant?.restaurantId || restaurantIdString;
+    const restaurantObjectIdString = restaurant._id.toString();
+    
+    logger.info(`📊 Fetching order statistics for restaurant:`, {
+      restaurantId: restaurantId,
+      restaurantIdString: restaurantIdString,
+      restaurantIdField: restaurantIdField,
+      restaurantObjectIdString: restaurantObjectIdString,
+      restaurantName: restaurant.name
+    });
+    
+    // Build query to match restaurantId in multiple formats
+    const orderMatchQuery = {
+      $or: [
+        { restaurantId: restaurantIdString },
+        { restaurantId: restaurantIdField },
+        { restaurantId: restaurantObjectIdString }
+      ]
+    };
+    
+    logger.info(`🔍 Order query:`, orderMatchQuery);
+    
+    const orderStats = await Order.aggregate([
+      {
+        $match: orderMatchQuery
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalRevenue: {
+            $sum: {
+              $cond: [
+                { $eq: ['$status', 'delivered'] },
+                { $ifNull: ['$pricing.total', 0] },
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
+    logger.info(`📊 Order stats found:`, orderStats);
+
+    const orderStatusMap = {};
+    let totalRevenue = 0;
+    orderStats.forEach(stat => {
+      orderStatusMap[stat._id] = stat.count;
+      if (stat._id === 'delivered') {
+        totalRevenue += stat.totalRevenue || 0;
+      }
+    });
+
+    const totalOrders = (orderStatusMap.delivered || 0) + (orderStatusMap.cancelled || 0) + 
+                       (orderStatusMap.pending || 0) + (orderStatusMap.confirmed || 0) +
+                       (orderStatusMap.preparing || 0) + (orderStatusMap.ready || 0) +
+                       (orderStatusMap.out_for_delivery || 0);
+    const completedOrders = orderStatusMap.delivered || 0;
+    const cancelledOrders = orderStatusMap.cancelled || 0;
+    
+    logger.info(`📊 Calculated order statistics:`, {
+      totalOrders,
+      completedOrders,
+      cancelledOrders,
+      orderStatusMap
+    });
+
+    // Get monthly orders and revenue
+    const monthlyStats = await Order.aggregate([
+      {
+        $match: {
+          $or: [
+            { restaurantId: restaurantIdString },
+            { restaurantId: restaurantIdField }
+          ],
+          status: 'delivered',
+          createdAt: { $gte: startOfMonth }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$pricing.total', 0] } }
+        }
+      }
+    ]);
+
+    const monthlyOrders = monthlyStats[0]?.count || 0;
+    const monthlyRevenue = monthlyStats[0]?.revenue || 0;
+
+    // Get yearly orders and revenue
+    const yearlyStats = await Order.aggregate([
+      {
+        $match: {
+          $or: [
+            { restaurantId: restaurantIdString },
+            { restaurantId: restaurantIdField }
+          ],
+          status: 'delivered',
+          createdAt: { $gte: startOfYear }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$pricing.total', 0] } }
+        }
+      }
+    ]);
+
+    const yearlyOrders = yearlyStats[0]?.count || 0;
+    const yearlyRevenue = yearlyStats[0]?.revenue || 0;
+
+    // Get commission data from AdminCommission (restaurantId is ObjectId in AdminCommission)
+    const commissionStats = await AdminCommission.aggregate([
+      {
+        $match: {
+          restaurantId: mongoose.Types.ObjectId.isValid(restaurantId) 
+            ? new mongoose.Types.ObjectId(restaurantId) 
+            : restaurantId,
+          status: 'completed'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalCommission: { $sum: '$commissionAmount' },
+          totalOrderAmount: { $sum: '$orderAmount' },
+          totalRestaurantEarning: { $sum: '$restaurantEarning' }
+        }
+      }
+    ]);
+
+    const totalCommission = commissionStats[0]?.totalCommission || 0;
+    const totalOrderAmount = commissionStats[0]?.totalOrderAmount || 0;
+    const restaurantEarning = commissionStats[0]?.totalRestaurantEarning || 0;
+
+    // Get monthly commission
+    const monthlyCommissionStats = await AdminCommission.aggregate([
+      {
+        $match: {
+          restaurantId: mongoose.Types.ObjectId.isValid(restaurantId) 
+            ? new mongoose.Types.ObjectId(restaurantId) 
+            : restaurantId,
+          status: 'completed',
+          orderDate: { $gte: startOfMonth }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalCommission: { $sum: '$commissionAmount' },
+          totalOrderAmount: { $sum: '$orderAmount' }
+        }
+      }
+    ]);
+
+    const monthlyCommission = monthlyCommissionStats[0]?.totalCommission || 0;
+    const monthlyProfit = monthlyCommission; // Admin profit = commission
+
+    // Get yearly commission
+    const yearlyCommissionStats = await AdminCommission.aggregate([
+      {
+        $match: {
+          restaurantId: mongoose.Types.ObjectId.isValid(restaurantId) 
+            ? new mongoose.Types.ObjectId(restaurantId) 
+            : restaurantId,
+          status: 'completed',
+          orderDate: { $gte: startOfYear }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalCommission: { $sum: '$commissionAmount' },
+          totalOrderAmount: { $sum: '$orderAmount' }
+        }
+      }
+    ]);
+
+    const yearlyCommission = yearlyCommissionStats[0]?.totalCommission || 0;
+    const yearlyProfit = yearlyCommission; // Admin profit = commission
+
+    // Get average monthly profit (last 12 months)
+    const last12MonthsStart = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+    const avgMonthlyProfitStats = await AdminCommission.aggregate([
+      {
+        $match: {
+          restaurantId: mongoose.Types.ObjectId.isValid(restaurantId) 
+            ? new mongoose.Types.ObjectId(restaurantId) 
+            : restaurantId,
+          status: 'completed',
+          orderDate: { $gte: last12MonthsStart }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$orderDate' },
+            month: { $month: '$orderDate' }
+          },
+          monthlyCommission: { $sum: '$commissionAmount' }
+        }
+      }
+    ]);
+
+    const avgMonthlyProfit = avgMonthlyProfitStats.length > 0
+      ? avgMonthlyProfitStats.reduce((sum, stat) => sum + stat.monthlyCommission, 0) / avgMonthlyProfitStats.length
+      : 0;
+
+    // Get commission percentage from RestaurantCommission
+    const RestaurantCommission = (await import('../models/RestaurantCommission.js')).default;
+    
+    // Use restaurant._id directly - ensure it's an ObjectId
+    const restaurantIdForQuery = restaurant._id instanceof mongoose.Types.ObjectId 
+      ? restaurant._id 
+      : new mongoose.Types.ObjectId(restaurant._id);
+    
+    logger.info(`🔍 Looking for commission config:`, {
+      restaurantId: restaurantId,
+      restaurantObjectId: restaurantIdForQuery.toString(),
+      restaurantName: restaurant.name,
+      restaurantIdString: restaurant.restaurantId
+    });
+    
+    // Try using the static method first
+    let commissionConfig = await RestaurantCommission.getCommissionForRestaurant(restaurantIdForQuery);
+    
+    if (commissionConfig) {
+      // Convert to plain object if needed
+      commissionConfig = commissionConfig.toObject ? commissionConfig.toObject() : commissionConfig;
+      logger.info(`✅ Found commission using static method`);
+    }
+    
+    // If not found, try direct query
+    if (!commissionConfig) {
+      logger.info(`⚠️ Static method didn't find commission, trying direct query`);
+      commissionConfig = await RestaurantCommission.findOne({
+        restaurant: restaurantIdForQuery,
+        status: true
+      });
+      
+      if (commissionConfig) {
+        commissionConfig = commissionConfig.toObject ? commissionConfig.toObject() : commissionConfig;
+      }
+    }
+    
+    // If still not found, try without status filter
+    if (!commissionConfig) {
+      logger.info(`⚠️ Trying without status filter`);
+      commissionConfig = await RestaurantCommission.findOne({
+        restaurant: restaurantIdForQuery
+      });
+      
+      if (commissionConfig) {
+        commissionConfig = commissionConfig.toObject ? commissionConfig.toObject() : commissionConfig;
+      }
+    }
+    
+    // Also try by restaurantId string field
+    if (!commissionConfig && restaurant?.restaurantId) {
+      logger.info(`🔄 Trying by restaurantId string: ${restaurant.restaurantId}`);
+      commissionConfig = await RestaurantCommission.findOne({
+        restaurantId: restaurant.restaurantId
+      });
+      
+      if (commissionConfig) {
+        commissionConfig = commissionConfig.toObject ? commissionConfig.toObject() : commissionConfig;
+      }
+    }
+    
+    // Final debug: List all commissions to see what's in DB
+    if (!commissionConfig) {
+      const allCommissions = await RestaurantCommission.find({}).lean();
+      logger.warn(`❌ No commission found. Total commissions in DB: ${allCommissions.length}`);
+      logger.info(`📋 All commissions:`, allCommissions.map(c => ({
+        _id: c._id,
+        restaurant: c.restaurant?.toString ? c.restaurant.toString() : String(c.restaurant),
+        restaurantId: c.restaurantId,
+        restaurantName: c.restaurantName,
+        status: c.status,
+        defaultCommission: c.defaultCommission
+      })));
+      
+      // Check if restaurant ObjectId matches any commission
+      const matching = allCommissions.filter(c => {
+        const cRestaurantId = c.restaurant?.toString ? c.restaurant.toString() : String(c.restaurant);
+        return cRestaurantId === restaurantIdForQuery.toString();
+      });
+      logger.info(`🔍 Matching commissions: ${matching.length}`, matching);
+    }
+
+    let commissionPercentage = 0;
+    if (commissionConfig) {
+      logger.info(`✅ Commission config found for restaurant ${restaurantId}`);
+      logger.info(`Commission config details:`, {
+        _id: commissionConfig._id,
+        restaurant: commissionConfig.restaurant?.toString ? commissionConfig.restaurant.toString() : String(commissionConfig.restaurant),
+        restaurantId: commissionConfig.restaurantId,
+        restaurantName: commissionConfig.restaurantName,
+        status: commissionConfig.status,
+        hasDefaultCommission: !!commissionConfig.defaultCommission,
+        defaultCommissionType: commissionConfig.defaultCommission?.type,
+        defaultCommissionValue: commissionConfig.defaultCommission?.value
+      });
+      
+      if (commissionConfig.defaultCommission) {
+        // Get default commission value - if type is percentage, show the percentage value
+        logger.info(`📊 Processing defaultCommission:`, {
+          type: commissionConfig.defaultCommission.type,
+          value: commissionConfig.defaultCommission.value,
+          valueType: typeof commissionConfig.defaultCommission.value
+        });
+        
+        if (commissionConfig.defaultCommission.type === 'percentage') {
+          const rawValue = commissionConfig.defaultCommission.value;
+          commissionPercentage = typeof rawValue === 'number' 
+            ? rawValue 
+            : parseFloat(rawValue) || 0;
+          logger.info(`✅ Found commission percentage: ${commissionPercentage}% for restaurant ${restaurantId} (raw value: ${rawValue})`);
+        } else if (commissionConfig.defaultCommission.type === 'amount') {
+          // For amount type, we can't show a percentage, so keep it as 0
+          commissionPercentage = 0;
+          logger.info(`⚠️ Commission type is 'amount', not 'percentage' for restaurant ${restaurantId}`);
+        }
+      } else {
+        logger.warn(`⚠️ Commission config found but no defaultCommission for restaurant ${restaurantId}`);
+      }
+    } else {
+      logger.warn(`❌ No commission config found for restaurant ${restaurantId} (restaurant._id: ${restaurantIdForQuery.toString()})`);
+      logger.warn(`⚠️ This restaurant may not have a commission configuration set up.`);
+      logger.warn(`💡 To set up commission, go to Restaurant Commission page and add commission for this restaurant.`);
+    }
+    
+    // Log the final commission percentage being returned
+    logger.info(`📊 Final commission percentage being returned: ${commissionPercentage}%`);
+    logger.info(`📤 Sending response with commissionPercentage: ${commissionPercentage}`);
+
+    // Get ratings from FeedbackExperience (restaurantId is ObjectId in FeedbackExperience)
+    const FeedbackExperience = (await import('../models/FeedbackExperience.js')).default;
+    
+    const restaurantIdForRating = restaurant._id instanceof mongoose.Types.ObjectId 
+      ? restaurant._id 
+      : new mongoose.Types.ObjectId(restaurant._id);
+    
+    logger.info(`⭐ Fetching ratings for restaurant:`, {
+      restaurantId: restaurantId,
+      restaurantObjectId: restaurantIdForRating.toString()
+    });
+    
+    const ratingStats = await FeedbackExperience.aggregate([
+      {
+        $match: {
+          restaurantId: restaurantIdForRating,
+          rating: { $exists: true, $ne: null, $gt: 0 }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: '$rating' },
+          totalRatings: { $sum: 1 }
+        }
+      }
+    ]);
+
+    logger.info(`⭐ Rating stats found:`, ratingStats);
+
+    const averageRating = ratingStats[0]?.averageRating || 0;
+    const totalRatings = ratingStats[0]?.totalRatings || 0;
+    
+    logger.info(`⭐ Calculated ratings:`, {
+      averageRating,
+      totalRatings
+    });
+
+    // Get unique customers
+    const customerStats = await Order.aggregate([
+      {
+        $match: {
+          $or: [
+            { restaurantId: restaurantIdString },
+            { restaurantId: restaurantIdField }
+          ],
+          status: 'delivered'
+        }
+      },
+      {
+        $group: {
+          _id: '$userId',
+          orderCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const totalCustomers = customerStats.length;
+    const repeatCustomers = customerStats.filter(c => c.orderCount > 1).length;
+
+    // Calculate average order value
+    const averageOrderValue = completedOrders > 0 ? totalRevenue / completedOrders : 0;
+
+    // Calculate rates
+    const cancellationRate = totalOrders > 0 ? (cancelledOrders / totalOrders) * 100 : 0;
+    const completionRate = totalOrders > 0 ? (completedOrders / totalOrders) * 100 : 0;
+
+    // Calculate average yearly profit (if restaurant has been active for multiple years)
+    const restaurantCreatedAt = restaurant.createdAt || new Date();
+    const yearsActive = Math.max(1, (now - restaurantCreatedAt) / (365 * 24 * 60 * 60 * 1000));
+    const averageYearlyProfit = yearsActive > 0 ? yearlyProfit / yearsActive : yearlyProfit;
+
+    return successResponse(res, 200, 'Restaurant analytics retrieved successfully', {
+      restaurant: {
+        _id: restaurant._id,
+        name: restaurant.name,
+        restaurantId: restaurant.restaurantId,
+        isActive: restaurant.isActive,
+        createdAt: restaurant.createdAt
+      },
+      analytics: {
+        totalOrders: Number(totalOrders) || 0,
+        cancelledOrders: Number(cancelledOrders) || 0,
+        completedOrders: Number(completedOrders) || 0,
+        averageRating: averageRating ? parseFloat(averageRating.toFixed(1)) : 0,
+        totalRatings: Number(totalRatings) || 0,
+        commissionPercentage: Number(commissionPercentage) || 0,
+        monthlyProfit: parseFloat(monthlyProfit.toFixed(2)),
+        yearlyProfit: parseFloat(yearlyProfit.toFixed(2)),
+        averageOrderValue: parseFloat(averageOrderValue.toFixed(2)),
+        totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+        totalCommission: parseFloat(totalCommission.toFixed(2)),
+        restaurantEarning: parseFloat(restaurantEarning.toFixed(2)),
+        monthlyOrders,
+        yearlyOrders,
+        averageMonthlyProfit: parseFloat(avgMonthlyProfit.toFixed(2)),
+        averageYearlyProfit: parseFloat(averageYearlyProfit.toFixed(2)),
+        status: restaurant.isActive ? 'active' : 'inactive',
+        joinDate: restaurant.createdAt,
+        totalCustomers,
+        repeatCustomers,
+        cancellationRate: parseFloat(cancellationRate.toFixed(2)),
+        completionRate: parseFloat(completionRate.toFixed(2))
+      }
+    });
+  } catch (error) {
+    logger.error(`Error fetching restaurant analytics: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to fetch restaurant analytics');
+  }
+});
+
+/**
+ * Get Customer Wallet Report
+ * GET /api/admin/customer-wallet-report
+ * Query params: fromDate, toDate, all (Credit/Debit), customer, search
+ */
+export const getCustomerWalletReport = asyncHandler(async (req, res) => {
+  try {
+    console.log('🔍 Fetching customer wallet report...');
+    const { 
+      fromDate,
+      toDate,
+      all,
+      customer,
+      search
+    } = req.query;
+    
+    console.log('📋 Query params:', { fromDate, toDate, all, customer, search });
+
+    const UserWallet = (await import('../../user/models/UserWallet.js')).default;
+    const User = (await import('../../auth/models/User.js')).default;
+
+    // Build date filter
+    let dateFilter = {};
+    if (fromDate || toDate) {
+      dateFilter['transactions.createdAt'] = {};
+      if (fromDate) {
+        const startDate = new Date(fromDate);
+        startDate.setHours(0, 0, 0, 0);
+        dateFilter['transactions.createdAt'].$gte = startDate;
+      }
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999);
+        dateFilter['transactions.createdAt'].$lte = endDate;
+      }
+    }
+
+    // Get all wallets with transactions
+    const wallets = await UserWallet.find({
+      ...dateFilter,
+      'transactions.0': { $exists: true } // Only wallets with transactions
+    })
+      .populate('userId', 'name email phone')
+      .lean();
+
+    // Flatten transactions with user info
+    let allTransactions = [];
+    wallets.forEach(wallet => {
+      if (!wallet.userId) return;
+      
+      // Sort transactions by date (oldest first for balance calculation)
+      const sortedTransactions = [...wallet.transactions].sort((a, b) => 
+        new Date(a.createdAt) - new Date(b.createdAt)
+      );
+      
+      let runningBalance = 0;
+      
+      sortedTransactions.forEach((transaction) => {
+        // Update running balance if transaction is completed (before date filter)
+        let balance = runningBalance;
+        if (transaction.status === 'Completed') {
+          if (transaction.type === 'addition' || transaction.type === 'refund') {
+            runningBalance += transaction.amount;
+            balance = runningBalance;
+          } else if (transaction.type === 'deduction') {
+            runningBalance -= transaction.amount;
+            balance = runningBalance;
+          }
+        }
+        
+        // Apply date filter if provided
+        if (fromDate || toDate) {
+          const transDate = new Date(transaction.createdAt);
+          if (fromDate && transDate < new Date(fromDate)) return;
+          if (toDate) {
+            const toDateObj = new Date(toDate);
+            toDateObj.setHours(23, 59, 59, 999);
+            if (transDate > toDateObj) return;
+          }
+        }
+
+        // Map transaction type to frontend format
+        let transactionType = 'CashBack';
+        if (transaction.type === 'addition') {
+          if (transaction.description?.includes('Admin') || transaction.description?.includes('admin')) {
+            transactionType = 'Add Fund By Admin';
+          } else {
+            transactionType = 'Add Fund';
+          }
+        } else if (transaction.type === 'deduction') {
+          transactionType = 'Order Payment';
+        } else if (transaction.type === 'refund') {
+          transactionType = 'Refund';
+        }
+
+        // Get reference
+        let reference = 'N/A';
+        if (transaction.orderId) {
+          reference = transaction.orderId.toString();
+        } else if (transaction.paymentGateway) {
+          reference = transaction.paymentGateway;
+        } else if (transaction.description) {
+          reference = transaction.description;
+        }
+
+        allTransactions.push({
+          _id: transaction._id,
+          transactionId: transaction._id.toString(),
+          customer: wallet.userId.name || 'Unknown',
+          customerId: wallet.userId._id.toString(),
+          credit: transaction.type === 'addition' || transaction.type === 'refund' ? transaction.amount : 0,
+          debit: transaction.type === 'deduction' ? transaction.amount : 0,
+          balance: balance,
+          transactionType: transactionType,
+          reference: reference,
+          createdAt: transaction.createdAt,
+          status: transaction.status,
+          type: transaction.type
+        });
+      });
+    });
+
+    // Filter by transaction type (Credit/Debit)
+    if (all && all !== 'All') {
+      if (all === 'Credit') {
+        allTransactions = allTransactions.filter(t => t.credit > 0);
+      } else if (all === 'Debit') {
+        allTransactions = allTransactions.filter(t => t.debit > 0);
+      }
+    }
+
+    // Filter by customer
+    if (customer && customer !== 'Select Customer') {
+      allTransactions = allTransactions.filter(t => 
+        t.customer.toLowerCase().includes(customer.toLowerCase())
+      );
+    }
+
+    // Search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      allTransactions = allTransactions.filter(t =>
+        t.transactionId.toLowerCase().includes(searchLower) ||
+        t.customer.toLowerCase().includes(searchLower) ||
+        t.reference.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Sort by date (newest first)
+    allTransactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Format currency
+    const formatCurrency = (amount) => {
+      return `₹${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    // Format date
+    const formatDate = (date) => {
+      const d = new Date(date);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const day = d.getDate();
+      const month = months[d.getMonth()];
+      const year = d.getFullYear();
+      let hours = d.getHours();
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'pm' : 'am';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      return `${day} ${month} ${year} ${hours}:${minutes} ${ampm}`;
+    };
+
+    // Transform transactions for frontend
+    const transformedTransactions = allTransactions.map((transaction, index) => ({
+      sl: index + 1,
+      transactionId: transaction.transactionId,
+      customer: transaction.customer,
+      credit: formatCurrency(transaction.credit),
+      debit: formatCurrency(transaction.debit),
+      balance: formatCurrency(transaction.balance),
+      transactionType: transaction.transactionType,
+      reference: transaction.reference,
+      createdAt: formatDate(transaction.createdAt)
+    }));
+
+    // Calculate summary statistics
+    const totalDebit = allTransactions.reduce((sum, t) => sum + t.debit, 0);
+    const totalCredit = allTransactions.reduce((sum, t) => sum + t.credit, 0);
+    const totalBalance = totalCredit - totalDebit;
+
+    // Get unique customers for dropdown
+    const uniqueCustomers = [...new Set(allTransactions.map(t => t.customer))].sort();
+
+    return successResponse(res, 200, 'Customer wallet report retrieved successfully', {
+      transactions: transformedTransactions,
+      stats: {
+        debit: formatCurrency(totalDebit),
+        credit: formatCurrency(totalCredit),
+        balance: formatCurrency(totalBalance)
+      },
+      customers: uniqueCustomers,
+      pagination: {
+        page: 1,
+        limit: 10000,
+        total: transformedTransactions.length,
+        pages: 1
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching customer wallet report:', error);
+    console.error('Error stack:', error.stack);
+    return errorResponse(res, 500, error.message || 'Failed to fetch customer wallet report');
   }
 });
 

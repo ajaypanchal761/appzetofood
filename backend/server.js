@@ -36,6 +36,7 @@ import categoryPublicRoutes from './modules/admin/routes/categoryPublicRoutes.js
 import feeSettingsPublicRoutes from './modules/admin/routes/feeSettingsPublicRoutes.js';
 import envPublicRoutes from './modules/admin/routes/envPublicRoutes.js';
 import aboutPublicRoutes from './modules/admin/routes/aboutPublicRoutes.js';
+import businessSettingsPublicRoutes from './modules/admin/routes/businessSettingsPublicRoutes.js';
 import termsPublicRoutes from './modules/admin/routes/termsPublicRoutes.js';
 import privacyPublicRoutes from './modules/admin/routes/privacyPublicRoutes.js';
 import refundPublicRoutes from './modules/admin/routes/refundPublicRoutes.js';
@@ -384,6 +385,7 @@ app.use('/api', categoryPublicRoutes);
 app.use('/api', feeSettingsPublicRoutes);
 app.use('/api/env', envPublicRoutes);
 app.use('/api', aboutPublicRoutes);
+app.use('/api', businessSettingsPublicRoutes);
 app.use('/api', termsPublicRoutes);
 app.use('/api', privacyPublicRoutes);
 app.use('/api', refundPublicRoutes);

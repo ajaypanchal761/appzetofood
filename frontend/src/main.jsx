@@ -5,6 +5,13 @@ import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.jsx'
 import { getGoogleMapsApiKey } from './lib/utils/googleMapsApiKey.js'
+import { loadBusinessSettings } from './lib/utils/businessSettings.js'
+
+// Load business settings on app start (favicon, title)
+// Silently handle errors - this is not critical for app functionality
+loadBusinessSettings().catch(() => {
+  // Silently fail - settings will load when admin is authenticated
+})
 
 // Global flag to track Google Maps loading state
 window.__googleMapsLoading = window.__googleMapsLoading || false;
@@ -112,13 +119,17 @@ console.error = (...args) => {
   }
   
   
-  // Suppress geolocation timeout errors (non-critical, will retry)
+  // Suppress geolocation errors (non-critical, will retry or use fallback)
   if (
     errorStr.includes('Timeout expired') ||
     errorStr.includes('GeolocationPositionError') ||
-    (errorStr.includes('code: 3') && errorStr.includes('location'))
+    errorStr.includes('Geolocation error') ||
+    errorStr.includes('User denied Geolocation') ||
+    errorStr.includes('permission denied') ||
+    (errorStr.includes('code: 3') && errorStr.includes('location')) ||
+    (errorStr.includes('code: 1') && errorStr.includes('location'))
   ) {
-    return // Silently ignore geolocation timeout errors
+    return // Silently ignore geolocation errors (permission denied, timeout, etc.)
   }
   
   // Suppress duplicate network error messages (handled by axios interceptor with cooldown)
@@ -189,11 +200,14 @@ window.addEventListener('unhandledrejection', (event) => {
   const errorMsg = error?.message || String(error) || ''
   const errorName = error?.name || ''
   
-  // Suppress geolocation timeout errors
+  // Suppress geolocation errors (permission denied, timeout, etc.)
   if (
     errorMsg.includes('Timeout expired') ||
+    errorMsg.includes('User denied Geolocation') ||
+    errorMsg.includes('permission denied') ||
     errorName === 'GeolocationPositionError' ||
-    (error?.code === 3 && errorMsg.includes('timeout'))
+    (error?.code === 3 && errorMsg.includes('timeout')) ||
+    (error?.code === 1 && (errorMsg.includes('location') || errorMsg.includes('geolocation')))
   ) {
     event.preventDefault() // Prevent error from showing in console
     return

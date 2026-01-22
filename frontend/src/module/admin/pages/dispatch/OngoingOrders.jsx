@@ -1,141 +1,19 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import OrdersTopbar from "../../components/orders/OrdersTopbar"
 import DispatchOrdersTable from "../../components/orders/DispatchOrdersTable"
 import DispatchFilterPanel from "../../components/orders/DispatchFilterPanel"
 import ViewOrderDialog from "../../components/orders/ViewOrderDialog"
 import SettingsDialog from "../../components/orders/SettingsDialog"
 import { useGenericTableManagement } from "../../components/orders/useGenericTableManagement"
-
-const MOCK_ONGOING_ORDERS = [
-  {
-    id: "100148",
-    sl: 1,
-    date: "11 JUN 2023",
-    time: "03:24 PM",
-    customerName: "Jdjidj Dhhdhd",
-    customerPhone: "+8***********",
-    restaurant: "Hungry Puppets",
-    total: "$ 129.75",
-    paymentStatus: "Unpaid",
-    orderStatus: "Out For Delivery",
-    orderStatusColor: "bg-orange-100 text-orange-600",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100130",
-    sl: 2,
-    date: "04 JUN 2023",
-    time: "09:33 AM",
-    customerName: "Jvjgjhj Fjkhgh",
-    customerPhone: "+8***********",
-    restaurant: "Hungry Puppets",
-    total: "$ 129.75",
-    paymentStatus: "Unpaid",
-    orderStatus: "Handover",
-    orderStatusColor: "bg-blue-50 text-blue-600",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100068",
-    sl: 3,
-    date: "11 JAN 2022",
-    time: "01:53 PM",
-    customerName: "Jane Cooper",
-    customerPhone: "+8***********",
-    restaurant: "Hungry Puppets",
-    total: "$ 99.75",
-    paymentStatus: "Paid",
-    orderStatus: "Confirmed",
-    orderStatusColor: "bg-blue-50 text-blue-600",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100056",
-    sl: 4,
-    date: "15 NOV 2021",
-    time: "04:15 PM",
-    customerName: "Jane Doe",
-    customerPhone: "+8***********",
-    restaurant: "Cheese Burger",
-    total: "$ 81.60",
-    paymentStatus: "Unpaid",
-    orderStatus: "Confirmed",
-    orderStatusColor: "bg-blue-50 text-blue-600",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100053",
-    sl: 5,
-    date: "17 OCT 2021",
-    time: "03:56 PM",
-    customerName: "Zubair Jamil",
-    customerPhone: "+9***********",
-    restaurant: "Hungry Puppets",
-    total: "$ 99.75",
-    paymentStatus: "Unpaid",
-    orderStatus: "Accepted",
-    orderStatusColor: "bg-red-50 text-red-500",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100052",
-    sl: 6,
-    date: "17 OCT 2021",
-    time: "03:55 PM",
-    customerName: "Zubair Jamil",
-    customerPhone: "+9***********",
-    restaurant: "Cheese Burger",
-    total: "$ 1,266.84",
-    paymentStatus: "Unpaid",
-    orderStatus: "Confirmed",
-    orderStatusColor: "bg-blue-50 text-blue-600",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100030",
-    sl: 7,
-    date: "22 AUG 2021",
-    time: "08:16 AM",
-    customerName: "Demo Demo",
-    customerPhone: "+2***********",
-    restaurant: "Café Monarch",
-    total: "$ 4,700.14",
-    paymentStatus: "Unpaid",
-    orderStatus: "Accepted",
-    orderStatusColor: "bg-red-50 text-red-500",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100017",
-    sl: 8,
-    date: "22 AUG 2021",
-    time: "01:13 AM",
-    customerName: "Spencer Hastings",
-    customerPhone: "+8***********",
-    restaurant: "Vintage Kitchen",
-    total: "$ 4,390.45",
-    paymentStatus: "Paid",
-    orderStatus: "Accepted",
-    orderStatusColor: "bg-red-50 text-red-500",
-    deliveryType: "Home Delivery",
-  },
-  {
-    id: "100016",
-    sl: 9,
-    date: "22 AUG 2021",
-    time: "01:12 AM",
-    customerName: "Spencer Hastings",
-    customerPhone: "+8***********",
-    restaurant: "Vintage Kitchen",
-    total: "$ 4,393.20",
-    paymentStatus: "Paid",
-    orderStatus: "Confirmed",
-    orderStatusColor: "bg-blue-50 text-blue-600",
-    deliveryType: "Home Delivery",
-  },
-]
+import { adminAPI } from "@/lib/api"
+import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
 
 export default function OngoingOrders() {
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
   const [visibleColumns, setVisibleColumns] = useState({
     sl: true,
     order: true,
@@ -147,9 +25,80 @@ export default function OngoingOrders() {
     actions: true,
   })
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 500) // 500ms delay
+
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Fetch orders from API
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        setLoading(true)
+        const response = await adminAPI.getOngoingOrders({
+          search: debouncedSearchQuery || undefined,
+          limit: 1000 // Get all orders
+        })
+
+        if (response?.data?.success && response.data.data?.orders) {
+          setOrders(response.data.data.orders)
+        } else {
+          setOrders([])
+          if (response?.data?.message) {
+            toast.error(response.data.message)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching ongoing orders:", error)
+        console.error("Error details:", {
+          message: error.message,
+          code: error.code,
+          response: error.response ? {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data
+          } : null,
+          request: error.request ? {
+            url: error.config?.url,
+            method: error.config?.method,
+            baseURL: error.config?.baseURL
+          } : null
+        })
+        
+        if (error.response) {
+          const status = error.response.status
+          const errorData = error.response.data
+          
+          if (status === 401) {
+            toast.error('Authentication required. Please login again.')
+          } else if (status === 403) {
+            toast.error('Access denied. You do not have permission.')
+          } else if (status === 404) {
+            toast.error('Endpoint not found. Please check backend server.')
+          } else if (status >= 500) {
+            toast.error('Server error. Please try again later.')
+          } else {
+            toast.error(errorData?.message || `Error ${status}: Failed to fetch orders`)
+          }
+        } else if (error.request) {
+          toast.error('Cannot connect to server. Please check if backend is running.')
+        } else {
+          toast.error(error.message || 'Failed to fetch orders')
+        }
+        setOrders([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchOrders()
+  }, [debouncedSearchQuery])
+
   const {
-    searchQuery,
-    setSearchQuery,
     isFilterOpen,
     setIsFilterOpen,
     isSettingsOpen,
@@ -169,7 +118,7 @@ export default function OngoingOrders() {
     handlePrintOrder,
     toggleColumn,
   } = useGenericTableManagement(
-    MOCK_ONGOING_ORDERS,
+    orders,
     "On Going Orders",
     ["id", "customerName", "restaurant", "customerPhone"]
   )
@@ -185,6 +134,17 @@ export default function OngoingOrders() {
       status: true,
       actions: true,
     })
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 lg:p-6 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+          <p className="text-gray-600">Loading orders...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
