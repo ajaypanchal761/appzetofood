@@ -222,12 +222,6 @@ export const sidebarMenuData = [
       },
       {
         type: "link",
-        label: "Food Report",
-        path: "/admin/food-report",
-        icon: "Utensils",
-      },
-      {
-        type: "link",
         label: "Order Report",
         path: "/admin/order-report/regular",
         icon: "FileText",
@@ -305,26 +299,6 @@ export const sidebarMenuData = [
         path: "/admin/business-setup",
         icon: "Settings",
       },
-      {
-        type: "expandable",
-        label: "System Tax",
-        icon: "DollarSign",
-        subItems: [
-          { label: "Create Taxes", path: "/admin/system-tax/create" },
-          { label: "Setup Taxes", path: "/admin/system-tax/setup" },
-        ],
-      },
-      {
-        type: "expandable",
-        label: "Subscription Management",
-        icon: "CreditCard",
-        subItems: [
-          { label: "Subscription Packages", path: "/admin/subscription-management/packages" },
-          { label: "Subscriber List", path: "/admin/subscription-management/subscribers" },
-          { label: "Settings", path: "/admin/subscription-management/settings" },
-        ],
-      },
-
       {
         type: "expandable",
         label: "Pages & Social Media",

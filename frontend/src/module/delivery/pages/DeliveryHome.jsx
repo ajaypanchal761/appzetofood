@@ -1313,14 +1313,11 @@ export default function DeliveryHome() {
           // Save location to localStorage (for refresh handling)
           localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(newLocation))
           
-          // Update bike marker if map is initialized and user is online
+          // Update bike marker if map is initialized (always show, both offline and online)
           if (window.deliveryMapInstance) {
-            if (isOnlineRef.current) {
-              // Online है तो bike icon show करें - center map on exact location
-              createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
-              updateRoutePolyline()
-            }
-            // Offline है तो marker hide रहेगा (blue dot नहीं दिखेगा)
+            // Always show bike icon on map (both offline and online)
+            createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
+            updateRoutePolyline()
           }
           
           setRiderLocation(newLocation)
@@ -1368,17 +1365,9 @@ export default function DeliveryHome() {
       watchPositionIdRef.current = null
     }
 
-    // Only start watchPosition if user is online
-    if (!isOnline) {
-      console.log('📍 User is offline - stopping location tracking')
-      // Hide bike marker when going offline
-      if (bikeMarkerRef.current && window.deliveryMapInstance) {
-        bikeMarkerRef.current.setMap(null)
-      }
-      return
-    }
-
-    console.log('📍 User is online - starting live location tracking')
+    // Keep location tracking running even when offline (bike should always show on map)
+    // But only send location to backend when online (for order assignment)
+    console.log('📍 Starting live location tracking (offline/online)')
 
     // Watch position updates for live tracking (Only when online)
     const watchId = navigator.geolocation.watchPosition(
@@ -1441,18 +1430,11 @@ export default function DeliveryHome() {
           animateRiderMarker(newLocation, heading);
           
           // Update bike marker with new location and heading (create if doesn't exist)
-          // Only update if user is online (use ref to get latest value)
+          // Always show bike marker on map (both offline and online)
           if (window.deliveryMapInstance) {
-            if (isOnlineRef.current) {
-              // Online है तो bike icon show करें (blue dot नहीं)
-              // Always center map on bike location (Zomato style) unless user is panning
-              createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
-            } else {
-              // Offline है तो marker hide करें
-              if (bikeMarkerRef.current) {
-                bikeMarkerRef.current.setMap(null)
-              }
-            }
+            // Always show bike icon on map (both offline and online)
+            // Always center map on bike location (Zomato style) unless user is panning
+            createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
           }
           
           setRiderLocation(newLocation)
@@ -4232,16 +4214,8 @@ export default function DeliveryHome() {
       return;
     }
 
-    if (!isOnline) {
-      // Hide bike marker when offline (blue dot नहीं दिखेगा)
-      if (bikeMarkerRef.current) {
-        bikeMarkerRef.current.setMap(null);
-        console.log('🚫 Bike marker hidden - user offline');
-      }
-      return;
-    }
-
-    // When going online, ensure bike marker is visible at current location IMMEDIATELY
+    // Always show bike marker on map (both offline and online)
+    // When going online/offline, ensure bike marker is visible at current location IMMEDIATELY
     if (riderLocation && riderLocation.length === 2) {
       // Calculate heading if we have previous location
       let heading = null;
@@ -7093,16 +7067,10 @@ export default function DeliveryHome() {
                     
                     // Update bike marker (only if online - blue dot नहीं, bike icon)
                     if (window.deliveryMapInstance) {
-                      if (isOnlineRef.current) {
-                        // Center map automatically (Zomato style) unless user is panning
-                        createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
-                        updateRoutePolyline()
-                      } else {
-                        // Offline है तो marker hide करें
-                        if (bikeMarkerRef.current) {
-                          bikeMarkerRef.current.setMap(null)
-                        }
-                      }
+                      // Always show bike marker on map (both offline and online)
+                      // Center map automatically (Zomato style) unless user is panning
+                      createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
+                      updateRoutePolyline()
                     }
                     
                     setRiderLocation(newLocation)

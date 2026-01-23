@@ -7,7 +7,6 @@ import { clearCache, updateFavicon, updateTitle } from "@/lib/utils/businessSett
 export default function BusinessSetup() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [maintenanceOn, setMaintenanceOn] = useState(false);
   const [logoPreview, setLogoPreview] = useState(null);
   const [faviconPreview, setFaviconPreview] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
@@ -46,8 +45,6 @@ export default function BusinessSetup() {
           state: settings.state || "",
           pincode: settings.pincode || "",
         });
-        
-        setMaintenanceOn(settings.maintenanceMode?.isEnabled || false);
         
         // Set logo and favicon previews if they exist
         if (settings.logo?.url) {
@@ -99,9 +96,6 @@ export default function BusinessSetup() {
         address: formData.address.trim(),
         state: formData.state.trim(),
         pincode: formData.pincode.trim(),
-        maintenanceMode: {
-          isEnabled: maintenanceOn,
-        },
       };
 
       // Prepare files
@@ -195,37 +189,8 @@ export default function BusinessSetup() {
       </div>
 
       <div className="space-y-4">
-        {/* Maintenance mode + Company info */}
+        {/* Company info */}
         <div className="bg-white rounded-lg shadow-sm border border-slate-200">
-          {/* Maintenance header */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 border-b border-slate-100">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Maintenance Mode</h2>
-              <p className="text-xs text-slate-500 mt-1 max-w-xl">
-                Turn on the Maintenance Mode will temporarily deactivate your selected systems as of your chosen date
-                and time.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setMaintenanceOn((prev) => !prev)}
-              className={`inline-flex items-center justify-between w-32 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                maintenanceOn
-                  ? "bg-blue-600 border-blue-600 text-white"
-                  : "bg-slate-100 border-slate-300 text-slate-700"
-              }`}
-            >
-              <span>Maintenance Mode</span>
-              <span
-                className={`inline-flex h-4 w-7 items-center rounded-full transition-all ${
-                  maintenanceOn ? "bg-white/30 justify-end" : "bg-slate-300 justify-start"
-                }`}
-              >
-                <span className="h-3 w-3 rounded-full bg-white shadow-sm" />
-              </span>
-            </button>
-          </div>
-
           {/* Company information */}
           <div className="px-4 py-4 border-b border-slate-100">
             <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">

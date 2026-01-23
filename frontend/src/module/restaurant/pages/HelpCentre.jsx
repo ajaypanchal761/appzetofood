@@ -7,7 +7,6 @@ import {
   Power, 
   Utensils, 
   Building2, 
-  Home, 
   FileText, 
   Wallet,
   ChevronRight,
@@ -37,13 +36,6 @@ const helpTopics = [
     title: "Restaurant",
     subtitle: "Timings, contacts, FSSAI, bank details, location etc.",
     path: "/restaurant/outlet-info"
-  },
-  {
-    id: 4,
-    icon: Home,
-    title: "Address, location",
-    subtitle: "Update Outlet's address and location",
-    path: "/restaurant/edit-address"
   },
   {
     id: 5,

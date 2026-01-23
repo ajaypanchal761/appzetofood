@@ -108,6 +108,9 @@ export default function OrderTrackingCard() {
   useEffect(() => {
     if (!activeOrder || timeRemaining === null) return;
 
+    // Update more frequently when time is running out (every second if <= 1 minute, otherwise every minute)
+    const updateInterval = timeRemaining <= 1 ? 1000 : 60000;
+
     const interval = setInterval(() => {
       // Check both context and API orders
       const allOrders = [...contextOrders, ...apiOrders];
@@ -140,7 +143,7 @@ export default function OrderTrackingCard() {
         setActiveOrder(null);
         setTimeRemaining(null);
       }
-    }, 60000); // Update every minute
+    }, updateInterval);
 
     return () => clearInterval(interval);
   }, [activeOrder, timeRemaining, contextOrders, apiOrders]);
@@ -177,8 +180,14 @@ export default function OrderTrackingCard() {
     return null;
   }
 
-  const restaurantName = activeOrder.restaurant || activeOrder.restaurantName || activeOrder.restaurantName || 'Restaurant';
+  // Check if order is delivered or time remaining is 0 - hide card
   const orderStatus = (activeOrder.status || activeOrder.deliveryState?.status || 'preparing').toLowerCase();
+  if (orderStatus === 'delivered' || orderStatus === 'completed' || timeRemaining === 0) {
+    console.log('❌ OrderTrackingCard - Order delivered or time is 0, hiding card');
+    return null;
+  }
+
+  const restaurantName = activeOrder.restaurant || activeOrder.restaurantName || activeOrder.restaurantName || 'Restaurant';
   const statusText = orderStatus === 'preparing' || orderStatus === 'confirmed' || orderStatus === 'pending'
     ? 'Preparing your order' 
     : orderStatus === 'out_for_delivery' || orderStatus === 'outfordelivery' || orderStatus === 'on_way'

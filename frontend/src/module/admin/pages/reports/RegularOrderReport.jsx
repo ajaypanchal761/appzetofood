@@ -370,10 +370,10 @@ export default function RegularOrderReport() {
                 onChange={(e) => handleFilterChange("time", e.target.value)}
                 className="w-full px-2.5 py-1.5 pr-5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs appearance-none cursor-pointer"
               >
-                <option value="All Time">All Time</option>
-                <option value="Today">Today</option>
-                <option value="This Week">This Week</option>
-                <option value="This Month">This Month</option>
+                <option key="all-time" value="All Time">All Time</option>
+                <option key="today" value="Today">Today</option>
+                <option key="this-week" value="This Week">This Week</option>
+                <option key="this-month" value="This Month">This Month</option>
               </select>
               <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
             </div>

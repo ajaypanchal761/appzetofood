@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button"
 export default function RestaurantStatus() {
   const navigate = useNavigate()
   const [deliveryStatus, setDeliveryStatus] = useState(false)
-  const [rushMode, setRushMode] = useState(false)
   const [restaurantData, setRestaurantData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [currentDateTime, setCurrentDateTime] = useState(new Date())
@@ -459,18 +458,6 @@ export default function RestaurantStatus() {
               checked={deliveryStatus}
               onCheckedChange={handleDeliveryStatusChange}
               className="ml-4 data-[state=unchecked]:bg-gray-300 data-[state=checked]:bg-green-600"
-            />
-          </div>
-
-          {/* Rush Mode */}
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-base font-bold text-gray-900">Rush mode</p>
-            </div>
-            <Switch
-              checked={rushMode}
-              onCheckedChange={setRushMode}
-              className="ml-4 data-[state=unchecked]:bg-gray-300"
             />
           </div>
 

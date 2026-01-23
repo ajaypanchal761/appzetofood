@@ -41,6 +41,7 @@ export default function ItemDetailsPage() {
   const [itemDescription, setItemDescription] = useState("")
   const [foodType, setFoodType] = useState("Non-Veg")
   const [basePrice, setBasePrice] = useState("0")
+  const [preparationTime, setPreparationTime] = useState("")
   const [gst, setGst] = useState("5.0")
   const [isRecommended, setIsRecommended] = useState(false)
   const [isInStock, setIsInStock] = useState(true)
@@ -53,7 +54,6 @@ export default function ItemDetailsPage() {
   const [allergens, setAllergens] = useState("")
   const [showMoreNutrition, setShowMoreNutrition] = useState(false)
   const [selectedTags, setSelectedTags] = useState([])
-  const [disclaimerChecked, setDisclaimerChecked] = useState(false)
   const [images, setImages] = useState([])
   const [imageFiles, setImageFiles] = useState(new Map()) // Track File objects by preview URL
   const [uploadingImages, setUploadingImages] = useState(false)
@@ -95,6 +95,7 @@ export default function ItemDetailsPage() {
         setItemDescription(item.description || "")
         setFoodType(item.foodType === "Veg" ? "Veg" : (item.foodType === "Egg" ? "Egg" : "Non-Veg"))
         setBasePrice(item.price?.toString() || "0")
+        setPreparationTime(item.preparationTime || "")
         setGst(item.gst?.toString() || "5.0")
         setIsRecommended(item.isRecommended || false)
         setIsInStock(item.isAvailable !== false)
@@ -185,6 +186,7 @@ export default function ItemDetailsPage() {
             setItemDescription(foundItem.description || "")
             setFoodType(foundItem.foodType === "Veg" ? "Veg" : (foundItem.foodType === "Egg" ? "Egg" : "Non-Veg"))
             setBasePrice(foundItem.price?.toString() || "0")
+            setPreparationTime(foundItem.preparationTime || "")
             setGst(foundItem.gst?.toString() || "5.0")
             setIsRecommended(foundItem.isRecommended || false)
             setIsInStock(foundItem.isAvailable !== false)
@@ -464,10 +466,6 @@ export default function ItemDetailsPage() {
   }
 
   const handleSave = async () => {
-    if (!disclaimerChecked) {
-      toast.error("Please accept the authorization disclaimer")
-      return
-    }
     if (!itemName.trim()) {
       toast.error("Please enter an item name")
       return
@@ -650,6 +648,7 @@ export default function ItemDetailsPage() {
         rating: itemData?.rating || 0.0,
         reviews: itemData?.reviews || 0,
         price: parseFloat(basePrice) || 0,
+        preparationTime: preparationTime || "",
         stock: "Unlimited",
         discount: null,
         originalPrice: null,
@@ -1044,6 +1043,25 @@ export default function ItemDetailsPage() {
                   </button>
                 </div>
               </div>
+              
+              {/* Preparation Time */}
+              <div className="relative">
+                <label className="block text-xs text-gray-600 mb-1">Preparation Time</label>
+                <div className="relative">
+                  <select
+                    value={preparationTime}
+                    onChange={(e) => setPreparationTime(e.target.value)}
+                    className="w-full pl-4 pr-10 py-3 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+                  >
+                    <option value="">Select timing</option>
+                    <option value="10-20 mins">10-20 mins</option>
+                    <option value="20-25 mins">20-25 mins</option>
+                    <option value="25-35 mins">25-35 mins</option>
+                    <option value="35-45 mins">35-45 mins</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
+                </div>
+              </div>
               {/* <div>
                 <label className="block text-xs text-gray-600 mb-1">GST</label>
                 <button
@@ -1222,22 +1240,6 @@ export default function ItemDetailsPage() {
 
       {/* Bottom Sticky Buttons */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200  z-40">
-        
-      {/* Disclaimer Checkbox */}
-      <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={disclaimerChecked}
-            onChange={(e) => setDisclaimerChecked(e.target.checked)}
-            className="mt-1 w-5 h-5 text-black border-gray-400 focus:ring-black rounded"
-            style={{ accentColor: "#000000" }}
-          />
-          <span className="text-sm text-gray-800">
-            I am authorized to make menu edits & responsible for the information shared including item details & prices
-          </span>
-        </label>
-      </div>
         <div className={`flex gap-3 px-4 py-4 ${isNewItem ? 'justify-end' : ''}`}>
           {!isNewItem && (
             <button
@@ -1249,9 +1251,9 @@ export default function ItemDetailsPage() {
           )}
           <button
             onClick={handleSave}
-            disabled={!disclaimerChecked || uploadingImages}
+            disabled={uploadingImages}
             className={`${isNewItem ? 'w-full' : 'flex-1'} py-3 px-4 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-              disclaimerChecked && !uploadingImages
+              !uploadingImages
                 ? "bg-black text-white hover:bg-black"
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}

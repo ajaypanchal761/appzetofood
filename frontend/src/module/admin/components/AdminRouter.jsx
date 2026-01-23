@@ -19,6 +19,7 @@ import ZoneSetup from "../pages/restaurant/ZoneSetup";
 import AddZone from "../pages/restaurant/AddZone";
 import ViewZone from "../pages/restaurant/ViewZone";
 import AllZonesMap from "../pages/restaurant/AllZonesMap";
+import DeliveryBoyViewMap from "../pages/restaurant/DeliveryBoyViewMap";
 import RestaurantsList from "../pages/restaurant/RestaurantsList";
 import JoiningRequest from "../pages/restaurant/JoiningRequest";
 import RestaurantCommission from "../pages/restaurant/RestaurantCommission";
@@ -66,7 +67,6 @@ import TransactionReport from "../pages/reports/TransactionReport";
 import ExpenseReport from "../pages/reports/ExpenseReport";
 import DisbursementReportRestaurants from "../pages/reports/DisbursementReportRestaurants";
 import DisbursementReportDeliverymen from "../pages/reports/DisbursementReportDeliverymen";
-import FoodReport from "../pages/reports/FoodReport";
 import RegularOrderReport from "../pages/reports/RegularOrderReport";
 import CampaignOrderReport from "../pages/reports/CampaignOrderReport";
 import RestaurantReport from "../pages/reports/RestaurantReport";
@@ -86,11 +86,6 @@ import AddEmployee from "../pages/employees/AddEmployee";
 import EmployeeList from "../pages/employees/EmployeeList";
 // Business Settings
 import BusinessSetup from "../pages/settings/BusinessSetup";
-import CreateTaxes from "../pages/settings/CreateTaxes";
-import SetupTaxes from "../pages/settings/SetupTaxes";
-import SubscriptionPackages from "../pages/settings/SubscriptionPackages";
-import SubscriberList from "../pages/settings/SubscriberList";
-import SubscriptionSettings from "../pages/settings/SubscriptionSettings";
 import EmailTemplate from "../pages/settings/EmailTemplate";
 import ThemeSettings from "../pages/settings/ThemeSettings";
 import Gallery from "../pages/settings/Gallery";
@@ -169,6 +164,7 @@ export default function AdminRouter() {
         {/* RESTAURANT MANAGEMENT */}
         <Route path="zone-setup" element={<ZoneSetup />} />
         <Route path="zone-setup/map" element={<AllZonesMap />} />
+        <Route path="zone-setup/delivery-boy-view" element={<DeliveryBoyViewMap />} />
         <Route path="zone-setup/add" element={<AddZone />} />
         <Route path="zone-setup/edit/:id" element={<AddZone />} />
         <Route path="zone-setup/view/:id" element={<ViewZone />} />
@@ -241,7 +237,6 @@ export default function AdminRouter() {
         {/* Disbursement Report */}
         <Route path="disbursement-report/restaurants" element={<DisbursementReportRestaurants />} />
         <Route path="disbursement-report/deliverymen" element={<DisbursementReportDeliverymen />} />
-        <Route path="food-report" element={<FoodReport />} />
         {/* Order Report */}
         <Route path="order-report/regular" element={<RegularOrderReport />} />
         <Route path="order-report/campaign" element={<CampaignOrderReport />} />
@@ -268,13 +263,6 @@ export default function AdminRouter() {
 
         {/* BUSINESS SETTINGS */}
         <Route path="business-setup" element={<BusinessSetup />} />
-        {/* System Tax */}
-        <Route path="system-tax/create" element={<CreateTaxes />} />
-        <Route path="system-tax/setup" element={<SetupTaxes />} />
-        {/* Subscription Management */}
-        <Route path="subscription-management/packages" element={<SubscriptionPackages />} />
-        <Route path="subscription-management/subscribers" element={<SubscriberList />} />
-        <Route path="subscription-management/settings" element={<SubscriptionSettings />} />
         <Route path="email-template" element={<EmailTemplate />} />
         <Route path="theme-settings" element={<ThemeSettings />} />
         <Route path="gallery" element={<Gallery />} />

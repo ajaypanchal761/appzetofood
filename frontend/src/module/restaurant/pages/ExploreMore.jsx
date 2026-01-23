@@ -15,7 +15,6 @@ import {
   Settings,
   Bell,
   Truck,
-  Hourglass,
   FileText,
   Star,
   MessageSquare,
@@ -334,7 +333,6 @@ function TimePickerWheel({
 
 export default function ExploreMore() {
   const navigate = useNavigate()
-  const [rushHourStatus, setRushHourStatus] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -684,7 +682,6 @@ export default function ExploreMore() {
   const settingsItems = [
     { id: 3, label: "Delivery settings", icon: Truck, route: "/restaurant/delivery-settings" },
     { id: 4, label: "Zone Setup", icon: MapPin, route: "/restaurant/zone-setup" },
-    { id: 5, label: "Rush hour", icon: Hourglass, route: "/restaurant/rush-hour", badge: rushHourStatus ? null : "OFF" },
     { id: 6, label: "Schedule off", icon: Clock, route: "/restaurant/schedule-off" },
   ]
 
