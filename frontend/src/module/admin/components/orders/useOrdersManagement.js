@@ -154,109 +154,152 @@ export function useOrdersManagement(orders, statusKey, title) {
     setIsViewOrderOpen(true)
   }
 
-  const handlePrintOrder = (order) => {
-    const printWindow = window.open("", "_blank")
-    
-    // Generate items table HTML
-    const itemsHtml = order.items && Array.isArray(order.items) && order.items.length > 0
-      ? `
-        <div style="margin: 30px 0;">
-          <h2 style="margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 10px;">Order Items</h2>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-            <thead>
-              <tr style="background-color: #f5f5f5; border-bottom: 2px solid #333;">
-                <th style="text-align: left; padding: 12px; border: 1px solid #ddd;">Qty</th>
-                <th style="text-align: left; padding: 12px; border: 1px solid #ddd;">Item Name</th>
-                <th style="text-align: right; padding: 12px; border: 1px solid #ddd;">Price</th>
-                <th style="text-align: right; padding: 12px; border: 1px solid #ddd;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${order.items.map((item, idx) => {
-                const itemTotal = (item.quantity || 1) * (item.price || 0)
-                return `
-                  <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${item.quantity || 1}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd;">${item.name || 'Unknown Item'}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">$${(item.price || 0).toFixed(2)}</td>
-                    <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">$${itemTotal.toFixed(2)}</td>
-                  </tr>
-                `
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      `
-      : '<div style="margin: 20px 0; color: #999; font-style: italic;">No items found</div>'
-    
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Order Invoice - ${order.orderId}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-            .order-info { margin-bottom: 20px; }
-            .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
-            .label { font-weight: bold; }
-            @media print { 
-              body { padding: 20px; }
-              table { page-break-inside: avoid; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Order Invoice</h1>
-            <p>Order ID: ${order.orderId}</p>
-          </div>
-          <div class="order-info">
-            <div class="info-row">
-              <span class="label">Date:</span>
-              <span>${order.date}, ${order.time}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Customer:</span>
-              <span>${order.customerName}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Phone:</span>
-              <span>${order.customerPhone}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Restaurant:</span>
-              <span>${order.restaurant}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Delivery Type:</span>
-              <span>${order.deliveryType}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Order Status:</span>
-              <span>${order.orderStatus}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Payment Status:</span>
-              <span>${order.paymentStatus}</span>
-            </div>
-          </div>
-          ${itemsHtml}
-          <div class="info-row" style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #333;">
-            <span class="label" style="font-size: 18px;">Total Amount:</span>
-            <span style="font-size: 18px; font-weight: bold;">$${order.totalAmount.toFixed(2)}</span>
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(() => window.close(), 100);
-            }
-          </script>
-        </body>
-      </html>
-    `
-    printWindow.document.write(htmlContent)
-    printWindow.document.close()
+  const handlePrintOrder = async (order) => {
+    try {
+      // Dynamic import of jsPDF and autoTable for instant PDF download
+      const { default: jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
+
+      // Add title
+      doc.setFontSize(18)
+      doc.setTextColor(30, 30, 30)
+      doc.text('Order Invoice', 105, 20, { align: 'center' })
+      
+      // Order ID
+      doc.setFontSize(12)
+      doc.setTextColor(100, 100, 100)
+      const orderId = order.orderId || order.id || order.subscriptionId || 'N/A'
+      doc.text(`Order ID: ${orderId}`, 105, 28, { align: 'center' })
+      
+      // Date
+      doc.setFontSize(10)
+      const orderDate = order.date && order.time ? `${order.date}, ${order.time}` : (order.date || new Date().toLocaleDateString())
+      doc.text(`Date: ${orderDate}`, 105, 34, { align: 'center' })
+      
+      let startY = 45
+      
+      // Customer Information
+      if (order.customerName || order.customerPhone) {
+        doc.setFontSize(12)
+        doc.setTextColor(30, 30, 30)
+        doc.text('Customer Information', 14, startY)
+        startY += 8
+        
+        doc.setFontSize(10)
+        doc.setTextColor(60, 60, 60)
+        if (order.customerName) {
+          doc.text(`Name: ${order.customerName}`, 14, startY)
+          startY += 6
+        }
+        if (order.customerPhone) {
+          doc.text(`Phone: ${order.customerPhone}`, 14, startY)
+          startY += 6
+        }
+        startY += 5
+      }
+      
+      // Restaurant Information
+      if (order.restaurant) {
+        doc.setFontSize(12)
+        doc.setTextColor(30, 30, 30)
+        doc.text('Restaurant', 14, startY)
+        startY += 8
+        
+        doc.setFontSize(10)
+        doc.setTextColor(60, 60, 60)
+        doc.text(order.restaurant, 14, startY)
+        startY += 10
+      }
+      
+      // Delivery Type
+      if (order.deliveryType) {
+        doc.setFontSize(10)
+        doc.text(`Delivery Type: ${order.deliveryType}`, 14, startY)
+        startY += 8
+      }
+      
+      // Order Items Table
+      if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+        const tableData = order.items.map((item) => [
+          item.quantity || 1,
+          item.name || 'Unknown Item',
+          `₹${(item.price || 0).toFixed(2)}`,
+          `₹${((item.quantity || 1) * (item.price || 0)).toFixed(2)}`
+        ])
+        
+        autoTable(doc, {
+          startY: startY,
+          head: [['Qty', 'Item Name', 'Price', 'Total']],
+          body: tableData,
+          theme: 'striped',
+          headStyles: {
+            fillColor: [59, 130, 246],
+            textColor: 255,
+            fontStyle: 'bold',
+            fontSize: 10
+          },
+          bodyStyles: {
+            fontSize: 9,
+            textColor: [30, 30, 30]
+          },
+          alternateRowStyles: {
+            fillColor: [245, 247, 250]
+          },
+          styles: {
+            cellPadding: 4,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.5
+          },
+          columnStyles: {
+            0: { cellWidth: 20, halign: 'center' },
+            1: { cellWidth: 80 },
+            2: { cellWidth: 35, halign: 'right' },
+            3: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
+          },
+          margin: { left: 14, right: 14 }
+        })
+        
+        startY = doc.lastAutoTable.finalY + 10
+      }
+      
+      // Total Amount
+      if (order.totalAmount) {
+        doc.setFontSize(14)
+        doc.setTextColor(30, 30, 30)
+        doc.setFont(undefined, 'bold')
+        const totalAmount = typeof order.totalAmount === 'number' ? order.totalAmount.toFixed(2) : order.totalAmount
+        doc.text(`Total Amount: ₹${totalAmount}`, 14, startY)
+        startY += 8
+      }
+      
+      // Payment Status
+      if (order.paymentStatus) {
+        doc.setFontSize(10)
+        doc.setTextColor(100, 100, 100)
+        doc.setFont(undefined, 'normal')
+        doc.text(`Payment Status: ${order.paymentStatus}`, 14, startY)
+        startY += 6
+      }
+      
+      // Order Status
+      if (order.orderStatus) {
+        doc.setFontSize(10)
+        doc.text(`Order Status: ${order.orderStatus}`, 14, startY)
+      }
+      
+      // Save the PDF instantly
+      const filename = `Invoice_${orderId}_${new Date().toISOString().split("T")[0]}.pdf`
+      doc.save(filename)
+    } catch (error) {
+      console.error("Error generating PDF invoice:", error)
+      alert("Failed to download PDF invoice. Please try again.")
+    }
   }
 
   const toggleColumn = (columnKey) => {

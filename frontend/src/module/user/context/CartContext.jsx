@@ -39,27 +39,35 @@ export function CartProvider({ children }) {
         const newItemRestaurantId = item?.restaurantId;
         const newItemRestaurantName = item?.restaurant;
         
-        // Check if restaurant IDs match
-        if (firstItemRestaurantId && newItemRestaurantId && 
-            firstItemRestaurantId !== newItemRestaurantId) {
-          console.error('❌ Cannot add item: Cart contains items from different restaurant!', {
-            cartRestaurantId: firstItemRestaurantId,
-            cartRestaurantName: firstItemRestaurantName,
-            newItemRestaurantId: newItemRestaurantId,
-            newItemRestaurantName: newItemRestaurantName
-          });
-          // Show error to user (will be handled by calling component)
-          throw new Error(`Cart already contains items from "${firstItemRestaurantName}". Please clear cart or complete order first.`);
-        }
+        // Normalize restaurant names for comparison (trim and case-insensitive)
+        const normalizeName = (name) => name ? name.trim().toLowerCase() : '';
+        const firstRestaurantNameNormalized = normalizeName(firstItemRestaurantName);
+        const newRestaurantNameNormalized = normalizeName(newItemRestaurantName);
         
-        // Also check restaurant name as fallback
-        if (firstItemRestaurantName && newItemRestaurantName && 
-            firstItemRestaurantName !== newItemRestaurantName) {
-          console.error('❌ Cannot add item: Restaurant name mismatch!', {
-            cartRestaurantName: firstItemRestaurantName,
-            newItemRestaurantName: newItemRestaurantName
-          });
-          throw new Error(`Cart already contains items from "${firstItemRestaurantName}". Please clear cart or complete order first.`);
+        // Check restaurant name first (more reliable than IDs which can have different formats)
+        // If names match, allow it even if IDs differ (same restaurant, different ID format)
+        if (firstRestaurantNameNormalized && newRestaurantNameNormalized) {
+          if (firstRestaurantNameNormalized !== newRestaurantNameNormalized) {
+            console.error('❌ Cannot add item: Restaurant name mismatch!', {
+              cartRestaurantId: firstItemRestaurantId,
+              cartRestaurantName: firstItemRestaurantName,
+              newItemRestaurantId: newItemRestaurantId,
+              newItemRestaurantName: newItemRestaurantName
+            });
+            throw new Error(`Cart already contains items from "${firstItemRestaurantName}". Please clear cart or complete order first.`);
+          }
+          // Names match - allow it (even if IDs differ, it's the same restaurant)
+        } else if (firstItemRestaurantId && newItemRestaurantId) {
+          // If names are not available, fallback to ID comparison
+          if (firstItemRestaurantId !== newItemRestaurantId) {
+            console.error('❌ Cannot add item: Cart contains items from different restaurant!', {
+              cartRestaurantId: firstItemRestaurantId,
+              cartRestaurantName: firstItemRestaurantName,
+              newItemRestaurantId: newItemRestaurantId,
+              newItemRestaurantName: newItemRestaurantName
+            });
+            throw new Error(`Cart already contains items from "${firstItemRestaurantName || 'another restaurant'}". Please clear cart or complete order first.`);
+          }
         }
       }
       

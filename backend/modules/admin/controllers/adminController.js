@@ -3,6 +3,8 @@ import Order from '../../order/models/Order.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import Offer from '../../restaurant/models/Offer.js';
 import AdminCommission from '../models/AdminCommission.js';
+import OrderSettlement from '../../order/models/OrderSettlement.js';
+import AdminWallet from '../models/AdminWallet.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import winston from 'winston';
@@ -53,12 +55,69 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       }
     ]);
 
-    // Get commission earned from AdminCommission model (actual commission from orders)
-    const totalCommissionData = await AdminCommission.getTotalCommission();
-    const last30DaysCommissionData = await AdminCommission.getTotalCommission(last30Days, now);
+    // Get revenue data from aggregation result
+    const revenueData = revenueStats[0] || { totalRevenue: 0, last30DaysRevenue: 0 };
+
+    // Get all settlements for delivered orders only (to match with revenue calculation)
+    // First get delivered order IDs
+    const deliveredOrderIds = await Order.find({ status: 'delivered' }).select('_id').lean();
+    const deliveredOrderIdArray = deliveredOrderIds.map(o => o._id);
     
-    const totalCommission = totalCommissionData.totalCommission || 0;
-    const last30DaysCommission = last30DaysCommissionData.totalCommission || 0;
+    // Get settlements only for delivered orders
+    const allSettlements = await OrderSettlement.find({
+      orderId: { $in: deliveredOrderIdArray }
+    }).lean();
+    
+    console.log(`📊 Dashboard Stats - Total settlements found: ${allSettlements.length}`);
+    
+    // Debug: Log first settlement to see actual structure
+    if (allSettlements.length > 0) {
+      const firstSettlement = allSettlements[0];
+      console.log('🔍 First settlement sample:', {
+        orderNumber: firstSettlement.orderNumber,
+        adminEarning: firstSettlement.adminEarning,
+        userPayment: firstSettlement.userPayment
+      });
+    }
+    
+    // Calculate totals from all settlements - use adminEarning fields
+    let totalCommission = 0;
+    let totalPlatformFee = 0;
+    let totalDeliveryFee = 0;
+    let totalGST = 0;
+    
+    allSettlements.forEach((s, index) => {
+      const commission = s.adminEarning?.commission || 0;
+      const platformFee = s.adminEarning?.platformFee || 0;
+      const deliveryFee = s.adminEarning?.deliveryFee || 0;
+      const gst = s.adminEarning?.gst || 0;
+      
+      totalCommission += commission;
+      totalPlatformFee += platformFee;
+      totalDeliveryFee += deliveryFee;
+      totalGST += gst;
+      
+      // Log each settlement for debugging
+      if (index < 5) { // Log first 5 settlements
+        console.log(`📦 Settlement ${index + 1} (${s.orderNumber}): Commission: ₹${commission}, Platform: ₹${platformFee}, Delivery: ₹${deliveryFee}, GST: ₹${gst}`);
+      }
+    });
+    
+    totalCommission = Math.round(totalCommission * 100) / 100;
+    totalPlatformFee = Math.round(totalPlatformFee * 100) / 100;
+    totalDeliveryFee = Math.round(totalDeliveryFee * 100) / 100;
+    totalGST = Math.round(totalGST * 100) / 100;
+    
+    console.log(`💰 Final calculated totals - Commission: ₹${totalCommission}, Platform Fee: ₹${totalPlatformFee}, Delivery Fee: ₹${totalDeliveryFee}, GST: ₹${totalGST}`);
+    
+    // Get last 30 days data from OrderSettlement
+    const last30DaysSettlements = await OrderSettlement.find({
+      createdAt: { $gte: last30Days, $lte: now }
+    }).lean();
+    const last30DaysCommission = last30DaysSettlements.reduce((sum, s) => sum + (s.adminEarning?.commission || 0), 0);
+    const last30DaysPlatformFee = last30DaysSettlements.reduce((sum, s) => sum + (s.adminEarning?.platformFee || 0), 0);
+    const last30DaysDeliveryFee = last30DaysSettlements.reduce((sum, s) => sum + (s.adminEarning?.deliveryFee || 0), 0);
+    const last30DaysGST = last30DaysSettlements.reduce((sum, s) => sum + (s.adminEarning?.gst || 0), 0);
 
     // Get order statistics
     const orderStats = await Order.aggregate([
@@ -87,6 +146,70 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       isActive: true 
     });
     const activePartners = activeRestaurants + activeDeliveryPartners;
+    
+    // Get additional stats
+    // Total restaurants (all restaurants)
+    const totalRestaurants = await Restaurant.countDocuments({});
+    
+    // Restaurant requests pending (inactive restaurants with completed onboarding, no rejection)
+    const pendingRestaurantRequestsQuery = {
+      isActive: false,
+      $and: [
+        {
+          $or: [
+            { 'onboarding.completedSteps': 4 },
+            {
+              $and: [
+                { 'name': { $exists: true, $ne: null, $ne: '' } },
+                { 'cuisines': { $exists: true, $ne: null, $not: { $size: 0 } } },
+                { 'openDays': { $exists: true, $ne: null, $not: { $size: 0 } } },
+                { 'estimatedDeliveryTime': { $exists: true, $ne: null, $ne: '' } },
+                { 'featuredDish': { $exists: true, $ne: null, $ne: '' } }
+              ]
+            }
+          ]
+        },
+        {
+          $or: [
+            { 'rejectionReason': { $exists: false } },
+            { 'rejectionReason': null }
+          ]
+        }
+      ]
+    };
+    const pendingRestaurantRequests = await Restaurant.countDocuments(pendingRestaurantRequestsQuery);
+    
+    // Total delivery boys (all delivery users)
+    const totalDeliveryBoys = await User.countDocuments({ role: 'delivery' });
+    
+    // Delivery boy requests pending (delivery users with isActive: false or verification pending)
+    // Assuming deliveryStatus field exists, if not we'll use isActive: false
+    const pendingDeliveryBoyRequests = await User.countDocuments({
+      role: 'delivery',
+      $or: [
+        { isActive: false },
+        { deliveryStatus: 'pending' }
+      ]
+    });
+    
+    // Total foods (Menu items)
+    const Menu = (await import('../../restaurant/models/Menu.js')).default;
+    const totalFoods = await Menu.countDocuments({ isActive: true });
+    
+    // Total customers (users with role 'user' or no role specified)
+    const totalCustomers = await User.countDocuments({
+      $or: [
+        { role: 'user' },
+        { role: { $exists: false } },
+        { role: null }
+      ]
+    });
+    
+    // Pending orders (already in orderStatusMap)
+    const pendingOrders = orderStatusMap.pending || 0;
+    
+    // Completed orders (delivered orders)
+    const completedOrders = orderStatusMap.delivered || 0;
 
     // Get recent activity (last 24 hours)
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -98,6 +221,61 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       isActive: true
     });
 
+    // Get monthly data for last 12 months
+    // Use aggregation to match orders with settlements by orderId and use order's deliveredAt
+    const monthlyData = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    for (let i = 11; i >= 0; i--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+      
+      // Get orders delivered in this month
+      const monthOrders = await Order.find({
+        status: 'delivered',
+        deliveredAt: { $gte: monthStart, $lte: monthEnd }
+      }).select('_id pricing deliveredAt').lean();
+      
+      // Get order IDs for this month
+      const monthOrderIds = monthOrders.map(o => o._id);
+      
+      // Get settlements for these orders (match by orderId, not by createdAt)
+      const monthSettlements = await OrderSettlement.find({
+        orderId: { $in: monthOrderIds }
+      }).select('orderId adminEarning').lean();
+      
+      // Create a map of orderId to settlement for quick lookup
+      const settlementMap = new Map();
+      monthSettlements.forEach(s => {
+        settlementMap.set(s.orderId.toString(), s);
+      });
+      
+      // Calculate revenue and commission from orders and their settlements
+      let monthRevenue = 0;
+      let monthCommission = 0;
+      
+      monthOrders.forEach(order => {
+        // Add revenue from order
+        monthRevenue += order.pricing?.total || 0;
+        
+        // Get commission from matching settlement
+        const settlement = settlementMap.get(order._id.toString());
+        if (settlement && settlement.adminEarning) {
+          // Only add commission (restaurant commission), not totalEarning
+          monthCommission += settlement.adminEarning.commission || 0;
+        }
+      });
+      
+      const monthOrdersCount = monthOrders.length;
+      
+      monthlyData.push({
+        month: monthNames[monthStart.getMonth()],
+        revenue: Math.round(monthRevenue * 100) / 100,
+        commission: Math.round(monthCommission * 100) / 100,
+        orders: monthOrdersCount
+      });
+    }
+
     return successResponse(res, 200, 'Dashboard stats retrieved successfully', {
       revenue: {
         total: revenueData.totalRevenue || 0,
@@ -107,8 +285,27 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       commission: {
         total: totalCommission,
         last30Days: last30DaysCommission,
-        currency: 'INR',
-        rate: commissionRate * 100 // Percentage
+        currency: 'INR'
+      },
+      platformFee: {
+        total: totalPlatformFee,
+        last30Days: last30DaysPlatformFee,
+        currency: 'INR'
+      },
+      deliveryFee: {
+        total: totalDeliveryFee,
+        last30Days: last30DaysDeliveryFee,
+        currency: 'INR'
+      },
+      gst: {
+        total: totalGST,
+        last30Days: last30DaysGST,
+        currency: 'INR'
+      },
+      totalAdminEarnings: {
+        total: totalCommission + totalPlatformFee + totalDeliveryFee + totalGST,
+        last30Days: last30DaysCommission + last30DaysPlatformFee + last30DaysDeliveryFee + last30DaysGST,
+        currency: 'INR'
       },
       orders: {
         total: totalOrders,
@@ -131,6 +328,28 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
         orders: recentOrders,
         restaurants: recentRestaurants,
         period: 'last24Hours'
+      },
+      monthlyData: monthlyData, // Add monthly data for graphs
+      // Additional stats
+      restaurants: {
+        total: totalRestaurants,
+        active: activeRestaurants,
+        pendingRequests: pendingRestaurantRequests
+      },
+      deliveryBoys: {
+        total: totalDeliveryBoys,
+        active: activeDeliveryPartners,
+        pendingRequests: pendingDeliveryBoyRequests
+      },
+      foods: {
+        total: totalFoods
+      },
+      customers: {
+        total: totalCustomers
+      },
+      orderStats: {
+        pending: pendingOrders,
+        completed: completedOrders
       }
     });
   } catch (error) {
@@ -1515,101 +1734,83 @@ export const getRestaurantAnalytics = asyncHandler(async (req, res) => {
     const yearlyOrders = yearlyStats[0]?.count || 0;
     const yearlyRevenue = yearlyStats[0]?.revenue || 0;
 
-    // Get commission data from AdminCommission (restaurantId is ObjectId in AdminCommission)
-    const commissionStats = await AdminCommission.aggregate([
-      {
-        $match: {
-          restaurantId: mongoose.Types.ObjectId.isValid(restaurantId) 
-            ? new mongoose.Types.ObjectId(restaurantId) 
-            : restaurantId,
-          status: 'completed'
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalCommission: { $sum: '$commissionAmount' },
-          totalOrderAmount: { $sum: '$orderAmount' },
-          totalRestaurantEarning: { $sum: '$restaurantEarning' }
-        }
-      }
-    ]);
+    // Get commission and earnings data from OrderSettlement (more accurate)
+    // Match settlements by restaurantId (ObjectId in OrderSettlement)
+    const restaurantIdForSettlement = restaurant._id instanceof mongoose.Types.ObjectId 
+      ? restaurant._id 
+      : new mongoose.Types.ObjectId(restaurant._id);
+    
+    // Get all settlements for this restaurant
+    const allSettlements = await OrderSettlement.find({
+      restaurantId: restaurantIdForSettlement
+    }).lean();
+    
+    // Calculate totals from settlements
+    let totalCommission = 0;
+    let totalRestaurantEarning = 0;
+    let totalFoodPrice = 0;
+    
+    allSettlements.forEach(s => {
+      totalCommission += s.restaurantEarning?.commission || 0;
+      totalRestaurantEarning += s.restaurantEarning?.netEarning || 0;
+      totalFoodPrice += s.restaurantEarning?.foodPrice || 0;
+    });
+    
+    totalCommission = Math.round(totalCommission * 100) / 100;
+    totalRestaurantEarning = Math.round(totalRestaurantEarning * 100) / 100;
+    totalFoodPrice = Math.round(totalFoodPrice * 100) / 100;
+    
+    // Get monthly settlements
+    const monthlySettlements = await OrderSettlement.find({
+      restaurantId: restaurantIdForSettlement,
+      createdAt: { $gte: startOfMonth }
+    }).lean();
+    
+    let monthlyCommission = 0;
+    let monthlyRestaurantEarning = 0;
+    monthlySettlements.forEach(s => {
+      monthlyCommission += s.restaurantEarning?.commission || 0;
+      monthlyRestaurantEarning += s.restaurantEarning?.netEarning || 0;
+    });
+    
+    monthlyCommission = Math.round(monthlyCommission * 100) / 100;
+    monthlyRestaurantEarning = Math.round(monthlyRestaurantEarning * 100) / 100;
+    const monthlyProfit = monthlyRestaurantEarning; // Restaurant profit = net earning
 
-    const totalCommission = commissionStats[0]?.totalCommission || 0;
-    const totalOrderAmount = commissionStats[0]?.totalOrderAmount || 0;
-    const restaurantEarning = commissionStats[0]?.totalRestaurantEarning || 0;
-
-    // Get monthly commission
-    const monthlyCommissionStats = await AdminCommission.aggregate([
-      {
-        $match: {
-          restaurantId: mongoose.Types.ObjectId.isValid(restaurantId) 
-            ? new mongoose.Types.ObjectId(restaurantId) 
-            : restaurantId,
-          status: 'completed',
-          orderDate: { $gte: startOfMonth }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalCommission: { $sum: '$commissionAmount' },
-          totalOrderAmount: { $sum: '$orderAmount' }
-        }
-      }
-    ]);
-
-    const monthlyCommission = monthlyCommissionStats[0]?.totalCommission || 0;
-    const monthlyProfit = monthlyCommission; // Admin profit = commission
-
-    // Get yearly commission
-    const yearlyCommissionStats = await AdminCommission.aggregate([
-      {
-        $match: {
-          restaurantId: mongoose.Types.ObjectId.isValid(restaurantId) 
-            ? new mongoose.Types.ObjectId(restaurantId) 
-            : restaurantId,
-          status: 'completed',
-          orderDate: { $gte: startOfYear }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalCommission: { $sum: '$commissionAmount' },
-          totalOrderAmount: { $sum: '$orderAmount' }
-        }
-      }
-    ]);
-
-    const yearlyCommission = yearlyCommissionStats[0]?.totalCommission || 0;
-    const yearlyProfit = yearlyCommission; // Admin profit = commission
+    // Get yearly settlements
+    const yearlySettlements = await OrderSettlement.find({
+      restaurantId: restaurantIdForSettlement,
+      createdAt: { $gte: startOfYear }
+    }).lean();
+    
+    let yearlyCommission = 0;
+    let yearlyRestaurantEarning = 0;
+    yearlySettlements.forEach(s => {
+      yearlyCommission += s.restaurantEarning?.commission || 0;
+      yearlyRestaurantEarning += s.restaurantEarning?.netEarning || 0;
+    });
+    
+    yearlyCommission = Math.round(yearlyCommission * 100) / 100;
+    yearlyRestaurantEarning = Math.round(yearlyRestaurantEarning * 100) / 100;
+    const yearlyProfit = yearlyRestaurantEarning; // Restaurant profit = net earning
 
     // Get average monthly profit (last 12 months)
     const last12MonthsStart = new Date(now.getFullYear(), now.getMonth() - 12, 1);
-    const avgMonthlyProfitStats = await AdminCommission.aggregate([
-      {
-        $match: {
-          restaurantId: mongoose.Types.ObjectId.isValid(restaurantId) 
-            ? new mongoose.Types.ObjectId(restaurantId) 
-            : restaurantId,
-          status: 'completed',
-          orderDate: { $gte: last12MonthsStart }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            year: { $year: '$orderDate' },
-            month: { $month: '$orderDate' }
-          },
-          monthlyCommission: { $sum: '$commissionAmount' }
-        }
-      }
-    ]);
-
-    const avgMonthlyProfit = avgMonthlyProfitStats.length > 0
-      ? avgMonthlyProfitStats.reduce((sum, stat) => sum + stat.monthlyCommission, 0) / avgMonthlyProfitStats.length
+    const last12MonthsSettlements = await OrderSettlement.find({
+      restaurantId: restaurantIdForSettlement,
+      createdAt: { $gte: last12MonthsStart }
+    }).lean();
+    
+    // Group by month
+    const monthlyEarningsMap = new Map();
+    last12MonthsSettlements.forEach(s => {
+      const monthKey = `${new Date(s.createdAt).getFullYear()}-${new Date(s.createdAt).getMonth()}`;
+      const current = monthlyEarningsMap.get(monthKey) || 0;
+      monthlyEarningsMap.set(monthKey, current + (s.restaurantEarning?.netEarning || 0));
+    });
+    
+    const avgMonthlyProfit = monthlyEarningsMap.size > 0
+      ? Array.from(monthlyEarningsMap.values()).reduce((sum, val) => sum + val, 0) / monthlyEarningsMap.size
       : 0;
 
     // Get commission percentage from RestaurantCommission
@@ -1810,7 +2011,7 @@ export const getRestaurantAnalytics = asyncHandler(async (req, res) => {
     // Calculate average yearly profit (if restaurant has been active for multiple years)
     const restaurantCreatedAt = restaurant.createdAt || new Date();
     const yearsActive = Math.max(1, (now - restaurantCreatedAt) / (365 * 24 * 60 * 60 * 1000));
-    const averageYearlyProfit = yearsActive > 0 ? yearlyProfit / yearsActive : yearlyProfit;
+    const averageYearlyProfit = yearsActive > 0 ? yearlyRestaurantEarning / yearsActive : yearlyRestaurantEarning;
 
     return successResponse(res, 200, 'Restaurant analytics retrieved successfully', {
       restaurant: {
@@ -1827,12 +2028,12 @@ export const getRestaurantAnalytics = asyncHandler(async (req, res) => {
         averageRating: averageRating ? parseFloat(averageRating.toFixed(1)) : 0,
         totalRatings: Number(totalRatings) || 0,
         commissionPercentage: Number(commissionPercentage) || 0,
-        monthlyProfit: parseFloat(monthlyProfit.toFixed(2)),
-        yearlyProfit: parseFloat(yearlyProfit.toFixed(2)),
+        monthlyProfit: parseFloat(monthlyRestaurantEarning.toFixed(2)),
+        yearlyProfit: parseFloat(yearlyRestaurantEarning.toFixed(2)),
         averageOrderValue: parseFloat(averageOrderValue.toFixed(2)),
         totalRevenue: parseFloat(totalRevenue.toFixed(2)),
         totalCommission: parseFloat(totalCommission.toFixed(2)),
-        restaurantEarning: parseFloat(restaurantEarning.toFixed(2)),
+        restaurantEarning: parseFloat(totalRestaurantEarning.toFixed(2)),
         monthlyOrders,
         yearlyOrders,
         averageMonthlyProfit: parseFloat(avgMonthlyProfit.toFixed(2)),

@@ -22,68 +22,112 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { Activity, ArrowUpRight, ShoppingBag, Users } from "lucide-react"
+import { Activity, ArrowUpRight, ShoppingBag, Users, CreditCard, Truck, Receipt, DollarSign, Store, UserCheck, Package, UserCircle, Clock, CheckCircle } from "lucide-react"
 import appzetoLogo from "@/assets/appzetologo.png"
+import { adminAPI } from "@/lib/api"
 
 export default function AdminHome() {
   const [selectedZone, setSelectedZone] = useState("all")
   const [selectedPeriod, setSelectedPeriod] = useState("overall")
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [dashboardData, setDashboardData] = useState(null)
 
+  // Fetch dashboard stats on mount
   useEffect(() => {
-    setIsLoading(true)
-    const timer = setTimeout(() => setIsLoading(false), 350)
-    return () => clearTimeout(timer)
+    const fetchDashboardStats = async () => {
+      try {
+        setIsLoading(true)
+        const response = await adminAPI.getDashboardStats()
+        if (response.data?.success && response.data?.data) {
+          setDashboardData(response.data.data)
+          console.log('✅ Dashboard stats fetched:', response.data.data)
+          console.log('💰 Commission:', response.data.data.commission)
+          console.log('💳 Platform Fee:', response.data.data.platformFee)
+          console.log('🚚 Delivery Fee:', response.data.data.deliveryFee)
+          console.log('🧾 GST:', response.data.data.gst)
+          console.log('💵 Total Admin Earnings:', response.data.data.totalAdminEarnings)
+        } else {
+          console.error('❌ Invalid response format:', response.data)
+        }
+      } catch (error) {
+        console.error('❌ Error fetching dashboard stats:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDashboardStats()
+  }, [])
+
+  // Update loading state when filters change
+  useEffect(() => {
+    if (dashboardData) {
+      setIsLoading(true)
+      const timer = setTimeout(() => setIsLoading(false), 350)
+      return () => clearTimeout(timer)
+    }
   }, [selectedZone, selectedPeriod])
 
+  // Get order stats from real data
   const getOrderStats = () => {
-    const base = [
-      { label: "Delivered", value: 0, color: "#0ea5e9" },
-      { label: "Cancelled", value: 0, color: "#ef4444" },
-      { label: "Refunded", value: 0, color: "#f59e0b" },
-      { label: "Pending", value: 0, color: "#10b981" },
-    ]
-    if (selectedZone !== "all" || selectedPeriod !== "overall") {
-      return base.map((item) => ({
-        ...item,
-        value: 0,
-      }))
+    if (!dashboardData?.orders?.byStatus) {
+      return [
+        { label: "Delivered", value: 0, color: "#0ea5e9" },
+        { label: "Cancelled", value: 0, color: "#ef4444" },
+        { label: "Refunded", value: 0, color: "#f59e0b" },
+        { label: "Pending", value: 0, color: "#10b981" },
+      ]
     }
-    return base
+    
+    const byStatus = dashboardData.orders.byStatus
+    return [
+      { label: "Delivered", value: byStatus.delivered || 0, color: "#0ea5e9" },
+      { label: "Cancelled", value: byStatus.cancelled || 0, color: "#ef4444" },
+      { label: "Refunded", value: 0, color: "#f59e0b" }, // Refunded not tracked separately
+      { label: "Pending", value: byStatus.pending || 0, color: "#10b981" },
+    ]
   }
 
+  // Get monthly data from real data
   const getMonthlyData = () => {
-    const baseData = [
-      { month: "Jan", commission: 0, revenue: 0, orders: 0 },
-      { month: "Feb", commission: 0, revenue: 0, orders: 0 },
-      { month: "Mar", commission: 0, revenue: 0, orders: 0 },
-      { month: "Apr", commission: 0, revenue: 0, orders: 0 },
-      { month: "May", commission: 0, revenue: 0, orders: 0 },
-      { month: "Jun", commission: 0, revenue: 0, orders: 0 },
-      { month: "Jul", commission: 0, revenue: 0, orders: 0 },
-      { month: "Aug", commission: 0, revenue: 0, orders: 0 },
-      { month: "Sep", commission: 0, revenue: 0, orders: 0 },
-      { month: "Oct", commission: 0, revenue: 0, orders: 0 },
-      { month: "Nov", commission: 0, revenue: 0, orders: 0 },
-      { month: "Dec", commission: 0, revenue: 0, orders: 0 },
-    ]
-    if (selectedZone !== "all" || selectedPeriod !== "overall") {
-      return baseData.map((m) => ({
-        ...m,
-        commission: 0,
-        revenue: 0,
-        orders: 0,
-      }))
+    if (!dashboardData?.monthlyData || dashboardData.monthlyData.length === 0) {
+      // Return empty data structure if no data
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      return monthNames.map(month => ({ month, commission: 0, revenue: 0, orders: 0 }))
     }
-    return baseData
+    
+    // Use real monthly data from backend
+    return dashboardData.monthlyData.map(item => ({
+      month: item.month,
+      commission: item.commission || 0,
+      revenue: item.revenue || 0,
+      orders: item.orders || 0
+    }))
   }
 
   const orderStats = getOrderStats()
   const monthlyData = getMonthlyData()
 
-  const revenueTotal = monthlyData.reduce((sum, m) => sum + m.revenue, 0)
-  const commissionTotal = monthlyData.reduce((sum, m) => sum + m.commission, 0)
-  const ordersTotal = monthlyData.reduce((sum, m) => sum + m.orders, 0)
+  // Calculate totals from real data
+  const revenueTotal = dashboardData?.revenue?.total || 0
+  const commissionTotal = dashboardData?.commission?.total || 0
+  const ordersTotal = dashboardData?.orders?.total || 0
+  const activePartners = dashboardData?.partners?.total || 0
+  const platformFeeTotal = dashboardData?.platformFee?.total || 0
+  const deliveryFeeTotal = dashboardData?.deliveryFee?.total || 0
+  const gstTotal = dashboardData?.gst?.total || 0
+  // Total revenue = Commission + Platform Fee + Delivery Fee + GST
+  const totalAdminEarnings = commissionTotal + platformFeeTotal + deliveryFeeTotal + gstTotal
+  
+  // Additional stats
+  const totalRestaurants = dashboardData?.restaurants?.total || 0
+  const pendingRestaurantRequests = dashboardData?.restaurants?.pendingRequests || 0
+  const totalDeliveryBoys = dashboardData?.deliveryBoys?.total || 0
+  const pendingDeliveryBoyRequests = dashboardData?.deliveryBoys?.pendingRequests || 0
+  const totalFoods = dashboardData?.foods?.total || 0
+  const totalCustomers = dashboardData?.customers?.total || 0
+  const pendingOrders = dashboardData?.orderStats?.pending || 0
+  const completedOrders = dashboardData?.orderStats?.completed || 0
 
   const pieData = orderStats.map((item) => ({
     name: item.label,
@@ -153,7 +197,7 @@ export default function AdminHome() {
             <MetricCard
               title="Commission earned"
               value={`₹${commissionTotal.toLocaleString("en-IN")}`}
-              helper="Platform fees"
+              helper="Restaurant commission"
               icon={<ArrowUpRight className="h-5 w-5 text-indigo-600" />}
               accent="bg-indigo-200/40"
             />
@@ -166,10 +210,94 @@ export default function AdminHome() {
             />
             <MetricCard
               title="Active partners"
-              value="0"
+              value={activePartners.toLocaleString("en-IN")}
               helper="Vendors & couriers"
               icon={<Users className="h-5 w-5 text-cyan-600" />}
               accent="bg-cyan-200/40"
+            />
+            <MetricCard
+              title="Platform fee"
+              value={`₹${platformFeeTotal.toLocaleString("en-IN")}`}
+              helper="Total platform fees"
+              icon={<CreditCard className="h-5 w-5 text-purple-600" />}
+              accent="bg-purple-200/40"
+            />
+            <MetricCard
+              title="Delivery fee"
+              value={`₹${deliveryFeeTotal.toLocaleString("en-IN")}`}
+              helper="Total delivery fees"
+              icon={<Truck className="h-5 w-5 text-blue-600" />}
+              accent="bg-blue-200/40"
+            />
+            <MetricCard
+              title="GST"
+              value={`₹${gstTotal.toLocaleString("en-IN")}`}
+              helper="Total GST collected"
+              icon={<Receipt className="h-5 w-5 text-orange-600" />}
+              accent="bg-orange-200/40"
+            />
+            <MetricCard
+              title="Total revenue"
+              value={`₹${totalAdminEarnings.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              helper={`Commission ₹${commissionTotal.toFixed(2)} + Platform ₹${platformFeeTotal.toFixed(2)} + Delivery ₹${deliveryFeeTotal.toFixed(2)} + GST ₹${gstTotal.toFixed(2)}`}
+              icon={<DollarSign className="h-5 w-5 text-green-600" />}
+              accent="bg-green-200/40"
+            />
+            <MetricCard
+              title="Total restaurants"
+              value={totalRestaurants.toLocaleString("en-IN")}
+              helper="All registered restaurants"
+              icon={<Store className="h-5 w-5 text-blue-600" />}
+              accent="bg-blue-200/40"
+            />
+            <MetricCard
+              title="Restaurant request pending"
+              value={pendingRestaurantRequests.toLocaleString("en-IN")}
+              helper="Awaiting approval"
+              icon={<UserCheck className="h-5 w-5 text-orange-600" />}
+              accent="bg-orange-200/40"
+            />
+            <MetricCard
+              title="Total delivery boy"
+              value={totalDeliveryBoys.toLocaleString("en-IN")}
+              helper="All delivery partners"
+              icon={<Truck className="h-5 w-5 text-indigo-600" />}
+              accent="bg-indigo-200/40"
+            />
+            <MetricCard
+              title="Delivery boy request pending"
+              value={pendingDeliveryBoyRequests.toLocaleString("en-IN")}
+              helper="Awaiting verification"
+              icon={<Clock className="h-5 w-5 text-yellow-600" />}
+              accent="bg-yellow-200/40"
+            />
+            <MetricCard
+              title="Total foods"
+              value={totalFoods.toLocaleString("en-IN")}
+              helper="Active menu items"
+              icon={<Package className="h-5 w-5 text-purple-600" />}
+              accent="bg-purple-200/40"
+            />
+            <MetricCard
+              title="Total customers"
+              value={totalCustomers.toLocaleString("en-IN")}
+              helper="Registered users"
+              icon={<UserCircle className="h-5 w-5 text-cyan-600" />}
+              accent="bg-cyan-200/40"
+            />
+            <MetricCard
+              title="Pending orders"
+              value={pendingOrders.toLocaleString("en-IN")}
+              helper="Orders awaiting processing"
+              icon={<Clock className="h-5 w-5 text-red-600" />}
+              accent="bg-red-200/40"
+            />
+            <MetricCard
+              title="Completed orders"
+              value={completedOrders.toLocaleString("en-IN")}
+              helper="Successfully delivered"
+              icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
+              accent="bg-emerald-200/40"
             />
           </div>
 

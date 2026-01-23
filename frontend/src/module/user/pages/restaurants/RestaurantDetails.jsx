@@ -997,7 +997,7 @@ export default function RestaurantDetails() {
       </div>
 
       {/* Main Content Card */}
-      <div className="bg-white dark:bg-[#1a1a1a] rounded-t-3xl relative z-10 min-h-[40vh] pb-4 md:pb-6 lg:pb-8">
+      <div className="bg-white dark:bg-[#1a1a1a] rounded-t-3xl relative z-10 min-h-[40vh] pb-[160px] md:pb-[160px]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-5 md:py-6 lg:py-8 space-y-3 md:space-y-4 lg:space-y-5 pb-0">
           {/* Restaurant Name and Rating */}
           <div className="flex items-start justify-between">
@@ -1067,13 +1067,6 @@ export default function RestaurantDetails() {
                   </motion.span>
                 </AnimatePresence>
               </div>
-            </div>
-            <div
-              className="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
-              onClick={() => setShowOffersSheet(true)}
-            >
-              <span>{(restaurant?.offerCount || 0)} offers</span>
-              <ChevronDown className="h-4 w-4" />
             </div>
           </div>
 
@@ -2705,7 +2698,7 @@ export default function RestaurantDetails() {
 
       {/* Add to Cart Animation Component */}
       <AddToCartAnimation
-        bottomOffset={96}
+        bottomOffset={150}
         linkTo="/cart"
         hideOnPages={true}
       />

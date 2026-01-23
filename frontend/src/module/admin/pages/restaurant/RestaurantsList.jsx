@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from "react"
 import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, MapPin, Phone, Mail, Clock, Star, Building2, User, FileText, CreditCard, Calendar, Image as ImageIcon, ExternalLink, ShieldX, AlertTriangle, Trash2 } from "lucide-react"
 import { adminAPI, restaurantAPI } from "../../../../lib/api"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { exportRestaurantsToPDF } from "../../components/restaurants/restaurantsExportUtils"
 
 // Import icons from Dashboard-icons
 import locationIcon from "../../assets/Dashboard-icons/image1.png"
@@ -377,6 +379,13 @@ export default function RestaurantsList() {
     setDeleteConfirmDialog(null)
   }
 
+  // Handle export functionality
+  const handleExport = () => {
+    const dataToExport = filteredRestaurants.length > 0 ? filteredRestaurants : restaurants
+    const filename = "restaurants_list"
+    exportRestaurantsToPDF(dataToExport, filename)
+  }
+
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -449,11 +458,23 @@ export default function RestaurantsList() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               </div>
 
-              <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
-                <Download className="w-4 h-4" />
-                <span>Export</span>
-                <ChevronDown className="w-3 h-3" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
+                    <Download className="w-4 h-4" />
+                    <span>Export</span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 animate-in fade-in-0 zoom-in-95 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95">
+                  <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleExport} className="cursor-pointer flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <button className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all">
                 <Settings className="w-4 h-4" />

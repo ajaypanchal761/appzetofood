@@ -130,9 +130,9 @@ export function useLocation() {
       const isInIndiaRange = latitude >= 6.5 && latitude <= 37.1 && longitude >= 68.7 && longitude <= 97.4 && longitude > 0
       
       if (!isInIndiaRange || longitude < 0) {
-        console.error("❌ BLOCKED: Coordinates are OUTSIDE India range!")
-        console.error("❌ Coordinates: Lat", latitude, "Lng", longitude)
-        console.error("❌ India Range: Lat 6.5-37.1, Lng 68.7-97.4 (must be positive/East)")
+        console.warn("⚠️ Coordinates are outside India range - skipping geocoding")
+        console.warn("⚠️ Coordinates: Lat", latitude, "Lng", longitude)
+        console.warn("⚠️ India Range: Lat 6.5-37.1, Lng 68.7-97.4 (must be positive/East)")
         throw new Error("Coordinates outside India range")
       }
       
@@ -1326,6 +1326,24 @@ export function useLocation() {
       const res = await userAPI.getLocation()
       const loc = res?.data?.data?.location
       if (loc?.latitude && loc?.longitude) {
+        // Validate coordinates are in India range BEFORE attempting geocoding
+        const isInIndiaRange = loc.latitude >= 6.5 && loc.latitude <= 37.1 && loc.longitude >= 68.7 && loc.longitude <= 97.4 && loc.longitude > 0
+        
+        if (!isInIndiaRange || loc.longitude < 0) {
+          // Coordinates are outside India - return placeholder
+          console.warn("⚠️ Coordinates from DB are outside India range:", { latitude: loc.latitude, longitude: loc.longitude })
+          return {
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            city: "Current Location",
+            state: "",
+            country: "",
+            area: "",
+            address: "Select location",
+            formattedAddress: "Select location",
+          }
+        }
+        
         try {
           const addr = await reverseGeocodeWithGoogleMaps(
             loc.latitude,
@@ -1334,7 +1352,7 @@ export function useLocation() {
           return { ...addr, latitude: loc.latitude, longitude: loc.longitude }
         } catch (geocodeErr) {
           // If reverse geocoding fails, return location without coordinates in address
-          console.error("Reverse geocoding failed in fetchLocationFromDB:", geocodeErr)
+          console.warn("⚠️ Reverse geocoding failed in fetchLocationFromDB:", geocodeErr.message)
           return {
             latitude: loc.latitude,
             longitude: loc.longitude,
@@ -1399,9 +1417,39 @@ export function useLocation() {
                 coordinates: `${latitude.toFixed(8)}, ${longitude.toFixed(8)}`
               })
               
+              // Validate coordinates are in India range BEFORE attempting geocoding
+              // India: Latitude 6.5° to 37.1° N, Longitude 68.7° to 97.4° E
+              const isInIndiaRange = latitude >= 6.5 && latitude <= 37.1 && longitude >= 68.7 && longitude <= 97.4 && longitude > 0
+              
               // Get address from Google Maps API
-              console.log("🔍 Calling reverse geocode with coordinates:", { latitude, longitude })
-              const addr = await reverseGeocodeWithGoogleMaps(latitude, longitude)
+              let addr
+              if (!isInIndiaRange || longitude < 0) {
+                // Coordinates are outside India - skip geocoding and use placeholder
+                console.warn("⚠️ Coordinates outside India range, skipping geocoding:", { latitude, longitude })
+                addr = {
+                  city: "Current Location",
+                  state: "",
+                  country: "",
+                  area: "",
+                  address: "Select location",
+                  formattedAddress: "Select location",
+                }
+              } else {
+                console.log("🔍 Calling reverse geocode with coordinates:", { latitude, longitude })
+                try {
+                  addr = await reverseGeocodeWithGoogleMaps(latitude, longitude)
+                } catch (geocodeErr) {
+                  console.warn("⚠️ Reverse geocoding failed, using placeholder:", geocodeErr.message)
+                  addr = {
+                    city: "Current Location",
+                    state: "",
+                    country: "",
+                    area: "",
+                    address: "Select location",
+                    formattedAddress: "Select location",
+                  }
+                }
+              }
               console.log("✅ Reverse geocode result:", addr)
 
               // Ensure we don't use coordinates as address if we have area/city
@@ -1579,35 +1627,52 @@ export function useLocation() {
             // Reset retry count on success
             retryCount = 0
             
+            // Validate coordinates are in India range BEFORE attempting geocoding
+            // India: Latitude 6.5° to 37.1° N, Longitude 68.7° to 97.4° E
+            const isInIndiaRange = latitude >= 6.5 && latitude <= 37.1 && longitude >= 68.7 && longitude <= 97.4 && longitude > 0
+            
             // Get address from Google Maps API with error handling
             let addr
-            try {
-                addr = await reverseGeocodeWithGoogleMaps(latitude, longitude)
-              console.log("✅ Reverse geocoding successful:", { 
-                city: addr.city, 
-                area: addr.area, 
-                formattedAddress: addr.formattedAddress 
-              })
-            } catch (geocodeErr) {
-              console.error("❌ Google Maps reverse geocoding failed:", geocodeErr.message)
-              // Try fallback geocoding
+            if (!isInIndiaRange || longitude < 0) {
+              // Coordinates are outside India - skip geocoding and use placeholder
+              console.warn("⚠️ Coordinates outside India range, skipping geocoding:", { latitude, longitude })
+              addr = {
+                city: "Current Location",
+                state: "",
+                country: "",
+                area: "",
+                address: "Select location",
+                formattedAddress: "Select location",
+              }
+            } else {
               try {
-                console.log("🔄 Trying fallback geocoding...")
-                addr = await reverseGeocodeDirect(latitude, longitude)
-                console.log("✅ Fallback geocoding successful:", { 
+                addr = await reverseGeocodeWithGoogleMaps(latitude, longitude)
+                console.log("✅ Reverse geocoding successful:", { 
                   city: addr.city, 
-                  area: addr.area 
+                  area: addr.area, 
+                  formattedAddress: addr.formattedAddress 
                 })
-              } catch (fallbackErr) {
-                console.error("❌ Fallback geocoding also failed:", fallbackErr.message)
-                // Don't use coordinates - use placeholder instead
-                addr = {
-                  city: "Current Location",
-                  state: "",
-                  country: "",
-                  area: "",
-                  address: "Select location", // Don't show coordinates
-                  formattedAddress: "Select location", // Don't show coordinates
+              } catch (geocodeErr) {
+                console.error("❌ Google Maps reverse geocoding failed:", geocodeErr.message)
+                // Try fallback geocoding
+                try {
+                  console.log("🔄 Trying fallback geocoding...")
+                  addr = await reverseGeocodeDirect(latitude, longitude)
+                  console.log("✅ Fallback geocoding successful:", { 
+                    city: addr.city, 
+                    area: addr.area 
+                  })
+                } catch (fallbackErr) {
+                  console.error("❌ Fallback geocoding also failed:", fallbackErr.message)
+                  // Don't use coordinates - use placeholder instead
+                  addr = {
+                    city: "Current Location",
+                    state: "",
+                    country: "",
+                    area: "",
+                    address: "Select location", // Don't show coordinates
+                    formattedAddress: "Select location", // Don't show coordinates
+                  }
                 }
               }
             }

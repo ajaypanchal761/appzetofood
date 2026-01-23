@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { FileSpreadsheet, FileDown, FileText, Code } from "lucide-react"
+import { FileSpreadsheet, FileText } from "lucide-react"
 
 export default function OrdersTopbar({
   title,
@@ -54,12 +54,6 @@ export default function OrdersTopbar({
             <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
               <DropdownMenuLabel>Export Format</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onExport("csv")} className="cursor-pointer">
-                <div className="w-6 h-6 rounded-md bg-blue-50 flex items-center justify-center mr-3">
-                  <FileDown className="w-4 h-4 text-blue-600" />
-                </div>
-                <span>CSV</span>
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onExport("excel")} className="cursor-pointer">
                 <div className="w-6 h-6 rounded-md bg-green-50 flex items-center justify-center mr-3">
                   <FileSpreadsheet className="w-4 h-4 text-green-600" />
@@ -71,12 +65,6 @@ export default function OrdersTopbar({
                   <FileText className="w-4 h-4 text-red-600" />
                 </div>
                 <span>PDF</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onExport("json")} className="cursor-pointer">
-                <div className="w-6 h-6 rounded-md bg-purple-50 flex items-center justify-center mr-3">
-                  <Code className="w-4 h-4 text-purple-600" />
-                </div>
-                <span>JSON</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

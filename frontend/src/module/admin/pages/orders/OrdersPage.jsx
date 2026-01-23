@@ -22,7 +22,6 @@ const statusConfig = {
   "canceled": { title: "Canceled Orders", color: "rose", icon: Package },
   "payment-failed": { title: "Payment Failed Orders", color: "red", icon: Package },
   "refunded": { title: "Refunded Orders", color: "sky", icon: Package },
-  "dine-in": { title: "Dine In Orders", color: "blue", icon: Package },
   "offline-payments": { title: "Offline Payments", color: "slate", icon: Package },
 }
 

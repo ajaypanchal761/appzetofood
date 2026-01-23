@@ -179,7 +179,7 @@ const creditRestaurantWallet = async (restaurantId, orderId, netAmount, orderNum
         name: 'System'
       },
       transactionDetails: {
-        amount: amount,
+        amount: netAmount,
         type: 'payment',
         status: 'success',
         orderId: orderId,

@@ -151,22 +151,29 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
     console.log(`📅 Date range: ${currentCycleStart.toISOString()} to ${currentCycleEnd.toISOString()}`);
 
     // Calculate current cycle payout
+    // IMPORTANT: Commission is calculated on FOOD PRICE (subtotal - discount), NOT on total (which includes platform fee, GST, delivery fee)
     let currentCycleTotal = 0;
     let currentCycleCommission = 0;
     const currentCycleOrdersData = currentCycleOrders.map(order => {
-      const orderTotal = order.pricing?.total || 0;
-      const commissionData = calculateCommissionForOrder(orderTotal);
-      const payout = orderTotal - commissionData.commission;
+      // Food price = subtotal - discount (this is what commission is calculated on)
+      const foodPrice = (order.pricing?.subtotal || 0) - (order.pricing?.discount || 0);
+      const commissionData = calculateCommissionForOrder(foodPrice);
+      const payout = foodPrice - commissionData.commission;
       
-      currentCycleTotal += orderTotal;
+      currentCycleTotal += foodPrice; // Use food price, not total
       currentCycleCommission += commissionData.commission;
 
+      // Get food names from order items
+      const foodNames = (order.items || []).map(item => item.name).join(', ') || 'N/A';
+      
       return {
         orderId: order.orderId || order._id,
-        orderTotal,
+        orderTotal: foodPrice, // Food price (subtotal - discount) for display
         commission: commissionData.commission,
         payout,
-        deliveredAt: order.deliveredAt || order.createdAt
+        deliveredAt: order.deliveredAt || order.createdAt,
+        items: order.items || [], // Include full items array
+        foodNames: foodNames // Include food names as comma-separated string
       };
     });
 
@@ -214,19 +221,25 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
       let pastCycleTotal = 0;
       let pastCycleCommission = 0;
       const pastCycleOrdersData = pastCycleOrders.map(order => {
-        const orderTotal = order.pricing?.total || 0;
-        const commissionData = calculateCommissionForOrder(orderTotal);
-        const payout = orderTotal - commissionData.commission;
+        // Food price = subtotal - discount (this is what commission is calculated on)
+        const foodPrice = (order.pricing?.subtotal || 0) - (order.pricing?.discount || 0);
+        const commissionData = calculateCommissionForOrder(foodPrice);
+        const payout = foodPrice - commissionData.commission;
         
-        pastCycleTotal += orderTotal;
+        pastCycleTotal += foodPrice; // Use food price, not total
         pastCycleCommission += commissionData.commission;
 
+        // Get food names from order items
+        const foodNames = (order.items || []).map(item => item.name).join(', ') || 'N/A';
+        
         return {
           orderId: order.orderId || order._id,
-          orderTotal,
+          orderTotal: foodPrice, // Food price (subtotal - discount) for display
           commission: commissionData.commission,
           payout,
-          deliveredAt: order.deliveredAt || order.createdAt
+          deliveredAt: order.deliveredAt || order.createdAt,
+          items: order.items || [], // Include full items array
+          foodNames: foodNames // Include food names as comma-separated string
         };
       });
 
@@ -255,7 +268,7 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
         totalCommission: Math.round(currentCycleCommission * 100) / 100,
         estimatedPayout: currentCyclePayout,
         payoutDate: null, // Will be set when payout is processed
-        orders: currentCycleOrdersData
+        orders: currentCycleOrdersData // Include orders array in response
       },
       pastCycles: pastCyclesData,
       restaurant: {

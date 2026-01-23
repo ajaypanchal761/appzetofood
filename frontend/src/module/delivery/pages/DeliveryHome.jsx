@@ -1662,6 +1662,14 @@ export default function DeliveryHome() {
           console.log('📡 API Response:', response.data)
 
           if (response.data?.success && response.data.data) {
+            // Stop audio immediately when order is successfully accepted
+            if (alertAudioRef.current) {
+              alertAudioRef.current.pause()
+              alertAudioRef.current.currentTime = 0
+              alertAudioRef.current = null
+              console.log('[NewOrder] 🔇 Audio stopped (order accepted successfully)')
+            }
+            
             const orderData = response.data.data
             const order = orderData.order || orderData // Backend returns { order, route }
             const routeData = response.data.data.route
@@ -7385,12 +7393,7 @@ export default function DeliveryHome() {
                     )}
                   </button>
                 </>
-              ) : (
-                <>
-                  <h3 className="text-lg font-bold text-gray-900 mb-1">No hotspots are available</h3>
-                  <p className="text-sm text-gray-600">Please go online to see hotspots</p>
-                </>
-              )}
+              ) : null}
             </motion.div>
           )}
 

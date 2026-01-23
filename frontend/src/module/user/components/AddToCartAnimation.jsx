@@ -431,7 +431,10 @@ export default function AddToCartAnimation({
               damping: 30,
               mass: 0.8,
             }}
-            className={`${dynamicBottom ? `fixed ${dynamicBottom}` : 'sticky dark:bg-[#1a1a1a] bottom-0'} left-0 right-0 z-40 flex justify-center px-4 pb-4 md:pb-6 transition-all duration-300 ease-in-out`}
+            style={{
+              bottom: dynamicBottom ? undefined : `${bottomOffset || 20}px`,
+            }}
+            className={`fixed ${dynamicBottom || ''} left-0 right-0 z-[60] flex justify-center px-4 pb-4 md:pb-6 transition-all duration-300 ease-in-out bg-transparent`}
           >
             <button
               ref={linkRef}
