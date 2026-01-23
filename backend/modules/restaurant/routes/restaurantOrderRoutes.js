@@ -7,6 +7,10 @@ import {
   markOrderPreparing,
   markOrderReady
 } from '../controllers/restaurantOrderController.js';
+import {
+  getRestaurantReviews,
+  getReviewByOrderId
+} from '../controllers/reviewController.js';
 import { authenticate } from '../middleware/restaurantAuth.js';
 
 const router = express.Router();
@@ -18,6 +22,10 @@ router.patch('/orders/:id/accept', authenticate, acceptOrder);
 router.patch('/orders/:id/reject', authenticate, rejectOrder);
 router.patch('/orders/:id/preparing', authenticate, markOrderPreparing);
 router.patch('/orders/:id/ready', authenticate, markOrderReady);
+
+// Review routes
+router.get('/reviews', authenticate, getRestaurantReviews);
+router.get('/reviews/:orderId', authenticate, getReviewByOrderId);
 
 export default router;
 

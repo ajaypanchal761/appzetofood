@@ -195,6 +195,28 @@ const orderSchema = new mongoose.Schema({
   cancellationReason: {
     type: String
   },
+  // Customer Review and Rating
+  review: {
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      sparse: true
+    },
+    comment: {
+      type: String,
+      trim: true,
+      maxlength: 1000
+    },
+    submittedAt: {
+      type: Date
+    },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      sparse: true
+    }
+  },
   assignmentInfo: {
     restaurantId: String,
     distance: Number, // Distance in km

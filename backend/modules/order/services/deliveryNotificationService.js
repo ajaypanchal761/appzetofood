@@ -183,7 +183,8 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
       note: order.note || '',
       pickupDistance: pickupDistance ? `${pickupDistance.toFixed(2)} km` : 'Distance not available',
       deliveryDistance: deliveryDistance ? `${deliveryDistance.toFixed(2)} km` : 'Distance not available',
-      estimatedEarnings: calculateEstimatedEarnings(order.pricing.total, deliveryDistance)
+      deliveryDistanceRaw: deliveryDistance || 0, // Raw distance number for calculations
+      estimatedEarnings: await calculateEstimatedEarnings(deliveryDistance || 0)
     };
 
     // Get delivery namespace
@@ -401,14 +402,74 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
 }
 
 /**
- * Calculate estimated earnings for delivery boy
- * Simple calculation: 10% of order total + base fee
+ * Calculate estimated earnings for delivery boy based on admin commission rules
+ * Uses DeliveryBoyCommission model to calculate: Base Payout + (Distance × Per Km) if distance > minDistance
  */
-function calculateEstimatedEarnings(orderTotal, deliveryDistance) {
-  const baseFee = 20; // Base delivery fee
-  const commissionRate = 0.10; // 10% commission
-  const distanceFee = deliveryDistance ? deliveryDistance * 2 : 0; // ₹2 per km
-  
-  return Math.round((orderTotal * commissionRate) + baseFee + distanceFee);
+async function calculateEstimatedEarnings(deliveryDistance) {
+  try {
+    if (!deliveryDistance || deliveryDistance <= 0) {
+      // If no distance, return base payout only
+      const DeliveryBoyCommission = (await import('../../admin/models/DeliveryBoyCommission.js')).default;
+      const rules = await DeliveryBoyCommission.find({ status: true }).sort({ minDistance: 1 }).limit(1).lean();
+      if (rules.length > 0) {
+        return {
+          basePayout: rules[0].basePayout,
+          distance: 0,
+          commissionPerKm: 0,
+          distanceCommission: 0,
+          totalEarning: rules[0].basePayout,
+          breakdown: `Base payout: ₹${rules[0].basePayout}`
+        };
+      }
+      return {
+        basePayout: 10,
+        distance: 0,
+        commissionPerKm: 0,
+        distanceCommission: 0,
+        totalEarning: 10,
+        breakdown: 'Base payout: ₹10'
+      };
+    }
+
+    const DeliveryBoyCommission = (await import('../../admin/models/DeliveryBoyCommission.js')).default;
+    const commissionResult = await DeliveryBoyCommission.calculateCommission(deliveryDistance);
+    
+    const basePayout = commissionResult.breakdown.basePayout;
+    const distance = deliveryDistance;
+    const commissionPerKm = commissionResult.breakdown.commissionPerKm;
+    const distanceCommission = commissionResult.breakdown.distanceCommission;
+    const totalEarning = commissionResult.commission;
+
+    // Create breakdown text
+    let breakdown = `Base payout: ₹${basePayout}`;
+    if (distance > commissionResult.rule.minDistance) {
+      breakdown += ` + Distance (${distance.toFixed(1)} km × ₹${commissionPerKm}/km) = ₹${distanceCommission.toFixed(0)}`;
+    } else {
+      breakdown += ` (Distance ${distance.toFixed(1)} km ≤ ${commissionResult.rule.minDistance} km, per km not applicable)`;
+    }
+    breakdown += ` = ₹${totalEarning.toFixed(0)}`;
+
+    return {
+      basePayout: Math.round(basePayout * 100) / 100,
+      distance: Math.round(distance * 100) / 100,
+      commissionPerKm: Math.round(commissionPerKm * 100) / 100,
+      distanceCommission: Math.round(distanceCommission * 100) / 100,
+      totalEarning: Math.round(totalEarning * 100) / 100,
+      breakdown: breakdown,
+      minDistance: commissionResult.rule.minDistance,
+      maxDistance: commissionResult.rule.maxDistance
+    };
+  } catch (error) {
+    console.error('Error calculating estimated earnings:', error);
+    // Fallback to default calculation
+    return {
+      basePayout: 10,
+      distance: deliveryDistance || 0,
+      commissionPerKm: 5,
+      distanceCommission: deliveryDistance && deliveryDistance > 4 ? deliveryDistance * 5 : 0,
+      totalEarning: 10 + (deliveryDistance && deliveryDistance > 4 ? deliveryDistance * 5 : 0),
+      breakdown: 'Default calculation'
+    };
+  }
 }
 

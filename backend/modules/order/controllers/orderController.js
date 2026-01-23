@@ -7,6 +7,9 @@ import winston from 'winston';
 import { calculateOrderPricing } from '../services/orderCalculationService.js';
 import { getRazorpayCredentials } from '../../../shared/utils/envService.js';
 import { notifyRestaurantNewOrder } from '../services/restaurantNotificationService.js';
+import { calculateOrderSettlement } from '../services/orderSettlementService.js';
+import { holdEscrow } from '../services/escrowWalletService.js';
+import { processCancellationRefund } from '../services/cancellationRefundService.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -386,6 +389,21 @@ export const verifyOrderPayment = async (req, res) => {
     order.status = 'confirmed';
     order.tracking.confirmed = { status: true, timestamp: new Date() };
     await order.save();
+
+    // Calculate order settlement and hold escrow
+    try {
+      // Calculate settlement breakdown
+      await calculateOrderSettlement(order._id);
+      
+      // Hold funds in escrow
+      await holdEscrow(order._id, userId, order.pricing.total);
+      
+      logger.info(`✅ Order settlement calculated and escrow held for order ${order.orderId}`);
+    } catch (settlementError) {
+      logger.error(`❌ Error calculating settlement for order ${order.orderId}:`, settlementError);
+      // Don't fail payment verification if settlement calculation fails
+      // But log it for investigation
+    }
 
     // Notify restaurant about confirmed order (payment verified)
     try {

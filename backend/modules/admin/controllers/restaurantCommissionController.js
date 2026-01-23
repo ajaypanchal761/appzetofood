@@ -2,6 +2,7 @@ import RestaurantCommission from '../models/RestaurantCommission.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
+import AuditLog from '../models/AuditLog.js';
 import mongoose from 'mongoose';
 
 /**
@@ -302,6 +303,31 @@ export const createRestaurantCommission = asyncHandler(async (req, res) => {
 
     await commission.save();
 
+    // Create audit log
+    try {
+      await AuditLog.createLog({
+        entityType: 'commission',
+        entityId: commission._id,
+        action: 'create_restaurant_commission',
+        actionType: 'create',
+        performedBy: {
+          type: 'admin',
+          userId: adminId,
+          name: req.user?.name || 'Admin'
+        },
+        commissionChange: {
+          restaurantId: restaurantId,
+          newValue: defaultCommission.value,
+          newType: defaultCommission.type,
+          reason: 'Commission created'
+        },
+        description: `Restaurant commission created for ${restaurant.name}`
+      });
+    } catch (auditError) {
+      console.error('Error creating audit log:', auditError);
+      // Don't fail commission creation if audit log fails
+    }
+
     // Populate and return
     const populatedCommission = await RestaurantCommission.findById(commission._id)
       .populate('restaurant', 'name restaurantId isActive email phone')
@@ -409,9 +435,51 @@ export const updateRestaurantCommission = asyncHandler(async (req, res) => {
       commission.notes = notes;
     }
 
+    // Store old values for audit log
+    const oldDefaultCommission = {
+      type: commission.defaultCommission.type,
+      value: commission.defaultCommission.value
+    };
+
     commission.updatedBy = adminId;
 
     await commission.save();
+
+    // Create audit log for commission change
+    if (defaultCommission && (
+      oldDefaultCommission.value !== defaultCommission.value ||
+      oldDefaultCommission.type !== defaultCommission.type
+    )) {
+      try {
+        await AuditLog.createLog({
+          entityType: 'commission',
+          entityId: commission._id,
+          action: 'update_restaurant_commission',
+          actionType: 'commission_change',
+          performedBy: {
+            type: 'admin',
+            userId: adminId,
+            name: req.user?.name || 'Admin'
+          },
+          changes: {
+            before: oldDefaultCommission,
+            after: defaultCommission
+          },
+          commissionChange: {
+            restaurantId: commission.restaurant,
+            oldValue: oldDefaultCommission.value,
+            newValue: defaultCommission.value,
+            oldType: oldDefaultCommission.type,
+            newType: defaultCommission.type,
+            reason: notes || 'Commission updated'
+          },
+          description: `Restaurant commission updated for ${commission.restaurantName}`
+        });
+      } catch (auditError) {
+        console.error('Error creating audit log:', auditError);
+        // Don't fail commission update if audit log fails
+      }
+    }
 
     // Populate and return
     const populatedCommission = await RestaurantCommission.findById(commission._id)

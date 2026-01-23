@@ -99,6 +99,22 @@ import {
   rejectFoodItem
 } from '../controllers/foodApprovalController.js';
 import {
+  getOrderSettlementDetails,
+  getRestaurantSettlements,
+  getDeliverySettlements,
+  getRestaurantSettlementReport,
+  getDeliverySettlementReport,
+  markSettlementsProcessed,
+  getAdminWalletSummary,
+  getSettlementStatistics
+} from '../controllers/settlementController.js';
+import {
+  getAuditLogs,
+  getAuditLogById,
+  getEntityAuditLogs,
+  getCommissionChangeLogs
+} from '../controllers/auditLogController.js';
+import {
   getAbout,
   updateAbout
 } from '../controllers/aboutController.js';
@@ -151,6 +167,11 @@ import {
   getTransactionReport,
   getRestaurantReport
 } from '../controllers/orderController.js';
+import {
+  getAllReviews,
+  getReviewByOrderId,
+  getReviewsByRestaurant
+} from '../controllers/reviewController.js';
 import {
   getFeeSettings,
   createOrUpdateFeeSettings,
@@ -331,6 +352,11 @@ router.get('/orders', getOrders);
 router.get('/orders/searching-deliveryman', getSearchingDeliverymanOrders);
 router.get('/orders/ongoing', getOngoingOrders);
 router.get('/orders/transaction-report', getTransactionReport);
+
+// Review Management
+router.get('/reviews', getAllReviews);
+router.get('/reviews/:orderId', getReviewByOrderId);
+router.get('/reviews/restaurant/:restaurantId', getReviewsByRestaurant);
 router.get('/orders/restaurant-report', getRestaurantReport);
 router.get('/orders/:id', getOrderById);
 
@@ -340,6 +366,22 @@ router.put('/business-settings', uploadMiddleware.fields([
   { name: 'logo', maxCount: 1 },
   { name: 'favicon', maxCount: 1 }
 ]), updateBusinessSettings);
+
+// Settlement Routes
+router.get('/settlements/order/:orderId', getOrderSettlementDetails);
+router.get('/settlements/restaurants', getRestaurantSettlements);
+router.get('/settlements/delivery', getDeliverySettlements);
+router.get('/settlements/restaurants/:restaurantId/report', getRestaurantSettlementReport);
+router.get('/settlements/delivery/:deliveryId/report', getDeliverySettlementReport);
+router.post('/settlements/mark-processed', markSettlementsProcessed);
+router.get('/settlements/admin-wallet', getAdminWalletSummary);
+router.get('/settlements/statistics', getSettlementStatistics);
+
+// Audit Log Routes
+router.get('/audit-logs', getAuditLogs);
+router.get('/audit-logs/:id', getAuditLogById);
+router.get('/audit-logs/entity/:entityType/:entityId', getEntityAuditLogs);
+router.get('/audit-logs/commission-changes', getCommissionChangeLogs);
 
 export default router;
 

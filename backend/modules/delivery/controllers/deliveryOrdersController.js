@@ -971,20 +971,42 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       return errorResponse(res, 500, 'Order ID not found in order object');
     }
 
+    // Prepare update object
+    const updateData = {
+      status: 'delivered',
+      'tracking.delivered': {
+        status: true,
+        timestamp: new Date()
+      },
+      deliveredAt: new Date(),
+      'deliveryState.status': 'delivered',
+      'deliveryState.currentPhase': 'completed'
+    };
+    
+    // Add review and rating if provided
+    if (rating && rating >= 1 && rating <= 5) {
+      updateData['review.rating'] = rating;
+      updateData['review.submittedAt'] = new Date();
+      if (order.userId) {
+        updateData['review.reviewedBy'] = order.userId;
+      }
+    }
+    
+    if (review && review.trim()) {
+      updateData['review.comment'] = review.trim();
+      if (!updateData['review.submittedAt']) {
+        updateData['review.submittedAt'] = new Date();
+      }
+      if (order.userId && !updateData['review.reviewedBy']) {
+        updateData['review.reviewedBy'] = order.userId;
+      }
+    }
+    
     // Update order to delivered
     const updatedOrder = await Order.findByIdAndUpdate(
       orderMongoId,
       {
-        $set: {
-          status: 'delivered',
-          'tracking.delivered': {
-            status: true,
-            timestamp: new Date()
-          },
-          deliveredAt: new Date(),
-          'deliveryState.status': 'delivered',
-          'deliveryState.currentPhase': 'completed'
-        }
+        $set: updateData
       },
       { new: true, runValidators: true }
     )
@@ -998,6 +1020,16 @@ export const completeDelivery = asyncHandler(async (req, res) => {
 
     const orderIdForLog = updatedOrder.orderId || order.orderId || orderMongoId?.toString() || orderId;
     console.log(`✅ Order ${orderIdForLog} marked as delivered by delivery partner ${delivery._id}`);
+
+    // Release escrow and distribute funds (this handles all wallet credits)
+    try {
+      const { releaseEscrow } = await import('../../order/services/escrowWalletService.js');
+      await releaseEscrow(orderMongoId);
+      console.log(`✅ Escrow released and funds distributed for order ${orderIdForLog}`);
+    } catch (escrowError) {
+      console.error(`❌ Error releasing escrow for order ${orderIdForLog}:`, escrowError);
+      // Continue with legacy wallet update as fallback
+    }
 
     // Calculate delivery earnings based on admin's commission rules
     // Get delivery distance (in km) from order

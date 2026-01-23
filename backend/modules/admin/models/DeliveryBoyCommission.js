@@ -168,16 +168,16 @@ deliveryBoyCommissionSchema.statics.calculateCommission = async function(distanc
   let basePayout = applicableRule.basePayout;
   let distanceCommission = 0;
   
-  // Per km commission is only added if distance >= rule's minDistance
-  // Example scenarios:
-  // - Distance = 2 km, Rule = 4-10 km (₹4/km): commission = base only (2 < 4)
-  // - Distance = 7 km, Rule = 4-10 km (₹4/km): commission = base + (7 × 4)
-  // - Distance = 15 km, Rule = 10+ km (₹10/km): commission = base + (15 × 10)
-  if (distance >= applicableRule.minDistance) {
-    // Apply per km commission for the entire distance
+  // Per km commission is only added if distance > rule's minDistance (strictly greater)
+  // Example scenarios based on user requirement:
+  // - Distance = 4 km, Rule = 4-10 km (₹5/km, base ₹10): commission = base only (4 is not > 4)
+  // - Distance = 5 km, Rule = 4-10 km (₹5/km, base ₹10): commission = base + (5 × 5) = ₹35
+  // - Distance = 2 km, Rule = 4-10 km: commission = base only (2 < 4)
+  if (distance > applicableRule.minDistance) {
+    // Apply per km commission for the entire distance if distance > minDistance
     distanceCommission = distance * applicableRule.commissionPerKm;
   }
-  // If distance < minDistance, only base payout is given (distanceCommission = 0)
+  // If distance <= minDistance, only base payout is given (distanceCommission = 0)
   
   const commission = basePayout + distanceCommission;
   

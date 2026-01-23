@@ -437,6 +437,17 @@ export const rejectOrder = asyncHandler(async (req, res) => {
     order.cancelledAt = new Date();
     await order.save();
 
+    // Process cancellation refund
+    try {
+      const { processCancellationRefund } = await import('../../order/services/cancellationRefundService.js');
+      await processCancellationRefund(order._id, reason || 'Rejected by restaurant');
+      console.log(`✅ Cancellation refund processed for order ${order.orderId}`);
+    } catch (refundError) {
+      console.error(`❌ Error processing cancellation refund for order ${order.orderId}:`, refundError);
+      // Don't fail order cancellation if refund processing fails
+      // But log it for investigation
+    }
+
     // Notify about status update
     try {
       await notifyRestaurantOrderUpdate(order._id.toString(), 'cancelled');
