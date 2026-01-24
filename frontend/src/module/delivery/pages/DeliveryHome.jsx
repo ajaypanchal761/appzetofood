@@ -8770,14 +8770,15 @@ export default function DeliveryHome() {
                 </button>
               </div>
 
-              {/* Hidden file input for camera */}
+              {/* Hidden file input for camera (sr-only keeps it in DOM for mobile camera) */}
               <input
+                id="bill-camera-input"
                 ref={cameraInputRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
                 onChange={handleBillImageSelect}
-                className="hidden"
+                className="sr-only"
               />
             </div>
 
