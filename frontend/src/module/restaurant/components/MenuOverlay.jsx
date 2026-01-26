@@ -51,19 +51,14 @@ export default function MenuOverlay({ showMenu, setShowMenu }) {
   // Get menu options based on authentication state
   const getMenuOptions = () => {
     const baseOptions = [
-      { id: 3, name: "Edit Profile", icon: User, route: "/restaurant/profile/edit" },
       { id: 4, name: "All Food", icon: Utensils, route: "/restaurant/food/all" },
-      { id: 5, name: "Campaign", icon: Megaphone, route: "/restaurant/campaign" },
       { id: 6, name: "Restaurant Config", icon: Settings, route: "/restaurant/config" },
       { id: 7, name: "Advertisements", icon: Monitor, route: "/restaurant/advertisements" },
-      { id: 8, name: "Addons", icon: Plus, route: "/restaurant/addons" },
       { id: 9, name: "Categories", icon: Grid3x3, route: "/restaurant/categories" },
       { id: 10, name: "Coupon", icon: Tag, route: "/restaurant/coupon" },
       { id: 11, name: "My Business Plan", icon: FileText, route: "/restaurant/business-plan" },
       { id: 12, name: "Reviews", icon: MessageSquare, route: "/restaurant/reviews" },
-      { id: 13, name: "Reports", icon: FileText, route: "/restaurant/reports" },
       { id: 14, name: "Wallet Method", icon: Settings, route: "/restaurant/wallet" },
-      { id: 15, name: "Language", icon: Globe, route: "/restaurant/language" },
       { id: 16, name: "Settings", icon: Settings, route: "/restaurant/settings" },
       { id: 17, name: "Conversation", icon: MessageCircle, route: "/restaurant/conversation" },
       { id: 18, name: "Privacy Policy", icon: Shield, route: "/restaurant/privacy" },

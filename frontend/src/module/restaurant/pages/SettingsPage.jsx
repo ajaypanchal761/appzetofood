@@ -56,7 +56,6 @@ export default function SettingsPage() {
       id: "account",
       title: "Account",
       items: [
-        { id: "profile", label: "Edit Profile", icon: User, route: "/restaurant/profile/edit" },
         { id: "notifications", label: "Notifications", icon: Bell, hasToggle: true, toggleValue: notificationsEnabled, onToggle: setNotificationsEnabled },
         { id: "privacy", label: "Privacy & Security", icon: Shield, route: "/restaurant/privacy" },
       ]

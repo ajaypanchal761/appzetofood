@@ -23,7 +23,6 @@ import { restaurantAPI } from "@/lib/api"
 
 export default function OrdersPage() {
   const navigate = useNavigate()
-  const [activeMainTab, setActiveMainTab] = useState("regular")
   // Default to "all" to show all orders (active + history)
   const [activeFilterTab, setActiveFilterTab] = useState("all")
   const [showMenu, setShowMenu] = useState(false)
@@ -380,44 +379,14 @@ export default function OrdersPage() {
 
         {/* Main Navigation Tabs */}
         <div className="flex gap-4 mb-6 border-b border-gray-200">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setActiveMainTab("regular")}
-            className={`pb-3 px-2 text-sm md:text-base font-medium transition-colors relative ${
-              activeMainTab === "regular"
-                ? "text-[#ff8100]"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
+          <div className="pb-3 px-2 text-sm md:text-base font-medium text-[#ff8100] relative">
             Regular Order
-            {activeMainTab === "regular" && (
-              <motion.div
-                layoutId="activeMainTab"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              />
-            )}
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setActiveMainTab("subscription")}
-            className={`pb-3 px-2 text-sm md:text-base font-medium transition-colors relative ${
-              activeMainTab === "subscription"
-                ? "text-[#ff8100]"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            Subscription Order
-            {activeMainTab === "subscription" && (
-              <motion.div
-                layoutId="activeMainTab"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              />
-            )}
-          </motion.button>
+            <motion.div
+              layoutId="activeMainTab"
+              className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ff8100]"
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            />
+          </div>
         </div>
 
         {/* Summary Cards */}

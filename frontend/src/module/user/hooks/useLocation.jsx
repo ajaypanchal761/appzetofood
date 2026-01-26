@@ -13,6 +13,22 @@ export function useLocation() {
   /* ===================== DB UPDATE (LIVE LOCATION TRACKING) ===================== */
   const updateLocationInDB = async (locationData) => {
     try {
+      // Check if location has placeholder values - don't save placeholders
+      const hasPlaceholder = 
+        locationData?.city === "Current Location" ||
+        locationData?.address === "Select location" ||
+        locationData?.formattedAddress === "Select location" ||
+        (!locationData?.city && !locationData?.address && !locationData?.formattedAddress);
+      
+      if (hasPlaceholder) {
+        console.log("⚠️ Skipping DB update - location contains placeholder values:", {
+          city: locationData?.city,
+          address: locationData?.address,
+          formattedAddress: locationData?.formattedAddress
+        });
+        return;
+      }
+
       // Check if user is authenticated before trying to update DB
       const userToken = localStorage.getItem('user_accessToken') || localStorage.getItem('accessToken')
       if (!userToken || userToken === 'null' || userToken === 'undefined') {
@@ -1437,16 +1453,38 @@ export function useLocation() {
               } else {
                 console.log("🔍 Calling reverse geocode with coordinates:", { latitude, longitude })
                 try {
+                  // Try Google Maps first
                   addr = await reverseGeocodeWithGoogleMaps(latitude, longitude)
+                  console.log("✅ Google Maps geocoding successful:", addr)
                 } catch (geocodeErr) {
-                  console.warn("⚠️ Reverse geocoding failed, using placeholder:", geocodeErr.message)
-                  addr = {
-                    city: "Current Location",
-                    state: "",
-                    country: "",
-                    area: "",
-                    address: "Select location",
-                    formattedAddress: "Select location",
+                  console.warn("⚠️ Google Maps geocoding failed, trying fallback:", geocodeErr.message)
+                  try {
+                    // Fallback to direct reverse geocode (BigDataCloud)
+                    addr = await reverseGeocodeDirect(latitude, longitude)
+                    console.log("✅ Fallback geocoding successful:", addr)
+                    
+                    // Validate fallback result - if it still has placeholder values, don't use it
+                    if (addr.city === "Current Location" || addr.address.includes(latitude.toFixed(4))) {
+                      console.warn("⚠️ Fallback geocoding returned placeholder, will not save")
+                      addr = {
+                        city: "Current Location",
+                        state: "",
+                        country: "",
+                        area: "",
+                        address: "Select location",
+                        formattedAddress: "Select location",
+                      }
+                    }
+                  } catch (fallbackErr) {
+                    console.error("❌ All geocoding methods failed:", fallbackErr.message)
+                    addr = {
+                      city: "Current Location",
+                      state: "",
+                      country: "",
+                      area: "",
+                      address: "Select location",
+                      formattedAddress: "Select location",
+                    }
                   }
                 }
               }
@@ -1477,6 +1515,33 @@ export function useLocation() {
                 formattedAddress: completeFormattedAddress || addr.formattedAddress || displayAddress // Complete detailed address
               }
               
+              // Check if location has placeholder values - don't save placeholders
+              const hasPlaceholder = 
+                finalLoc.city === "Current Location" ||
+                finalLoc.address === "Select location" ||
+                finalLoc.formattedAddress === "Select location" ||
+                (!finalLoc.city && !finalLoc.address && !finalLoc.formattedAddress && !finalLoc.area);
+              
+              if (hasPlaceholder) {
+                console.warn("⚠️ Skipping save - location contains placeholder values:", finalLoc)
+                // Don't save placeholder values to localStorage or DB
+                // Just set in state for display but don't persist
+                const coordOnlyLoc = {
+                  latitude,
+                  longitude,
+                  accuracy: accuracy || null,
+                  city: finalLoc.city,
+                  address: finalLoc.address,
+                  formattedAddress: finalLoc.formattedAddress
+                }
+                setLocation(coordOnlyLoc)
+                setPermissionGranted(true)
+                if (showLoading) setLoading(false)
+                setError(null)
+                resolve(coordOnlyLoc)
+                return
+              }
+              
             console.log("💾 Saving location:", finalLoc)
             localStorage.setItem("userLocation", JSON.stringify(finalLoc))
             setLocation(finalLoc)
@@ -1492,8 +1557,42 @@ export function useLocation() {
               resolve(finalLoc)
             } catch (err) {
               console.error("❌ Error processing location:", err)
-              // If reverse geocoding fails, don't use coordinates - use placeholder
+              // Try one more time with direct reverse geocode as last resort
               const { latitude, longitude } = pos.coords
+              
+              try {
+                console.log("🔄 Last attempt: trying direct reverse geocode...")
+                const lastResortAddr = await reverseGeocodeDirect(latitude, longitude)
+                
+                // Check if we got valid data (not just coordinates)
+                if (lastResortAddr && 
+                    lastResortAddr.city !== "Current Location" && 
+                    !lastResortAddr.address.includes(latitude.toFixed(4)) &&
+                    lastResortAddr.formattedAddress &&
+                    !lastResortAddr.formattedAddress.includes(latitude.toFixed(4))) {
+                  const lastResortLoc = {
+                    ...lastResortAddr,
+                    latitude,
+                    longitude,
+                    accuracy: pos.coords.accuracy || null
+                  }
+                  console.log("✅ Last resort geocoding succeeded:", lastResortLoc)
+                  localStorage.setItem("userLocation", JSON.stringify(lastResortLoc))
+                  setLocation(lastResortLoc)
+                  setPermissionGranted(true)
+                  if (showLoading) setLoading(false)
+                  setError(null)
+                  if (updateDB) await updateLocationInDB(lastResortLoc).catch(() => {})
+                  resolve(lastResortLoc)
+                  return
+                } else {
+                  console.warn("⚠️ Last resort geocoding returned invalid data:", lastResortAddr)
+                }
+              } catch (lastErr) {
+                console.error("❌ Last resort geocoding also failed:", lastErr.message)
+              }
+              
+              // If all geocoding fails, use placeholder but don't save
               const fallbackLoc = {
                 latitude,
                 longitude,
@@ -1503,11 +1602,13 @@ export function useLocation() {
                 address: "Select location", // Don't show coordinates
                 formattedAddress: "Select location", // Don't show coordinates
               }
-            localStorage.setItem("userLocation", JSON.stringify(fallbackLoc))
+            // Don't save placeholder values to localStorage
+            // Only set in state for display
+            console.warn("⚠️ Skipping save - all geocoding failed, using placeholder")
             setLocation(fallbackLoc)
             setPermissionGranted(true)
             if (showLoading) setLoading(false)
-            if (updateDB) await updateLocationInDB(fallbackLoc).catch(() => {})
+            // Don't try to update DB with placeholder
             resolve(fallbackLoc)
             }
           },
@@ -1767,6 +1868,18 @@ export function useLocation() {
               loc.address = loc.area || loc.city || "Select location";
             }
 
+            // Check if location has placeholder values - don't save placeholders
+            const hasPlaceholder = 
+              loc.city === "Current Location" ||
+              loc.address === "Select location" ||
+              loc.formattedAddress === "Select location" ||
+              (!loc.city && !loc.address && !loc.formattedAddress && !loc.area);
+            
+            if (hasPlaceholder) {
+              console.warn("⚠️ Skipping live location update - contains placeholder values:", loc)
+              return // Don't update location or save to DB
+            }
+
             console.log("💾 Updating live location:", loc)
             localStorage.setItem("userLocation", JSON.stringify(loc))
             setLocation(loc)
@@ -1794,7 +1907,9 @@ export function useLocation() {
               formattedAddress: "Select location", // NEVER use coordinates
             }
             console.warn("⚠️ Using fallback location (reverse geocoding failed):", fallbackLoc)
-            localStorage.setItem("userLocation", JSON.stringify(fallbackLoc))
+            // Don't save placeholder values to localStorage
+            // Only set in state for display
+            console.warn("⚠️ Skipping localStorage save - fallback location contains placeholder values")
             setLocation(fallbackLoc)
             setPermissionGranted(true)
           }
@@ -1881,7 +1996,11 @@ export function useLocation() {
         
         // Show cached location immediately (even if incomplete) - better UX
         // We'll refresh in background but user sees something right away
-        if (parsedLocation && (parsedLocation.latitude || parsedLocation.city)) {
+        // BUT: Skip if it's just placeholder values ("Select location" or "Current Location")
+        if (parsedLocation && 
+            (parsedLocation.latitude || parsedLocation.city) &&
+            parsedLocation.formattedAddress !== "Select location" &&
+            parsedLocation.city !== "Current Location") {
           setLocation(parsedLocation)
           setPermissionGranted(true)
           setLoading(false) // Set loading to false immediately
@@ -1899,6 +2018,7 @@ export function useLocation() {
             shouldForceRefresh = true
           }
         } else {
+          console.log("⚠️ Cached location is placeholder, will fetch fresh")
           shouldForceRefresh = true
         }
       } catch (err) {
@@ -1970,29 +2090,65 @@ export function useLocation() {
     // Request fresh location in BACKGROUND (non-blocking)
     // This updates the location silently without showing loading
     console.log("🚀 Fetching fresh location in background...", shouldForceRefresh ? "(FORCE REFRESH)" : "")
-    getLocation(true, shouldForceRefresh) // forceFresh = true if cached location is incomplete
-      .then((location) => {
-        if (location) {
-          console.log("✅ Fresh location fetched:", location)
-          console.log("✅ Location details:", {
-            formattedAddress: location?.formattedAddress,
-            address: location?.address,
-            city: location?.city,
-            state: location?.state,
-            area: location?.area
-          })
-          // CRITICAL: Update state with fresh location so PageNavbar displays it
-          setLocation(location)
-          setPermissionGranted(true)
-          // Start watching for live updates
+    
+    // Always fetch fresh location if we don't have a valid one
+    // Check current location state to see if it's a placeholder
+    const currentLocation = location
+    const hasPlaceholder = currentLocation && 
+      (currentLocation.formattedAddress === "Select location" || 
+       currentLocation.city === "Current Location")
+    
+    const shouldFetch = shouldForceRefresh || !hasInitialLocation || hasPlaceholder
+    
+    if (shouldFetch) {
+      console.log("🔄 Fetching location - shouldForceRefresh:", shouldForceRefresh, "hasInitialLocation:", hasInitialLocation, "hasPlaceholder:", hasPlaceholder)
+      getLocation(true, shouldForceRefresh) // forceFresh = true if cached location is incomplete
+        .then((location) => {
+          if (location && 
+              location.formattedAddress !== "Select location" && 
+              location.city !== "Current Location") {
+            console.log("✅ Fresh location fetched:", location)
+            console.log("✅ Location details:", {
+              formattedAddress: location?.formattedAddress,
+              address: location?.address,
+              city: location?.city,
+              state: location?.state,
+              area: location?.area
+            })
+            // CRITICAL: Update state with fresh location so PageNavbar displays it
+            setLocation(location)
+            setPermissionGranted(true)
+            // Start watching for live updates
+            startWatchingLocation()
+          } else {
+            console.warn("⚠️ Location fetch returned placeholder, retrying...")
+            // Retry after 2 seconds if we got placeholder
+            setTimeout(() => {
+              getLocation(true, true)
+                .then((retryLocation) => {
+                  if (retryLocation && 
+                      retryLocation.formattedAddress !== "Select location" && 
+                      retryLocation.city !== "Current Location") {
+                    setLocation(retryLocation)
+                    setPermissionGranted(true)
+                    startWatchingLocation()
+                  }
+                })
+                .catch(() => {
+                  startWatchingLocation()
+                })
+            }, 2000)
+          }
+        })
+        .catch((err) => {
+          console.warn("⚠️ Background location fetch failed (using cached):", err.message)
+          // Still start watching in case permission is granted later
           startWatchingLocation()
-        }
-      })
-      .catch((err) => {
-        console.warn("⚠️ Background location fetch failed (using cached):", err.message)
-        // Still start watching in case permission is granted later
-        startWatchingLocation()
-      })
+        })
+    } else {
+      // We have a valid location, just start watching
+      startWatchingLocation()
+    }
     
     // Cleanup timeout and watcher
     return () => {

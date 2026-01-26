@@ -5,12 +5,9 @@ import AdminHome from "../pages/AdminHome";
 import PointOfSale from "../pages/PointOfSale";
 import AdminProfile from "../pages/AdminProfile";
 import AdminSettings from "../pages/AdminSettings";
-import SearchingDeliveryMan from "../pages/dispatch/SearchingDeliveryMan";
-import OngoingOrders from "../pages/dispatch/OngoingOrders";
 import NewRefundRequests from "../pages/refunds/NewRefundRequests";
 import FoodApproval from "../pages/restaurant/FoodApproval";
 import OrdersPage from "../pages/orders/OrdersPage";
-import SubscriptionOrders from "../pages/SubscriptionOrders";
 import OrderDetectDelivery from "../pages/OrderDetectDelivery";
 import Category from "../pages/categories/Category";
 import FeeSettings from "../pages/fee-settings/FeeSettings";
@@ -70,7 +67,6 @@ import DisbursementReportDeliverymen from "../pages/reports/DisbursementReportDe
 import RegularOrderReport from "../pages/reports/RegularOrderReport";
 import CampaignOrderReport from "../pages/reports/CampaignOrderReport";
 import RestaurantReport from "../pages/reports/RestaurantReport";
-import SubscriptionReport from "../pages/reports/SubscriptionReport";
 import CustomerWalletReport from "../pages/reports/CustomerWalletReport";
 import FeedbackExperienceReport from "../pages/reports/FeedbackExperienceReport";
 import TaxReport from "../pages/reports/TaxReport";
@@ -149,14 +145,11 @@ export default function AdminRouter() {
         <Route path="orders/food-on-the-way" element={<OrdersPage statusKey="food-on-the-way" />} />
         <Route path="orders/delivered" element={<OrdersPage statusKey="delivered" />} />
         <Route path="orders/canceled" element={<OrdersPage statusKey="canceled" />} />
+        <Route path="orders/restaurant-cancelled" element={<OrdersPage statusKey="restaurant-cancelled" />} />
         <Route path="orders/payment-failed" element={<OrdersPage statusKey="payment-failed" />} />
         <Route path="orders/refunded" element={<OrdersPage statusKey="refunded" />} />
         <Route path="orders/offline-payments" element={<OrdersPage statusKey="offline-payments" />} />
-        <Route path="subscription-orders" element={<SubscriptionOrders />} />
         <Route path="order-detect-delivery" element={<OrderDetectDelivery />} />
-        {/* Dispatch Management */}
-        <Route path="dispatch/searching" element={<SearchingDeliveryMan />} />
-        <Route path="dispatch/ongoing" element={<OngoingOrders />} />
         {/* Order Refunds */}
         <Route path="order-refunds/new" element={<NewRefundRequests />} />
 
@@ -241,7 +234,6 @@ export default function AdminRouter() {
         <Route path="order-report/campaign" element={<CampaignOrderReport />} />
         {/* Restaurant Report */}
         <Route path="restaurant-report" element={<RestaurantReport />} />
-        <Route path="restaurant-report/subscription" element={<SubscriptionReport />} />
         {/* Customer Report */}
         <Route path="customer-report/wallet" element={<CustomerWalletReport />} />
         <Route path="customer-report/feedback-experience" element={<FeedbackExperienceReport />} />

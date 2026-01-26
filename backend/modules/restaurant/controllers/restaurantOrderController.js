@@ -250,6 +250,16 @@ export const acceptOrder = asyncHandler(async (req, res) => {
 
     await order.save();
 
+    // Trigger ETA recalculation for restaurant accepted event
+    try {
+      const etaEventService = (await import('../../order/services/etaEventService.js')).default;
+      await etaEventService.handleRestaurantAccepted(order._id.toString(), new Date());
+      console.log(`✅ ETA updated after restaurant accepted order ${order.orderId}`);
+    } catch (etaError) {
+      console.error('Error updating ETA after restaurant accept:', etaError);
+      // Continue even if ETA update fails
+    }
+
     // Notify about status update
     try {
       await notifyRestaurantOrderUpdate(order._id.toString(), 'preparing');
@@ -437,14 +447,15 @@ export const rejectOrder = asyncHandler(async (req, res) => {
     order.cancelledAt = new Date();
     await order.save();
 
-    // Process cancellation refund
+    // Calculate refund amount but don't process automatically
+    // Admin will process refund manually via refund button
     try {
-      const { processCancellationRefund } = await import('../../order/services/cancellationRefundService.js');
-      await processCancellationRefund(order._id, reason || 'Rejected by restaurant');
-      console.log(`✅ Cancellation refund processed for order ${order.orderId}`);
+      const { calculateCancellationRefund } = await import('../../order/services/cancellationRefundService.js');
+      await calculateCancellationRefund(order._id, reason || 'Rejected by restaurant');
+      console.log(`✅ Cancellation refund calculated for order ${order.orderId} - awaiting admin approval`);
     } catch (refundError) {
-      console.error(`❌ Error processing cancellation refund for order ${order.orderId}:`, refundError);
-      // Don't fail order cancellation if refund processing fails
+      console.error(`❌ Error calculating cancellation refund for order ${order.orderId}:`, refundError);
+      // Don't fail order cancellation if refund calculation fails
       // But log it for investigation
     }
 

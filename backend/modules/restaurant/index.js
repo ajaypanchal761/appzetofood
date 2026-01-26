@@ -7,6 +7,7 @@ import { getOnboarding, upsertOnboarding, createRestaurantFromOnboardingManual }
 import { getRestaurants, getRestaurantById, getRestaurantByOwner, updateRestaurantProfile, uploadProfileImage, uploadMenuImage, deleteRestaurantAccount, updateDeliveryStatus, getRestaurantsWithDishesUnder250 } from './controllers/restaurantController.js';
 import { getRestaurantFinance } from './controllers/restaurantFinanceController.js';
 import { getWallet, getWalletTransactions, getWalletStats } from './controllers/restaurantWalletController.js';
+import { createWithdrawalRequest, getRestaurantWithdrawalRequests } from './controllers/withdrawalController.js';
 import { getMenu, updateMenu, getMenuByRestaurantId, addSection, addItemToSection, addSubsectionToSection, addItemToSubsection, addAddon, getAddons, getAddonsByRestaurantId, updateAddon, deleteAddon } from './controllers/menuController.js';
 import { scheduleItemAvailability, cancelScheduledAvailability, getItemSchedule } from './controllers/menuScheduleController.js';
 import { getInventory, updateInventory, getInventoryByRestaurantId } from './controllers/inventoryController.js';
@@ -84,6 +85,10 @@ router.get('/finance', authenticate, getRestaurantFinance);
 router.get('/wallet', authenticate, getWallet);
 router.get('/wallet/transactions', authenticate, getWalletTransactions);
 router.get('/wallet/stats', authenticate, getWalletStats);
+
+// Withdrawal routes (authenticated - for restaurant module)
+router.post('/withdrawal/request', authenticate, createWithdrawalRequest);
+router.get('/withdrawal/requests', authenticate, getRestaurantWithdrawalRequests);
 
 // Restaurant routes (public - for user module)
 router.get('/list', getRestaurants);

@@ -140,9 +140,14 @@ const orderSettlementSchema = new mongoose.Schema({
     restaurantCompensation: { type: Number, default: 0, min: 0 },
     refundStatus: {
       type: String,
-      enum: ['pending', 'processed', 'failed'],
+      enum: ['pending', 'requested', 'initiated', 'processed', 'failed'],
       sparse: true
-    }
+    },
+    razorpayRefundId: { type: String, sparse: true },
+    refundInitiatedAt: Date,
+    refundInitiatedBy: { type: mongoose.Schema.Types.ObjectId, sparse: true },
+    refundProcessedAt: Date,
+    refundFailureReason: { type: String, sparse: true }
   },
   
   // Audit Trail

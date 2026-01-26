@@ -10,6 +10,9 @@ import { notifyRestaurantNewOrder } from '../services/restaurantNotificationServ
 import { calculateOrderSettlement } from '../services/orderSettlementService.js';
 import { holdEscrow } from '../services/escrowWalletService.js';
 import { processCancellationRefund } from '../services/cancellationRefundService.js';
+import etaCalculationService from '../services/etaCalculationService.js';
+import etaWebSocketService from '../services/etaWebSocketService.js';
+import OrderEvent from '../models/OrderEvent.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -196,6 +199,62 @@ export const createOrder = async (req, res) => {
       }
     });
 
+    // Calculate initial ETA
+    try {
+      const restaurantLocation = restaurant.location 
+        ? {
+            latitude: restaurant.location.latitude,
+            longitude: restaurant.location.longitude
+          }
+        : null;
+
+      const userLocation = address.location?.coordinates
+        ? {
+            latitude: address.location.coordinates[1],
+            longitude: address.location.coordinates[0]
+          }
+        : null;
+
+      if (restaurantLocation && userLocation) {
+        const etaResult = await etaCalculationService.calculateInitialETA({
+          restaurantId: assignedRestaurantId,
+          restaurantLocation,
+          userLocation
+        });
+
+        // Update order with ETA
+        order.eta = {
+          min: etaResult.minETA,
+          max: etaResult.maxETA,
+          lastUpdated: new Date()
+        };
+        order.estimatedDeliveryTime = Math.ceil((etaResult.minETA + etaResult.maxETA) / 2);
+
+        // Create order created event
+        await OrderEvent.create({
+          orderId: order._id,
+          eventType: 'ORDER_CREATED',
+          data: {
+            initialETA: {
+              min: etaResult.minETA,
+              max: etaResult.maxETA
+            }
+          },
+          timestamp: new Date()
+        });
+
+        logger.info('✅ ETA calculated for order:', {
+          orderId: order.orderId,
+          eta: `${etaResult.minETA}-${etaResult.maxETA} mins`
+        });
+      } else {
+        logger.warn('⚠️ Could not calculate ETA - missing location data');
+      }
+    } catch (etaError) {
+      logger.error('❌ Error calculating ETA:', etaError);
+      // Continue with order creation even if ETA calculation fails
+    }
+
     await order.save();
 
     // Log order creation for debugging
@@ -205,7 +264,8 @@ export const createOrder = async (req, res) => {
       restaurantId: order.restaurantId,
       userId: order.userId,
       status: order.status,
-      total: order.pricing.total
+      total: order.pricing.total,
+      eta: order.eta ? `${order.eta.min}-${order.eta.max} mins` : 'N/A'
     });
 
     // Note: Restaurant notification will be sent after payment verification in verifyOrderPayment

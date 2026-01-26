@@ -245,6 +245,16 @@ export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantL
     
     await order.save();
 
+    // Trigger ETA recalculation for rider assigned event
+    try {
+      const etaEventService = (await import('./etaEventService.js')).default;
+      await etaEventService.handleRiderAssigned(order._id.toString(), nearestDeliveryBoy.deliveryPartnerId);
+      console.log(`✅ ETA updated after rider assigned to order ${order.orderId}`);
+    } catch (etaError) {
+      console.error('Error updating ETA after rider assignment:', etaError);
+      // Continue even if ETA update fails
+    }
+
     console.log(`✅ Assigned order ${order.orderId} to delivery partner ${nearestDeliveryBoy.name}`);
 
     return {

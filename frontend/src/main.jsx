@@ -199,6 +199,7 @@ window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason || event
   const errorMsg = error?.message || String(error) || ''
   const errorName = error?.name || ''
+  const errorStr = String(error) || ''
   
   // Suppress geolocation errors (permission denied, timeout, etc.)
   if (
@@ -210,6 +211,17 @@ window.addEventListener('unhandledrejection', (event) => {
     (error?.code === 1 && (errorMsg.includes('location') || errorMsg.includes('geolocation')))
   ) {
     event.preventDefault() // Prevent error from showing in console
+    return
+  }
+  
+  // Suppress refund processing errors that are already handled by the component
+  // These errors are logged with console.error in the component's catch block
+  if (
+    errorStr.includes('Error processing refund') ||
+    (errorName === 'AxiosError' && errorMsg.includes('refund'))
+  ) {
+    // Error is already handled by the component, just prevent unhandled rejection
+    event.preventDefault()
     return
   }
 })

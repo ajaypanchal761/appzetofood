@@ -56,10 +56,17 @@ export default function Orders() {
           const transformedOrders = ordersData.map(order => {
             const createdAt = order.createdAt ? new Date(order.createdAt) : new Date()
             
+            // Check if cancelled by restaurant
+            const isCancelled = order.status === 'cancelled'
+            const cancellationReason = order.cancellationReason || ''
+            const isRestaurantCancelled = isCancelled && (
+              /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i.test(cancellationReason)
+            )
+
             return {
               id: order.orderId || order._id?.toString() || `ORD-${order._id}`,
               mongoId: order._id,
-              status: getOrderStatus(order),
+              status: isRestaurantCancelled ? 'restaurant_cancelled' : getOrderStatus(order),
               createdAt: createdAt.toISOString(),
               address: order.address || {},
               items: order.items || [],
@@ -73,7 +80,9 @@ export default function Orders() {
               restaurantImage: order.restaurantId?.profileImage?.url || order.restaurantId?.profileImage || null,
               restaurantLocation: order.restaurantId?.location?.area || order.restaurantId?.location?.city || order.address?.city || '',
               rating: order.rating || null,
-              tracking: order.tracking || {}
+              tracking: order.tracking || {},
+              cancellationReason: cancellationReason,
+              isRestaurantCancelled: isRestaurantCancelled
             }
           })
           
@@ -305,6 +314,8 @@ Order again from this restaurant in the Appzeto app.`
           filteredOrders.map((order) => {
             const paymentFailed = order.payment?.status === 'failed' || order.payment?.status === 'pending'
             const isDelivered = order.status === 'delivered'
+            const isRestaurantCancelled = order.isRestaurantCancelled || order.status === 'restaurant_cancelled'
+            const isCancelled = order.status === 'cancelled' || order.status === 'restaurant_cancelled'
             // Prefer food image from first item; fallback to restaurant image, then generic food photo
             const firstItemImage = order.items?.[0]?.image
             const restaurantImage = firstItemImage 
@@ -399,6 +410,12 @@ Order again from this restaurant in the Appzeto app.`
                     {isDelivered && !paymentFailed && (
                       <p className="text-xs font-medium text-gray-500 mt-1">Delivered</p>
                     )}
+                    {isRestaurantCancelled && (
+                      <p className="text-xs font-medium text-red-500 mt-1">Restaurant Cancelled</p>
+                    )}
+                    {isCancelled && !isRestaurantCancelled && (
+                      <p className="text-xs font-medium text-gray-500 mt-1">Cancelled</p>
+                    )}
                   </div>
                   <div className="flex items-center">
                     <span className="text-sm font-semibold text-gray-800">₹{order.total.toFixed(2)}</span>
@@ -414,7 +431,17 @@ Order again from this restaurant in the Appzeto app.`
                 {/* Card Footer: Actions */}
                 <div className="px-4 py-3 flex items-center justify-between">
                   {/* Left Side: Rating or Error */}
-                  {paymentFailed ? (
+                  {isRestaurantCancelled ? (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-red-100 p-1 rounded-full">
+                          <AlertCircle className="w-4 h-4 text-red-500" />
+                        </div>
+                        <span className="text-xs font-semibold text-red-500">Restaurant Cancelled</span>
+                      </div>
+                      <p className="text-xs text-gray-600 ml-7">Refund will be processed in 24-48 hours</p>
+                    </div>
+                  ) : paymentFailed ? (
                     <div className="flex items-center gap-2">
                       <div className="bg-red-100 p-1 rounded-full">
                         <AlertCircle className="w-4 h-4 text-red-500" />

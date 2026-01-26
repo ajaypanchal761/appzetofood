@@ -14,12 +14,39 @@ export default function PageNavbar({
   showProfile = false,
   onNavClick 
 }) {
-  const { location, loading } = useLocation()
+  const { location, loading, requestLocation } = useLocation()
   const { getCartCount } = useCart()
   const { openLocationSelector } = useLocationSelector()
   const cartCount = getCartCount()
   const [logoUrl, setLogoUrl] = useState(null)
   const [companyName, setCompanyName] = useState(null)
+  
+  // Auto-trigger location fetch if we have placeholder values (only once on mount)
+  useEffect(() => {
+    if (location && 
+        !loading && 
+        requestLocation &&
+        (location.formattedAddress === "Select location" || 
+         location.city === "Current Location")) {
+      console.log("🔄 Auto-triggering location fetch due to placeholder values")
+      // Wait a bit to avoid multiple rapid calls, and only trigger once
+      const timeoutId = setTimeout(() => {
+        requestLocation().then((fetchedLocation) => {
+          if (fetchedLocation && 
+              fetchedLocation.formattedAddress !== "Select location" && 
+              fetchedLocation.city !== "Current Location") {
+            console.log("✅ Location fetched successfully:", fetchedLocation)
+          } else {
+            console.warn("⚠️ Location fetch returned placeholder, user may need to select manually")
+          }
+        }).catch(err => {
+          console.warn("Location fetch failed:", err)
+        })
+      }, 2000) // Wait 2 seconds before triggering
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, []) // Only run once on mount
 
   // Load business settings logo
   useEffect(() => {
@@ -259,7 +286,9 @@ export default function PageNavbar({
     }
     
     // Priority 2: Use formattedAddress to extract exact locality (e.g., "Princess center, 5th Floor, New Palasia")
-    if (!mainLocation && location?.formattedAddress && !isCoordinates(location.formattedAddress)) {
+    if (!mainLocation && location?.formattedAddress && 
+        !isCoordinates(location.formattedAddress) && 
+        location.formattedAddress !== "Select location") {
       console.log("🔍 Processing formattedAddress (Priority 2):", location.formattedAddress)
       const parts = location.formattedAddress.split(',').map(part => part.trim()).filter(part => part.length > 0)
       console.log("📋 Address parts:", parts)
@@ -380,18 +409,31 @@ export default function PageNavbar({
       }
     }
     // Priority 2: Use address field if formattedAddress not available or didn't work
-    if (!mainLocation && location?.address && !isCoordinates(location.address)) {
+    if (!mainLocation && 
+        location?.address && 
+        !isCoordinates(location.address) &&
+        location.address !== "Select location") {
       console.log("🔍 Processing address field:", location.address)
       const parts = location.address.split(',').map(part => part.trim()).filter(part => part.length > 0)
       console.log("📋 Address parts:", parts)
       
-      // Remove pincode and country
+      // Remove pincode, country, and placeholder values
       const filteredParts = parts.filter(part => {
         if (/^\d{6}$/.test(part)) return false
         if (part.toLowerCase() === "india" || part.length > 25) return false
+        if (part.toLowerCase() === "select location" || part.toLowerCase() === "current location") return false
         return true
       })
       console.log("📋 Filtered parts:", filteredParts)
+      
+      // If filtered parts is empty or only has placeholder, skip this priority
+      if (filteredParts.length === 0 || 
+          (filteredParts.length === 1 && 
+           (filteredParts[0].toLowerCase() === "select location" || 
+            filteredParts[0].toLowerCase() === "current location"))) {
+        console.log("⚠️ Address field only contains placeholder, skipping")
+        // Don't set mainLocation, continue to next priority
+      } else {
       
       // Find city index - same logic as formattedAddress
       let cityIndex = -1
@@ -418,23 +460,27 @@ export default function PageNavbar({
         }
       }
       
-      if (cityIndex > 0) {
-        const localityParts = filteredParts.slice(0, cityIndex)
-        if (localityParts.length > 0) {
-          mainLocation = localityParts.join(', ')
-          console.log("✅ Using exact locality from address:", mainLocation)
-        }
-      } else if (filteredParts.length >= 3) {
-        mainLocation = filteredParts.slice(0, 3).join(', ')
-        console.log("✅ Using first 3 parts from address:", mainLocation)
-      } else if (filteredParts.length >= 2) {
-        mainLocation = filteredParts.slice(0, 2).join(', ')
-        console.log("✅ Using first 2 parts from address:", mainLocation)
-      } else if (filteredParts.length >= 1) {
-        const firstPart = filteredParts[0]
-        if (!isCoordinates(firstPart) && firstPart.length > 2) {
-          mainLocation = firstPart
-          console.log("✅ Using first part from address:", mainLocation)
+        if (cityIndex > 0) {
+          const localityParts = filteredParts.slice(0, cityIndex)
+          if (localityParts.length > 0) {
+            mainLocation = localityParts.join(', ')
+            console.log("✅ Using exact locality from address:", mainLocation)
+          }
+        } else if (filteredParts.length >= 3) {
+          mainLocation = filteredParts.slice(0, 3).join(', ')
+          console.log("✅ Using first 3 parts from address:", mainLocation)
+        } else if (filteredParts.length >= 2) {
+          mainLocation = filteredParts.slice(0, 2).join(', ')
+          console.log("✅ Using first 2 parts from address:", mainLocation)
+        } else if (filteredParts.length >= 1) {
+          const firstPart = filteredParts[0]
+          if (!isCoordinates(firstPart) && 
+              firstPart.length > 2 &&
+              firstPart.toLowerCase() !== "select location" &&
+              firstPart.toLowerCase() !== "current location") {
+            mainLocation = firstPart
+            console.log("✅ Using first part from address:", mainLocation)
+          }
         }
       }
     }
@@ -442,7 +488,10 @@ export default function PageNavbar({
     if (!mainLocation) {
       // Try to get first 3 parts from any available address field
       const addressToUse = location?.formattedAddress || location?.address || ""
-      if (addressToUse && !isCoordinates(addressToUse)) {
+      if (addressToUse && 
+          !isCoordinates(addressToUse) && 
+          addressToUse !== "Select location" &&
+          addressToUse.trim() !== "") {
         const parts = addressToUse.split(',').map(part => part.trim()).filter(part => part.length > 0)
         const filteredParts = parts.filter(part => {
           if (/^\d{6}$/.test(part)) return false // Skip pincode
@@ -469,7 +518,10 @@ export default function PageNavbar({
     
     // Priority 4: Force extract from formattedAddress if still no mainLocation
     // This is a last resort to get locality before falling back to city
-    if (!mainLocation && location?.formattedAddress && !isCoordinates(location.formattedAddress)) {
+    if (!mainLocation && 
+        location?.formattedAddress && 
+        !isCoordinates(location.formattedAddress) &&
+        location.formattedAddress !== "Select location") {
       console.log("🔄🔄🔄 FORCE EXTRACTING from formattedAddress (last resort):", location.formattedAddress)
       const parts = location.formattedAddress.split(',').map(p => p.trim()).filter(p => p.length > 0)
       const filteredParts = parts.filter(part => {
@@ -515,7 +567,12 @@ export default function PageNavbar({
       }
     }
     // Priority 6: Use city ONLY if nothing else worked (last resort)
-    else if (!mainLocation && location?.city && location.city.trim() !== "" && location.city !== "Unknown City") {
+    // Skip if city is "Current Location" or "Select location" - these are placeholders
+    else if (!mainLocation && location?.city && 
+             location.city.trim() !== "" && 
+             location.city !== "Unknown City" &&
+             location.city !== "Current Location" &&
+             location.city !== "Select location") {
       mainLocation = location.city
       console.log("⚠️⚠️⚠️ FALLBACK: Using city (no locality found):", mainLocation)
     } 

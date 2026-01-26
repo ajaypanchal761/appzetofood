@@ -95,6 +95,11 @@ const orderSchema = new mongoose.Schema({
       default: 0,
       min: 0
     },
+    platformFee: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
     tax: {
       type: Number,
       default: 0,
@@ -185,6 +190,21 @@ const orderSchema = new mongoose.Schema({
   estimatedDeliveryTime: {
     type: Number, // in minutes
     default: 30
+  },
+  // Enhanced ETA tracking
+  eta: {
+    min: {
+      type: Number, // minimum ETA in minutes
+      default: 25
+    },
+    max: {
+      type: Number, // maximum ETA in minutes
+      default: 30
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
+    }
   },
   deliveredAt: {
     type: Date

@@ -30,7 +30,7 @@ export const exportToCSV = (orders, filename = "orders") => {
       order.customerName,
       order.customerPhone,
       order.restaurant,
-      order.total || `$ ${(order.totalAmount || 0).toFixed(2)}`,
+      order.total || `₹${(order.totalAmount || 0).toFixed(2)}`,
       order.paymentStatus || "",
       order.orderStatus || "",
       order.deliveryType || ""
@@ -83,7 +83,7 @@ export const exportToExcel = (orders, filename = "orders") => {
       order.customerName,
       order.customerPhone,
       order.restaurant,
-      order.total || `$ ${(order.totalAmount || 0).toFixed(2)}`,
+      order.total || `₹${(order.totalAmount || 0).toFixed(2)}`,
       order.paymentStatus || "",
       order.orderStatus || "",
       order.deliveryType || ""

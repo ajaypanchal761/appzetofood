@@ -20,7 +20,8 @@ export const getOrders = asyncHandler(async (req, res) => {
       restaurant,
       paymentStatus,
       zone,
-      customer
+      customer,
+      cancelledBy
     } = req.query;
 
     // Build query
@@ -37,6 +38,7 @@ export const getOrders = asyncHandler(async (req, res) => {
         'food-on-the-way': 'out_for_delivery',
         'delivered': 'delivered',
         'canceled': 'cancelled',
+        'restaurant-cancelled': 'cancelled', // Restaurant cancelled orders
         'payment-failed': 'pending', // Payment failed orders have pending status
         'refunded': 'cancelled', // Refunded orders might be cancelled
         'dine-in': 'dine_in',
@@ -45,6 +47,21 @@ export const getOrders = asyncHandler(async (req, res) => {
       
       const mappedStatus = statusMap[status] || status;
       query.status = mappedStatus;
+      
+      // If restaurant-cancelled, filter by cancellation reason
+      if (status === 'restaurant-cancelled') {
+        query.cancellationReason = { 
+          $regex: /rejected by restaurant|restaurant rejected|restaurant cancelled/i 
+        };
+      }
+    }
+    
+    // Also handle cancelledBy query parameter (if passed separately)
+    if (cancelledBy === 'restaurant') {
+      query.status = 'cancelled';
+      query.cancellationReason = { 
+        $regex: /rejected by restaurant|restaurant rejected|restaurant cancelled/i 
+      };
     }
 
     // Payment status filter
@@ -164,6 +181,31 @@ export const getOrders = asyncHandler(async (req, res) => {
     // Get total count
     const total = await Order.countDocuments(query);
 
+    // Batch fetch settlements for platform fee and refund status (more efficient than individual queries)
+    let settlementMap = new Map();
+    let refundStatusMap = new Map();
+    try {
+      const OrderSettlement = (await import('../../order/models/OrderSettlement.js')).default;
+      const orderIds = orders.map(o => o._id);
+      const settlements = await OrderSettlement.find({ orderId: { $in: orderIds } })
+        .select('orderId userPayment.platformFee cancellationDetails.refundStatus')
+        .lean();
+      
+      // Create maps for quick lookup
+      settlements.forEach(s => {
+        if (s.orderId) {
+          if (s.userPayment?.platformFee !== undefined) {
+            settlementMap.set(s.orderId.toString(), s.userPayment.platformFee);
+          }
+          if (s.cancellationDetails?.refundStatus) {
+            refundStatusMap.set(s.orderId.toString(), s.cancellationDetails.refundStatus);
+          }
+        }
+      });
+    } catch (err) {
+      console.warn('Could not batch fetch settlements:', err.message);
+    }
+
     // Transform orders to match frontend format
     const transformedOrders = orders.map((order, index) => {
       const orderDate = new Date(order.createdAt);
@@ -192,18 +234,31 @@ export const getOrders = asyncHandler(async (req, res) => {
       const paymentStatusDisplay = paymentStatusMap[order.payment?.status] || 'Pending';
 
       // Map order status for display
-      const statusMap = {
-        'pending': 'Pending',
-        'confirmed': 'Accepted',
-        'preparing': 'Processing',
-        'ready': 'Ready',
-        'out_for_delivery': 'Food On The Way',
-        'delivered': 'Delivered',
-        'cancelled': 'Canceled',
-        'scheduled': 'Scheduled',
-        'dine_in': 'Dine In'
-      };
-      const orderStatusDisplay = statusMap[order.status] || order.status;
+      // Check if cancelled and determine who cancelled it
+      let orderStatusDisplay;
+      if (order.status === 'cancelled') {
+        // Check cancellation reason to determine who cancelled
+        const cancellationReason = order.cancellationReason || '';
+        const isRestaurantCancelled = /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i.test(cancellationReason);
+        
+        if (isRestaurantCancelled) {
+          orderStatusDisplay = 'Cancelled by Restaurant';
+        } else {
+          orderStatusDisplay = 'Cancelled by User';
+        }
+      } else {
+        const statusMap = {
+          'pending': 'Pending',
+          'confirmed': 'Accepted',
+          'preparing': 'Processing',
+          'ready': 'Ready',
+          'out_for_delivery': 'Food On The Way',
+          'delivered': 'Delivered',
+          'scheduled': 'Scheduled',
+          'dine_in': 'Dine In'
+        };
+        orderStatusDisplay = statusMap[order.status] || order.status;
+      }
 
       // Determine delivery type
       const deliveryType = order.deliveryFleet === 'standard' ? 
@@ -216,6 +271,22 @@ export const getOrders = asyncHandler(async (req, res) => {
       const deliveryFee = order.pricing?.deliveryFee || 0;
       const tax = order.pricing?.tax || 0;
       const couponCode = order.pricing?.couponCode || null;
+      
+      // Get platform fee - check if it exists in pricing, otherwise get from settlement map
+      let platformFee = order.pricing?.platformFee;
+      if (platformFee === undefined || platformFee === null) {
+        // Get from settlement map (batch fetched above)
+        platformFee = settlementMap.get(order._id.toString());
+        
+        // If still not found, calculate from total (fallback for old orders)
+        if (platformFee === undefined || platformFee === null) {
+          const calculatedTotal = (order.pricing?.subtotal || 0) - (order.pricing?.discount || 0) + (order.pricing?.deliveryFee || 0) + (order.pricing?.tax || 0);
+          const actualTotal = order.pricing?.total || 0;
+          const difference = actualTotal - calculatedTotal;
+          // If difference is positive and reasonable (between 0 and 50), assume it's platform fee
+          platformFee = (difference > 0 && difference <= 50) ? difference : 0;
+        }
+      }
       
       // For report: itemDiscount is the discount applied to items
       const itemDiscount = discount;
@@ -253,6 +324,7 @@ export const getOrders = asyncHandler(async (req, res) => {
         referralDiscount: referralDiscount,
         vatTax: vatTax,
         deliveryCharge: deliveryCharge,
+        platformFee: platformFee,
         totalAmount: orderAmount,
         // Original fields
         paymentStatus: paymentStatusDisplay,
@@ -265,14 +337,17 @@ export const getOrders = asyncHandler(async (req, res) => {
         deliveryPartnerPhone: order.deliveryPartnerId?.phone || null,
         estimatedDeliveryTime: order.estimatedDeliveryTime || 30,
         deliveredAt: order.deliveredAt,
-        cancelledAt: order.cancelledAt,
+        cancellationReason: order.cancellationReason || null,
+        cancelledAt: order.cancelledAt || null,
         tracking: order.tracking || {},
         deliveryState: order.deliveryState || {},
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
         // Zone info from assignmentInfo
         zoneId: order.assignmentInfo?.zoneId || null,
-        zoneName: order.assignmentInfo?.zoneName || null
+        zoneName: order.assignmentInfo?.zoneName || null,
+        // Refund status from settlement
+        refundStatus: refundStatusMap.get(order._id.toString()) || null
       };
     });
 
@@ -1196,6 +1271,323 @@ export const getRestaurantReport = asyncHandler(async (req, res) => {
     console.error('❌ Error fetching restaurant report:', error);
     console.error('Error stack:', error.stack);
     return errorResponse(res, 500, error.message || 'Failed to fetch restaurant report');
+  }
+});
+
+/**
+ * Get refund requests (restaurant cancelled orders with pending refunds)
+ * GET /api/admin/refund-requests
+ */
+export const getRefundRequests = asyncHandler(async (req, res) => {
+  try {
+    console.log('✅ getRefundRequests route hit!');
+    console.log('Request URL:', req.url);
+    console.log('Request method:', req.method);
+    console.log('Request query:', req.query);
+    
+    const { 
+      page = 1, 
+      limit = 50,
+      search,
+      fromDate,
+      toDate,
+      restaurant
+    } = req.query;
+
+    console.log('🔍 Fetching refund requests with params:', { page, limit, search, fromDate, toDate, restaurant });
+
+    // Build query for restaurant cancelled orders with pending refunds
+    const query = {
+      status: 'cancelled',
+      cancellationReason: { 
+        $regex: /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i 
+      }
+    };
+    
+    console.log('📋 Initial query:', JSON.stringify(query, null, 2));
+
+    // Restaurant filter
+    if (restaurant && restaurant !== 'All restaurants') {
+      try {
+        const Restaurant = (await import('../../restaurant/models/Restaurant.js')).default;
+        const restaurantDoc = await Restaurant.findOne({
+          $or: [
+            { name: { $regex: restaurant, $options: 'i' } },
+            ...(mongoose.Types.ObjectId.isValid(restaurant) ? [{ _id: restaurant }] : []),
+            { restaurantId: restaurant }
+          ]
+        }).select('_id restaurantId').lean();
+
+        if (restaurantDoc) {
+          query.restaurantId = restaurantDoc._id?.toString() || restaurantDoc.restaurantId;
+        }
+      } catch (error) {
+        console.error('Error filtering by restaurant:', error);
+        // Continue without restaurant filter if there's an error
+      }
+    }
+
+    // Date range filter
+    if (fromDate || toDate) {
+      query.cancelledAt = {};
+      if (fromDate) {
+        const startDate = new Date(fromDate);
+        startDate.setHours(0, 0, 0, 0);
+        query.cancelledAt.$gte = startDate;
+      }
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999);
+        query.cancelledAt.$lte = endDate;
+      }
+    }
+
+    // Search filter - build search conditions separately
+    const searchConditions = [];
+    if (search) {
+      searchConditions.push(
+        { orderId: { $regex: search, $options: 'i' } },
+        { restaurantName: { $regex: search, $options: 'i' } }
+      );
+    }
+
+    // Combine search with existing query
+    if (searchConditions.length > 0) {
+      if (Object.keys(query).length > 0 && !query.$and) {
+        // Convert existing query to $and format
+        const existingQuery = { ...query };
+        query = {
+          $and: [
+            existingQuery,
+            { $or: searchConditions }
+          ]
+        };
+      } else if (query.$and) {
+        // Add search to existing $and
+        query.$and.push({ $or: searchConditions });
+      } else {
+        // Simple case - just add $or
+        query.$or = searchConditions;
+      }
+    }
+
+    console.log('📋 Final query:', JSON.stringify(query, null, 2));
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Fetch orders with population
+    // Sort by cancelledAt if available, otherwise by createdAt
+    let orders = [];
+    try {
+      orders = await Order.find(query)
+        .populate('userId', 'name email phone')
+        .populate({
+          path: 'restaurantId',
+          select: 'name slug',
+          match: { _id: { $exists: true } } // Only populate if it's a valid ObjectId
+        })
+        .sort({ cancelledAt: -1, createdAt: -1 })
+        .limit(parseInt(limit))
+        .skip(skip)
+        .lean();
+      
+      // Filter out orders where restaurantId population failed (null)
+      orders = orders.filter(order => order.restaurantId !== null || order.restaurantName);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      throw error;
+    }
+
+    const total = await Order.countDocuments(query);
+    console.log(`✅ Found ${total} restaurant cancelled orders`);
+
+    // Get settlement info for each order to check refund status
+    let OrderSettlement;
+    try {
+      OrderSettlement = (await import('../../order/models/OrderSettlement.js')).default;
+    } catch (error) {
+      console.error('Error importing OrderSettlement:', error);
+      OrderSettlement = null;
+    }
+    
+    const transformedOrders = await Promise.all(orders.map(async (order, index) => {
+      let settlement = null;
+      if (OrderSettlement) {
+        try {
+          settlement = await OrderSettlement.findOne({ orderId: order._id }).lean();
+        } catch (error) {
+          console.error(`Error fetching settlement for order ${order._id}:`, error);
+        }
+      }
+      
+      const orderDate = new Date(order.createdAt);
+      const dateStr = orderDate.toLocaleDateString('en-GB', { 
+        day: '2-digit', 
+        month: 'short', 
+        year: 'numeric' 
+      }).toUpperCase();
+      const timeStr = orderDate.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }).toUpperCase();
+
+      const customerPhone = order.userId?.phone || '';
+      
+      // Check refund status from settlement
+      const refundStatus = settlement?.cancellationDetails?.refundStatus || 'pending';
+      const refundAmount = settlement?.cancellationDetails?.refundAmount || 0;
+
+      return {
+        sl: skip + index + 1,
+        orderId: order.orderId,
+        id: order._id.toString(),
+        date: dateStr,
+        time: timeStr,
+        customerName: order.userId?.name || 'Unknown',
+        customerPhone: customerPhone,
+        customerEmail: order.userId?.email || '',
+        restaurant: order.restaurantName || order.restaurantId?.name || 'Unknown Restaurant',
+        restaurantId: order.restaurantId?.toString() || order.restaurantId || '',
+        totalAmount: order.pricing?.total || 0,
+        paymentStatus: order.payment?.status === 'completed' ? 'Paid' : 'Pending',
+        orderStatus: 'Refund Requested',
+        deliveryType: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Fast Delivery',
+        cancellationReason: order.cancellationReason || 'Rejected by restaurant',
+        cancelledAt: order.cancelledAt,
+        refundStatus: refundStatus,
+        refundAmount: refundAmount,
+        settlement: settlement ? {
+          cancellationStage: settlement.cancellationDetails?.cancellationStage,
+          refundAmount: settlement.cancellationDetails?.refundAmount,
+          restaurantCompensation: settlement.cancellationDetails?.restaurantCompensation
+        } : null
+      };
+    }));
+
+    console.log(`✅ Returning ${transformedOrders.length} refund requests`);
+    
+    return successResponse(res, 200, 'Refund requests retrieved successfully', {
+      orders: transformedOrders || [],
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: total || 0,
+        pages: Math.ceil((total || 0) / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching refund requests:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    });
+    return errorResponse(res, 500, error.message || 'Failed to fetch refund requests');
+  }
+});
+
+/**
+ * Process refund for an order via Razorpay
+ * POST /api/admin/orders/:orderId/refund
+ */
+export const processRefund = asyncHandler(async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { notes } = req.body;
+    const adminId = req.user?.id || req.admin?.id || null;
+
+    console.log('🔍 [processRefund] Processing refund request:', {
+      orderId,
+      orderIdType: typeof orderId,
+      orderIdLength: orderId?.length,
+      isObjectId: mongoose.Types.ObjectId.isValid(orderId),
+      adminId
+    });
+
+    // Find order
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
+      console.log('🔍 [processRefund] Searching by MongoDB _id:', orderId);
+      order = await Order.findById(orderId);
+      console.log('🔍 [processRefund] Order found by _id:', order ? 'Yes' : 'No');
+    }
+    if (!order) {
+      console.log('🔍 [processRefund] Searching by orderId string:', orderId);
+      order = await Order.findOne({ orderId: orderId });
+      console.log('🔍 [processRefund] Order found by orderId:', order ? 'Yes' : 'No');
+    }
+
+    if (!order) {
+      console.error('❌ [processRefund] Order not found for orderId:', orderId);
+      return errorResponse(res, 404, 'Order not found');
+    }
+
+    console.log('✅ [processRefund] Order found:', {
+      _id: order._id.toString(),
+      orderId: order.orderId,
+      status: order.status
+    });
+
+    if (order.status !== 'cancelled') {
+      return errorResponse(res, 400, 'Order is not cancelled');
+    }
+
+    // Check if it's a restaurant cancelled order
+    const isRestaurantCancelled = order.cancellationReason && 
+      /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i.test(order.cancellationReason);
+
+    if (!isRestaurantCancelled) {
+      return errorResponse(res, 400, 'This order was not cancelled by restaurant');
+    }
+
+    // Check if order is Home Delivery
+    if (order.deliveryType !== 'home_delivery' && order.deliveryType !== 'Home Delivery') {
+      return errorResponse(res, 400, 'Refund can only be processed for Home Delivery orders');
+    }
+
+    // Get settlement
+    const OrderSettlement = (await import('../../order/models/OrderSettlement.js')).default;
+    const settlement = await OrderSettlement.findOne({ orderId: order._id });
+
+    if (!settlement) {
+      return errorResponse(res, 404, 'Settlement not found for this order');
+    }
+
+    // Check if refund already processed
+    if (settlement.cancellationDetails?.refundStatus === 'processed' || 
+        settlement.cancellationDetails?.refundStatus === 'initiated') {
+      return errorResponse(res, 400, 'Refund already processed or initiated for this order');
+    }
+
+    // Check if refund amount is calculated
+    const refundAmount = settlement.cancellationDetails?.refundAmount || 0;
+    if (refundAmount <= 0) {
+      return errorResponse(res, 400, 'No refund amount calculated for this order');
+    }
+
+    // Process Razorpay refund
+    const { processRazorpayRefund } = await import('../../order/services/cancellationRefundService.js');
+    const refundResult = await processRazorpayRefund(order._id, adminId);
+
+    // Update settlement with admin notes if provided
+    if (notes) {
+      settlement.metadata = settlement.metadata || new Map();
+      settlement.metadata.set('adminRefundNotes', notes);
+      await settlement.save();
+    }
+
+    return successResponse(res, 200, refundResult.message || 'Refund processed successfully', {
+      orderId: order.orderId,
+      refundId: refundResult.refundId,
+      refundAmount: refundResult.refundAmount,
+      razorpayRefund: refundResult.razorpayRefund,
+      message: refundResult.message
+    });
+  } catch (error) {
+    console.error('Error processing refund:', error);
+    return errorResponse(res, 500, error.message || 'Failed to process refund');
   }
 });
 

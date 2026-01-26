@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Plus, Minus, ArrowLeft, ChevronRight, Clock, MapPin, Phone, FileText, Utensils, Tag, Percent, Truck, Leaf, Share2, Crown, ChevronUp, ChevronDown, X, Check, Settings, CreditCard, Wallet, Building2, Sparkles } from "lucide-react"
+import { Plus, Minus, ArrowLeft, ChevronRight, Clock, MapPin, Phone, FileText, Utensils, Tag, Percent, Truck, Leaf, Share2, ChevronUp, ChevronDown, X, Check, Settings, CreditCard, Wallet, Building2, Sparkles } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import confetti from "canvas-confetti"
 
@@ -10,9 +10,10 @@ import { useCart } from "../../context/CartContext"
 import { useProfile } from "../../context/ProfileContext"
 import { useOrders } from "../../context/OrdersContext"
 import { useLocation as useUserLocation } from "../../hooks/useLocation"
-import { orderAPI, restaurantAPI, adminAPI, API_ENDPOINTS } from "@/lib/api"
+import { orderAPI, restaurantAPI, adminAPI, userAPI, API_ENDPOINTS } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
+import { toast } from "sonner"
 
 
 // Removed hardcoded suggested items - now fetching approved addons from backend
@@ -596,6 +597,65 @@ export default function Cart() {
   // Restaurant name from data or cart
   const restaurantName = restaurantData?.name || cart[0]?.restaurant || "Restaurant"
 
+  // Handler to select address by label (Home, Office, Other)
+  const handleSelectAddressByLabel = async (label) => {
+    try {
+      // Find address with matching label
+      const address = addresses.find(addr => addr.label === label)
+      
+      if (!address) {
+        toast.error(`No ${label} address found. Please add an address first.`)
+        return
+      }
+
+      // Get coordinates from address location
+      const coordinates = address.location?.coordinates || []
+      const longitude = coordinates[0]
+      const latitude = coordinates[1]
+
+      if (!latitude || !longitude) {
+        toast.error(`Invalid coordinates for ${label} address`)
+        return
+      }
+
+      // Update location in backend
+      await userAPI.updateLocation({
+        latitude,
+        longitude,
+        address: `${address.street}, ${address.city}`,
+        city: address.city,
+        state: address.state,
+        area: address.additionalDetails || "",
+        formattedAddress: address.additionalDetails 
+          ? `${address.additionalDetails}, ${address.street}, ${address.city}, ${address.state}${address.zipCode ? ` ${address.zipCode}` : ''}`
+          : `${address.street}, ${address.city}, ${address.state}${address.zipCode ? ` ${address.zipCode}` : ''}`
+      })
+
+      // Update the location in localStorage
+      const locationData = {
+        city: address.city,
+        state: address.state,
+        address: `${address.street}, ${address.city}`,
+        area: address.additionalDetails || "",
+        zipCode: address.zipCode,
+        latitude,
+        longitude,
+        formattedAddress: address.additionalDetails 
+          ? `${address.additionalDetails}, ${address.street}, ${address.city}, ${address.state}${address.zipCode ? ` ${address.zipCode}` : ''}`
+          : `${address.street}, ${address.city}, ${address.state}${address.zipCode ? ` ${address.zipCode}` : ''}`
+      }
+      localStorage.setItem("userLocation", JSON.stringify(locationData))
+      
+      toast.success(`${label} address selected!`)
+      
+      // Force page reload to update location
+      window.location.reload()
+    } catch (error) {
+      console.error(`Error selecting ${label} address:`, error)
+      toast.error(`Failed to select ${label} address. Please try again.`)
+    }
+  }
+
   const handleApplyCoupon = async (coupon) => {
     if (subtotal >= coupon.minOrder) {
       setAppliedCoupon(coupon)
@@ -1117,26 +1177,6 @@ export default function Cart() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 px-4 md:px-6 py-4 md:py-6">
             {/* Left Column - Cart Items and Details */}
             <div className="lg:col-span-2 space-y-2 md:space-y-4">
-              {/* Gold Offer Card */}
-              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
-                <div className="flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-lg md:rounded-xl p-3 md:p-4">
-                  <div className="flex items-center gap-2 md:gap-3">
-                    <Crown className="h-5 w-5 md:h-6 md:w-6 text-amber-600 dark:text-amber-400" />
-                    <div>
-                      <p className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Get Gold for 3 months at ₹1</p>
-                      <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Enjoy FREE delivery above ₹99 and extra offers with Gold</p>
-                      <button className="text-xs md:text-sm text-amber-600 dark:text-amber-400 font-medium mt-0.5">Learn more →</button>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <Button size="sm" variant="outline" className="h-7 md:h-8 text-xs md:text-sm border-red-600 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
-                      ADD
-                    </Button>
-                    <p className="text-xs md:text-sm text-center text-gray-500 dark:text-gray-400 mt-0.5">₹1</p>
-                  </div>
-                </div>
-              </div>
-
               {/* Cart Items */}
               <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 rounded-lg md:rounded-xl">
                 <div className="space-y-3 md:space-y-4">
@@ -1371,7 +1411,6 @@ export default function Cart() {
                   <Clock className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
                   <div className="flex-1">
                     <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">Delivery in <span className="font-semibold">{restaurantData?.estimatedDeliveryTime || "10-15 mins"}</span></p>
-                    <button className="text-xs md:text-sm text-gray-500 dark:text-gray-400">Want this later? <span className="text-blue-600 dark:text-blue-400 font-medium">Schedule it</span></button>
                   </div>
                 </div>
               </div>
@@ -1424,14 +1463,37 @@ export default function Cart() {
                 <Link  className="flex items-center justify-between">
                   <div className="flex items-center gap-3 md:gap-4">
                     <MapPin className="h-4 w-4 md:h-5 md:w-5 text-gray-500 dark:text-gray-400" />
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm md:text-base text-gray-800 dark:text-gray-200">
                         Delivery at <span className="font-semibold">Location</span>
                       </p>
                       <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
                         {defaultAddress ? (formatFullAddress(defaultAddress) || defaultAddress?.formattedAddress || defaultAddress?.address || "Add delivery address") : "Add delivery address"}
                       </p>
-                      <button className="text-xs md:text-sm text-gray-500 dark:text-gray-400 border-b border-dashed border-gray-400 dark:border-gray-600">Add instructions for delivery partner</button>
+                      {/* Address Selection Buttons */}
+                      <div className="flex gap-2 mt-2">
+                        {["Home", "Office", "Other"].map((label) => {
+                          const addressExists = addresses.some(addr => addr.label === label)
+                          return (
+                            <button
+                              key={label}
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleSelectAddressByLabel(label)
+                              }}
+                              disabled={!addressExists}
+                              className={`text-xs md:text-sm px-2 md:px-3 py-1 md:py-1.5 rounded-md border transition-colors ${
+                                addressExists
+                                  ? 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 bg-white dark:bg-[#1a1a1a]'
+                                  : 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-50'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
                   </div>
                   <ChevronRight className="h-4 w-4 md:h-5 md:w-5 text-gray-400" />
@@ -1508,11 +1570,6 @@ export default function Cart() {
                 )}
               </div>
 
-              {/* Payment Issue Notice */}
-              <div className="bg-white dark:bg-[#1a1a1a] px-4 md:px-6 py-3 md:py-4 border-t-4 border-gray-100 dark:border-gray-800 rounded-lg md:rounded-xl">
-                <p className="text-sm md:text-base font-semibold text-gray-800 dark:text-gray-200">Appzeto Money</p>
-                <p className="text-xs md:text-sm text-amber-600 dark:text-amber-400">Facing technical issues. Will be back shortly!</p>
-              </div>
             </div>
 
             {/* Right Column - Order Summary (Desktop) */}

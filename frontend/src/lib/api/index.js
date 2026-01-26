@@ -429,6 +429,19 @@ export const restaurantAPI = {
   getWallet: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.WALLET);
   },
+  getWalletTransactions: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.WALLET_TRANSACTIONS, { params });
+  },
+  getWalletStats: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.WALLET_STATS, { params });
+  },
+  // Withdrawal
+  createWithdrawalRequest: (amount) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.WITHDRAWAL_REQUEST, { amount });
+  },
+  getWithdrawalRequests: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.WITHDRAWAL_REQUESTS, { params });
+  },
 
   // Get analytics
   getAnalytics: (params = {}) => {
@@ -985,6 +998,32 @@ export const adminAPI = {
   // Get restaurant report
   getRestaurantReport: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.ORDERS_RESTAURANT_REPORT, { params });
+  },
+
+  // Get refund requests
+  getRefundRequests: (params = {}) => {
+    return apiClient.get('/api/admin/refund-requests', { params });
+  },
+
+  // Process refund (supports both old and new endpoints)
+  processRefund: (orderId, data = {}) => {
+    // Use the orders endpoint: /api/admin/orders/:orderId/refund
+    // Backend accepts either MongoDB ObjectId (24 chars) or orderId string
+    if (!orderId) {
+      return Promise.reject(new Error('Order ID is required'));
+    }
+    return apiClient.post(`/api/admin/orders/${encodeURIComponent(orderId)}/refund`, data);
+  },
+
+  // Withdrawal Request Management
+  getWithdrawalRequests: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.WITHDRAWAL_REQUESTS, { params });
+  },
+  approveWithdrawalRequest: (id) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.WITHDRAWAL_APPROVE.replace(':id', id));
+  },
+  rejectWithdrawalRequest: (id, rejectionReason = '') => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.WITHDRAWAL_REJECT.replace(':id', id), { rejectionReason });
   },
 
   // Get customer wallet report

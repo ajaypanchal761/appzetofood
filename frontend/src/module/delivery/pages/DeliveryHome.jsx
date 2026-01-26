@@ -136,6 +136,147 @@ const mockRestaurants = [
   }
 ]
 
+// ============================================
+// STABLE TRACKING SYSTEM - RAPIDO/UBER STYLE
+// ============================================
+
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ * @param {number} lat1 
+ * @param {number} lng1 
+ * @param {number} lat2 
+ * @param {number} lng2 
+ * @returns {number} Distance in meters
+ */
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000 // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+/**
+ * Filter GPS location based on accuracy, distance jump, and speed
+ * @param {Object} position - GPS position object
+ * @param {Array} lastValidLocation - [lat, lng] of last valid location
+ * @param {number} lastLocationTime - Timestamp of last location
+ * @returns {boolean} true if location should be accepted
+ */
+function shouldAcceptLocation(position, lastValidLocation, lastLocationTime) {
+  const accuracy = position.coords.accuracy || 0
+  const latitude = position.coords.latitude
+  const longitude = position.coords.longitude
+  
+  // Filter 1: Ignore if accuracy > 30 meters
+  if (accuracy > 30) {
+    console.log('🚫 Location rejected: accuracy too poor', { accuracy: accuracy.toFixed(2) + 'm' })
+    return false
+  }
+  
+  // Filter 2: Check distance jump and speed if we have previous location
+  if (lastValidLocation && lastLocationTime) {
+    const [prevLat, prevLng] = lastValidLocation
+    const distance = haversineDistance(prevLat, prevLng, latitude, longitude)
+    const timeDiff = (Date.now() - lastLocationTime) / 1000 // seconds
+    
+    // Filter 2a: Ignore if distance jump > 50 meters within 2 seconds
+    if (distance > 50 && timeDiff < 2) {
+      console.log('🚫 Location rejected: distance jump too large', { 
+        distance: distance.toFixed(2) + 'm', 
+        timeDiff: timeDiff.toFixed(2) + 's' 
+      })
+      return false
+    }
+    
+    // Filter 2b: Ignore if calculated speed > 60 km/h (bike speed limit)
+    if (timeDiff > 0) {
+      const speedKmh = (distance / timeDiff) * 3.6 // Convert m/s to km/h
+      if (speedKmh > 60) {
+        console.log('🚫 Location rejected: speed too high', { 
+          speed: speedKmh.toFixed(2) + ' km/h' 
+        })
+        return false
+      }
+    }
+  }
+  
+  return true
+}
+
+/**
+ * Apply moving average smoothing on location history
+ * @param {Array} locationHistory - Array of [lat, lng] coordinates
+ * @returns {Array|null} Smoothed [lat, lng] or null if not enough points
+ */
+function smoothLocation(locationHistory) {
+  if (locationHistory.length < 2) {
+    return locationHistory.length === 1 ? locationHistory[0] : null
+  }
+  
+  // Use last 5 points for moving average
+  const pointsToUse = locationHistory.slice(-5)
+  
+  // Calculate average latitude and longitude
+  const avgLat = pointsToUse.reduce((sum, point) => sum + point[0], 0) / pointsToUse.length
+  const avgLng = pointsToUse.reduce((sum, point) => sum + point[1], 0) / pointsToUse.length
+  
+  return [avgLat, avgLng]
+}
+
+/**
+ * Animate marker smoothly from current position to new position
+ * @param {Object} marker - Google Maps Marker instance
+ * @param {Object} newPosition - {lat, lng} new position
+ * @param {number} duration - Animation duration in milliseconds (default 1500ms)
+ */
+function animateMarkerSmoothly(marker, newPosition, duration = 1500) {
+  if (!marker || !newPosition) return
+  
+  const currentPosition = marker.getPosition()
+  if (!currentPosition) {
+    // If no current position, set directly
+    marker.setPosition(newPosition)
+    return
+  }
+  
+  const startLat = currentPosition.lat()
+  const startLng = currentPosition.lng()
+  const endLat = newPosition.lat
+  const endLng = newPosition.lng
+  
+  // Cancel any ongoing animation
+  if (markerAnimationRef.current) {
+    cancelAnimationFrame(markerAnimationRef.current)
+  }
+  
+  const startTime = Date.now()
+  const startPos = { lat: startLat, lng: startLng }
+  const endPos = { lat: endLat, lng: endLng }
+  
+  function animate() {
+    const elapsed = Date.now() - startTime
+    const progress = Math.min(elapsed / duration, 1)
+    
+    // Linear easing
+    const currentLat = startPos.lat + (endPos.lat - startPos.lat) * progress
+    const currentLng = startPos.lng + (endPos.lng - startPos.lng) * progress
+    
+    marker.setPosition({ lat: currentLat, lng: currentLng })
+    
+    if (progress < 1) {
+      markerAnimationRef.current = requestAnimationFrame(animate)
+    } else {
+      markerAnimationRef.current = null
+    }
+  }
+  
+  markerAnimationRef.current = requestAnimationFrame(animate)
+}
+
 export default function DeliveryHome() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -227,8 +368,8 @@ export default function DeliveryHome() {
   // Delivery notifications hook
   const { newOrder, clearNewOrder, orderReady, clearOrderReady, isConnected } = useDeliveryNotifications()
   
-  // Default location - Indore, India (based on image)
-  const [riderLocation, setRiderLocation] = useState([22.7196, 75.8577]) // Indore coordinates
+  // Default location - will be set from saved location or GPS, not hardcoded
+  const [riderLocation, setRiderLocation] = useState(null) // Will be set from GPS or saved location
   const [isRefreshingLocation, setIsRefreshingLocation] = useState(false)
   const [bankDetailsFilled, setBankDetailsFilled] = useState(false)
   const [deliveryStatus, setDeliveryStatus] = useState(null) // Store delivery partner status
@@ -245,6 +386,13 @@ export default function DeliveryHome() {
   const routePolylineRef = useRef(null) // Store route polyline instance (legacy - for fallback)
   const routeHistoryRef = useRef([]) // Store route history for traveled path
   const isOnlineRef = useRef(false) // Store online status for use in callbacks
+  
+  // Stable tracking system - Rapido/Uber style
+  const locationHistoryRef = useRef([]) // Store last 5 valid GPS points for smoothing
+  const lastValidLocationRef = useRef(null) // Last valid smoothed location
+  const lastLocationTimeRef = useRef(null) // Timestamp of last location update
+  const smoothedLocationRef = useRef(null) // Current smoothed location
+  const markerAnimationRef = useRef(null) // Track ongoing marker animation
   const zonesPolygonsRef = useRef([]) // Store zone polygons
   // Google Maps Directions API refs
   const directionsServiceRef = useRef(null) // Directions Service instance
@@ -310,7 +458,9 @@ export default function DeliveryHome() {
   // Generate nearby hotspot locations with irregular shapes from 3-5 points
   // Using useState with lazy initializer to generate hotspots once and keep them fixed
   const [hotspots] = useState(() => {
-    const [lat, lng] = riderLocation
+    // Use default location if riderLocation is not available yet
+    const defaultLocation = [23.2599, 77.4126] // Bhopal center as fallback
+    const [lat, lng] = riderLocation || defaultLocation
     const hotspots = []
     const baseSpread = 0.004 // Base spread for points in degrees
     
@@ -1238,22 +1388,55 @@ export default function DeliveryHome() {
 
   // Get rider location - App open होते ही location fetch करें
   useEffect(() => {
-    // Set default location immediately so map can render
-    setRiderLocation(prev => prev || [22.7196, 75.8577])
-
-    // Check if we have saved location in localStorage (for refresh handling)
+    // First, check if we have saved location in localStorage (for refresh handling)
     const savedLocation = localStorage.getItem('deliveryBoyLastLocation')
     if (savedLocation) {
       try {
         const parsed = JSON.parse(savedLocation)
         if (parsed && Array.isArray(parsed) && parsed.length === 2) {
-          setRiderLocation(parsed)
-          lastLocationRef.current = parsed
-          routeHistoryRef.current = [{
-            lat: parsed[0],
-            lng: parsed[1]
-          }]
-          console.log('📍 Restored location from localStorage:', parsed)
+          const [lat, lng] = parsed
+          
+          // Validate saved coordinates
+          if (typeof lat === 'number' && typeof lng === 'number' &&
+              lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            // Check if coordinates might be swapped (common issue)
+            // If lat > 90 or lng > 180, they're definitely swapped
+            // If lat is in lng range (68-98 for India) and lng is in lat range (8-38), they might be swapped
+            const mightBeSwapped = (lat >= 68 && lat <= 98 && lng >= 8 && lng <= 38)
+            
+            if (mightBeSwapped) {
+              console.warn('⚠️ Saved coordinates might be swapped - correcting:', {
+                original: [lat, lng],
+                corrected: [lng, lat],
+                note: 'Swapping lat/lng based on India coordinate ranges'
+              })
+              // Swap coordinates
+              const correctedLocation = [lng, lat]
+              setRiderLocation(correctedLocation)
+              lastLocationRef.current = correctedLocation
+              routeHistoryRef.current = [{
+                lat: correctedLocation[0],
+                lng: correctedLocation[1]
+              }]
+              // Update localStorage with corrected coordinates
+              localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(correctedLocation))
+              console.log('✅ Corrected and saved location:', correctedLocation)
+            } else {
+              setRiderLocation(parsed)
+              lastLocationRef.current = parsed
+              routeHistoryRef.current = [{
+                lat: parsed[0],
+                lng: parsed[1]
+              }]
+              console.log('📍 Restored location from localStorage:', {
+                location: parsed,
+                format: "[lat, lng]",
+                validated: true
+              })
+            }
+          } else {
+            console.warn('⚠️ Invalid saved coordinates in localStorage:', parsed)
+          }
         }
       } catch (e) {
         console.warn('⚠️ Error parsing saved location:', e)
@@ -1268,6 +1451,7 @@ export default function DeliveryHome() {
           // Validate coordinates
           const latitude = position.coords.latitude
           const longitude = position.coords.longitude
+          const accuracy = position.coords.accuracy || 0
           
           // Validate coordinates are valid numbers
           if (typeof latitude !== 'number' || typeof longitude !== 'number' || 
@@ -1275,72 +1459,181 @@ export default function DeliveryHome() {
               latitude < -90 || latitude > 90 || 
               longitude < -180 || longitude > 180) {
             console.warn("⚠️ Invalid coordinates received:", { latitude, longitude })
-            // Use default location if invalid
-            const defaultLocation = [22.7196, 75.8577]
-            setRiderLocation(defaultLocation)
-            lastLocationRef.current = defaultLocation
+            // Don't use default location - keep trying or use saved location
+            // Retry after a delay
+            setTimeout(() => {
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    const lat = pos.coords.latitude
+                    const lng = pos.coords.longitude
+                    if (typeof lat === 'number' && typeof lng === 'number' && 
+                        !isNaN(lat) && !isNaN(lng) &&
+                        lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                      setRiderLocation([lat, lng])
+                      lastLocationRef.current = [lat, lng]
+                    }
+                  },
+                  (err) => console.warn("⚠️ Retry failed:", err),
+                  { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                )
+              }
+            }, 2000)
             return
           }
           
-          const newLocation = [latitude, longitude] // [lat, lng] format
+          // Check for coordinate swap (common issue: lat/lng swapped)
+          // India coordinates: lat ~8-37, lng ~68-97
+          if ((latitude > 90 || latitude < -90) || (longitude > 180 || longitude < -180)) {
+            console.error("❌ Coordinates out of valid range - possible swap:", { latitude, longitude })
+            // Don't use default location - retry
+            setTimeout(() => {
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    const lat = pos.coords.latitude
+                    const lng = pos.coords.longitude
+                    if (typeof lat === 'number' && typeof lng === 'number' && 
+                        !isNaN(lat) && !isNaN(lng) &&
+                        lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                      setRiderLocation([lat, lng])
+                      lastLocationRef.current = [lat, lng]
+                    }
+                  },
+                  (err) => console.warn("⚠️ Retry failed:", err),
+                  { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                )
+              }
+            }, 2000)
+            return
+          }
+          
+          // Validate coordinates are reasonable for India (basic sanity check)
+          // India: Latitude 8.4° to 37.6°, Longitude 68.7° to 97.25°
+          const isInIndiaRange = latitude >= 8 && latitude <= 38 && longitude >= 68 && longitude <= 98
+          if (!isInIndiaRange) {
+            console.warn("⚠️ Coordinates outside India range - might be incorrect:", { 
+              latitude, 
+              longitude,
+              note: "India range: lat 8-38, lng 68-98"
+            })
+            // Still use the location but log warning
+          }
+          
+          // Apply stable tracking filter
+          const shouldAccept = shouldAcceptLocation(
+            position,
+            lastValidLocationRef.current,
+            lastLocationTimeRef.current
+          )
+          
+          if (!shouldAccept) {
+            console.log('🚫 Initial location rejected by filter, will wait for better GPS signal')
+            return
+          }
+          
+          const rawLocation = [latitude, longitude]
+          
+          // Initialize location history with first valid point
+          locationHistoryRef.current = [rawLocation]
+          const smoothedLocation = rawLocation // First point, no smoothing needed yet
+          
+          // Update refs
+          lastValidLocationRef.current = smoothedLocation
+          lastLocationTimeRef.current = Date.now()
+          smoothedLocationRef.current = smoothedLocation
+          
           let heading = position.coords.heading !== null && position.coords.heading !== undefined 
             ? position.coords.heading 
             : null
           
-          // Calculate heading from previous location if GPS heading not available
-          if (heading === null && lastLocationRef.current) {
-            const [prevLat, prevLng] = lastLocationRef.current
-            heading = calculateHeading(prevLat, prevLng, latitude, longitude)
-          }
+          // Initialize route history
+          routeHistoryRef.current = [{
+            lat: smoothedLocation[0],
+            lng: smoothedLocation[1]
+          }]
           
-          // Initialize route history if empty
-          if (routeHistoryRef.current.length === 0) {
-            routeHistoryRef.current = [{
-              lat: latitude,
-              lng: longitude
-            }]
-          } else {
-            // Add to route history
-            routeHistoryRef.current.push({
-              lat: latitude,
-              lng: longitude
-            })
-            if (routeHistoryRef.current.length > 1000) {
-              routeHistoryRef.current.shift()
-            }
-          }
+          // Save location to localStorage
+          localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(smoothedLocation))
           
-          // Save location to localStorage (for refresh handling)
-          localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(newLocation))
+          setRiderLocation(smoothedLocation)
+          lastLocationRef.current = smoothedLocation
           
-          // Update bike marker if map is initialized (always show, both offline and online)
-          if (window.deliveryMapInstance) {
-            // Always show bike icon on map (both offline and online)
-            createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
+          // Initialize map if not already initialized (will use this location)
+          if (!window.deliveryMapInstance && window.google && window.google.maps && mapContainerRef.current) {
+            console.log('📍 Map not initialized yet, will initialize with GPS location')
+            // Map will be initialized in the map initialization useEffect with this location
+          } else if (window.deliveryMapInstance) {
+            // Map already initialized - recenter and update marker
+            window.deliveryMapInstance.setCenter({ lat: smoothedLocation[0], lng: smoothedLocation[1] })
+            window.deliveryMapInstance.setZoom(18)
+            createOrUpdateBikeMarker(smoothedLocation[0], smoothedLocation[1], heading, !isUserPanningRef.current)
             updateRoutePolyline()
+            console.log('📍 Map recentered to GPS location')
           }
           
-          setRiderLocation(newLocation)
-          lastLocationRef.current = newLocation
-          console.log("📍 Current location obtained on app open:", { 
-            latitude, 
-            longitude, 
+          console.log("📍 Current location obtained on app open (filtered):", { 
+            raw: { lat: latitude, lng: longitude },
+            smoothed: { lat: smoothedLocation[0], lng: smoothedLocation[1] },
             heading,
-            accuracy: position.coords.accuracy,
+            accuracy: `${accuracy.toFixed(0)}m`,
             isOnline: isOnlineRef.current,
             timestamp: new Date().toISOString()
           })
         },
         (error) => {
           console.warn("⚠️ Error getting current location:", error)
-          // Keep default location if geolocation fails
-          const defaultLocation = [22.7196, 75.8577]
-          setRiderLocation(defaultLocation)
-          lastLocationRef.current = defaultLocation
-          routeHistoryRef.current = [{
-            lat: defaultLocation[0],
-            lng: defaultLocation[1]
-          }]
+          // Don't use default location - retry after delay
+          // Check if we have saved location from localStorage
+          const savedLoc = localStorage.getItem('deliveryBoyLastLocation')
+          if (!savedLoc) {
+            // No saved location, retry after 3 seconds
+            setTimeout(() => {
+              if (navigator.geolocation) {
+                console.log('🔄 Retrying location fetch...')
+                navigator.geolocation.getCurrentPosition(
+                  (position) => {
+                    const lat = position.coords.latitude
+                    const lng = position.coords.longitude
+                    if (typeof lat === 'number' && typeof lng === 'number' && 
+                        !isNaN(lat) && !isNaN(lng) &&
+                        lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                      const newLocation = [lat, lng]
+                      setRiderLocation(newLocation)
+                      lastLocationRef.current = newLocation
+                      smoothedLocationRef.current = newLocation
+                      lastValidLocationRef.current = newLocation
+                      locationHistoryRef.current = [newLocation]
+                      localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(newLocation))
+                      console.log('✅ Location obtained on retry:', newLocation)
+                      
+                      // Recenter map if already initialized, otherwise it will initialize when location is set
+                      if (window.deliveryMapInstance) {
+                        window.deliveryMapInstance.setCenter({ lat, lng })
+                        window.deliveryMapInstance.setZoom(18)
+                        console.log('📍 Recentered map to GPS location')
+                        
+                        // Update bike marker
+                        if (bikeMarkerRef.current) {
+                          bikeMarkerRef.current.setPosition({ lat, lng })
+                        } else if (window.deliveryMapInstance) {
+                          createOrUpdateBikeMarker(lat, lng, null, true)
+                        }
+                      }
+                    }
+                  },
+                  (err) => {
+                    console.warn("⚠️ Retry also failed:", err)
+                    // Show toast to user to enable location
+                    toast.error('Location access required. Please enable location permissions.')
+                  },
+                  { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                )
+              }
+            }, 3000)
+          } else {
+            console.log('📍 Using saved location from previous session')
+          }
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       )
@@ -1348,8 +1641,9 @@ export default function DeliveryHome() {
       // NOTE: watchPosition will be started/stopped based on isOnline status
       // This is handled in a separate useEffect that depends on isOnline
     } else {
-      // Default location if geolocation not available
-      setRiderLocation(prev => prev || [22.7196, 75.8577])
+      // Geolocation not available - show error
+      console.error('❌ Geolocation API not available in this browser')
+      toast.error('Location services not available. Please use a device with GPS.')
     }
   }, []) // Run only on mount - get initial location
 
@@ -1369,14 +1663,15 @@ export default function DeliveryHome() {
     // But only send location to backend when online (for order assignment)
     console.log('📍 Starting live location tracking (offline/online)')
 
-    // Watch position updates for live tracking (Only when online)
+    // Watch position updates for live tracking with STABLE TRACKING SYSTEM
     const watchId = navigator.geolocation.watchPosition(
         (position) => {
-          // Validate coordinates
+          // Validate coordinates first
           const latitude = position.coords.latitude
           const longitude = position.coords.longitude
+          const accuracy = position.coords.accuracy || 0
           
-          // Validate coordinates are valid numbers
+          // Basic validation
           if (typeof latitude !== 'number' || typeof longitude !== 'number' || 
               isNaN(latitude) || isNaN(longitude) ||
               latitude < -90 || latitude > 90 || 
@@ -1385,83 +1680,191 @@ export default function DeliveryHome() {
             return
           }
           
-          const newLocation = [latitude, longitude] // [lat, lng] format
+          // ============================================
+          // STABLE TRACKING FILTERING (RAPIDO STYLE)
+          // ============================================
+          
+          // Apply filtering: accuracy, distance jump, speed checks
+          const shouldAccept = shouldAcceptLocation(
+            position, 
+            lastValidLocationRef.current, 
+            lastLocationTimeRef.current
+          )
+          
+          if (!shouldAccept) {
+            // Location rejected by filter - keep using last valid location
+            return
+          }
+          
+          // Location passed filter - add to history
+          const rawLocation = [latitude, longitude]
+          locationHistoryRef.current.push(rawLocation)
+          
+          // Keep only last 5 points for moving average
+          if (locationHistoryRef.current.length > 5) {
+            locationHistoryRef.current.shift()
+          }
+          
+          // Apply moving average smoothing
+          const smoothedLocation = smoothLocation(locationHistoryRef.current)
+          
+          if (!smoothedLocation) {
+            // Not enough points yet, use raw location
+            const newLocation = rawLocation
+            lastValidLocationRef.current = newLocation
+            lastLocationTimeRef.current = Date.now()
+            smoothedLocationRef.current = newLocation
+            
+            // Initialize if first location
+            if (!lastLocationRef.current) {
+              setRiderLocation(newLocation)
+              lastLocationRef.current = newLocation
+              routeHistoryRef.current = [{
+                lat: newLocation[0],
+                lng: newLocation[1]
+              }]
+              
+              // Save to localStorage
+              localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(newLocation))
+              
+              // Update marker with correct location
+              if (window.deliveryMapInstance) {
+                const [lat, lng] = newLocation
+                console.log('📍 Updating bike marker with first location:', { lat, lng })
+                
+                // Validate coordinates
+                if (typeof lat === 'number' && typeof lng === 'number' &&
+                    !isNaN(lat) && !isNaN(lng) &&
+                    lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                  if (bikeMarkerRef.current) {
+                    bikeMarkerRef.current.setPosition({ lat, lng })
+                    console.log('✅ Bike marker position updated to first location')
+                  } else {
+                    // Create marker if it doesn't exist
+                    createOrUpdateBikeMarker(lat, lng, null, true)
+                    console.log('✅ Bike marker created with first location')
+                  }
+                } else {
+                  console.error('❌ Invalid coordinates for bike marker:', { lat, lng })
+                }
+              }
+            }
+            
+            // Send raw location to backend even if not smoothed yet
+            if (isOnlineRef.current) {
+              const [lat, lng] = newLocation
+              const now = Date.now();
+              const lastSentTime = window.lastLocationSentTime || 0;
+              const timeSinceLastSend = now - lastSentTime;
+              
+              // Send location every 5 seconds even if not smoothed
+              if (timeSinceLastSend >= 5000) {
+                if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                  console.log('📤 Sending raw location to backend (not smoothed yet):', { lat, lng })
+                  deliveryAPI.updateLocation(lat, lng, true)
+                    .then(() => {
+                      window.lastLocationSentTime = now;
+                      window.lastSentLocation = newLocation;
+                      console.log('✅ Raw location sent to backend successfully')
+                    })
+                    .catch(error => {
+                      if (error.code !== 'ERR_NETWORK' && error.message !== 'Network Error') {
+                        console.error('❌ Error sending raw location to backend:', error);
+                      }
+                    });
+                }
+              }
+            }
+            
+            return
+          }
+          
+          // ============================================
+          // SMOOTH MARKER ANIMATION (NO INSTANT JUMPS)
+          // ============================================
+          
+          const [smoothedLat, smoothedLng] = smoothedLocation
+          const newSmoothedLocation = { lat: smoothedLat, lng: smoothedLng }
+          
+          // Calculate heading
           let heading = position.coords.heading !== null && position.coords.heading !== undefined 
             ? position.coords.heading 
             : null
           
-          // Calculate heading from previous location if GPS heading not available
-          if (heading === null && lastLocationRef.current) {
-            const [prevLat, prevLng] = lastLocationRef.current
-            heading = calculateHeading(prevLat, prevLng, latitude, longitude)
+          if (heading === null && smoothedLocationRef.current) {
+            const [prevLat, prevLng] = smoothedLocationRef.current
+            heading = calculateHeading(prevLat, prevLng, smoothedLat, smoothedLng)
           }
           
-          // Update route history for traveled path
-          if (lastLocationRef.current) {
-            routeHistoryRef.current.push({
-              lat: latitude,
-              lng: longitude
-            })
-            // Keep only last 1000 points to avoid performance issues
-            if (routeHistoryRef.current.length > 1000) {
-              routeHistoryRef.current.shift()
-            }
-            // Update route polyline on map
-            updateRoutePolyline()
-          } else {
-            // Initialize route history with first location
-            routeHistoryRef.current = [{
-              lat: latitude,
-              lng: longitude
-            }]
+          // Update refs
+          lastValidLocationRef.current = smoothedLocation
+          lastLocationTimeRef.current = Date.now()
+          smoothedLocationRef.current = smoothedLocation
+          
+          // Update route history with smoothed location
+          routeHistoryRef.current.push({
+            lat: smoothedLat,
+            lng: smoothedLng
+          })
+          if (routeHistoryRef.current.length > 1000) {
+            routeHistoryRef.current.shift()
           }
           
-          // Save location to localStorage (for refresh handling)
-          localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(newLocation))
+          // Save smoothed location to localStorage
+          localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(smoothedLocation))
           
-          // Update live tracking polyline only for restaurant route, not for customer route
-          // Use ref to get latest directionsResponse in callback
+          // Update live tracking polyline only for restaurant route
           const currentDirectionsResponse = directionsResponseRef.current;
           const isOutForDelivery = selectedRestaurant?.orderStatus === 'out_for_delivery' || 
                                    selectedRestaurant?.deliveryPhase === 'en_route_to_drop' ||
                                    selectedRestaurant?.deliveryState?.currentPhase === 'en_route_to_drop';
           
-          // Only update polyline if NOT going to customer (i.e., going to restaurant)
           if (currentDirectionsResponse && currentDirectionsResponse.routes && currentDirectionsResponse.routes.length > 0 && !isOutForDelivery) {
-            updateLiveTrackingPolyline(currentDirectionsResponse, newLocation);
+            updateLiveTrackingPolyline(currentDirectionsResponse, smoothedLocation);
           } else if (isOutForDelivery && liveTrackingPolylineRef.current) {
-            // Remove polyline if going to customer
             liveTrackingPolylineRef.current.setMap(null);
             liveTrackingPolylineRef.current = null;
           }
           
-          // Smoothly animate rider marker
-          animateRiderMarker(newLocation, heading);
+          // ============================================
+          // SMOOTH MARKER ANIMATION (1-2 seconds)
+          // ============================================
           
-          // Update bike marker with new location and heading (create if doesn't exist)
-          // Always show bike marker on map (both offline and online)
+          // Update state with smoothed location FIRST
+          setRiderLocation(smoothedLocation)
+          lastLocationRef.current = smoothedLocation
+          
+          // Always update bike marker with latest smoothed location
           if (window.deliveryMapInstance) {
-            // Always show bike icon on map (both offline and online)
-            // Always center map on bike location (Zomato style) unless user is panning
-            createOrUpdateBikeMarker(latitude, longitude, heading, !isUserPanningRef.current)
+            if (bikeMarkerRef.current) {
+              // Marker exists - animate smoothly to new position
+              animateMarkerSmoothly(bikeMarkerRef.current, newSmoothedLocation, 1500)
+            } else {
+              // Marker doesn't exist yet, create it immediately with correct location
+              console.log('📍 Creating bike marker with smoothed location:', { lat: smoothedLat, lng: smoothedLng })
+              createOrUpdateBikeMarker(smoothedLat, smoothedLng, heading, !isUserPanningRef.current)
+            }
           }
           
-          setRiderLocation(newLocation)
-          lastLocationRef.current = newLocation
-          console.log("📍 Live location updated:", { 
-            latitude, 
-            longitude, 
+          // Update route polyline
+          updateRoutePolyline()
+          
+          console.log("📍 Live location updated (smoothed):", { 
+            raw: { lat: latitude, lng: longitude },
+            smoothed: { lat: smoothedLat, lng: smoothedLng },
             heading,
-            accuracy: position.coords.accuracy,
+            accuracy: `${accuracy.toFixed(0)}m`,
             isOnline: isOnlineRef.current,
             timestamp: new Date().toISOString()
           })
           
-          // Send location to backend if user is online (throttle to every 10 seconds)
-          if (isOnlineRef.current) {
+          // Send SMOOTHED location to backend if user is online (throttle to every 5 seconds)
+          if (isOnlineRef.current && smoothedLocation) {
             const now = Date.now();
             const lastSentTime = window.lastLocationSentTime || 0;
             const timeSinceLastSend = now - lastSentTime;
+            
+            // Use smoothed location for backend (not raw GPS) - already declared above
             
             // Simple distance check using Haversine formula
             const calculateDistance = (lat1, lng1, lat2, lng2) => {
@@ -1475,26 +1878,52 @@ export default function DeliveryHome() {
               return R * c;
             };
             
-            // Send location every 10 seconds or if location changed significantly (>100m)
-            const shouldSend = timeSinceLastSend >= 10000 || 
-              (lastLocationRef.current && 
-               calculateDistance(lastLocationRef.current[0], lastLocationRef.current[1], latitude, longitude) > 0.1);
+            // Get last sent location for distance check
+            const lastSentLocation = window.lastSentLocation || null;
+            
+            // Send location every 5 seconds OR if location changed significantly (>50m)
+            const shouldSend = timeSinceLastSend >= 5000 || 
+              (lastSentLocation && 
+               calculateDistance(lastSentLocation[0], lastSentLocation[1], smoothedLat, smoothedLng) > 0.05);
             
             if (shouldSend) {
-              deliveryAPI.updateLocation(latitude, longitude, true)
-                .then(() => {
-                  window.lastLocationSentTime = now;
-                  console.log('✅ Location sent to backend:', { latitude, longitude });
-                })
-                .catch(error => {
-                  // Only log non-network errors (backend might be down, which is expected in dev)
-                  if (error.code !== 'ERR_NETWORK' && error.message !== 'Network Error') {
-                    console.error('❌ Error sending location to backend:', error);
-                  } else {
-                    // Silently handle network errors - backend might not be running
-                    // Socket.IO will handle reconnection automatically
-                  }
+              // Final validation before sending to backend
+              // Ensure coordinates are in correct format [lat, lng] and within valid ranges
+              if (smoothedLat >= -90 && smoothedLat <= 90 && smoothedLng >= -180 && smoothedLng <= 180) {
+                console.log('📤 Sending smoothed location to backend:', { 
+                  smoothed: { lat: smoothedLat, lng: smoothedLng },
+                  raw: { lat: latitude, lng: longitude },
+                  accuracy: `${accuracy.toFixed(0)}m`,
+                  timeSinceLastSend: `${(timeSinceLastSend / 1000).toFixed(1)}s`
                 });
+                
+                deliveryAPI.updateLocation(smoothedLat, smoothedLng, true)
+                  .then(() => {
+                    window.lastLocationSentTime = now;
+                    window.lastSentLocation = smoothedLocation; // Store last sent location
+                    console.log('✅ Smoothed location sent to backend successfully:', { 
+                      latitude: smoothedLat, 
+                      longitude: smoothedLng,
+                      format: "lat, lng (correct order)",
+                      accuracy: `${accuracy.toFixed(0)}m`
+                    });
+                  })
+                  .catch(error => {
+                    // Only log non-network errors (backend might be down, which is expected in dev)
+                    if (error.code !== 'ERR_NETWORK' && error.message !== 'Network Error') {
+                      console.error('❌ Error sending location to backend:', error);
+                    } else {
+                      // Silently handle network errors - backend might not be running
+                      // Socket.IO will handle reconnection automatically
+                    }
+                  });
+              } else {
+                console.error('❌ Invalid smoothed coordinates - not sending to backend:', { 
+                  smoothedLat, 
+                  smoothedLng,
+                  raw: { latitude, longitude }
+                });
+              }
             }
           }
         },
@@ -2750,17 +3179,112 @@ export default function DeliveryHome() {
     }
   }
 
-  // Handle camera capture for bill image
-  const handleCameraCapture = () => {
-    // Trigger camera input (back camera)
-    if (cameraInputRef.current) {
-      cameraInputRef.current.click()
+  /**
+   * Handle camera capture for bill image - Flutter InAppWebView compatible
+   * 
+   * Flutter Handler Requirements:
+   * Handler name: 'openCamera'
+   * Expected response format:
+   * {
+   *   success: true,
+   *   file?: File,              // Preferred: JavaScript File object
+   *   base64?: string,          // Alternative: Base64 encoded image (with or without data:image/jpeg;base64, prefix)
+   *   mimeType?: string,        // MIME type (e.g., 'image/jpeg', 'image/png')
+   *   fileName?: string,        // File name (e.g., 'bill-image.jpg')
+   *   filePath?: string         // Not recommended: File path (requires additional handler to read)
+   * }
+   * 
+   * If user cancels:
+   * { success: false } or null
+   */
+  const handleCameraCapture = async () => {
+    try {
+      // Check if Flutter InAppWebView handler is available
+      if (window.flutter_inappwebview && typeof window.flutter_inappwebview.callHandler === 'function') {
+        console.log('📸 Using Flutter InAppWebView camera handler')
+        
+        // Call Flutter handler to open camera
+        const result = await window.flutter_inappwebview.callHandler('openCamera', {
+          source: 'camera', // 'camera' for camera, 'gallery' for file picker
+          accept: 'image/*',
+          multiple: false,
+          quality: 0.8 // Image quality (0.0 to 1.0)
+        })
+        
+        console.log('📸 Flutter handler response:', result)
+        
+        if (result && result.success) {
+          // Handle the result - could be base64, file path, or file object
+          let file = null
+          
+          if (result.file) {
+            // If Flutter returns a File object (preferred method)
+            file = result.file
+            console.log('✅ Received File object from Flutter')
+          } else if (result.base64) {
+            // If Flutter returns base64, convert to File
+            console.log('📸 Converting base64 to File object')
+            let base64Data = result.base64
+            
+            // Remove data URL prefix if present
+            if (base64Data.includes(',')) {
+              base64Data = base64Data.split(',')[1]
+            }
+            
+            try {
+              const byteCharacters = atob(base64Data)
+              const byteNumbers = new Array(byteCharacters.length)
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i)
+              }
+              const byteArray = new Uint8Array(byteNumbers)
+              const mimeType = result.mimeType || 'image/jpeg'
+              const blob = new Blob([byteArray], { type: mimeType })
+              file = new File([blob], result.fileName || `bill-image-${Date.now()}.jpg`, { type: mimeType })
+              console.log('✅ Converted base64 to File:', { name: file.name, size: file.size, type: file.type })
+            } catch (base64Error) {
+              console.error('❌ Error converting base64 to File:', base64Error)
+              toast.error('Failed to process image. Please try again.')
+              return
+            }
+          } else if (result.filePath) {
+            // If Flutter returns file path, we need to fetch it
+            // This would require additional Flutter handler to read file
+            console.warn('⚠️ File path returned, but file reading not implemented')
+            toast.error('File path handling not implemented. Please use base64 or File object.')
+            return
+          }
+          
+          if (file) {
+            // Process the file the same way as handleBillImageSelect
+            await processBillImageFile(file)
+          } else {
+            console.error('❌ No file data in Flutter response:', result)
+            toast.error('Failed to get image from camera')
+          }
+        } else {
+          console.log('ℹ️ Camera cancelled by user or failed')
+        }
+      } else {
+        // Fallback to standard file input for web browsers
+        console.log('📸 Flutter handler not available, using standard file input')
+        if (cameraInputRef.current) {
+          cameraInputRef.current.click()
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error opening camera:', error)
+      toast.error('Failed to open camera. Please try again.')
+      
+      // Fallback to standard file input
+      if (cameraInputRef.current) {
+        cameraInputRef.current.click()
+      }
     }
   }
 
-  // Handle bill image file selection and upload
-  const handleBillImageSelect = async (e) => {
-    const file = e.target.files?.[0]
+  // Process bill image file (extracted from handleBillImageSelect for reuse)
+  const processBillImageFile = async (file) => {
     if (!file) return
 
     // Validate file type
@@ -2816,6 +3340,13 @@ export default function DeliveryHome() {
         cameraInputRef.current.value = ''
       }
     }
+  }
+
+  // Handle bill image file selection and upload (fallback for web browsers)
+  const handleBillImageSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await processBillImageFile(file)
   }
 
   const handleOrderIdConfirmTouchEnd = (e) => {
@@ -3486,11 +4017,21 @@ export default function DeliveryHome() {
       console.log('📦 New order received from Socket.IO:', newOrder)
       
       // Transform newOrder data to match selectedRestaurant format
+      // Extract restaurant address with proper priority
+      let restaurantAddress = 'Restaurant address';
+      if (newOrder.restaurantLocation?.address) {
+        restaurantAddress = newOrder.restaurantLocation.address;
+      } else if (newOrder.restaurantLocation?.formattedAddress) {
+        restaurantAddress = newOrder.restaurantLocation.formattedAddress;
+      } else if (newOrder.restaurantAddress) {
+        restaurantAddress = newOrder.restaurantAddress;
+      }
+      
       const restaurantData = {
         id: newOrder.orderMongoId || newOrder.orderId,
         orderId: newOrder.orderId,
         name: newOrder.restaurantName,
-        address: newOrder.restaurantLocation?.address || 'Restaurant address',
+        address: restaurantAddress,
         lat: newOrder.restaurantLocation?.latitude,
         lng: newOrder.restaurantLocation?.longitude,
         distance: newOrder.pickupDistance || '0 km',
@@ -3511,6 +4052,49 @@ export default function DeliveryHome() {
       setCountdownSeconds(300) // Reset countdown to 5 minutes
     }
   }, [newOrder, calculateTimeAway])
+
+  // Fetch restaurant address if missing when selectedRestaurant is set
+  useEffect(() => {
+    if (!selectedRestaurant?.orderId && !selectedRestaurant?.id) return
+    if (!selectedRestaurant?.address || 
+        selectedRestaurant.address === 'Restaurant address' || 
+        selectedRestaurant.address === 'Restaurant Address') {
+      // Address is missing, fetch order details to get restaurant address
+      const orderId = selectedRestaurant.orderId || selectedRestaurant.id
+      console.log('🔄 Fetching restaurant address for order:', orderId)
+      
+      const fetchAddress = async () => {
+        try {
+          const response = await deliveryAPI.getOrderDetails(orderId)
+          if (response?.data?.success && response?.data?.data) {
+            const order = response.data.data.order || response.data.data
+            
+            // Extract restaurant address
+            let restaurantAddress = null
+            if (order.restaurantId?.address) {
+              restaurantAddress = order.restaurantId.address
+            } else if (order.restaurantId?.location?.formattedAddress) {
+              restaurantAddress = order.restaurantId.location.formattedAddress
+            } else if (order.restaurantId?.location?.address) {
+              restaurantAddress = order.restaurantId.location.address
+            }
+            
+            if (restaurantAddress && restaurantAddress !== 'Restaurant address' && restaurantAddress !== 'Restaurant Address') {
+              setSelectedRestaurant(prev => ({
+                ...prev,
+                address: restaurantAddress
+              }))
+              console.log('✅ Restaurant address fetched and updated:', restaurantAddress)
+            }
+          }
+        } catch (error) {
+          console.error('❌ Error fetching restaurant address:', error)
+        }
+      }
+      
+      fetchAddress()
+    }
+  }, [selectedRestaurant?.orderId, selectedRestaurant?.id, selectedRestaurant?.address])
 
   // Handle online toggle - check for booked gigs
   const handleToggleOnline = () => {
@@ -3698,6 +4282,162 @@ export default function DeliveryHome() {
       fetchWalletData()
     }
   }, [deliveryStatus])
+
+  // Fetch assigned orders from API when delivery person goes online
+  const fetchAssignedOrders = useCallback(async () => {
+    if (!isOnline) {
+      console.log('⚠️ Delivery person is offline, skipping order fetch')
+      return
+    }
+
+    try {
+      console.log('📦 Fetching assigned orders from API...')
+      const response = await deliveryAPI.getOrders({
+        limit: 50, // Get up to 50 pending orders
+        page: 1,
+        includeDelivered: false // Only get active orders
+      })
+
+      if (response?.data?.success && response?.data?.data?.orders) {
+        const orders = response.data.data.orders
+        console.log(`✅ Found ${orders.length} assigned order(s)`)
+        
+        // Filter out orders that are already accepted or delivered
+        const pendingOrders = orders.filter(order => {
+          const orderStatus = order.status
+          const deliveryPhase = order.deliveryState?.currentPhase
+          
+          // Skip if already delivered or completed
+          if (orderStatus === 'delivered' || deliveryPhase === 'completed') {
+            return false
+          }
+          
+          // Skip if already accepted (has deliveryState with accepted status)
+          if (order.deliveryState?.status === 'accepted' || 
+              order.deliveryState?.status === 'reached_pickup' ||
+              order.deliveryState?.status === 'order_confirmed' ||
+              deliveryPhase === 'en_route_to_pickup' ||
+              deliveryPhase === 'at_pickup' ||
+              deliveryPhase === 'en_route_to_delivery' ||
+              deliveryPhase === 'at_delivery') {
+            return false
+          }
+          
+          return true
+        })
+
+        if (pendingOrders.length > 0) {
+          console.log(`📦 Found ${pendingOrders.length} new pending order(s) to show`)
+          
+          // Show the first pending order as a new order notification
+          const firstOrder = pendingOrders[0]
+          const orderId = firstOrder.orderId || firstOrder._id?.toString()
+          
+          // Check if this order is already being shown or accepted
+          if (acceptedOrderIdsRef.current.has(orderId)) {
+            console.log('⚠️ Order already accepted, skipping:', orderId)
+            return
+          }
+
+          // Transform order data to match selectedRestaurant format
+          // Fetch restaurant address with proper priority
+          let restaurantAddress = 'Restaurant address';
+          if (firstOrder.restaurantId?.address) {
+            restaurantAddress = firstOrder.restaurantId.address;
+          } else if (firstOrder.restaurantId?.location?.formattedAddress) {
+            restaurantAddress = firstOrder.restaurantId.location.formattedAddress;
+          } else if (firstOrder.restaurantId?.location?.address) {
+            restaurantAddress = firstOrder.restaurantId.location.address;
+          } else if (firstOrder.restaurantId?.location?.street) {
+            // Build address from location fields
+            const loc = firstOrder.restaurantId.location;
+            const parts = [loc.street, loc.city, loc.state, loc.pincode].filter(Boolean);
+            restaurantAddress = parts.join(', ') || 'Restaurant address';
+          }
+          
+          console.log('📍 Restaurant address extracted from assigned order:', {
+            address: restaurantAddress,
+            hasRestaurantId: !!firstOrder.restaurantId,
+            hasLocation: !!firstOrder.restaurantId?.location
+          });
+          
+          const restaurantData = {
+            id: firstOrder._id?.toString() || firstOrder.orderId,
+            orderId: firstOrder.orderId,
+            name: firstOrder.restaurantId?.name || 'Restaurant',
+            address: restaurantAddress,
+            lat: firstOrder.restaurantId?.location?.coordinates?.[1],
+            lng: firstOrder.restaurantId?.location?.coordinates?.[0],
+            distance: firstOrder.assignmentInfo?.distance 
+              ? `${firstOrder.assignmentInfo.distance.toFixed(2)} km` 
+              : '0 km',
+            timeAway: firstOrder.assignmentInfo?.distance 
+              ? calculateTimeAway(`${firstOrder.assignmentInfo.distance.toFixed(2)} km`)
+              : '0 mins',
+            dropDistance: firstOrder.address?.location?.coordinates 
+              ? 'Calculating...' 
+              : '0 km',
+            pickupDistance: firstOrder.assignmentInfo?.distance 
+              ? `${firstOrder.assignmentInfo.distance.toFixed(2)} km` 
+              : '0 km',
+            estimatedEarnings: firstOrder.pricing?.deliveryFee || 0,
+            customerName: firstOrder.userId?.name || 'Customer',
+            customerAddress: firstOrder.address?.formattedAddress || 
+                           (firstOrder.address?.street 
+                             ? `${firstOrder.address.street}, ${firstOrder.address.city || ''}, ${firstOrder.address.state || ''}`.trim()
+                             : 'Customer address'),
+            customerLat: firstOrder.address?.location?.coordinates?.[1],
+            customerLng: firstOrder.address?.location?.coordinates?.[0],
+            items: firstOrder.items || [],
+            total: firstOrder.pricing?.total || 0,
+            payment: firstOrder.payment?.method || 'COD',
+            amount: firstOrder.pricing?.total || 0
+          }
+          
+          setSelectedRestaurant(restaurantData)
+          setShowNewOrderPopup(true)
+          setCountdownSeconds(300) // Reset countdown to 5 minutes
+          console.log('✅ Showing pending order notification:', orderId)
+        } else {
+          console.log('ℹ️ No pending orders found')
+        }
+      } else {
+        console.log('ℹ️ No orders in response or response format unexpected')
+      }
+    } catch (error) {
+      console.error('❌ Error fetching assigned orders:', error)
+      // Don't show error to user, just log it
+    }
+  }, [isOnline, calculateTimeAway])
+
+  // Fetch assigned orders when delivery person goes online
+  useEffect(() => {
+    if (isOnline) {
+      // Small delay to ensure socket connection is established
+      const timeoutId = setTimeout(() => {
+        fetchAssignedOrders()
+      }, 2000) // Wait 2 seconds after going online
+
+      return () => clearTimeout(timeoutId)
+    }
+  }, [isOnline, fetchAssignedOrders])
+
+  // Also fetch orders on initial page load if already online
+  useEffect(() => {
+    // Check if delivery person is already online when component mounts
+    const storedOnlineStatus = localStorage.getItem('delivery_online_status')
+    const isCurrentlyOnline = storedOnlineStatus === 'true' || isOnline
+    
+    if (isCurrentlyOnline) {
+      // Fetch orders after a short delay to ensure everything is initialized
+      const timeoutId = setTimeout(() => {
+        fetchAssignedOrders()
+      }, 3000) // Wait 3 seconds on page load
+
+      return () => clearTimeout(timeoutId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount
 
   // Fetch bank details status and delivery partner status
   useEffect(() => {
@@ -4011,7 +4751,43 @@ export default function DeliveryHome() {
 
         console.log('📍 Initializing Google Map with container:', mapContainerRef.current);
         setMapLoading(true);
-        const initialCenter = riderLocation ? { lat: riderLocation[0], lng: riderLocation[1] } : { lat: 22.7196, lng: 75.8577 };
+        
+        // Get location from multiple sources (priority: riderLocation > saved location > wait for GPS)
+        let initialCenter = null;
+        
+        if (riderLocation && riderLocation.length === 2) {
+          // Use current rider location
+          initialCenter = { lat: riderLocation[0], lng: riderLocation[1] };
+          console.log('📍 Using current rider location for map center:', initialCenter);
+        } else {
+          // Try to get from localStorage (saved location from previous session)
+          const savedLocation = localStorage.getItem('deliveryBoyLastLocation');
+          if (savedLocation) {
+            try {
+              const parsed = JSON.parse(savedLocation);
+              if (parsed && Array.isArray(parsed) && parsed.length === 2) {
+                const [lat, lng] = parsed;
+                // Validate coordinates
+                if (typeof lat === 'number' && typeof lng === 'number' &&
+                    lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                  initialCenter = { lat, lng };
+                  console.log('📍 Using saved location from localStorage for map center:', initialCenter);
+                }
+              }
+            } catch (e) {
+              console.warn('⚠️ Error parsing saved location:', e);
+            }
+          }
+        }
+        
+        // If still no location, wait for GPS instead of using default
+        if (!initialCenter) {
+          console.log('⏳ No location available yet, waiting for GPS...');
+          // Don't initialize map yet - wait for GPS location
+          // The map will be initialized when GPS location is received
+          setMapLoading(false);
+          return;
+        }
         
         console.log('📍 Map center:', initialCenter);
         
@@ -4256,6 +5032,54 @@ export default function DeliveryHome() {
     }
   }, [showHomeSections]) // Only re-initialize when showHomeSections changes
 
+  // Initialize map when riderLocation becomes available (if map not already initialized)
+  useEffect(() => {
+    if (showHomeSections) return
+    if (!riderLocation || riderLocation.length !== 2) return
+    if (window.deliveryMapInstance) return // Map already initialized
+    if (!window.google || !window.google.maps) return // Google Maps not loaded yet
+    if (!mapContainerRef.current) return // Container not ready
+
+    console.log('📍 Rider location available, initializing map...')
+    // Map initialization will happen in the main useEffect, but we can trigger it
+    // by calling initializeGoogleMap directly
+    const initializeMap = async () => {
+      try {
+        const initialCenter = { lat: riderLocation[0], lng: riderLocation[1] }
+        console.log('📍 Initializing map with rider location:', initialCenter)
+        
+        if (!window.google || !window.google.maps) return
+        
+        const map = new window.google.maps.Map(mapContainerRef.current, {
+          center: initialCenter,
+          zoom: 18,
+          minZoom: 10,
+          maxZoom: 21,
+          mapTypeId: window.google.maps.MapTypeId?.ROADMAP || 'roadmap',
+          tilt: 45,
+          heading: 0,
+          disableDefaultUI: false,
+          zoomControl: true,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false
+        })
+        
+        window.deliveryMapInstance = map
+        console.log('✅ Map initialized with rider location')
+        
+        // Create bike marker
+        createOrUpdateBikeMarker(riderLocation[0], riderLocation[1], null, true)
+        setMapLoading(false)
+      } catch (error) {
+        console.error('❌ Error initializing map with rider location:', error)
+        setMapLoading(false)
+      }
+    }
+    
+    initializeMap()
+  }, [riderLocation, showHomeSections]) // Initialize when location is available
+
   // Update bike marker when going online - ensure bike appears immediately
   useEffect(() => {
     console.log('🔄 Online status effect triggered:', { 
@@ -4321,8 +5145,29 @@ export default function DeliveryHome() {
         try {
           const parsed = JSON.parse(savedLocation)
           if (parsed && Array.isArray(parsed) && parsed.length === 2) {
-            console.log('📍 Using saved location from localStorage:', parsed)
-            createOrUpdateBikeMarker(parsed[0], parsed[1], null, true)
+            const [lat, lng] = parsed
+            
+            // Validate and check for coordinate swap
+            if (typeof lat === 'number' && typeof lng === 'number' &&
+                lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+              const mightBeSwapped = (lat >= 68 && lat <= 98 && lng >= 8 && lng <= 38)
+              
+              if (mightBeSwapped) {
+                console.warn('⚠️ Saved coordinates might be swapped - correcting:', {
+                  original: [lat, lng],
+                  corrected: [lng, lat]
+                })
+                createOrUpdateBikeMarker(lng, lat, null, true)
+              } else {
+                console.log('📍 Using saved location from localStorage:', {
+                  location: parsed,
+                  format: "[lat, lng]"
+                })
+                createOrUpdateBikeMarker(parsed[0], parsed[1], null, true)
+              }
+            } else {
+              console.warn('⚠️ Invalid saved coordinates:', parsed)
+            }
           }
         } catch (e) {
           console.warn('⚠️ Error using saved location:', e)
@@ -4706,7 +5551,12 @@ export default function DeliveryHome() {
         setDirectionsMapLoading(true);
         
         // Get current LIVE location (delivery boy) - prioritize riderLocation which is updated in real-time
-        const currentLocation = riderLocation || lastLocationRef.current || [22.7196, 75.8577];
+        // Use rider location or last known location, don't use default
+        const currentLocation = riderLocation || lastLocationRef.current;
+        if (!currentLocation) {
+          console.warn('⚠️ No location available for navigation')
+          return
+        }
         
         // Determine destination based on navigation mode
         let destinationLocation;
@@ -6385,7 +7235,26 @@ export default function DeliveryHome() {
       }
       
       // Update position EXACTLY - use setPosition for precise location
-      bikeMarkerRef.current.setPosition(position);
+      // Verify coordinates are correct before setting
+      console.log('📍 Updating bike marker position:', { 
+        lat: latitude, 
+        lng: longitude,
+        heading: heading || 0,
+        currentMarkerPos: bikeMarkerRef.current.getPosition() 
+          ? { lat: bikeMarkerRef.current.getPosition().lat(), lng: bikeMarkerRef.current.getPosition().lng() }
+          : 'null'
+      });
+      
+      // Validate coordinates before setting
+      if (typeof latitude === 'number' && typeof longitude === 'number' &&
+          !isNaN(latitude) && !isNaN(longitude) &&
+          latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180) {
+        bikeMarkerRef.current.setPosition(position);
+        console.log('✅ Bike marker position updated successfully');
+      } else {
+        console.error('❌ Invalid coordinates for bike marker:', { latitude, longitude });
+        return; // Don't update if coordinates are invalid
+      }
       
       // Update icon with rotation for smooth movement
       const currentHeading = heading !== null && heading !== undefined ? heading : 0;
@@ -6495,14 +7364,6 @@ export default function DeliveryHome() {
 
   // Carousel slides data - filter based on bank details status
   const carouselSlides = useMemo(() => [
-    {
-      id: 1,
-      title: "Work for 2 days",
-      subtitle: "to get Appzeto bag",
-      icon: "bag",
-      buttonText: "Know more",
-      bgColor: "bg-gray-700"
-    },
     ...(bankDetailsFilled ? [] : [{
       id: 2,
       title: "Submit bank details",
@@ -7019,7 +7880,8 @@ export default function DeliveryHome() {
         onHelpClick={() => setShowHelpPopup(true)}
       />
 
-      {/* Carousel */}
+      {/* Carousel - Only show if there are slides */}
+      {carouselSlides.length > 0 && (
       <div
         ref={carouselRef}
         className="relative overflow-hidden bg-gray-700 cursor-grab active:cursor-grabbing select-none flex-shrink-0"
@@ -7098,6 +7960,7 @@ export default function DeliveryHome() {
           ))}
         </div>
       </div>
+      )}
 
 
       {/* Conditional Content Based on Swipe Bar Position */}
@@ -8403,33 +9266,27 @@ export default function DeliveryHome() {
             <p className="text-gray-600 mb-2 leading-relaxed">
               {(() => {
                 const address = selectedRestaurant?.address;
-                const allKeys = selectedRestaurant ? Object.keys(selectedRestaurant) : [];
-                console.log('📍 Displaying restaurant address:', {
-                  hasSelectedRestaurant: !!selectedRestaurant,
-                  address: address,
-                  addressType: typeof address,
-                  isDefault: address === 'Restaurant Address' || !address,
-                  selectedRestaurantKeys: allKeys,
-                  selectedRestaurantFull: selectedRestaurant
-                });
                 
-                // If address is default, try to find it in other fields
-                if (!address || address === 'Restaurant Address') {
+                // If address is default or missing, try to find it in other fields
+                if (!address || address === 'Restaurant Address' || address === 'Restaurant address') {
                   // Check if address might be in a different field
                   const possibleAddress = 
                     selectedRestaurant?.restaurantAddress ||
                     selectedRestaurant?.restaurant?.address ||
                     selectedRestaurant?.restaurantId?.address ||
+                    selectedRestaurant?.restaurantId?.location?.formattedAddress ||
+                    selectedRestaurant?.restaurantId?.location?.address ||
                     selectedRestaurant?.location?.address ||
                     selectedRestaurant?.location?.formattedAddress;
                   
-                  if (possibleAddress) {
-                    console.log('✅ Found address in alternative field:', possibleAddress);
+                  if (possibleAddress && possibleAddress !== 'Restaurant Address' && possibleAddress !== 'Restaurant address') {
                     return possibleAddress;
                   }
                 }
                 
-                return address && address !== 'Restaurant Address' ? address : 'Restaurant Address';
+                return address && address !== 'Restaurant Address' && address !== 'Restaurant address' 
+                  ? address 
+                  : 'Address will be updated...';
               })()}
             </p>
             <p className="text-gray-500 text-sm font-medium">

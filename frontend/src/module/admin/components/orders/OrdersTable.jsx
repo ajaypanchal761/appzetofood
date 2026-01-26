@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
-import { Eye, Printer, ArrowUpDown } from "lucide-react"
+import { Eye, Printer, ArrowUpDown, Loader2 } from "lucide-react"
 
 const getStatusColor = (orderStatus) => {
   const colors = {
@@ -10,6 +10,8 @@ const getStatusColor = (orderStatus) => {
     "Processing": "bg-orange-100 text-orange-700",
     "Food On The Way": "bg-yellow-100 text-yellow-700",
     "Canceled": "bg-rose-100 text-rose-700",
+    "Cancelled by Restaurant": "bg-red-100 text-red-700",
+    "Cancelled by User": "bg-orange-100 text-orange-700",
     "Payment Failed": "bg-red-100 text-red-700",
     "Refunded": "bg-sky-100 text-sky-700",
     "Dine In": "bg-indigo-100 text-indigo-700",
@@ -24,7 +26,7 @@ const getPaymentStatusColor = (paymentStatus) => {
   return "text-slate-600"
 }
 
-export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPrintOrder }) {
+export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPrintOrder, onRefund }) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const totalPages = Math.ceil(orders.length / itemsPerPage)
@@ -200,7 +202,7 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                 {visibleColumns.totalAmount && (
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <div className="text-sm font-medium text-slate-900">
-                      $ {order.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹{order.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div className={`text-xs mt-0.5 ${getPaymentStatusColor(order.paymentStatus)}`}>
                       {order.paymentStatus}
@@ -209,11 +211,18 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                 )}
                 {visibleColumns.orderStatus && (
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>
-                        {order.orderStatus}
-                      </span>
-                      <span className="text-xs text-slate-500">{order.deliveryType}</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>
+                          {order.orderStatus}
+                        </span>
+                        <span className="text-xs text-slate-500">{order.deliveryType}</span>
+                      </div>
+                      {order.cancellationReason && (
+                        <div className="text-xs text-red-600 mt-1">
+                          <span className="font-medium">Reason:</span> {order.cancellationReason}
+                        </div>
+                      )}
                     </div>
                   </td>
                 )}
@@ -234,6 +243,28 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                       >
                         <Printer className="w-4 h-4" />
                       </button>
+                      {/* Show Refund button or Refunded status for cancelled Home Delivery orders */}
+                      {order.orderStatus === "Cancelled by Restaurant" && 
+                       (order.deliveryType === "Home Delivery" || 
+                        order.deliveryType === "home_delivery" ||
+                        order.deliveryFleet === "standard") && (
+                        <>
+                          {order.refundStatus === 'processed' || order.refundStatus === 'initiated' ? (
+                            <span className="px-3 py-1.5 rounded-md bg-emerald-100 text-emerald-700 text-xs font-medium">
+                              Refunded
+                            </span>
+                          ) : onRefund ? (
+                            <button 
+                              onClick={() => onRefund(order)}
+                              className="px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-1.5"
+                              title="Process Refund via Razorpay"
+                            >
+                              <span className="text-sm">₹</span>
+                              <span>Refund</span>
+                            </button>
+                          ) : null}
+                        </>
+                      )}
                     </div>
                   </td>
                 )}

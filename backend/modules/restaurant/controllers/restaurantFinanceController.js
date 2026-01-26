@@ -136,7 +136,10 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
         { deliveredAt: { $gte: currentCycleStart, $lte: currentCycleEnd } },
         { 'tracking.delivered.timestamp': { $gte: currentCycleStart, $lte: currentCycleEnd } }
       ]
-    }).lean();
+    })
+    .populate('userId', 'name phone email')
+    .select('orderId userId items pricing payment status address createdAt deliveredAt tracking')
+    .lean();
 
     // If no orders found with deliveredAt/tracking, check by createdAt as last resort
     if (currentCycleOrders.length === 0) {
@@ -144,17 +147,61 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
         ...restaurantIdQuery,
         status: 'delivered',
         createdAt: { $gte: currentCycleStart, $lte: currentCycleEnd }
-      }).lean();
+      })
+      .populate('userId', 'name phone email')
+      .select('orderId userId items pricing payment status address createdAt deliveredAt tracking')
+      .lean();
     }
 
     console.log(`📊 Finance API - Current cycle orders found: ${currentCycleOrders.length} for restaurant ${restaurantId}`);
     console.log(`📅 Date range: ${currentCycleStart.toISOString()} to ${currentCycleEnd.toISOString()}`);
 
+    // Get all unique user IDs from orders
+    const userIds = [...new Set(currentCycleOrders.map(order => {
+      if (!order.userId) return null;
+      // If populated, use _id, otherwise use the value directly
+      if (typeof order.userId === 'object' && order.userId._id) {
+        return order.userId._id.toString();
+      } else if (typeof order.userId === 'object' && mongoose.Types.ObjectId.isValid(order.userId)) {
+        return order.userId.toString();
+      } else {
+        return order.userId.toString();
+      }
+    }).filter(Boolean))];
+    
+    console.log(`📋 Found ${userIds.length} unique user IDs:`, userIds);
+    
+    // Fetch user data in bulk
+    let usersMap = {};
+    if (userIds.length > 0) {
+      try {
+        const UserModel = (await import('../../auth/models/User.js')).default;
+        // Convert string IDs to ObjectIds for query
+        const objectIds = userIds.map(id => {
+          try {
+            return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id;
+          } catch (e) {
+            return id;
+          }
+        });
+        const users = await UserModel.find({ _id: { $in: objectIds } })
+          .select('name phone email')
+          .lean();
+        console.log(`👥 Fetched ${users.length} users from database`);
+        users.forEach(user => {
+          usersMap[user._id.toString()] = user;
+        });
+        console.log(`📝 Users map created with ${Object.keys(usersMap).length} entries`);
+      } catch (error) {
+        console.error('❌ Error fetching users:', error);
+      }
+    }
+
     // Calculate current cycle payout
     // IMPORTANT: Commission is calculated on FOOD PRICE (subtotal - discount), NOT on total (which includes platform fee, GST, delivery fee)
     let currentCycleTotal = 0;
     let currentCycleCommission = 0;
-    const currentCycleOrdersData = currentCycleOrders.map(order => {
+    const currentCycleOrdersData = await Promise.all(currentCycleOrders.map(async (order) => {
       // Food price = subtotal - discount (this is what commission is calculated on)
       const foodPrice = (order.pricing?.subtotal || 0) - (order.pricing?.discount || 0);
       const commissionData = calculateCommissionForOrder(foodPrice);
@@ -166,16 +213,96 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
       // Get food names from order items
       const foodNames = (order.items || []).map(item => item.name).join(', ') || 'N/A';
       
+      // Handle userId - can be ObjectId or populated object
+      let customerName = 'N/A';
+      let customerPhone = 'N/A';
+      let customerEmail = 'N/A';
+      
+      if (order.userId) {
+        let userIdStr = null;
+        
+        // Check if populated (has _id property or name property)
+        if (typeof order.userId === 'object' && (order.userId.name || order.userId._id)) {
+          // Populated user object
+          userIdStr = order.userId._id?.toString() || order.userId.toString();
+          customerName = order.userId.name || 'N/A';
+          customerPhone = order.userId.phone || 'N/A';
+          customerEmail = order.userId.email || 'N/A';
+        } else {
+          // Just ObjectId, need to look up in usersMap
+          userIdStr = order.userId.toString();
+          if (usersMap[userIdStr]) {
+            const user = usersMap[userIdStr];
+            customerName = user.name || 'N/A';
+            customerPhone = user.phone || 'N/A';
+            customerEmail = user.email || 'N/A';
+          } else {
+            // Debug: log if user not found
+            console.log(`⚠️ User not found in map for userId: ${userIdStr}, orderId: ${order.orderId}`);
+          }
+        }
+      } else {
+        console.log(`⚠️ No userId found for order: ${order.orderId}`);
+      }
+      
+      // Format payment method - fetch full order if payment not available
+      let paymentMethod = 'N/A';
+      if (order.payment && order.payment.method) {
+        const method = order.payment.method;
+        paymentMethod = method.charAt(0).toUpperCase() + method.slice(1);
+      } else {
+        // Fetch full order to get payment method
+        try {
+          const fullOrder = await Order.findOne({ orderId: order.orderId })
+            .select('payment status')
+            .lean();
+          if (fullOrder && fullOrder.payment && fullOrder.payment.method) {
+            const method = fullOrder.payment.method;
+            paymentMethod = method.charAt(0).toUpperCase() + method.slice(1);
+          }
+        } catch (err) {
+          console.log(`⚠️ Could not fetch payment for order ${order.orderId}:`, err.message);
+        }
+      }
+      
+      // Format order status - use from order or fetch if missing
+      let orderStatus = 'N/A';
+      if (order.status) {
+        const status = order.status;
+        orderStatus = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+      } else {
+        // Fetch full order to get status
+        try {
+          const fullOrder = await Order.findOne({ orderId: order.orderId })
+            .select('status')
+            .lean();
+          if (fullOrder && fullOrder.status) {
+            const status = fullOrder.status;
+            orderStatus = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+          }
+        } catch (err) {
+          console.log(`⚠️ Could not fetch status for order ${order.orderId}:`, err.message);
+        }
+      }
+      
       return {
-        orderId: order.orderId || order._id,
+        orderId: order.orderId || order._id?.toString() || 'N/A',
         orderTotal: foodPrice, // Food price (subtotal - discount) for display
+        totalAmount: order.pricing?.total || 0, // Total order amount paid by customer
         commission: commissionData.commission,
         payout,
         deliveredAt: order.deliveredAt || order.createdAt,
+        createdAt: order.createdAt,
         items: order.items || [], // Include full items array
-        foodNames: foodNames // Include food names as comma-separated string
+        foodNames: foodNames, // Include food names as comma-separated string
+        customerName: customerName,
+        customerPhone: customerPhone,
+        customerEmail: customerEmail,
+        paymentMethod: paymentMethod,
+        orderStatus: orderStatus,
+        address: order.address || {}
       };
-    });
+    }));
 
     // Format current cycle dates
     const formatCycleDate = (date) => {
@@ -205,7 +332,9 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
           { deliveredAt: { $gte: start, $lte: end } },
           { 'tracking.delivered.timestamp': { $gte: start, $lte: end } }
         ]
-      }).lean();
+      })
+      .populate('userId', 'name phone email')
+      .lean();
 
       // If no orders found with deliveredAt/tracking, check by createdAt as last resort
       if (pastCycleOrders.length === 0) {
@@ -213,14 +342,50 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
           ...restaurantIdQuery,
           status: 'delivered',
           createdAt: { $gte: start, $lte: end }
-        }).lean();
+        })
+        .populate('userId', 'name phone email')
+        .select('orderId userId items pricing payment status address createdAt deliveredAt tracking')
+        .lean();
       }
 
       console.log(`📊 Finance API - Past cycle orders found: ${pastCycleOrders.length} for date range ${startDate} to ${endDate}`);
 
+      // Get all unique user IDs from past cycle orders
+      const pastUserIds = [...new Set(pastCycleOrders.map(order => {
+        if (!order.userId) return null;
+        // Handle both populated and non-populated userId
+        if (typeof order.userId === 'object' && order.userId._id) {
+          return order.userId._id.toString();
+        } else if (typeof order.userId === 'object' && mongoose.Types.ObjectId.isValid(order.userId)) {
+          return order.userId.toString();
+        } else {
+          return order.userId.toString();
+        }
+      }).filter(Boolean))];
+      
+      console.log(`📋 Found ${pastUserIds.length} unique user IDs for past cycle:`, pastUserIds);
+      
+      // Fetch user data in bulk for past cycle
+      let pastUsersMap = {};
+      if (pastUserIds.length > 0) {
+        try {
+          const UserModel = (await import('../../auth/models/User.js')).default;
+          const users = await UserModel.find({ _id: { $in: pastUserIds.map(id => new mongoose.Types.ObjectId(id)) } })
+            .select('name phone email')
+            .lean();
+          console.log(`👥 Fetched ${users.length} users for past cycle from database`);
+          users.forEach(user => {
+            pastUsersMap[user._id.toString()] = user;
+          });
+          console.log(`📝 Past users map keys:`, Object.keys(pastUsersMap));
+        } catch (error) {
+          console.error('❌ Error fetching users for past cycle:', error);
+        }
+      }
+
       let pastCycleTotal = 0;
       let pastCycleCommission = 0;
-      const pastCycleOrdersData = pastCycleOrders.map(order => {
+      const pastCycleOrdersData = await Promise.all(pastCycleOrders.map(async (order) => {
         // Food price = subtotal - discount (this is what commission is calculated on)
         const foodPrice = (order.pricing?.subtotal || 0) - (order.pricing?.discount || 0);
         const commissionData = calculateCommissionForOrder(foodPrice);
@@ -232,16 +397,74 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
         // Get food names from order items
         const foodNames = (order.items || []).map(item => item.name).join(', ') || 'N/A';
         
+        // Handle userId - can be ObjectId or populated object
+        let customerName = 'N/A';
+        let customerPhone = 'N/A';
+        let customerEmail = 'N/A';
+        
+        if (order.userId) {
+          let userIdStr = null;
+          
+          // Check if populated (has _id property or name property)
+          if (typeof order.userId === 'object' && (order.userId.name || order.userId._id)) {
+            // Populated user object
+            userIdStr = order.userId._id?.toString() || order.userId.toString();
+            customerName = order.userId.name || 'N/A';
+            customerPhone = order.userId.phone || 'N/A';
+            customerEmail = order.userId.email || 'N/A';
+          } else {
+            // Just ObjectId, need to look up in pastUsersMap
+            userIdStr = order.userId.toString();
+            if (pastUsersMap[userIdStr]) {
+              const user = pastUsersMap[userIdStr];
+              customerName = user.name || 'N/A';
+              customerPhone = user.phone || 'N/A';
+              customerEmail = user.email || 'N/A';
+            } else {
+              // Debug: log if user not found
+              console.log(`⚠️ User not found in pastUsersMap for userId: ${userIdStr}, orderId: ${order.orderId}`);
+            }
+          }
+        } else {
+          console.log(`⚠️ No userId found for order: ${order.orderId}`);
+        }
+        
+        // Format payment method
+        let paymentMethod = 'N/A';
+        if (order.payment && order.payment.method) {
+          const method = order.payment.method;
+          paymentMethod = method.charAt(0).toUpperCase() + method.slice(1);
+        } else {
+          console.log(`⚠️ No payment method found for past order: ${order.orderId}, payment object:`, order.payment);
+        }
+        
+        // Format order status
+        let orderStatus = 'N/A';
+        if (order.status) {
+          const status = order.status;
+          orderStatus = status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ');
+        } else {
+          console.log(`⚠️ No status found for past order: ${order.orderId}`);
+        }
+        
         return {
-          orderId: order.orderId || order._id,
+          orderId: order.orderId || order._id?.toString() || 'N/A',
           orderTotal: foodPrice, // Food price (subtotal - discount) for display
+          totalAmount: order.pricing?.total || 0, // Total order amount paid by customer
           commission: commissionData.commission,
           payout,
           deliveredAt: order.deliveredAt || order.createdAt,
+          createdAt: order.createdAt,
           items: order.items || [], // Include full items array
-          foodNames: foodNames // Include food names as comma-separated string
-        };
-      });
+          foodNames: foodNames, // Include food names as comma-separated string
+          customerName: customerName,
+          customerPhone: customerPhone,
+          customerEmail: customerEmail,
+          paymentMethod: paymentMethod,
+          orderStatus: orderStatus,
+        address: order.address || {}
+      };
+    }));
 
       pastCyclesData = {
         dateRange: {

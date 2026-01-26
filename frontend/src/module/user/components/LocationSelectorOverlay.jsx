@@ -525,33 +525,34 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             circleOnMap: accuracyCircle.getMap() === map
           })
 
-          // Force visibility check
+          // Force visibility check (silent fix - no error logging)
           setTimeout(() => {
+            if (!isMounted || !map) return
+            
             const markerVisible = userLocationMarkerRef.current?.getVisible()
             const circleVisible = blueDotCircleRef.current?.getVisible()
             const markerOnMap = userLocationMarkerRef.current?.getMap() === map
             const circleOnMap = blueDotCircleRef.current?.getMap() === map
             
-            console.log("🔍 Visibility Check:", {
-              markerVisible,
-              circleVisible,
-              markerOnMap,
-              circleOnMap
-            })
-            
-            if (!markerOnMap || !markerVisible) {
-              console.error("❌ Blue dot marker not visible! Fixing...")
-              if (userLocationMarkerRef.current) {
+            // Silently fix marker visibility if needed
+            if (userLocationMarkerRef.current && (!markerOnMap || !markerVisible)) {
+              try {
                 userLocationMarkerRef.current.setMap(map)
                 userLocationMarkerRef.current.setVisible(true)
+                console.log("✅ Blue dot marker visibility fixed")
+              } catch (e) {
+                // Silently handle - marker might not be ready yet
               }
             }
             
-            if (!circleOnMap || !circleVisible) {
-              console.error("❌ Accuracy circle not visible! Fixing...")
-              if (blueDotCircleRef.current) {
+            // Silently fix circle visibility if needed
+            if (blueDotCircleRef.current && (!circleOnMap || !circleVisible)) {
+              try {
                 blueDotCircleRef.current.setMap(map)
                 blueDotCircleRef.current.setVisible(true)
+                console.log("✅ Accuracy circle visibility fixed")
+              } catch (e) {
+                // Silently handle - circle might not be ready yet
               }
             }
           }, 1000)
@@ -694,9 +695,36 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // Clear any cached location first to ensure fresh coordinates
       console.log("🔄 Requesting fresh location (clearing cache and forcing fresh GPS)...")
       
-      // Force fresh location with high accuracy GPS
-      // This ensures we get exact landmark like "Mama Loca Cafe" instead of just city
-      const locationData = await requestLocation()
+      // Use Promise.race to get location within 2 seconds
+      const locationPromise = requestLocation()
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Location timeout")), 2000)
+      )
+      
+      let locationData
+      try {
+        locationData = await Promise.race([locationPromise, timeoutPromise])
+      } catch (raceError) {
+        // If timeout, try to use cached location immediately
+        const stored = localStorage.getItem("userLocation")
+        if (stored) {
+          try {
+            const cachedLocation = JSON.parse(stored)
+            if (cachedLocation?.latitude && cachedLocation?.longitude) {
+              console.log("📍 Using cached location (2s timeout):", cachedLocation)
+              locationData = cachedLocation
+            } else {
+              throw new Error("Invalid cached location")
+            }
+          } catch (cacheErr) {
+            toast.error("Could not get location. Please try again.", { id: "location-request" })
+            return
+          }
+        } else {
+          toast.error("Could not get location. Please try again.", { id: "location-request" })
+          return
+        }
+      }
       
       console.log("✅ Fresh location received:", {
         formattedAddress: locationData?.formattedAddress,
@@ -764,12 +792,14 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         }
       }
       
-      // Update map position and show address form to display full address
+      // Update map position - don't automatically show address form
+      // User can manually open address form if needed
       if (locationData?.latitude && locationData?.longitude) {
         setMapPosition([locationData.latitude, locationData.longitude])
-        setShowAddressForm(true)
+        // Don't automatically show address form - keep user on same page
+        // setShowAddressForm(true)
         
-        // Update address form data with complete address
+        // Update address form data with complete address (for when user opens form)
         if (locationData.formattedAddress) {
           setCurrentAddress(locationData.formattedAddress)
           setAddressFormData(prev => ({
@@ -811,11 +841,14 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       const addressPreview = locationData?.formattedAddress || locationData?.address || "Location updated"
       toast.success(`Location updated: ${addressPreview.split(',').slice(0, 2).join(', ')}`, {
         id: "location-request",
-        duration: 3000,
+        duration: 2000,
       })
       
-      // Don't close immediately - let user see the full address in the form
-      // User can close manually or save the address
+      // Wait 2 seconds then redirect to home page
+      setTimeout(() => {
+        onClose()
+        navigate("/")
+      }, 2000)
     } catch (error) {
       // Handle permission denied or other errors
       if (error.code === 1 || error.message?.includes("denied") || error.message?.includes("permission")) {
@@ -1675,9 +1708,38 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
 
       toast.loading("Getting your fresh location...", { id: "current-location" })
       
-      // Force fresh location - don't use cached coordinates
-      const locationData = await requestLocation(true, true) // forceFresh = true, updateDB = true
-      console.log("📍 Current location data received (fresh):", locationData)
+      // Use Promise.race to get location within 2 seconds
+      const locationPromise = requestLocation(true, true) // forceFresh = true, updateDB = true
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Location timeout")), 2000)
+      )
+      
+      let locationData
+      try {
+        locationData = await Promise.race([locationPromise, timeoutPromise])
+      } catch (raceError) {
+        // If timeout, try to use cached location immediately
+        const stored = localStorage.getItem("userLocation")
+        if (stored) {
+          try {
+            const cachedLocation = JSON.parse(stored)
+            if (cachedLocation?.latitude && cachedLocation?.longitude) {
+              console.log("📍 Using cached location (2s timeout):", cachedLocation)
+              locationData = cachedLocation
+            } else {
+              throw new Error("Invalid cached location")
+            }
+          } catch (cacheErr) {
+            toast.error("Could not get location. Please try again.", { id: "current-location" })
+            return
+          }
+        } else {
+          toast.error("Could not get location. Please try again.", { id: "current-location" })
+          return
+        }
+      }
+      
+      console.log("📍 Current location data received:", locationData)
       
       if (!locationData?.latitude || !locationData?.longitude) {
         toast.error("Could not get your location. Please try again.", { id: "current-location" })
@@ -1771,22 +1833,22 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
             console.log("✅ Created blue dot accuracy circle")
           }
           
-          // Wait for map to finish moving, then fetch address
+          // Wait for map to finish moving, then fetch address (reduced delay for faster response)
           setTimeout(async () => {
             await handleMapMoveEnd(lat, lng)
             toast.success("Location updated!", { id: "current-location" })
-          }, 500)
+          }, 200)
           
         } catch (mapError) {
           console.error("❌ Error updating map location:", mapError)
           toast.error("Failed to update map location", { id: "current-location" })
         }
       } else {
-        // Map not initialized yet, just update position and fetch address
+        // Map not initialized yet, just update position and fetch address (reduced delay)
         setTimeout(async () => {
           await handleMapMoveEnd(lat, lng)
           toast.success("Location updated!", { id: "current-location" })
-        }, 300)
+        }, 200)
       }
     } catch (error) {
       console.error("❌ Error getting current location:", error)
@@ -1925,8 +1987,9 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       setShowAddressForm(false)
       setLoadingAddress(false)
       
-      // Optionally close the overlay after saving
-      // onClose()
+      // Close overlay and redirect to home page
+      onClose()
+      navigate("/")
     } catch (error) {
       console.error("❌ Error saving address:", error)
       console.error("❌ Error details:", {
@@ -1998,9 +2061,51 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       }
       localStorage.setItem("userLocation", JSON.stringify(locationData))
       
-      // Close overlay and reload to refresh location state
-      onClose()
-      window.location.reload()
+      // Update map position to show selected address
+      setMapPosition([latitude, longitude])
+      
+      // Update address form data with selected address
+      setAddressFormData({
+        street: address.street || "",
+        city: address.city || "",
+        state: address.state || "",
+        zipCode: address.zipCode || "",
+        additionalDetails: address.additionalDetails || "",
+        label: address.label || "Home",
+        phone: address.phone || "",
+      })
+      
+      // Update Google Maps to show selected address
+      if (googleMapRef.current && window.google && window.google.maps) {
+        try {
+          googleMapRef.current.panTo({ lat: latitude, lng: longitude })
+          googleMapRef.current.setZoom(17)
+          
+          // Update green marker position
+          if (greenMarkerRef.current) {
+            greenMarkerRef.current.setPosition({ lat: latitude, lng: longitude })
+          }
+          
+          // Fetch and update address details
+          setTimeout(async () => {
+            await handleMapMoveEnd(latitude, longitude)
+            toast.success("Location updated!", { id: "saved-address" })
+          }, 500)
+        } catch (mapError) {
+          console.error("Error updating map:", mapError)
+          toast.success("Location updated!", { id: "saved-address" })
+        }
+      } else {
+        // Map not initialized yet, just fetch address
+        setTimeout(async () => {
+          await handleMapMoveEnd(latitude, longitude)
+          toast.success("Location updated!", { id: "saved-address" })
+        }, 300)
+      }
+      
+      // Don't close overlay - keep user on select location page
+      // onClose()
+      // window.location.reload()
     } catch (error) {
       console.error("Error selecting saved address:", error)
       toast.error("Failed to update location. Please try again.")
@@ -2037,7 +2142,7 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
   // If showing address form, render full-screen address form
   if (showAddressForm) {
     return (
-      <div className="fixed inset-0 z-[10000] bg-white dark:bg-[#0a0a0a] flex flex-col">
+      <div className="fixed inset-0 z-[10000] bg-white dark:bg-[#0a0a0a] flex flex-col h-screen max-h-screen overflow-hidden">
         {/* Header */}
         <div className="flex-shrink-0 bg-white dark:bg-[#1a1a1a] border-b border-gray-100 dark:border-gray-800 px-4 py-3">
           <div className="flex items-center gap-4">
@@ -2119,8 +2224,8 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
         </div>
 
         {/* Form Section - Scrollable */}
-        <div className="flex-1 overflow-y-auto bg-white dark:bg-[#0a0a0a] min-h-0">
-          <div className="px-4 py-4 space-y-4 pb-6">
+        <div className="flex-1 overflow-y-auto bg-white dark:bg-[#0a0a0a] min-h-0 overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="px-4 py-4 space-y-4 pb-32">
             {/* Delivery Details */}
             <div>
               <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">

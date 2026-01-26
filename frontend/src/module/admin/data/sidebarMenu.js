@@ -87,6 +87,7 @@ export const sidebarMenuData = [
           { label: "Food On The Way", path: "/admin/orders/food-on-the-way" },
           { label: "Delivered", path: "/admin/orders/delivered" },
           { label: "Canceled", path: "/admin/orders/canceled" },
+          { label: "Restaurant cancelled", path: "/admin/orders/restaurant-cancelled" },
           { label: "Payment Failed", path: "/admin/orders/payment-failed" },
           { label: "Refunded", path: "/admin/orders/refunded" },
           { label: "Offline Payments", path: "/admin/orders/offline-payments" },
@@ -94,32 +95,9 @@ export const sidebarMenuData = [
       },
       {
         type: "link",
-        label: "Subscription Orders",
-        path: "/admin/subscription-orders",
-        icon: "Calendar",
-      },
-      {
-        type: "link",
         label: "Order Detect Delivery",
         path: "/admin/order-detect-delivery",
         icon: "Truck",
-      },
-      {
-        type: "expandable",
-        label: "Dispatch Management",
-        icon: "Clock",
-        subItems: [
-          { label: "Searching DeliveryMan", path: "/admin/dispatch/searching" },
-          { label: "Ongoing Orders", path: "/admin/dispatch/ongoing" },
-        ],
-      },
-      {
-        type: "expandable",
-        label: "Order Refunds",
-        icon: "Receipt",
-        subItems: [
-          { label: "New Refund Requests", path: "/admin/order-refunds/new" },
-        ],
       },
     ],
   },
@@ -231,7 +209,6 @@ export const sidebarMenuData = [
         icon: "FileText",
         subItems: [
           { label: "Restaurant Report", path: "/admin/restaurant-report" },
-          { label: "Subscription Report", path: "/admin/restaurant-report/subscription" },
         ],
       },
       {

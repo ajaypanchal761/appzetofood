@@ -57,7 +57,7 @@ export const getOrders = asyncHandler(async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
-      .populate('restaurantId', 'name slug profileImage')
+      .populate('restaurantId', 'name slug profileImage address location phone ownerPhone')
       .populate('userId', 'name phone')
       .lean();
 

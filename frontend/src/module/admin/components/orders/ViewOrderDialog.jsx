@@ -1,4 +1,4 @@
-import { Eye } from "lucide-react"
+import { Eye, MapPin, Package, User, Phone, Mail, Calendar, Clock, Truck, CreditCard, X } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,8 @@ const getStatusColor = (orderStatus) => {
     "Processing": "bg-orange-100 text-orange-700",
     "Food On The Way": "bg-yellow-100 text-yellow-700",
     "Canceled": "bg-rose-100 text-rose-700",
+    "Cancelled by Restaurant": "bg-red-100 text-red-700",
+    "Cancelled by User": "bg-orange-100 text-orange-700",
     "Payment Failed": "bg-red-100 text-red-700",
     "Refunded": "bg-sky-100 text-sky-700",
     "Dine In": "bg-indigo-100 text-indigo-700",
@@ -31,10 +33,40 @@ const getPaymentStatusColor = (paymentStatus) => {
 }
 
 export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
+  if (!order) return null
+
+  // Format address for display
+  const formatAddress = (address) => {
+    if (!address) return "N/A"
+    
+    const parts = []
+    if (address.label) parts.push(address.label)
+    if (address.street) parts.push(address.street)
+    if (address.additionalDetails) parts.push(address.additionalDetails)
+    if (address.formattedAddress) {
+      parts.push(address.formattedAddress)
+    } else {
+      if (address.city) parts.push(address.city)
+      if (address.state) parts.push(address.state)
+      if (address.zipCode) parts.push(address.zipCode)
+    }
+    
+    return parts.length > 0 ? parts.join(", ") : "Address not available"
+  }
+
+  // Get coordinates if available
+  const getCoordinates = (address) => {
+    if (address?.location?.coordinates && Array.isArray(address.location.coordinates) && address.location.coordinates.length === 2) {
+      const [lng, lat] = address.location.coordinates
+      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+    }
+    return null
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200">
+      <DialogContent className="max-w-4xl max-h-[90vh] bg-white p-0 overflow-y-auto">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200 sticky top-0 bg-white z-10">
           <DialogTitle className="flex items-center gap-2">
             <Eye className="w-5 h-5 text-orange-600" />
             Order Details
@@ -43,66 +75,280 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
             View complete information about this order
           </DialogDescription>
         </DialogHeader>
-        {order && (
-          <div className="px-6 py-6 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+        <div className="px-6 py-6 space-y-6">
+          {/* Basic Order Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
               <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Order ID</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  <Package className="w-4 h-4" />
+                  Order ID
+                </p>
                 <p className="text-sm font-medium text-slate-900">{order.orderId || order.id || order.subscriptionId}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Order Date</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Order Date
+                </p>
                 <p className="text-sm font-medium text-slate-900">{order.date}{order.time ? `, ${order.time}` : ""}</p>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer Name</p>
-                <p className="text-sm font-medium text-slate-900">{order.customerName}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Phone</p>
-                <p className="text-sm font-medium text-slate-900">{order.customerPhone}</p>
-              </div>
-              {order.restaurant && (
+              {order.estimatedDeliveryTime && (
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Restaurant</p>
-                  <p className="text-sm font-medium text-slate-900">{order.restaurant}</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Estimated Delivery Time
+                  </p>
+                  <p className="text-sm font-medium text-slate-900">{order.estimatedDeliveryTime} minutes</p>
                 </div>
               )}
-              {order.deliveryType && (
+              {order.deliveredAt && (
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Delivery Type</p>
-                  <p className="text-sm font-medium text-slate-900">{order.deliveryType}</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Delivered At
+                  </p>
+                  <p className="text-sm font-medium text-slate-900">
+                    {new Date(order.deliveredAt).toLocaleString('en-GB', { 
+                      day: '2-digit', 
+                      month: 'short', 
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }).toUpperCase()}
+                  </p>
                 </div>
               )}
+            </div>
+
+            <div className="space-y-4">
               {order.orderStatus && (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Order Status</p>
                   <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>
                     {order.orderStatus}
                   </span>
+                  {order.cancellationReason && (
+                    <p className="text-xs text-red-600 mt-1">
+                      <span className="font-medium">Reason:</span> {order.cancellationReason}
+                    </p>
+                  )}
+                  {order.cancelledAt && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Cancelled: {new Date(order.cancelledAt).toLocaleString('en-GB', { 
+                        day: '2-digit', 
+                        month: 'short', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }).toUpperCase()}
+                    </p>
+                  )}
                 </div>
               )}
               {order.paymentStatus && (
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Payment Status</p>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    Payment Status
+                  </p>
                   <p className={`text-sm font-medium ${getPaymentStatusColor(order.paymentStatus)}`}>
                     {order.paymentStatus}
                   </p>
                 </div>
               )}
-            </div>
-            {(order.totalAmount || order.total) && (
-              <div className="pt-4 border-t border-slate-200">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-700">Total Amount</p>
-                  <p className="text-xl font-bold text-emerald-600">
-                    {order.total || `$ ${(order.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              {order.deliveryType && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Truck className="w-4 h-4" />
+                    Delivery Type
                   </p>
+                  <p className="text-sm font-medium text-slate-900">{order.deliveryType}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Customer Information */}
+          <div className="border-t border-slate-200 pt-4">
+            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Customer Information
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer Name</p>
+                <p className="text-sm font-medium text-slate-900">{order.customerName || "N/A"}</p>
+              </div>
+              {order.customerPhone && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Phone className="w-4 h-4" />
+                    Phone
+                  </p>
+                  <p className="text-sm font-medium text-slate-900">{order.customerPhone}</p>
+                </div>
+              )}
+              {order.customerEmail && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Mail className="w-4 h-4" />
+                    Email
+                  </p>
+                  <p className="text-sm font-medium text-slate-900">{order.customerEmail}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Restaurant Information */}
+          {order.restaurant && (
+            <div className="border-t border-slate-200 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">Restaurant Information</h3>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Restaurant Name</p>
+                <p className="text-sm font-medium text-slate-900">{order.restaurant}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Order Items */}
+          {order.items && Array.isArray(order.items) && order.items.length > 0 && (
+            <div className="border-t border-slate-200 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                Order Items ({order.items.length})
+              </h3>
+              <div className="space-y-3">
+                {order.items.map((item, index) => (
+                  <div key={index} className="flex items-start justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-700 bg-white px-2 py-1 rounded">
+                          {item.quantity || 1}x
+                        </span>
+                        <p className="text-sm font-medium text-slate-900">{item.name || "Unknown Item"}</p>
+                        {item.isVeg !== undefined && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${item.isVeg ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {item.isVeg ? 'Veg' : 'Non-Veg'}
+                          </span>
+                        )}
+                      </div>
+                      {item.description && (
+                        <p className="text-xs text-slate-500 mt-1 ml-8">{item.description}</p>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      ₹{((item.price || 0) * (item.quantity || 1)).toFixed(2)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Delivery Address */}
+          {order.address && (
+            <div className="border-t border-slate-200 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Delivery Address
+              </h3>
+              <div className="space-y-2 p-4 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-900">{formatAddress(order.address)}</p>
+                {getCoordinates(order.address) && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    <span className="font-medium">Coordinates:</span> {getCoordinates(order.address)}
+                  </p>
+                )}
+                {order.address.label && (
+                  <p className="text-xs text-slate-500">
+                    <span className="font-medium">Label:</span> {order.address.label}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Delivery Partner Information */}
+          {(order.deliveryPartnerName || order.deliveryPartnerPhone) && (
+            <div className="border-t border-slate-200 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <Truck className="w-4 h-4" />
+                Delivery Partner
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {order.deliveryPartnerName && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Name</p>
+                    <p className="text-sm font-medium text-slate-900">{order.deliveryPartnerName}</p>
+                  </div>
+                )}
+                {order.deliveryPartnerPhone && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Phone</p>
+                    <p className="text-sm font-medium text-slate-900">{order.deliveryPartnerPhone}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Pricing Breakdown */}
+          <div className="border-t border-slate-200 pt-4">
+            <h3 className="text-sm font-semibold text-slate-700 mb-4">Pricing Breakdown</h3>
+            <div className="space-y-2">
+              {order.totalItemAmount !== undefined && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Subtotal</span>
+                  <span className="font-medium text-slate-900">₹{order.totalItemAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {order.itemDiscount !== undefined && order.itemDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Discount</span>
+                  <span className="font-medium text-emerald-600">-₹{order.itemDiscount.toFixed(2)}</span>
+                </div>
+              )}
+              {order.couponDiscount !== undefined && order.couponDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Coupon Discount</span>
+                  <span className="font-medium text-emerald-600">-₹{order.couponDiscount.toFixed(2)}</span>
+                </div>
+              )}
+              {order.deliveryCharge !== undefined && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Delivery Charge</span>
+                  <span className="font-medium text-slate-900">
+                    {order.deliveryCharge > 0 ? `₹${order.deliveryCharge.toFixed(2)}` : <span className="text-emerald-600">Free delivery</span>}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Platform Fee</span>
+                <span className="font-medium text-slate-900">
+                  {order.platformFee !== undefined && order.platformFee > 0 
+                    ? `₹${order.platformFee.toFixed(2)}` 
+                    : <span className="text-slate-400">₹0.00</span>}
+                </span>
+              </div>
+              {order.vatTax !== undefined && order.vatTax > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Tax (GST)</span>
+                  <span className="font-medium text-slate-900">₹{order.vatTax.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="pt-2 border-t border-slate-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-base font-semibold text-slate-700">Total Amount</span>
+                  <span className="text-xl font-bold text-emerald-600">
+                    ₹{(order.totalAmount || order.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
               </div>
-            )}
+            </div>
           </div>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   )

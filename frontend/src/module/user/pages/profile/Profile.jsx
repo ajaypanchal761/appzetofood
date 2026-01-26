@@ -4,7 +4,6 @@ import { motion } from "framer-motion"
 import { 
   ArrowLeft, 
   ChevronRight, 
-  Crown, 
   Wallet, 
   Tag, 
   User, 
@@ -289,15 +288,6 @@ export default function Profile() {
                   <ChevronRight className="h-4 w-4" />
                 </Link> */}
               </div>
-            </div>
-            
-            {/* Appzeto Gold Banner */}
-            <div className="bg-black dark:bg-[#1a1a1a] rounded-none p-4 flex items-center justify-between -mx-4 mb-0 cursor-pointer">
-              <div className="flex items-center gap-3">
-                <Crown className="h-5 w-5 text-yellow-400" fill="currentColor" />
-                <span className="text-yellow-400 font-medium">Join Appzeto Gold</span>
-              </div>
-              <ChevronRight className="h-5 w-5 text-white" />
             </div>
           </CardContent>
         </Card>

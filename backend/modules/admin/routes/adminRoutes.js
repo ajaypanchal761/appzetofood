@@ -1,4 +1,5 @@
 import express from 'express';
+import { getAllWithdrawalRequests, approveWithdrawalRequest, rejectWithdrawalRequest } from '../../restaurant/controllers/withdrawalController.js';
 import {
   getDashboardStats,
   getAdmins,
@@ -163,6 +164,8 @@ import {
   getOrders,
   getOrderById,
   getSearchingDeliverymanOrders,
+  getRefundRequests,
+  processRefund,
   getOngoingOrders,
   getTransactionReport,
   getRestaurantReport
@@ -184,6 +187,9 @@ import { authenticateAdmin } from '../middleware/adminAuth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 
 const router = express.Router();
+
+// Debug: Log route file loading
+console.log('📦 Loading adminRoutes.js - All routes will be registered');
 
 // All admin routes require admin authentication
 router.use(authenticateAdmin);
@@ -352,12 +358,23 @@ router.get('/orders', getOrders);
 router.get('/orders/searching-deliveryman', getSearchingDeliverymanOrders);
 router.get('/orders/ongoing', getOngoingOrders);
 router.get('/orders/transaction-report', getTransactionReport);
+router.get('/orders/restaurant-report', getRestaurantReport);
+
+// Refund Requests (must be before /orders/:id to avoid route conflicts)
+console.log('🔧 Registering /refund-requests route...');
+router.get('/refund-requests', getRefundRequests);
+router.post('/refund-requests/:orderId/process', processRefund);
+console.log('✅ /refund-requests routes registered');
+
+// Order Refund (must be before /orders/:id to avoid route conflicts)
+router.post('/orders/:orderId/refund', processRefund);
 
 // Review Management
 router.get('/reviews', getAllReviews);
 router.get('/reviews/:orderId', getReviewByOrderId);
 router.get('/reviews/restaurant/:restaurantId', getReviewsByRestaurant);
-router.get('/orders/restaurant-report', getRestaurantReport);
+
+// Get order by ID (must be last to avoid matching other routes)
 router.get('/orders/:id', getOrderById);
 
 // Business Settings Management
@@ -382,6 +399,11 @@ router.get('/audit-logs', getAuditLogs);
 router.get('/audit-logs/:id', getAuditLogById);
 router.get('/audit-logs/entity/:entityType/:entityId', getEntityAuditLogs);
 router.get('/audit-logs/commission-changes', getCommissionChangeLogs);
+
+// Withdrawal Request Routes (Admin)
+router.get('/withdrawal/requests', getAllWithdrawalRequests);
+router.post('/withdrawal/:id/approve', approveWithdrawalRequest);
+router.post('/withdrawal/:id/reject', rejectWithdrawalRequest);
 
 export default router;
 
