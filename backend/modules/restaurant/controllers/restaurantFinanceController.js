@@ -1,5 +1,7 @@
 import Order from '../../order/models/Order.js';
 import RestaurantCommission from '../../admin/models/RestaurantCommission.js';
+import WithdrawalRequest from '../models/WithdrawalRequest.js';
+import RestaurantWallet from '../models/RestaurantWallet.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import mongoose from 'mongoose';
@@ -482,6 +484,27 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
     // Calculate current cycle payout (total - commission)
     const currentCyclePayout = Math.round((currentCycleTotal - currentCycleCommission) * 100) / 100;
 
+    // Get all withdrawal requests (pending + approved) to subtract from estimatedPayout
+    // This ensures that once a withdrawal is made, it's immediately reflected in the available balance
+    const allWithdrawals = await WithdrawalRequest.find({
+      restaurantId: restaurant._id,
+      status: { $in: ['Pending', 'Approved'] }
+    }).lean();
+
+    const totalWithdrawals = allWithdrawals.reduce((sum, req) => sum + (req.amount || 0), 0);
+    
+    // Subtract all withdrawals (pending + approved) from estimatedPayout to show available balance
+    // This ensures end-to-end withdrawal calculation works correctly
+    const availablePayout = Math.max(0, Math.round((currentCyclePayout - totalWithdrawals) * 100) / 100);
+    
+    console.log('💰 Finance Calculation:', {
+      currentCyclePayout,
+      totalWithdrawals,
+      availablePayout,
+      withdrawalsCount: allWithdrawals.length,
+      withdrawals: allWithdrawals.map(w => ({ id: w._id, amount: w.amount, status: w.status }))
+    });
+
     return successResponse(res, 200, 'Finance data retrieved successfully', {
       currentCycle: {
         start: currentCycleStartFormatted,
@@ -489,7 +512,7 @@ export const getRestaurantFinance = asyncHandler(async (req, res) => {
         totalOrders: currentCycleOrders.length,
         totalOrderValue: Math.round(currentCycleTotal * 100) / 100,
         totalCommission: Math.round(currentCycleCommission * 100) / 100,
-        estimatedPayout: currentCyclePayout,
+        estimatedPayout: availablePayout, // Show available balance after pending withdrawals
         payoutDate: null, // Will be set when payout is processed
         orders: currentCycleOrdersData // Include orders array in response
       },

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bell, History, Menu, ChevronDown, Calendar, Download, ArrowRight, FileText, Wallet, X } from "lucide-react"
+import { Bell, Menu, ChevronDown, Calendar, Download, ArrowRight, FileText, Wallet, X } from "lucide-react"
 import BottomNavOrders from "../components/BottomNavOrders"
 import { restaurantAPI } from "@/lib/api"
 
@@ -226,6 +226,7 @@ export default function HubFinance() {
       setPastCyclesData(null)
     }
   }, [selectedDateRange])
+
 
   // Prepare report data from real finance data
   const getReportData = () => {
@@ -616,16 +617,16 @@ export default function HubFinance() {
           <div className="flex items-center gap-1 ml-2">
             <button
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/notifications")}
+              onClick={() => navigate("/restaurant/withdrawal-history")}
+              title="Withdrawal History"
             >
-              <Bell className="w-5 h-5 text-gray-700" />
+              <Wallet className="w-5 h-5 text-gray-700" />
             </button>
             <button
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              onClick={() => navigate("/restaurant/wallet")}
-              title="Withdrawal History"
+              onClick={() => navigate("/restaurant/notifications")}
             >
-              <History className="w-5 h-5 text-gray-700" />
+              <Bell className="w-5 h-5 text-gray-700" />
             </button>
             <button
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"

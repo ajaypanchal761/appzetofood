@@ -92,6 +92,7 @@ import HubMenu from "@/module/restaurant/pages/HubMenu"
 import ItemDetailsPage from "@/module/restaurant/pages/ItemDetailsPage"
 import HubFinance from "@/module/restaurant/pages/HubFinance"
 import FinanceDetailsPage from "@/module/restaurant/pages/FinanceDetailsPage"
+import WithdrawalHistoryPage from "@/module/restaurant/pages/WithdrawalHistoryPage"
 import PhoneNumbersPage from "@/module/restaurant/pages/PhoneNumbersPage"
 import DownloadReport from "@/module/restaurant/pages/DownloadReport"
 import ToHub from "@/module/restaurant/pages/ToHub"
@@ -705,7 +706,15 @@ export default function App() {
           <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
             <HubFinance />
           </ProtectedRoute>
-        } 
+        }
+      />
+      <Route 
+        path="/restaurant/withdrawal-history" 
+        element={
+          <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
+            <WithdrawalHistoryPage />
+          </ProtectedRoute>
+        }
       />
       <Route 
         path="/restaurant/finance-details" 
@@ -713,7 +722,7 @@ export default function App() {
           <ProtectedRoute requiredRole="restaurant" loginPath="/restaurant/login">
             <FinanceDetailsPage />
           </ProtectedRoute>
-        } 
+        }
       />
       <Route 
         path="/restaurant/phone" 

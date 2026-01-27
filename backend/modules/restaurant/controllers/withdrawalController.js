@@ -63,7 +63,26 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
       restaurantIdString: restaurantDetails?.restaurantId || restaurant.restaurantId || restaurant._id.toString()
     });
 
-    logger.info(`Withdrawal request created: ${withdrawalRequest._id} for restaurant: ${restaurant._id}, amount: ${amount}`);
+    // Deduct balance immediately when withdrawal request is created
+    // Create a pending withdrawal transaction
+    const withdrawalRequestId = withdrawalRequest._id.toString();
+    const transaction = wallet.addTransaction({
+      amount: parseFloat(amount),
+      type: 'withdrawal',
+      status: 'Pending',
+      description: `Withdrawal request created - Request ID: ${withdrawalRequestId}`
+    });
+
+    // Manually deduct from balance (since addTransaction only deducts when status is 'Completed')
+    wallet.totalBalance = Math.max(0, (wallet.totalBalance || 0) - parseFloat(amount));
+    wallet.totalWithdrawn = (wallet.totalWithdrawn || 0) + parseFloat(amount);
+    await wallet.save();
+
+    // Link transaction ID to withdrawal request for easier tracking
+    withdrawalRequest.transactionId = transaction._id;
+    await withdrawalRequest.save();
+
+    logger.info(`Withdrawal request created: ${withdrawalRequest._id} for restaurant: ${restaurant._id}, amount: ${amount}. Balance deducted immediately.`);
 
     return successResponse(res, 201, 'Withdrawal request created successfully', {
       withdrawalRequest: {
@@ -222,25 +241,45 @@ export const approveWithdrawalRequest = asyncHandler(async (req, res) => {
     // Get restaurant wallet
     const wallet = await RestaurantWallet.findOrCreateByRestaurantId(withdrawalRequest.restaurantId._id);
 
-    // Check if sufficient balance
-    const availableBalance = wallet.totalBalance || 0;
-    if (withdrawalRequest.amount > availableBalance) {
-      return errorResponse(res, 400, 'Insufficient balance in restaurant wallet');
-    }
-
     // Update withdrawal request
     withdrawalRequest.status = 'Approved';
     withdrawalRequest.processedAt = new Date();
     withdrawalRequest.processedBy = admin._id;
     await withdrawalRequest.save();
 
-    // Create withdrawal transaction
-    const transaction = wallet.addTransaction({
-      amount: withdrawalRequest.amount,
-      type: 'withdrawal',
-      status: 'Completed',
-      description: `Withdrawal request approved - Request ID: ${withdrawalRequest._id}`
-    });
+    // Find and update the pending withdrawal transaction to Completed
+    // Balance was already deducted when request was created, so we just mark transaction as completed
+    let pendingTransaction = null;
+    
+    if (withdrawalRequest.transactionId) {
+      // Find transaction by ID if linked
+      pendingTransaction = wallet.transactions.id(withdrawalRequest.transactionId);
+    }
+    
+    if (!pendingTransaction) {
+      // Fallback: find by description
+      pendingTransaction = wallet.transactions.find(
+        t => t.type === 'withdrawal' && 
+             t.status === 'Pending' && 
+             t.description?.includes(withdrawalRequest._id.toString())
+      );
+    }
+
+    if (pendingTransaction) {
+      // Update transaction status to Completed
+      pendingTransaction.status = 'Completed';
+      pendingTransaction.processedAt = new Date();
+      // Balance was already deducted, so no need to deduct again
+    } else {
+      // If transaction not found, create a new one (fallback)
+      wallet.addTransaction({
+        amount: withdrawalRequest.amount,
+        type: 'withdrawal',
+        status: 'Completed',
+        description: `Withdrawal request approved - Request ID: ${withdrawalRequest._id}`
+      });
+      // Balance already deducted, so we don't deduct again
+    }
 
     await wallet.save();
 
@@ -284,6 +323,9 @@ export const rejectWithdrawalRequest = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, `Withdrawal request is already ${withdrawalRequest.status}`);
     }
 
+    // Get restaurant wallet to refund the balance
+    const wallet = await RestaurantWallet.findOrCreateByRestaurantId(withdrawalRequest.restaurantId);
+
     // Update withdrawal request
     withdrawalRequest.status = 'Rejected';
     withdrawalRequest.processedAt = new Date();
@@ -293,7 +335,48 @@ export const rejectWithdrawalRequest = asyncHandler(async (req, res) => {
     }
     await withdrawalRequest.save();
 
-    logger.info(`Withdrawal request rejected: ${id} by admin: ${admin._id}`);
+    // Find and update the pending withdrawal transaction to Cancelled
+    // Refund the balance back
+    let pendingTransaction = null;
+    
+    if (withdrawalRequest.transactionId) {
+      // Find transaction by ID if linked
+      pendingTransaction = wallet.transactions.id(withdrawalRequest.transactionId);
+    }
+    
+    if (!pendingTransaction) {
+      // Fallback: find by description
+      pendingTransaction = wallet.transactions.find(
+        t => t.type === 'withdrawal' && 
+             t.status === 'Pending' && 
+             t.description?.includes(withdrawalRequest._id.toString())
+      );
+    }
+
+    if (pendingTransaction) {
+      // Update transaction status to Cancelled
+      pendingTransaction.status = 'Cancelled';
+      pendingTransaction.processedAt = new Date();
+      
+      // Refund the balance back
+      wallet.totalBalance = (wallet.totalBalance || 0) + withdrawalRequest.amount;
+      wallet.totalWithdrawn = Math.max(0, (wallet.totalWithdrawn || 0) - withdrawalRequest.amount);
+    } else {
+      // If transaction not found, create a refund transaction (fallback)
+      wallet.addTransaction({
+        amount: withdrawalRequest.amount,
+        type: 'refund',
+        status: 'Completed',
+        description: `Withdrawal request rejected - Refund for Request ID: ${withdrawalRequest._id}`
+      });
+      // Refund the balance
+      wallet.totalBalance = (wallet.totalBalance || 0) + withdrawalRequest.amount;
+      wallet.totalWithdrawn = Math.max(0, (wallet.totalWithdrawn || 0) - withdrawalRequest.amount);
+    }
+
+    await wallet.save();
+
+    logger.info(`Withdrawal request rejected: ${id} by admin: ${admin._id}. Balance refunded.`);
 
     return successResponse(res, 200, 'Withdrawal request rejected successfully', {
       withdrawalRequest: {

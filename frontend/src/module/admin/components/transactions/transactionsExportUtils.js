@@ -23,42 +23,19 @@ export const exportTransactionsToCSV = (transactions, headers, filename = "trans
 };
 
 export const exportTransactionsToExcel = (transactions, headers, filename = "transactions") => {
-  const excelContent = [
-    headers.map(h => h.label).join("\t"),
-    ...transactions.map(row => headers.map(h => {
-      const value = row[h.key];
-      if (value === null || value === undefined) return '';
-      return String(value).replace(/\t/g, ' ');
-    }).join("\t"))
-  ].join("\n");
-
-  const blob = new Blob([excelContent], { type: "application/vnd.ms-excel" });
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  link.setAttribute("href", url);
-  link.setAttribute("download", `${filename}_${new Date().toISOString().split("T")[0]}.xls`);
-  link.style.visibility = "hidden";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-
-export const exportTransactionsToPDF = (transactions, headers, filename = "transactions", title = "Transaction Report") => {
-  const printWindow = window.open("", "_blank");
-  printWindow.document.write(`
+  // Create HTML table for better Excel compatibility and clear formatting
+  const htmlContent = `
     <html>
       <head>
-        <title>${title}</title>
+        <meta charset="utf-8">
         <style>
-          body { font-family: sans-serif; padding: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+          table { border-collapse: collapse; width: 100%; }
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
           th { background-color: #f2f2f2; font-weight: bold; }
-          h1 { text-align: center; margin-bottom: 1rem; }
+          td { white-space: nowrap; }
         </style>
       </head>
       <body>
-        <h1>${title}</h1>
         <table>
           <thead>
             <tr>
@@ -68,16 +45,78 @@ export const exportTransactionsToPDF = (transactions, headers, filename = "trans
           <tbody>
             ${transactions.map(row => `
               <tr>
-                ${headers.map(h => `<td>${row[h.key] || ''}</td>`).join("")}
+                ${headers.map(h => {
+                  const value = row[h.key];
+                  if (value === null || value === undefined) return '<td></td>';
+                  // Escape HTML to prevent issues
+                  const escapedValue = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  return `<td>${escapedValue}</td>`;
+                }).join("")}
               </tr>
             `).join("")}
           </tbody>
         </table>
       </body>
     </html>
-  `);
-  printWindow.document.close();
-  printWindow.print();
+  `;
+
+  const blob = new Blob([htmlContent], { type: "application/vnd.ms-excel" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${filename}_${new Date().toISOString().split("T")[0]}.xls`);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+export const exportTransactionsToPDF = async (transactions, headers, filename = "transactions", title = "Transaction Report") => {
+  // Instant PDF download using jsPDF + autoTable (no print dialog)
+  const { default: jsPDF } = await import('jspdf')
+  const { default: autoTable } = await import('jspdf-autotable')
+
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4'
+  })
+
+  const reportDate = new Date().toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  })
+
+  // Title
+  doc.setFontSize(16)
+  doc.text(title, 14, 16)
+  doc.setFontSize(10)
+  doc.text(`Generated: ${reportDate}`, 14, 22)
+
+  const head = [headers.map(h => h.label)]
+  const body = transactions.map(row =>
+    headers.map(h => {
+      const v = row[h.key]
+      return v === null || v === undefined ? '' : String(v)
+    })
+  )
+
+  autoTable(doc, {
+    head,
+    body,
+    startY: 28,
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [0, 0, 0], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    margin: { left: 14, right: 14 }
+  })
+
+  doc.save(`${filename}_${new Date().toISOString().split("T")[0]}.pdf`)
 };
 
 export const exportTransactionsToJSON = (transactions, filename = "transactions") => {

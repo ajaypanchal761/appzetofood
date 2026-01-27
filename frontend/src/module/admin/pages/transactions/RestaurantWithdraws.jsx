@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Search, Download, ChevronDown, Eye, Settings, Building, ArrowUpDown, FileText, FileSpreadsheet, Code, Check, Columns, CheckCircle, XCircle, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { exportTransactionsToCSV, exportTransactionsToExcel, exportTransactionsToPDF, exportTransactionsToJSON } from "../../components/transactions/transactionsExportUtils"
+import { exportTransactionsToExcel, exportTransactionsToPDF } from "../../components/transactions/transactionsExportUtils"
 import { adminAPI } from "@/lib/api"
 import { toast } from "sonner"
 
@@ -22,7 +22,7 @@ export default function RestaurantWithdraws() {
     amount: true,
     restaurant: true,
     restaurantId: true,
-    restaurantAddress: true,
+    restaurantAddress: false,
     requestTime: true,
     status: true,
     actions: true,
@@ -167,7 +167,7 @@ export default function RestaurantWithdraws() {
     })}`
   }
 
-  const handleExport = (format) => {
+  const handleExport = async (format) => {
     if (filteredWithdraws.length === 0) {
       toast.error("No data to export.")
       return
@@ -177,24 +177,30 @@ export default function RestaurantWithdraws() {
       { key: "amount", label: "Amount" },
       { key: "restaurantName", label: "Restaurant Name" },
       { key: "restaurantIdString", label: "Restaurant ID" },
-      { key: "restaurantAddress", label: "Restaurant Address" },
       { key: "requestTime", label: "Request Time" },
+      { key: "processedTime", label: "Approved/Rejected Time" },
+      { key: "processedBy", label: "Processed By" },
       { key: "status", label: "Status" },
+      { key: "rejectionReason", label: "Rejection Reason" },
     ]
     const exportData = filteredWithdraws.map((w, index) => ({
       sl: index + 1,
       amount: formatCurrency(w.amount),
       restaurantName: w.restaurantName || 'N/A',
       restaurantIdString: w.restaurantIdString || 'N/A',
-      restaurantAddress: w.restaurantAddress || 'N/A',
       requestTime: formatDate(w.requestedAt || w.createdAt),
-      status: w.status
+      processedTime: w.processedAt ? formatDate(w.processedAt) : '',
+      processedBy: w.processedBy?.name ? `${w.processedBy.name}${w.processedBy.email ? ` (${w.processedBy.email})` : ''}` : '',
+      status: w.status,
+      rejectionReason: w.rejectionReason || ''
     }))
     switch (format) {
-      case "csv": exportTransactionsToCSV(exportData, headers, "restaurant_withdraws"); break
-      case "excel": exportTransactionsToExcel(exportData, headers, "restaurant_withdraws"); break
-      case "pdf": exportTransactionsToPDF(exportData, headers, "restaurant_withdraws", "Restaurant Withdraws Report"); break
-      case "json": exportTransactionsToJSON(exportData, "restaurant_withdraws"); break
+      case "excel":
+        exportTransactionsToExcel(exportData, headers, "restaurant_withdraws_full_details")
+        break
+      case "pdf":
+        await exportTransactionsToPDF(exportData, headers, "restaurant_withdraws_full_details", "Restaurant Withdraws Report")
+        break
       default: break
     }
   }
@@ -209,7 +215,7 @@ export default function RestaurantWithdraws() {
       amount: true,
       restaurant: true,
       restaurantId: true,
-      restaurantAddress: true,
+      restaurantAddress: false,
       requestTime: true,
       status: true,
       actions: true,
@@ -285,17 +291,11 @@ export default function RestaurantWithdraws() {
                 <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
                   <DropdownMenuLabel>Export Format</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport("csv")} className="cursor-pointer flex items-center gap-2">
-                    <FileText className="w-4 h-4" /> CSV
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport("excel")} className="cursor-pointer flex items-center gap-2">
                     <FileSpreadsheet className="w-4 h-4" /> Excel
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExport("pdf")} className="cursor-pointer flex items-center gap-2">
                     <Code className="w-4 h-4" /> PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("json")} className="cursor-pointer flex items-center gap-2">
-                    <Code className="w-4 h-4" /> JSON
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -322,7 +322,6 @@ export default function RestaurantWithdraws() {
                     {visibleColumns.amount && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Amount</th>}
                     {visibleColumns.restaurant && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Restaurant Name</th>}
                     {visibleColumns.restaurantId && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Restaurant ID</th>}
-                    {visibleColumns.restaurantAddress && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Address</th>}
                     {visibleColumns.requestTime && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Request Time</th>}
                     {visibleColumns.status && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Status</th>}
                     {visibleColumns.actions && <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">Action</th>}
@@ -355,9 +354,6 @@ export default function RestaurantWithdraws() {
                         </td>}
                         {visibleColumns.restaurantId && <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-medium text-slate-700">{withdraw.restaurantIdString || 'N/A'}</span>
-                        </td>}
-                        {visibleColumns.restaurantAddress && <td className="px-6 py-4">
-                          <span className="text-sm font-medium text-slate-700">{withdraw.restaurantAddress || 'N/A'}</span>
                         </td>}
                         {visibleColumns.requestTime && <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-medium text-slate-700">{formatDate(withdraw.requestedAt || withdraw.createdAt)}</span>
@@ -437,13 +433,21 @@ export default function RestaurantWithdraws() {
                   <p className="text-sm font-medium text-slate-900 mt-1">{selectedWithdraw.restaurantIdString || 'N/A'}</p>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase">Restaurant Address</label>
-                  <p className="text-sm font-medium text-slate-900 mt-1">{selectedWithdraw.restaurantAddress || 'N/A'}</p>
-                </div>
-                <div>
                   <label className="text-xs font-semibold text-slate-500 uppercase">Request Time</label>
                   <p className="text-sm font-medium text-slate-900 mt-1">{formatDate(selectedWithdraw.requestedAt || selectedWithdraw.createdAt)}</p>
                 </div>
+                {(selectedWithdraw.status === 'Approved' || selectedWithdraw.status === 'Processed') && selectedWithdraw.processedAt && (
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Approved Time</label>
+                    <p className="text-sm font-medium text-slate-900 mt-1">{formatDate(selectedWithdraw.processedAt)}</p>
+                  </div>
+                )}
+                {selectedWithdraw.status === 'Rejected' && selectedWithdraw.processedAt && (
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Rejected Time</label>
+                    <p className="text-sm font-medium text-slate-900 mt-1">{formatDate(selectedWithdraw.processedAt)}</p>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-semibold text-slate-500 uppercase">Status</label>
                   <p className="mt-1">
