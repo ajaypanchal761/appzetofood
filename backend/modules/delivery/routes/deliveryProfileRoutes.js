@@ -3,6 +3,11 @@ import { getProfile, updateProfile, reverify } from '../controllers/deliveryProf
 import { authenticate } from '../middleware/deliveryAuth.js';
 import { validate } from '../../../shared/middleware/validate.js';
 import Joi from 'joi';
+import {
+  createSupportTicket,
+  getDeliveryTickets,
+  getTicketById
+} from '../../admin/controllers/deliverySupportTicketController.js';
 
 const router = express.Router();
 
@@ -46,6 +51,27 @@ router.put('/profile', validate(Joi.object({
 
 // Reverify route (resubmit for approval)
 router.post('/reverify', reverify);
+
+// Support tickets routes
+router.post('/support-tickets', validate(Joi.object({
+  subject: Joi.string().trim().min(3).max(200).required().messages({
+    'string.empty': 'Subject is required',
+    'string.min': 'Subject must be at least 3 characters',
+    'string.max': 'Subject must not exceed 200 characters',
+    'any.required': 'Subject is required'
+  }),
+  description: Joi.string().trim().min(10).max(2000).required().messages({
+    'string.empty': 'Description is required',
+    'string.min': 'Description must be at least 10 characters',
+    'string.max': 'Description must not exceed 2000 characters',
+    'any.required': 'Description is required'
+  }),
+  category: Joi.string().valid('payment', 'account', 'technical', 'order', 'other').optional().allow('', null),
+  priority: Joi.string().valid('low', 'medium', 'high', 'urgent').optional().allow('', null)
+})), createSupportTicket);
+
+router.get('/support-tickets', getDeliveryTickets);
+router.get('/support-tickets/:id', getTicketById);
 
 export default router;
 

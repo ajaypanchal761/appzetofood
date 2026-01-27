@@ -204,13 +204,6 @@ export default function FeedNavbar({ className = "" }) {
   // Help options with proper navigation paths
   const helpOptions = [
     { 
-      id: "helpCenter", 
-      title: "Help center", 
-      subtitle: "Find answers to queries and raise ticket", 
-      icon: "helpCenter", 
-      path: "/delivery/help/center"
-    },
-    { 
       id: "supportTickets", 
       title: "Support tickets", 
       subtitle: "Check status of tickets raised", 
@@ -223,13 +216,6 @@ export default function FeedNavbar({ className = "" }) {
       subtitle: "See your Appzeto ID card", 
       icon: "idCard", 
       path: "/delivery/help/id-card"
-    },
-    { 
-      id: "changeLanguage", 
-      title: "Change language", 
-      subtitle: "Use app in your language of choice", 
-      icon: "language", 
-      path: "/delivery/help/language"
     },
   ];
 
@@ -244,17 +230,99 @@ export default function FeedNavbar({ className = "" }) {
     }
   };
 
-  const emergencyOptions = [
-    { id: "ambulance", title: "Medical Emergency", subtitle: "Call an ambulance", icon: "ambulance", onClick: () => toast("Dialing medical emergency…") },
-    { id: "accident", title: "Accident Helpline", subtitle: "Report an accident", icon: "accident", onClick: () => toast("Calling accident helpline…") },
-    { id: "police", title: "Contact Police", subtitle: "Nearest police support", icon: "police", onClick: () => toast("Contacting police…") },
-    { id: "insurance", title: "Insurance", subtitle: "Policy & claim help", icon: "insurance", onClick: () => toast("Opening insurance help…") },
-  ];
+  const [emergencyNumbers, setEmergencyNumbers] = useState({
+    medicalEmergency: "",
+    accidentHelpline: "",
+    contactPolice: "",
+    insurance: "",
+  });
 
   const [showEmergencyPopup, setShowEmergencyPopup] = useState(false);
   const [showHelpPopup, setShowHelpPopup] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
   const [imageError, setImageError] = useState(false);
+
+  // Fetch emergency help numbers
+  useEffect(() => {
+    const fetchEmergencyHelp = async () => {
+      try {
+        const response = await deliveryAPI.getEmergencyHelp();
+        if (response?.data?.success && response?.data?.data) {
+          setEmergencyNumbers({
+            medicalEmergency: response.data.data.medicalEmergency || "",
+            accidentHelpline: response.data.data.accidentHelpline || "",
+            contactPolice: response.data.data.contactPolice || "",
+            insurance: response.data.data.insurance || "",
+          });
+        }
+      } catch (error) {
+        // Silently fail - use default empty numbers
+        console.error("Error fetching emergency help:", error);
+      }
+    };
+
+    fetchEmergencyHelp();
+  }, []);
+
+  // Emergency options with phone numbers from API
+  const emergencyOptions = [
+    { 
+      id: "ambulance", 
+      title: "Medical Emergency", 
+      subtitle: "Call an ambulance", 
+      icon: "ambulance", 
+      phone: emergencyNumbers.medicalEmergency,
+      onClick: () => {
+        if (emergencyNumbers.medicalEmergency) {
+          window.location.href = `tel:${emergencyNumbers.medicalEmergency}`;
+        } else {
+          toast.error("Medical emergency number not configured");
+        }
+      }
+    },
+    { 
+      id: "accident", 
+      title: "Accident Helpline", 
+      subtitle: "Report an accident", 
+      icon: "accident", 
+      phone: emergencyNumbers.accidentHelpline,
+      onClick: () => {
+        if (emergencyNumbers.accidentHelpline) {
+          window.location.href = `tel:${emergencyNumbers.accidentHelpline}`;
+        } else {
+          toast.error("Accident helpline number not configured");
+        }
+      }
+    },
+    { 
+      id: "police", 
+      title: "Contact Police", 
+      subtitle: "Nearest police support", 
+      icon: "police", 
+      phone: emergencyNumbers.contactPolice,
+      onClick: () => {
+        if (emergencyNumbers.contactPolice) {
+          window.location.href = `tel:${emergencyNumbers.contactPolice}`;
+        } else {
+          toast.error("Police emergency number not configured");
+        }
+      }
+    },
+    { 
+      id: "insurance", 
+      title: "Insurance", 
+      subtitle: "Policy & claim help", 
+      icon: "insurance", 
+      phone: emergencyNumbers.insurance,
+      onClick: () => {
+        if (emergencyNumbers.insurance) {
+          window.location.href = `tel:${emergencyNumbers.insurance}`;
+        } else {
+          toast.error("Insurance helpline number not configured");
+        }
+      }
+    },
+  ];
 
   // Fetch profile image
   useEffect(() => {

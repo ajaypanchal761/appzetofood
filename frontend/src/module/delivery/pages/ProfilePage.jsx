@@ -12,7 +12,6 @@ import {
   Star,
   Briefcase,
   Bike,
-  Tag,
   Headphones,
   Ticket,
   Bell,
@@ -284,7 +283,7 @@ export default function ProfilePage() {
       <div className="px-4 py-6 pb-24 md:pb-6">
 
         {/* Navigation Buttons */}
-        <div ref={navButtonsRef} className="grid grid-cols-2 gap-3 mb-6">
+        <div ref={navButtonsRef} className="grid grid-cols-1 gap-3 mb-6">
           <button
             onClick={() => navigate("/delivery/trip-history")}
             className="bg-white rounded-lg p-4 flex flex-col items-center gap-1 hover:bg-gray-200 transition-colors"
@@ -293,15 +292,6 @@ export default function ProfilePage() {
               <Bike className="w-5 h-5" />
             </div>
             <span className="text-xs font-medium">Trips history</span>
-          </button>
-          <button
-            onClick={() => navigate("/delivery/offers")}
-            className="bg-white rounded-lg p-4 flex flex-col items-center gap-1 hover:bg-gray-200 transition-colors"
-          >
-            <div className="rounded-lg p-2">
-              <Tag className="w-5 h-5" />
-            </div>
-            <span className="text-xs font-medium">Your offers</span>
           </button>
         </div>
 
@@ -327,18 +317,6 @@ export default function ProfilePage() {
           <div>
             <h3 className="text-base font-medium mb-3 px-1">Support</h3>
             <div className="space-y-0">
-              <Card 
-                onClick={() => navigate("/delivery/help/center")}
-                className="bg-white py-0 border-0 shadow-none rounded-none first:rounded-t-lg last:rounded-b-lg cursor-pointer hover:bg-gray-200 transition-colors"
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Headphones className="w-5 h-5" />
-                    <span className="text-sm font-medium">Help centre</span>
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400" />
-                </CardContent>
-              </Card>
               <div className="h-px bg-gray-200"></div>
               <Card 
                 onClick={() => navigate("/delivery/help/tickets")}

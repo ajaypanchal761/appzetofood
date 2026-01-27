@@ -1,4 +1,5 @@
 import express from 'express';
+import { getEmergencyHelpPublic } from '../../admin/controllers/deliveryEmergencyHelpController.js';
 import {
   getDashboard,
   getWalletBalance,
@@ -8,6 +9,9 @@ import {
 import { authenticate } from '../middleware/deliveryAuth.js';
 
 const router = express.Router();
+
+// Public route - Emergency help (accessible without authentication)
+router.get('/emergency-help', getEmergencyHelpPublic);
 
 // All routes require authentication
 router.use(authenticate);

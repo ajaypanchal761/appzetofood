@@ -152,6 +152,18 @@ export const sidebarMenuData = [
         icon: "DollarSign",
       },
       {
+        type: "link",
+        label: "Delivery Emergency Help",
+        path: "/admin/delivery-emergency-help",
+        icon: "Phone",
+      },
+      {
+        type: "link",
+        label: "Delivery Support Tickets",
+        path: "/admin/delivery-support-tickets",
+        icon: "MessageSquare",
+      },
+      {
         type: "expandable",
         label: "Deliveryman",
         icon: "Package",

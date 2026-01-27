@@ -48,6 +48,8 @@ import LoyaltyPointReport from "../pages/loyalty-point/Report";
 import SubscribedMailList from "../pages/SubscribedMailList";
 // Deliveryman Management
 import DeliveryBoyCommission from "../pages/DeliveryBoyCommission";
+import DeliveryEmergencyHelp from "../pages/DeliveryEmergencyHelp";
+import DeliverySupportTickets from "../pages/DeliverySupportTickets";
 import JoinRequest from "../pages/delivery-partners/JoinRequest";
 import AddDeliveryman from "../pages/delivery-partners/AddDeliveryman";
 import DeliverymanList from "../pages/delivery-partners/DeliverymanList";
@@ -209,6 +211,8 @@ export default function AdminRouter() {
 
         {/* DELIVERYMAN MANAGEMENT */}
         <Route path="delivery-boy-commission" element={<DeliveryBoyCommission />} />
+        <Route path="delivery-emergency-help" element={<DeliveryEmergencyHelp />} />
+        <Route path="delivery-support-tickets" element={<DeliverySupportTickets />} />
         {/* Delivery Partners */}
         <Route path="delivery-partners/join-request" element={<JoinRequest />} />
         <Route path="delivery-partners/add" element={<AddDeliveryman />} />

@@ -40,6 +40,7 @@ import {
   LogIn,
   Database,
   Zap,
+  Phone,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -83,6 +84,8 @@ const iconMap = {
   LogIn,
   Database,
   Zap,
+  Phone,
+  MessageSquare,
 }
 
 export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange }) {

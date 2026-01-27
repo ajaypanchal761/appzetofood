@@ -84,6 +84,18 @@ import {
   calculateCommission
 } from '../controllers/deliveryBoyCommissionController.js';
 import {
+  getEmergencyHelp,
+  getEmergencyHelpPublic,
+  createOrUpdateEmergencyHelp,
+  toggleEmergencyHelpStatus
+} from '../controllers/deliveryEmergencyHelpController.js';
+import {
+  getAllTickets,
+  getTicketByIdAdmin,
+  updateTicket,
+  getTicketStats
+} from '../controllers/deliverySupportTicketController.js';
+import {
   getRestaurantCommissions,
   getApprovedRestaurants,
   getRestaurantCommissionById,
@@ -285,6 +297,17 @@ router.get('/delivery-boy-commission/:id', getCommissionRuleById);
 router.put('/delivery-boy-commission/:id', updateCommissionRule);
 router.delete('/delivery-boy-commission/:id', deleteCommissionRule);
 router.patch('/delivery-boy-commission/:id/status', toggleCommissionRuleStatus);
+
+// Delivery Emergency Help Management
+router.get('/delivery-emergency-help', getEmergencyHelp);
+router.post('/delivery-emergency-help', createOrUpdateEmergencyHelp);
+router.patch('/delivery-emergency-help/status', toggleEmergencyHelpStatus);
+
+// Delivery Support Tickets Management
+router.get('/delivery-support-tickets', getAllTickets);
+router.get('/delivery-support-tickets/stats', getTicketStats);
+router.get('/delivery-support-tickets/:id', getTicketByIdAdmin);
+router.put('/delivery-support-tickets/:id', updateTicket);
 
 // Restaurant Commission Management
 router.get('/restaurant-commission', getRestaurantCommissions);

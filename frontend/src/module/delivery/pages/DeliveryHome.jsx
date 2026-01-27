@@ -4158,13 +4158,6 @@ export default function DeliveryHome() {
   // Help options - using paths from DeliveryRouter
   const helpOptions = [
     {
-      id: "helpCenter",
-      title: "Help center",
-      subtitle: "Find answers to queries and raise ticket",
-      icon: "helpCenter",
-      path: "/delivery/help/center"
-    },
-    {
       id: "supportTickets",
       title: "Support tickets",
       subtitle: "Check status of tickets raised",
@@ -4177,13 +4170,6 @@ export default function DeliveryHome() {
       subtitle: "See your Appzeto ID card",
       icon: "idCard",
       path: "/delivery/help/id-card"
-    },
-    {
-      id: "changeLanguage",
-      title: "Change language",
-      subtitle: "Use app in your language of choice",
-      icon: "language",
-      path: "/delivery/help/language"
     }
   ]
 

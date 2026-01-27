@@ -652,6 +652,24 @@ export const deliveryAPI = {
     return apiClient.get(API_ENDPOINTS.DELIVERY.ORDER_STATS, { params: { period } });
   },
 
+  // Get emergency help numbers
+  getEmergencyHelp: () => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.EMERGENCY_HELP);
+  },
+
+  // Support Tickets
+  getSupportTickets: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.SUPPORT_TICKETS, { params });
+  },
+
+  getSupportTicketById: (id) => {
+    return apiClient.get(API_ENDPOINTS.DELIVERY.SUPPORT_TICKET_BY_ID.replace(':id', id));
+  },
+
+  createSupportTicket: (data) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.SUPPORT_TICKETS, data);
+  },
+
   // Get delivery profile
   getProfile: () => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.PROFILE);
@@ -1241,6 +1259,36 @@ export const adminAPI = {
 
   calculateCommission: (distance) => {
     return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION_CALCULATE, { distance });
+  },
+
+  // Delivery Emergency Help Management
+  getEmergencyHelp: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_EMERGENCY_HELP);
+  },
+
+  createOrUpdateEmergencyHelp: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_EMERGENCY_HELP, data);
+  },
+
+  toggleEmergencyHelpStatus: () => {
+    return apiClient.patch(API_ENDPOINTS.ADMIN.DELIVERY_EMERGENCY_HELP_STATUS);
+  },
+
+  // Delivery Support Tickets Management
+  getDeliverySupportTickets: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_SUPPORT_TICKETS, { params });
+  },
+
+  getDeliverySupportTicketById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_SUPPORT_TICKET_BY_ID.replace(':id', id));
+  },
+
+  updateDeliverySupportTicket: (id, data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.DELIVERY_SUPPORT_TICKET_BY_ID.replace(':id', id), data);
+  },
+
+  getDeliverySupportTicketStats: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_SUPPORT_TICKETS_STATS);
   },
 
   // Food Approval

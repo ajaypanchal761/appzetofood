@@ -216,6 +216,9 @@ export const API_ENDPOINTS = {
     LOCATION: '/delivery/location',
     ZONES_IN_RADIUS: '/delivery/zones/in-radius',
     REVERIFY: '/delivery/reverify',
+    EMERGENCY_HELP: '/delivery/emergency-help',
+    SUPPORT_TICKETS: '/delivery/support-tickets',
+    SUPPORT_TICKET_BY_ID: '/delivery/support-tickets/:id',
   },
   // Admin endpoints
   ADMIN: {
@@ -305,6 +308,11 @@ export const API_ENDPOINTS = {
     DELIVERY_BOY_COMMISSION_BY_ID: '/admin/delivery-boy-commission/:id',
     DELIVERY_BOY_COMMISSION_STATUS: '/admin/delivery-boy-commission/:id/status',
     DELIVERY_BOY_COMMISSION_CALCULATE: '/admin/delivery-boy-commission/calculate',
+    DELIVERY_EMERGENCY_HELP: '/admin/delivery-emergency-help',
+    DELIVERY_EMERGENCY_HELP_STATUS: '/admin/delivery-emergency-help/status',
+    DELIVERY_SUPPORT_TICKETS: '/admin/delivery-support-tickets',
+    DELIVERY_SUPPORT_TICKET_BY_ID: '/admin/delivery-support-tickets/:id',
+    DELIVERY_SUPPORT_TICKETS_STATS: '/admin/delivery-support-tickets/stats',
     RESTAURANT_COMMISSION: '/admin/restaurant-commission',
     RESTAURANT_COMMISSION_APPROVED_RESTAURANTS: '/admin/restaurant-commission/approved-restaurants',
     RESTAURANT_COMMISSION_BY_RESTAURANT_ID: '/admin/restaurant-commission/restaurant/:restaurantId',

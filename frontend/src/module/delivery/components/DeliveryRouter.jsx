@@ -26,8 +26,9 @@ import PocketStatement from "../pages/PocketStatement"
 import FuelPayment from "../pages/FuelPayment"
 import OffersPage from "../pages/OffersPage"
 import UpdatesPage from "../pages/UpdatesPage"
-import HelpCenter from "../pages/HelpCenter"
 import SupportTickets from "../pages/SupportTickets"
+import CreateSupportTicket from "../pages/CreateSupportTicket"
+import ViewSupportTicket from "../pages/ViewSupportTicket"
 import ShowIdCard from "../pages/ShowIdCard"
 import ChangeLanguage from "../pages/ChangeLanguage"
 import SelectDropLocation from "../pages/SelectDropLocation"
@@ -355,21 +356,31 @@ export default function DeliveryRouter() {
         element={
           <ProtectedRoute>
             <DeliveryLayout>
-              <HelpCenter />
-            </DeliveryLayout>
-          </ProtectedRoute>
-        }
-        path="/help/center"
-      />
-      <Route
-        element={
-          <ProtectedRoute>
-            <DeliveryLayout>
               <SupportTickets />
             </DeliveryLayout>
           </ProtectedRoute>
         }
         path="/help/tickets"
+      />
+      <Route
+        element={
+          <ProtectedRoute>
+            <DeliveryLayout>
+              <CreateSupportTicket />
+            </DeliveryLayout>
+          </ProtectedRoute>
+        }
+        path="/help/create-ticket"
+      />
+      <Route
+        element={
+          <ProtectedRoute>
+            <DeliveryLayout>
+              <ViewSupportTicket />
+            </DeliveryLayout>
+          </ProtectedRoute>
+        }
+        path="/help/tickets/:id"
       />
       <Route
         element={
