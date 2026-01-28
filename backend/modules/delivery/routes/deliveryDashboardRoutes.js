@@ -18,8 +18,10 @@ router.use(authenticate);
 
 // Dashboard routes
 router.get('/dashboard', getDashboard);
-router.get('/wallet', getWalletBalance);
-router.post('/wallet/claim-joining-bonus', claimJoiningBonus);
+// NOTE: Wallet endpoints are served from `/api/delivery/wallet/*` (deliveryWalletRoutes).
+// Keep these legacy routes under `/dashboard/wallet*` to avoid clashing with the new wallet module.
+router.get('/dashboard/wallet', getWalletBalance);
+router.post('/dashboard/wallet/claim-joining-bonus', claimJoiningBonus);
 router.get('/orders/stats', getOrderStats);
 
 export default router;

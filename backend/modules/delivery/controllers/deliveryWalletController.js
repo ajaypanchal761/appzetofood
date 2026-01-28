@@ -1,10 +1,15 @@
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import DeliveryWallet from '../models/DeliveryWallet.js';
+import DeliveryWithdrawalRequest from '../models/DeliveryWithdrawalRequest.js';
 import Order from '../../order/models/Order.js';
+import BusinessSettings from '../../admin/models/BusinessSettings.js';
 import { validate } from '../../../shared/middleware/validate.js';
 import Joi from 'joi';
 import winston from 'winston';
+import { createOrder as createRazorpayOrder } from '../../payment/services/razorpayService.js';
+import { verifyPayment } from '../../payment/services/razorpayService.js';
+import { getRazorpayCredentials } from '../../../shared/utils/envService.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -44,6 +49,95 @@ export const getWallet = asyncHandler(async (req, res) => {
       .filter(t => t.type === 'withdrawal' && t.status === 'Pending')
       .reduce((sum, t) => sum + t.amount, 0);
 
+    // Global cash limit and withdrawal limit (same for all delivery partners)
+    let totalCashLimit = 0;
+    let withdrawalLimit = 100;
+    try {
+      const settings = await BusinessSettings.getSettings();
+      const configured = Number(settings?.deliveryCashLimit);
+      if (Number.isFinite(configured) && configured >= 0) {
+        totalCashLimit = configured;
+      }
+      const wl = Number(settings?.deliveryWithdrawalLimit);
+      if (Number.isFinite(wl) && wl >= 0) {
+        withdrawalLimit = wl;
+      }
+    } catch (e) {
+      totalCashLimit = 0;
+    }
+
+    // ANYHOW FIX (end-to-end): compute COD cash collected from Orders so "Cash in hand" shows real amount.
+    // Robust against legacy data (ObjectId vs string IDs, method casing, status stored in deliveryState).
+    let codCollectedTotal = 0;
+    try {
+      const deliveryIdStr = delivery._id?.toString?.() || String(delivery._id);
+      const codAgg = await Order.aggregate([
+        {
+          $match: {
+            $expr: {
+              $and: [
+                // deliveryPartnerId matches current delivery (handles ObjectId or string)
+                {
+                  $eq: [
+                    { $toString: { $ifNull: ['$deliveryPartnerId', ''] } },
+                    deliveryIdStr
+                  ]
+                },
+                // COD / Cash payment method (handles casing + some legacy values)
+                {
+                  $in: [
+                    {
+                      $toLower: {
+                        $ifNull: ['$payment.method', '']
+                      }
+                    },
+                    ['cash', 'cod', 'cash on delivery']
+                  ]
+                },
+                // Delivered status can be in status or deliveryState fields
+                {
+                  $or: [
+                    {
+                      $eq: [
+                        { $toLower: { $ifNull: ['$status', ''] } },
+                        'delivered'
+                      ]
+                    },
+                    {
+                      $eq: [
+                        { $toLower: { $ifNull: ['$deliveryState.status', ''] } },
+                        'delivered'
+                      ]
+                    },
+                    {
+                      $eq: [
+                        { $toLower: { $ifNull: ['$deliveryState.currentPhase', ''] } },
+                        'completed'
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $ifNull: ['$pricing.total', 0] } }
+          }
+        }
+      ]);
+      codCollectedTotal = Number(codAgg?.[0]?.total) || 0;
+    } catch (e) {
+      console.warn('⚠️ Failed to compute COD cash in hand from orders:', e?.message || e);
+      codCollectedTotal = 0;
+    }
+
+    // Use wallet.cashInHand for cash-in-hand and available limit so deposit correctly
+    // reduces cash in hand and increases available limit. Do not override with COD.
+    const cashInHandForLimit = Math.max(0, Number(wallet.cashInHand) || 0);
+
     // Get all transactions (sorted by date, newest first)
     // Frontend needs all transactions to calculate weekly earnings and orders
     const allTransactions = wallet.transactions
@@ -73,9 +167,12 @@ export const getWallet = asyncHandler(async (req, res) => {
     
     const walletData = {
       totalBalance: wallet.totalBalance || 0,
-      cashInHand: wallet.cashInHand || 0,
+      cashInHand: cashInHandForLimit,
       totalWithdrawn: wallet.totalWithdrawn || 0,
       totalEarned: wallet.totalEarned || 0,
+      totalCashLimit: totalCashLimit,
+      availableCashLimit: Math.max(0, totalCashLimit - cashInHandForLimit),
+      deliveryWithdrawalLimit: withdrawalLimit,
       // Pocket balance = total balance (includes bonus, earnings, etc.)
       pocketBalance: wallet.totalBalance || 0,
       pendingWithdrawals: pendingWithdrawals,
@@ -94,6 +191,8 @@ export const getWallet = asyncHandler(async (req, res) => {
       totalBalance: walletData.totalBalance,
       pocketBalance: walletData.pocketBalance,
       cashInHand: walletData.cashInHand,
+      availableCashLimit: walletData.availableCashLimit,
+      codCollectedTotal,
       totalBonus: totalBonus,
       bonusTransactionsCount: bonusTransactions.length,
       totalTransactions: walletData.totalTransactions
@@ -223,20 +322,26 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
     // Find or create wallet
     let wallet = await DeliveryWallet.findOrCreateByDeliveryId(delivery._id);
 
-    // Check minimum withdrawal amount
-    const minWithdrawalAmount = 100;
+    // Check minimum withdrawal amount (from BusinessSettings)
+    let minWithdrawalAmount = 100;
+    try {
+      const settings = await BusinessSettings.getSettings();
+      const wl = Number(settings?.deliveryWithdrawalLimit);
+      if (Number.isFinite(wl) && wl >= 0) minWithdrawalAmount = wl;
+    } catch (e) { /* keep default */ }
     if (amount < minWithdrawalAmount) {
       return errorResponse(res, 400, `Minimum withdrawal amount is ₹${minWithdrawalAmount}`);
     }
 
-    // Check pocket balance (totalBalance - cashInHand)
-    const pocketBalance = wallet.totalBalance - wallet.cashInHand;
-    if (amount > pocketBalance) {
-      return errorResponse(res, 400, `Insufficient balance. Available balance: ₹${pocketBalance.toFixed(2)}`);
+    // Withdrawal is based on totalBalance only. No connection to cash-in-hand (COD collected).
+    const availableForWithdrawal = Number(wallet.totalBalance) || 0;
+    if (amount > availableForWithdrawal) {
+      return errorResponse(res, 400, `Insufficient balance. Available balance: ₹${availableForWithdrawal.toFixed(2)}`);
     }
+    // Withdrawal allowed only when withdrawable >= limit (enforced via min amount check above)
 
-    // Create withdrawal transaction
-    const transaction = wallet.addTransaction({
+    // Create withdrawal transaction (Pending)
+    wallet.addTransaction({
       amount: amount,
       type: 'withdrawal',
       status: 'Pending',
@@ -248,23 +353,55 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
       }
     });
 
+    // Deduct balance on request create (refund on reject)
+    wallet.totalBalance = Math.max(0, (wallet.totalBalance || 0) - amount);
     await wallet.save();
+
+    // Use the last transaction (the one we just added). Plain-object push has no _id; Mongoose assigns _id to the array element.
+    const lastTx = wallet.transactions[wallet.transactions.length - 1];
+    const transactionId = lastTx?._id;
+    if (!transactionId) {
+      return errorResponse(res, 500, 'Failed to create withdrawal: transaction id missing');
+    }
+
+    const deliveryName = delivery.name || 'Delivery Partner';
+    const deliveryIdString = delivery.deliveryId || delivery._id?.toString?.() || 'N/A';
+
+    const withdrawalRequest = await DeliveryWithdrawalRequest.create({
+      deliveryId: delivery._id,
+      amount,
+      status: 'Pending',
+      paymentMethod,
+      bankDetails: paymentMethod === 'bank_transfer' ? bankDetails : undefined,
+      upiId: paymentMethod === 'upi' ? upiId : undefined,
+      transactionId,
+      walletId: wallet._id,
+      deliveryName,
+      deliveryIdString
+    });
 
     logger.info(`Withdrawal request created for delivery: ${delivery._id}`, {
       deliveryId: delivery.deliveryId,
       amount,
       paymentMethod,
-      transactionId: transaction._id
+      transactionId,
+      requestId: withdrawalRequest._id
     });
 
     return successResponse(res, 201, 'Withdrawal request created successfully', {
+      request: {
+        id: withdrawalRequest._id,
+        amount: withdrawalRequest.amount,
+        status: withdrawalRequest.status,
+        requestedAt: withdrawalRequest.requestedAt
+      },
       transaction: {
-        id: transaction._id,
-        amount: transaction.amount,
-        type: transaction.type,
-        status: transaction.status,
-        description: transaction.description,
-        date: transaction.createdAt
+        id: lastTx._id,
+        amount: lastTx.amount,
+        type: lastTx.type,
+        status: lastTx.status,
+        description: lastTx.description,
+        date: lastTx.createdAt
       },
       wallet: {
         totalBalance: wallet.totalBalance,
@@ -583,5 +720,143 @@ export const getWalletStats = asyncHandler(async (req, res) => {
     logger.error('Error fetching wallet statistics:', error);
     return errorResponse(res, 500, 'Failed to fetch wallet statistics');
   }
+});
+
+const createDepositOrderSchema = Joi.object({
+  amount: Joi.number().positive().required()
+});
+
+/**
+ * Create Razorpay order for cash limit deposit
+ * POST /api/delivery/wallet/deposit/create-order
+ * Body: { amount } (INR)
+ */
+export const createDepositOrder = asyncHandler(async (req, res) => {
+  const delivery = req.delivery;
+  if (!delivery?._id) {
+    return errorResponse(res, 401, 'Delivery authentication required');
+  }
+  const { error: ve } = createDepositOrderSchema.validate(req.body || {});
+  if (ve) {
+    return errorResponse(res, 400, ve.details[0].message || 'Amount is required');
+  }
+  const amount = Number(req.body.amount);
+  if (amount < 1) {
+    return errorResponse(res, 400, 'Minimum deposit amount is ₹1');
+  }
+  if (amount > 500000) {
+    return errorResponse(res, 400, 'Maximum deposit amount is ₹5,00,000');
+  }
+
+  let credentials;
+  try {
+    credentials = await getRazorpayCredentials();
+  } catch (e) {
+    logger.error('Razorpay credentials error:', e);
+    return errorResponse(res, 500, 'Payment gateway is not configured. Please contact support.');
+  }
+  if (!credentials?.keyId || !credentials?.keySecret || !credentials.keyId.trim() || !credentials.keySecret.trim()) {
+    return errorResponse(res, 500, 'Payment gateway credentials are missing. Please configure Razorpay in admin.');
+  }
+
+  const receipt = `dl_dep_${delivery._id.toString().slice(-8)}_${Date.now().toString().slice(-8)}`;
+  let razorpayOrder;
+  try {
+    razorpayOrder = await createRazorpayOrder({
+      amount: Math.round(amount * 100),
+      currency: 'INR',
+      receipt,
+      notes: { deliveryId: delivery._id.toString(), type: 'cash_limit_deposit', amount: String(amount) }
+    });
+  } catch (e) {
+    logger.error('Razorpay create order error:', e);
+    return errorResponse(res, 500, e.message || 'Failed to create payment order');
+  }
+  if (!razorpayOrder?.id) {
+    return errorResponse(res, 500, 'Failed to create payment order');
+  }
+
+  return successResponse(res, 201, 'Order created', {
+    razorpay: {
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency || 'INR',
+      key: credentials.keyId
+    },
+    amount
+  });
+});
+
+const verifyDepositSchema = Joi.object({
+  razorpay_order_id: Joi.string().required(),
+  razorpay_payment_id: Joi.string().required(),
+  razorpay_signature: Joi.string().required(),
+  amount: Joi.number().positive().required()
+});
+
+/**
+ * Verify Razorpay payment and apply deposit (reduce cash in hand, add to available limit)
+ * POST /api/delivery/wallet/deposit/verify
+ */
+export const verifyDepositPayment = asyncHandler(async (req, res) => {
+  const delivery = req.delivery;
+  if (!delivery?._id) {
+    return errorResponse(res, 401, 'Delivery authentication required');
+  }
+  const { error: ve } = verifyDepositSchema.validate(req.body || {});
+  if (ve) {
+    return errorResponse(res, 400, ve.details[0].message || 'Invalid payload');
+  }
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } = req.body;
+  const amt = Number(amount);
+
+  const isValid = await verifyPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+  if (!isValid) {
+    return errorResponse(res, 400, 'Invalid payment signature');
+  }
+
+  const wallet = await DeliveryWallet.findOrCreateByDeliveryId(delivery._id);
+  const cashInHand = Number(wallet.cashInHand) || 0;
+  if (cashInHand < amt) {
+    return errorResponse(res, 400, `Insufficient cash in hand (₹${cashInHand.toFixed(2)}). Deposit amount cannot exceed cash in hand.`);
+  }
+
+  const pid = (t) => (t.metadata?.get ? t.metadata.get('razorpayPaymentId') : t.metadata?.razorpayPaymentId);
+  const existing = (wallet.transactions || []).find(
+    t => t.type === 'deposit' && pid(t) === razorpay_payment_id
+  );
+  if (existing) {
+    return errorResponse(res, 400, 'Payment already processed');
+  }
+
+  const meta = new Map();
+  meta.set('razorpayOrderId', razorpay_order_id);
+  meta.set('razorpayPaymentId', razorpay_payment_id);
+
+  wallet.addTransaction({
+    amount: amt,
+    type: 'deposit',
+    status: 'Completed',
+    description: `Cash limit deposit via Razorpay`,
+    paymentMethod: 'other',
+    metadata: Object.fromEntries(meta),
+    processedAt: new Date()
+  });
+  wallet.markModified('transactions');
+  await wallet.save();
+
+  let limit = 0;
+  try {
+    const settings = await BusinessSettings.getSettings();
+    limit = Number(settings?.deliveryCashLimit) || 0;
+  } catch (_) {}
+  const cashInHandNow = Math.max(0, Number(wallet.cashInHand) || 0);
+  const availableCashLimit = Math.max(0, limit - cashInHandNow);
+
+  return successResponse(res, 200, 'Deposit successful', {
+    amount: amt,
+    cashInHand: cashInHandNow,
+    availableCashLimit
+  });
 });
 

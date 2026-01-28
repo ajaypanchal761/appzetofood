@@ -41,6 +41,8 @@ import {
   Database,
   Zap,
   Phone,
+  IndianRupee,
+  PiggyBank,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -86,6 +88,8 @@ const iconMap = {
   Zap,
   Phone,
   MessageSquare,
+  IndianRupee,
+  PiggyBank,
 }
 
 export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange }) {

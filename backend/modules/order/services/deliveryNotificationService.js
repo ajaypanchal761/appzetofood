@@ -153,6 +153,16 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
       deliveryDistance = calculateDistance(restaurantLat, restaurantLng, customerLat, customerLng);
     }
 
+    // Calculate estimated earnings; use order's delivery fee as fallback when 0 or distance missing
+    const deliveryFeeFromOrder = order.pricing?.deliveryFee ?? 0;
+    let estimatedEarnings = await calculateEstimatedEarnings(deliveryDistance || 0);
+    const earnedValue = typeof estimatedEarnings === 'object' ? (estimatedEarnings.totalEarning ?? 0) : (Number(estimatedEarnings) || 0);
+    if (earnedValue <= 0 && deliveryFeeFromOrder > 0) {
+      estimatedEarnings = typeof estimatedEarnings === 'object'
+        ? { ...estimatedEarnings, totalEarning: deliveryFeeFromOrder }
+        : deliveryFeeFromOrder;
+    }
+
     // Prepare order notification data
     const orderNotification = {
       orderId: order.orderId,
@@ -175,6 +185,7 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
         price: item.price
       })),
       total: order.pricing.total,
+      deliveryFee: deliveryFeeFromOrder,
       customerName: orderWithUser.userId?.name || 'Customer',
       customerPhone: orderWithUser.userId?.phone || '',
       status: order.status,
@@ -182,9 +193,9 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
       estimatedDeliveryTime: order.estimatedDeliveryTime || 30,
       note: order.note || '',
       pickupDistance: pickupDistance ? `${pickupDistance.toFixed(2)} km` : 'Distance not available',
-      deliveryDistance: deliveryDistance ? `${deliveryDistance.toFixed(2)} km` : 'Distance not available',
+      deliveryDistance: deliveryDistance ? `${deliveryDistance.toFixed(2)} km` : 'Calculating...',
       deliveryDistanceRaw: deliveryDistance || 0, // Raw distance number for calculations
-      estimatedEarnings: await calculateEstimatedEarnings(deliveryDistance || 0)
+      estimatedEarnings
     };
 
     // Get delivery namespace

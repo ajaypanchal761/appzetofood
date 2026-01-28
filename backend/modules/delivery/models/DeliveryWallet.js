@@ -9,7 +9,7 @@ const transactionSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['payment', 'withdrawal', 'bonus', 'deduction', 'refund'],
+    enum: ['payment', 'withdrawal', 'bonus', 'deduction', 'refund', 'deposit'],
     required: true
   },
   status: {
@@ -216,6 +216,8 @@ deliveryWalletSchema.methods.addTransaction = function(transactionData) {
     } else if (transaction.type === 'deduction') {
       this.totalBalance -= transaction.amount;
       this.cashInHand = Math.max(0, this.cashInHand - transaction.amount);
+    } else if (transaction.type === 'deposit') {
+      this.cashInHand = Math.max(0, (this.cashInHand || 0) - transaction.amount);
     }
   }
   
@@ -275,6 +277,8 @@ deliveryWalletSchema.methods.updateTransactionStatus = function(transactionId, s
     } else if (transaction.type === 'withdrawal') {
       this.totalBalance += oldAmount;
       this.totalWithdrawn = Math.max(0, this.totalWithdrawn - oldAmount);
+    } else if (transaction.type === 'deposit') {
+      this.cashInHand = (this.cashInHand || 0) + oldAmount;
     }
   }
   

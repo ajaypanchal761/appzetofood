@@ -48,6 +48,10 @@ import LoyaltyPointReport from "../pages/loyalty-point/Report";
 import SubscribedMailList from "../pages/SubscribedMailList";
 // Deliveryman Management
 import DeliveryBoyCommission from "../pages/DeliveryBoyCommission";
+import DeliveryCashLimit from "../pages/DeliveryCashLimit";
+import CashLimitSettlement from "../pages/CashLimitSettlement";
+import DeliveryWithdrawal from "../pages/DeliveryWithdrawal";
+import DeliveryBoyWallet from "../pages/DeliveryBoyWallet";
 import DeliveryEmergencyHelp from "../pages/DeliveryEmergencyHelp";
 import DeliverySupportTickets from "../pages/DeliverySupportTickets";
 import JoinRequest from "../pages/delivery-partners/JoinRequest";
@@ -76,7 +80,6 @@ import RestaurantVATReport from "../pages/reports/RestaurantVATReport";
 // Transaction Management
 import CollectCash from "../pages/transactions/CollectCash";
 import RestaurantWithdraws from "../pages/transactions/RestaurantWithdraws";
-import DeliveryManPayments from "../pages/transactions/DeliveryManPayments";
 import WithdrawMethod from "../pages/transactions/WithdrawMethod";
 // Employee Management
 import EmployeeRole from "../pages/employees/EmployeeRole";
@@ -211,6 +214,10 @@ export default function AdminRouter() {
 
         {/* DELIVERYMAN MANAGEMENT */}
         <Route path="delivery-boy-commission" element={<DeliveryBoyCommission />} />
+        <Route path="delivery-cash-limit" element={<DeliveryCashLimit />} />
+        <Route path="cash-limit-settlement" element={<CashLimitSettlement />} />
+        <Route path="delivery-withdrawal" element={<DeliveryWithdrawal />} />
+        <Route path="delivery-boy-wallet" element={<DeliveryBoyWallet />} />
         <Route path="delivery-emergency-help" element={<DeliveryEmergencyHelp />} />
         <Route path="delivery-support-tickets" element={<DeliverySupportTickets />} />
         {/* Delivery Partners */}
@@ -247,7 +254,6 @@ export default function AdminRouter() {
         {/* TRANSACTION MANAGEMENT */}
         <Route path="collect-cash" element={<CollectCash />} />
         <Route path="restaurant-withdraws" element={<RestaurantWithdraws />} />
-        <Route path="delivery-man-payments" element={<DeliveryManPayments />} />
         <Route path="withdraw-method" element={<WithdrawMethod />} />
 
         {/* EMPLOYEE MANAGEMENT */}

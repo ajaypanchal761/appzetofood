@@ -54,12 +54,15 @@ export const fetchDeliveryWallet = async () => {
       console.log('💰 Transactions Count:', walletData.transactions?.length || walletData.recentTransactions?.length || 0)
       console.log('💰 Transactions:', walletData.transactions || walletData.recentTransactions || [])
       
-      // Transform API response to match expected format
+      // Transform API response to match expected format (support both camelCase and snake_case)
       const transformedData = {
         totalBalance: Number(walletData.totalBalance) || 0,
-        cashInHand: Number(walletData.cashInHand) || 0,
+        cashInHand: Number(walletData.cashInHand ?? walletData.cash_in_hand) || 0,
         totalWithdrawn: Number(walletData.totalWithdrawn) || 0,
         totalEarned: Number(walletData.totalEarned) || 0,
+        totalCashLimit: Number(walletData.totalCashLimit) || 0,
+        availableCashLimit: Number(walletData.availableCashLimit) || 0,
+        deliveryWithdrawalLimit: Number(walletData.deliveryWithdrawalLimit ?? walletData.delivery_withdrawal_limit) || 100,
         // Pocket balance = total balance (includes bonus)
         pocketBalance: walletData.pocketBalance !== undefined ? Number(walletData.pocketBalance) : (Number(walletData.totalBalance) || 0),
         pendingWithdrawals: walletData.pendingWithdrawals || 0,

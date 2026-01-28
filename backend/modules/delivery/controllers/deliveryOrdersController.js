@@ -1136,29 +1136,53 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       if (existingTransaction) {
         console.warn(`⚠️ Earning already added for order ${orderIdForLog}, skipping wallet update`);
       } else {
-        // Add payment transaction to wallet
+        // Add payment transaction (earning) with paymentCollected: false so cashInHand gets COD amount, not commission
+        const isCOD = order.payment?.method === 'cash' || order.payment?.method === 'cod';
         walletTransaction = wallet.addTransaction({
           amount: totalEarning,
           type: 'payment',
           status: 'Completed',
           description: `Delivery earnings for Order #${orderIdForLog} (Distance: ${deliveryDistance.toFixed(2)} km)`,
           orderId: orderMongoId || order._id,
-          paymentCollected: order.payment?.method === 'cash' // If COD, payment was collected
+          paymentCollected: false
         });
 
         await wallet.save();
 
+        // COD: add cash collected (order total) to cashInHand so Pocket balance shows it
+        const codAmount = Number(order.pricing?.total) || 0;
+        const paymentMethod = (order.payment?.method || '').toString().toLowerCase();
+        const isCashOrder = paymentMethod === 'cash' || paymentMethod === 'cod';
+        if (isCashOrder && codAmount > 0) {
+          try {
+            const updateResult = await DeliveryWallet.updateOne(
+              { deliveryId: delivery._id },
+              { $inc: { cashInHand: codAmount } }
+            );
+            if (updateResult.modifiedCount > 0) {
+              console.log(`✅ Cash collected ₹${codAmount.toFixed(2)} (COD) added to cashInHand for order ${orderIdForLog}`);
+            } else {
+              console.warn(`⚠️ Wallet update for cashInHand had no effect (deliveryId: ${delivery._id})`);
+            }
+          } catch (codErr) {
+            console.error(`❌ Failed to add COD to cashInHand:`, codErr.message);
+          }
+        }
+
+        const cashCollectedThisOrder = isCOD ? codAmount : 0;
         logger.info(`💰 Earning added to wallet for delivery: ${delivery._id}`, {
           deliveryId: delivery.deliveryId || delivery._id.toString(),
           orderId: orderIdForLog,
           amount: totalEarning,
+          cashCollected: cashCollectedThisOrder,
           distance: deliveryDistance,
           transactionId: walletTransaction?._id || walletTransaction?.id,
-          walletBalance: wallet.totalBalance
+          walletBalance: wallet.totalBalance,
+          cashInHand: wallet.cashInHand
         });
 
         console.log(`✅ Earning ₹${totalEarning.toFixed(2)} added to delivery boy's wallet`);
-        console.log(`💰 New wallet balance: ₹${wallet.totalBalance.toFixed(2)}`);
+        console.log(`💰 New wallet balance: ₹${wallet.totalBalance.toFixed(2)}, cashInHand: ₹${wallet.cashInHand?.toFixed(2) || '0.00'}`);
       }
     } catch (walletError) {
       logger.error('❌ Error adding earning to wallet:', walletError);

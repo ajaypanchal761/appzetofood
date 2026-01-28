@@ -24,6 +24,7 @@ import DeductionStatement from "../pages/DeductionStatement"
 import TipsStatement from "../pages/TipsStatement"
 import PocketStatement from "../pages/PocketStatement"
 import FuelPayment from "../pages/FuelPayment"
+import LimitSettlement from "../pages/LimitSettlement"
 import OffersPage from "../pages/OffersPage"
 import UpdatesPage from "../pages/UpdatesPage"
 import SupportTickets from "../pages/SupportTickets"
@@ -39,6 +40,7 @@ import TripHistory from "../pages/TripHistory"
 import TimeOnOrders from "../pages/TimeOnOrders"
 import PocketBalancePage from "../pages/PocketBalance"
 import CustomerTipsBalancePage from "../pages/CustomerTips"
+import PocketDetails from "../pages/PocketDetails"
 
 export default function DeliveryRouter() {
   return (
@@ -291,6 +293,26 @@ export default function DeliveryRouter() {
           </ProtectedRoute>
         }
         path="/fuel-payment"
+      />
+      <Route
+        element={
+          <ProtectedRoute>
+            <DeliveryLayout>
+              <LimitSettlement />
+            </DeliveryLayout>
+          </ProtectedRoute>
+        }
+        path="/limit-settlement"
+      />
+      <Route
+        element={
+          <ProtectedRoute>
+            <DeliveryLayout>
+              <PocketDetails />
+            </DeliveryLayout>
+          </ProtectedRoute>
+        }
+        path="/pocket-details"
       />
       <Route
         element={

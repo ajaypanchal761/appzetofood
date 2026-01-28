@@ -648,6 +648,12 @@ export const deliveryAPI = {
   claimJoiningBonus: () => {
     return apiClient.post(API_ENDPOINTS.DELIVERY.CLAIM_JOINING_BONUS);
   },
+  createDepositOrder: (amount) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.WALLET_DEPOSIT_CREATE_ORDER, { amount });
+  },
+  verifyDepositPayment: (data) => {
+    return apiClient.post(API_ENDPOINTS.DELIVERY.WALLET_DEPOSIT_VERIFY, data);
+  },
   getOrderStats: (period = 'all') => {
     return apiClient.get(API_ENDPOINTS.DELIVERY.ORDER_STATS, { params: { period } });
   },
@@ -1259,6 +1265,38 @@ export const adminAPI = {
 
   calculateCommission: (distance) => {
     return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_BOY_COMMISSION_CALCULATE, { distance });
+  },
+
+  // Delivery Partner global cash limit
+  getDeliveryCashLimit: () => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_CASH_LIMIT);
+  },
+
+  updateDeliveryCashLimit: (data) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.DELIVERY_CASH_LIMIT, typeof data === 'object' ? data : { deliveryCashLimit: data });
+  },
+
+  getCashLimitSettlements: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.CASH_LIMIT_SETTLEMENT, { params });
+  },
+
+  getDeliveryWithdrawalRequests: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_WITHDRAWAL_REQUESTS, { params });
+  },
+  approveDeliveryWithdrawal: (id) => {
+    const sid = id != null ? String(id) : '';
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_WITHDRAWAL_APPROVE.replace(':id', sid));
+  },
+  rejectDeliveryWithdrawal: (id, rejectionReason = '') => {
+    const sid = id != null ? String(id) : '';
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_WITHDRAWAL_REJECT.replace(':id', sid), { rejectionReason });
+  },
+
+  getDeliveryBoyWallets: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_BOY_WALLET, { params });
+  },
+  addDeliveryBoyWalletAdjustment: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.DELIVERY_BOY_WALLET_ADJUSTMENT, data);
   },
 
   // Delivery Emergency Help Management

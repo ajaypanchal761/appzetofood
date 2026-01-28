@@ -116,25 +116,17 @@ export default function PocketPage() {
     }
   }, [])
 
-  // Carousel slides data - filter based on bank details status
-  const carouselSlides = useMemo(() => [
-    {
-      id: 1,
-      title: "Work for 2 days",
-      subtitle: "to get Appzeto bag",
-      icon: "bag",
-      buttonText: "Know more",
-      bgColor: "bg-gray-700"
-    },
-    ...(bankDetailsFilled ? [] : [{
+  // Carousel slides data - only show bank details banner when not filled
+  const carouselSlides = useMemo(() =>
+    bankDetailsFilled ? [] : [{
       id: 2,
       title: "Submit bank details",
       subtitle: "PAN & bank details required for payouts",
       icon: "bank",
       buttonText: "Submit",
       bgColor: "bg-yellow-400"
-    }])
-  ], [bankDetailsFilled])
+    }]
+  , [bankDetailsFilled])
 
   // Calculate balances
   const balances = calculateDeliveryBalances(walletState)
@@ -222,20 +214,13 @@ export default function PocketPage() {
           setActiveEarningAddon(null)
         }
       } catch (error) {
-        // Skip logging timeout errors (handled by axios interceptor)
         if (error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
-          console.error('❌ Error fetching active earning addons:', error)
           if (error.code === 'ERR_NETWORK') {
-            console.error('🔴 Network Error - Backend server may not be running!')
-            console.error('💡 Please ensure:')
-            console.error(`   1. Backend server is running on ${API_BASE_URL.replace('/api', '')}`)
-            console.error('   2. Backend server has been restarted after adding the new route')
-            console.error('   3. Route /api/delivery/earnings/active-offers is registered')
-            console.error('   4. No CORS issues blocking the request')
+            console.warn('Active offers: network error. Ensure backend is running and CORS allows /api/delivery.')
           } else if (error.response) {
-            console.error('⚠️ Server responded with error:', error.response.status, error.response.data)
+            console.warn('Active offers fetch failed:', error.response.status, error.response?.data?.message || error.response?.data)
           } else {
-            console.error('⚠️ Error details:', error.message)
+            console.warn('Active offers fetch failed:', error.message)
           }
         }
         setActiveEarningAddon(null)
@@ -353,8 +338,15 @@ export default function PocketPage() {
     })
     // Only depend on walletState and balances - totalBonus and weeklyEarnings are derived from these
   }, [pocketBalance, walletState, balances])
-  // Available cash limit = cash in hand (real data from wallet)
-  const availableCashLimit = balances.cashInHand || 0
+  // Available cash limit = remaining limit (global limit - cash in hand)
+  const totalCashLimit = Number.isFinite(Number(walletState?.totalCashLimit))
+    ? Number(walletState.totalCashLimit)
+    : 0
+  const availableCashLimit =
+    Number.isFinite(Number(walletState?.availableCashLimit)) &&
+    Number(walletState?.availableCashLimit) >= 0
+      ? Number(walletState.availableCashLimit)
+      : Math.max(0, totalCashLimit - (Number(balances.cashInHand) || 0))
   const depositAmount = pocketBalance < 0 ? Math.abs(pocketBalance) : 0
 
   // Customer tips balance - calculate from transactions
@@ -669,7 +661,8 @@ export default function PocketPage() {
         className=""
       />
 
-<div
+{carouselSlides.length > 0 && (
+      <div
         ref={carouselRef}
         className="relative overflow-hidden bg-gray-700 cursor-grab active:cursor-grabbing select-none"
         onTouchStart={handleCarouselTouchStart}
@@ -750,6 +743,7 @@ export default function PocketPage() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Main Content */}
       <div className="px-4 py-6 bg-gray-100 pb-24 md:pb-6">
@@ -939,36 +933,14 @@ export default function PocketPage() {
               <div className="flex gap-3 pt-2">
                 <Button
                   onClick={() => setShowDepositPopup(true)}
-                  className="flex-1 bg-white hover:bg-gray-300 text-black border  border-black  font-semibold py-3 rounded-lg"
+                  className="flex-1 bg-white hover:bg-gray-300 text-black border border-black font-semibold py-3 rounded-lg"
                 >
                   Deposit
-                </Button>
-                <Button
-                  disabled
-                  className="flex-1 bg-gray-500 text-black/90   font-medium py-3 rounded-lg cursor-not-allowed"
-                >
-                  Withdraw
                 </Button>
               </div>
             </CardContent>
           </Card>
         </div>
-
-        {/* Customer Tips Balance Section */}
-        <Card className=" py-0  bg-white border-0 shadow-none mb-6">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div onClick={() => navigate("/delivery/customer-tips-balance")} className="flex items-center gap-3">
-                <Wallet className="w-5 h-5 text-black" />
-                <span className="text-black text-sm">Customer tips balance</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-black text-sm font-medium">₹{customerTipsBalance.toFixed(0)}</span>
-                <ArrowRight className="w-4 h-4 text-gray-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* More Services Section */}
         <div className="mb-6">
@@ -993,16 +965,16 @@ export default function PocketPage() {
               </CardContent>
             </Card>
 
-            {/* Customer Tips Statement */}
+            {/* Available Limit Settlement */}
             <Card
               className=" py-0  bg-white border-0 shadow-none cursor-pointer hover:bg-gray-200 transition-colors"
-              onClick={() => navigate("/delivery/tips-statement")}
+              onClick={() => navigate("/delivery/limit-settlement")}
             >
               <CardContent className="p-4 flex flex-col items-start text-start">
                 <div className="w-12 h-12 flex items-start mb-3">
                   <Receipt className="w-8 h-8 text-black" />
                 </div>
-                <div className="text-black text-sm font-medium text-start">Customer tips statement</div>
+                <div className="text-black text-sm font-medium text-start">Available limit settlement</div>
               </CardContent>
             </Card>
 
@@ -1019,31 +991,19 @@ export default function PocketPage() {
               </CardContent>
             </Card>
 
-            {/* Pocket Statement */}
+            {/* Pocket Details */}
             <Card
               className=" py-0  bg-white border-0 shadow-none cursor-pointer hover:bg-gray-200 transition-colors"
-              onClick={() => navigate("/delivery/pocket-statement")}
+              onClick={() => navigate("/delivery/pocket-details")}
             >
               <CardContent className="p-4 flex flex-col items-start text-start">
                 <div className="w-12 h-12 flex items-center justify-center mb-3">
                   <WalletIcon className="w-8 h-8 text-black" />
                 </div>
-                <div className="text-black text-sm font-medium">Pocket statement</div>
+                <div className="text-black text-sm font-medium">Pocket details</div>
               </CardContent>
             </Card>
-          
-            {/* Fuel Payment */}
-            <Card
-              className=" py-0  bg-white border-0 shadow-none cursor-pointer hover:bg-gray-200 transition-colors"
-              onClick={() => navigate("/delivery/fuel-payment")}
-            >
-              <CardContent className="p-4 flex flex-col items-start text-start">
-                <div className="w-12 h-12 flex items-center justify-center mb-3">
-                  <UtensilsCrossed className="w-8 h-8 text-black" />
-                </div>
-                <div className="text-black text-sm font-medium">Fuel Payment</div>
-              </CardContent>
-            </Card>
+
           </div>
 
         </div>
@@ -1057,7 +1017,16 @@ export default function PocketPage() {
         closeOnBackdropClick={true}
         maxHeight="60vh"
       >
-     <AvailableCashLimit onClose={() => setShowCashLimitPopup(false)}/>
+     <AvailableCashLimit
+          onClose={() => setShowCashLimitPopup(false)}
+          walletData={{
+            totalCashLimit: totalCashLimit,
+            cashInHand: balances.cashInHand ?? 0,
+            deductions: 0,
+            pocketWithdrawals: balances.totalWithdrawn ?? 0,
+            settlementAdjustment: 0
+          }}
+        />
       </BottomPopup>
 
       <BottomPopup
@@ -1068,7 +1037,10 @@ export default function PocketPage() {
         closeOnBackdropClick={true}
         maxHeight="50vh"
       >
-        <DepositPopup/>
+        <DepositPopup
+          cashInHand={balances.cashInHand ?? walletState?.cashInHand ?? 0}
+          onSuccess={() => setShowDepositPopup(false)}
+        />
       </BottomPopup>
     </div>
   )

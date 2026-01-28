@@ -1,6 +1,9 @@
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import Order from '../../order/models/Order.js';
+import Payment from '../../payment/models/Payment.js';
+import Restaurant from '../../restaurant/models/Restaurant.js';
+import mongoose from 'mongoose';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -90,7 +93,6 @@ export const getTripHistory = asyncHandler(async (req, res) => {
 
     // Fetch orders
     const orders = await Order.find(query)
-      .populate('restaurantId', 'name slug')
       .populate('userId', 'name phone')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -99,6 +101,68 @@ export const getTripHistory = asyncHandler(async (req, res) => {
 
     // Get total count
     const total = await Order.countDocuments(query);
+
+    // Get order IDs for Payment collection lookup
+    const orderIds = orders.map(o => o._id);
+    
+    // Fetch payment records for COD fallback check
+    const codOrderIds = new Set();
+    try {
+      const codPayments = await Payment.find({ 
+        orderId: { $in: orderIds }, 
+        method: 'cash' 
+      }).select('orderId').lean();
+      codPayments.forEach(p => codOrderIds.add(p.orderId?.toString()));
+    } catch (e) {
+      // Ignore payment lookup errors
+      logger.warn('Could not fetch payment records for COD check:', e.message);
+    }
+
+    // Get unique restaurant IDs that need name lookup (where restaurantName is missing/empty)
+    const restaurantIdsToLookup = [...new Set(
+      orders
+        .filter(o => !o.restaurantName || o.restaurantName === 'Unknown Restaurant' || o.restaurantName.trim() === '')
+        .map(o => o.restaurantId)
+        .filter(id => id)
+    )];
+
+    // Fetch restaurant names for orders missing restaurantName
+    const restaurantNameMap = new Map();
+    if (restaurantIdsToLookup.length > 0) {
+      try {
+        // Try to find restaurants by restaurantId (String) or _id (ObjectId)
+        const restaurantQueries = restaurantIdsToLookup.map(id => {
+          // Check if it's a valid ObjectId
+          if (mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
+            return {
+              $or: [
+                { restaurantId: id },
+                { _id: new mongoose.Types.ObjectId(id) }
+              ]
+            };
+          } else {
+            return { restaurantId: id };
+          }
+        });
+
+        const restaurants = await Restaurant.find({
+          $or: restaurantQueries
+        }).select('restaurantId name _id').lean();
+
+        restaurants.forEach(rest => {
+          // Map by restaurantId string
+          if (rest.restaurantId) {
+            restaurantNameMap.set(rest.restaurantId, rest.name);
+          }
+          // Also map by _id string
+          if (rest._id) {
+            restaurantNameMap.set(rest._id.toString(), rest.name);
+          }
+        });
+      } catch (e) {
+        logger.warn('Could not fetch restaurant names:', e.message);
+      }
+    }
 
     // Format response
     const formattedTrips = orders.map((order, index) => {
@@ -121,20 +185,38 @@ export const getTripHistory = asyncHandler(async (req, res) => {
       const minutes = orderDate.getMinutes();
       const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
-      // Get restaurant name
-      const restaurantName = order.restaurantId?.name || 'Unknown Restaurant';
+      // Get restaurant name - use restaurantName field, fallback to Restaurant collection lookup
+      let restaurantName = order.restaurantName;
+      if (!restaurantName || restaurantName === 'Unknown Restaurant' || restaurantName.trim() === '') {
+        // Try to get from lookup map
+        restaurantName = restaurantNameMap.get(order.restaurantId) || 
+                        restaurantNameMap.get(order.restaurantId?.toString()) ||
+                        'Unknown Restaurant';
+      }
 
       // Get order amount (delivery fee or total)
       const amount = order.pricing?.deliveryFee || order.pricing?.total || 0;
+
+      // Get payment method - check Payment collection as fallback (for COD orders)
+      let paymentMethod = order.payment?.method || 'razorpay';
+      // If order.payment.method is not 'cash', check Payment collection for COD
+      if (paymentMethod !== 'cash' && codOrderIds.has(order._id?.toString())) {
+        paymentMethod = 'cash';
+      }
 
       return {
         id: order._id.toString(),
         orderId: order.orderId,
         restaurant: restaurantName,
+        restaurantName: restaurantName, // Also include for compatibility
         customer: order.userId?.name || 'Unknown Customer',
         status: displayStatus,
         time,
         amount,
+        paymentMethod: paymentMethod,
+        payment: {
+          method: paymentMethod
+        },
         date: order.createdAt,
         createdAt: order.createdAt,
         deliveredAt: order.deliveredAt,

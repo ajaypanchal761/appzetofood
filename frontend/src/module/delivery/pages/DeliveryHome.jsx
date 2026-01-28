@@ -4028,6 +4028,12 @@ export default function DeliveryHome() {
         restaurantAddress = newOrder.restaurantAddress;
       }
       
+      // Use deliveryFee as fallback when estimatedEarnings is 0 (e.g. drop still calculating)
+      const deliveryFee = newOrder.deliveryFee ?? 0;
+      const earned = newOrder.estimatedEarnings;
+      const earnedValue = typeof earned === 'object' ? earned?.totalEarning : earned;
+      const effectiveEarnings = (earnedValue != null && Number(earnedValue) > 0) ? earned : (deliveryFee > 0 ? deliveryFee : 0);
+
       const restaurantData = {
         id: newOrder.orderMongoId || newOrder.orderId,
         orderId: newOrder.orderId,
@@ -4037,9 +4043,11 @@ export default function DeliveryHome() {
         lng: newOrder.restaurantLocation?.longitude,
         distance: newOrder.pickupDistance || '0 km',
         timeAway: calculateTimeAway(newOrder.pickupDistance),
-        dropDistance: newOrder.deliveryDistance || '0 km',
+        dropDistance: newOrder.deliveryDistance || 'Calculating...',
         pickupDistance: newOrder.pickupDistance || '0 km',
-        estimatedEarnings: newOrder.estimatedEarnings || 0,
+        estimatedEarnings: effectiveEarnings,
+        deliveryFee,
+        amount: deliveryFee || (typeof earned === 'object' ? earned?.totalEarning : earned) || 0,
         customerName: newOrder.customerName,
         customerAddress: newOrder.customerLocation?.address || 'Customer address',
         customerLat: newOrder.customerLocation?.latitude,
@@ -4520,6 +4528,9 @@ export default function DeliveryHome() {
 
   // Ola Maps SDK check removed
 
+  // Re-run map init when container might have become available (ref can be null on first run)
+  const [mapInitRetry, setMapInitRetry] = useState(0)
+
   // Initialize Google Map - Preserve map across navigation, re-attach when returning
   useEffect(() => {
     if (showHomeSections) {
@@ -4528,7 +4539,11 @@ export default function DeliveryHome() {
     }
 
     if (!mapContainerRef.current) {
-      console.log('📍 Map container ref not available yet');
+      console.log('📍 Map container ref not available yet, will retry...');
+      if (mapInitRetry < 10) {
+        const timer = setTimeout(() => setMapInitRetry((r) => r + 1), 200);
+        return () => clearTimeout(timer);
+      }
       return;
     }
 
@@ -4768,13 +4783,11 @@ export default function DeliveryHome() {
           }
         }
         
-        // If still no location, wait for GPS instead of using default
+        // If still no location, use default India center so map always loads.
+        // When GPS location is received, map will recenter and show bike marker.
         if (!initialCenter) {
-          console.log('⏳ No location available yet, waiting for GPS...');
-          // Don't initialize map yet - wait for GPS location
-          // The map will be initialized when GPS location is received
-          setMapLoading(false);
-          return;
+          initialCenter = { lat: 20.5937, lng: 78.9629 };
+          console.log('📍 No location yet, using default center (India). Map will recenter when GPS is available.');
         }
         
         console.log('📍 Map center:', initialCenter);
@@ -5018,7 +5031,7 @@ export default function DeliveryHome() {
         // Don't set to null - preserve reference for re-attachment
       }
     }
-  }, [showHomeSections]) // Only re-initialize when showHomeSections changes
+  }, [showHomeSections, mapInitRetry]) // Re-run when showHomeSections or container retry
 
   // Initialize map when riderLocation becomes available (if map not already initialized)
   useEffect(() => {
@@ -8963,11 +8976,16 @@ export default function DeliveryHome() {
                     <p className="text-4xl font-bold text-gray-900 mb-2">
                       ₹{(() => {
                         const earnings = newOrder?.estimatedEarnings || selectedRestaurant?.estimatedEarnings || 0;
-                        // Handle both old format (number) and new format (object)
-                        if (typeof earnings === 'object' && earnings.totalEarning) {
-                          return earnings.totalEarning.toFixed(0);
+                        const fallback = newOrder?.deliveryFee ?? selectedRestaurant?.deliveryFee ?? selectedRestaurant?.amount ?? 0;
+                        let value = 0;
+                        if (typeof earnings === 'object' && earnings.totalEarning != null) {
+                          value = Number(earnings.totalEarning) || fallback;
+                        } else if (typeof earnings === 'number' && earnings > 0) {
+                          value = earnings;
+                        } else {
+                          value = Number(fallback) || 0;
                         }
-                        return typeof earnings === 'number' ? earnings.toFixed(2) : '0.00';
+                        return value > 0 ? value.toFixed(2) : '0.00';
                       })()}
                     </p>
                     {/* Earnings Breakdown */}
@@ -10108,7 +10126,7 @@ export default function DeliveryHome() {
                     
                     if (response.data?.success) {
                       // Get updated earnings from response
-                      // Note: completeDelivery API already adds earnings to wallet automatically
+                      // Note: completeDelivery API already adds earnings and COD cash collected to wallet
                       const earnings = response.data.data?.earnings?.amount || 
                                      response.data.data?.totalEarning ||
                                      orderEarnings
@@ -10116,6 +10134,9 @@ export default function DeliveryHome() {
                       
                       console.log('✅ Delivery completed and earnings added to wallet:', earnings)
                       console.log('✅ Wallet transaction:', response.data.data?.walletTransaction)
+                      
+                      // Notify wallet listeners (Pocket balance, Pocket page) so cash collected updates
+                      window.dispatchEvent(new Event('deliveryWalletStateUpdated'))
                       
                       // Show success message
                       if (earnings > 0) {

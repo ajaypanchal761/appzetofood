@@ -6,7 +6,9 @@ import {
   addEarning,
   collectPayment,
   claimJoiningBonus,
-  getWalletStats
+  getWalletStats,
+  createDepositOrder,
+  verifyDepositPayment
 } from '../controllers/deliveryWalletController.js';
 import { authenticate } from '../middleware/deliveryAuth.js';
 
@@ -23,6 +25,8 @@ router.post('/withdraw', createWithdrawalRequest); // POST /api/delivery/wallet/
 router.post('/earnings', addEarning); // POST /api/delivery/wallet/earnings
 router.post('/collect-payment', collectPayment); // POST /api/delivery/wallet/collect-payment
 router.post('/claim-joining-bonus', claimJoiningBonus); // POST /api/delivery/wallet/claim-joining-bonus
+router.post('/deposit/create-order', createDepositOrder); // POST /api/delivery/wallet/deposit/create-order
+router.post('/deposit/verify', verifyDepositPayment); // POST /api/delivery/wallet/deposit/verify
 
 export default router;
 

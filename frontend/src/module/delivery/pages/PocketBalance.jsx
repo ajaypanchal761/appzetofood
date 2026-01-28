@@ -1,4 +1,4 @@
-import { ArrowLeft, AlertTriangle } from "lucide-react"
+import { ArrowLeft, AlertTriangle, Loader2 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
 import {
@@ -7,6 +7,15 @@ import {
   calculatePeriodEarnings
 } from "../utils/deliveryWalletState"
 import { formatCurrency } from "../../restaurant/utils/currency"
+import { deliveryAPI } from "@/lib/api"
+import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 export default function PocketBalancePage() {
   const navigate = useNavigate()
@@ -19,32 +28,34 @@ export default function PocketBalancePage() {
     joiningBonusClaimed: false
   })
   const [walletLoading, setWalletLoading] = useState(true)
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false)
+  const [withdrawAmount, setWithdrawAmount] = useState("")
+  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false)
 
-  // Fetch wallet data from API
-  useEffect(() => {
-    const fetchWalletData = async () => {
-      try {
-        setWalletLoading(true)
-        const walletData = await fetchDeliveryWallet()
-        setWalletState(walletData)
-      } catch (error) {
-        console.error('Error fetching wallet data:', error)
-        setWalletState({
-          totalBalance: 0,
-          cashInHand: 0,
-          totalWithdrawn: 0,
-          totalEarned: 0,
-          transactions: [],
-          joiningBonusClaimed: false
-        })
-      } finally {
-        setWalletLoading(false)
-      }
+  // Fetch wallet data from API (cashInHand = Cash collected from backend)
+  const fetchWalletData = async () => {
+    try {
+      setWalletLoading(true)
+      const walletData = await fetchDeliveryWallet()
+      setWalletState(walletData)
+    } catch (error) {
+      console.error('Error fetching wallet data:', error)
+      setWalletState({
+        totalBalance: 0,
+        cashInHand: 0,
+        totalWithdrawn: 0,
+        totalEarned: 0,
+        transactions: [],
+        joiningBonusClaimed: false
+      })
+    } finally {
+      setWalletLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchWalletData()
 
-    // Listen for wallet state updates
     const handleWalletUpdate = () => {
       fetchWalletData()
     }
@@ -52,9 +63,21 @@ export default function PocketBalancePage() {
     window.addEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
     window.addEventListener('storage', handleWalletUpdate)
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchWalletData()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    // Refetch periodically when visible so admin approve/reject reflects in pocket balance
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchWalletData()
+    }, 20000)
+
     return () => {
       window.removeEventListener('deliveryWalletStateUpdated', handleWalletUpdate)
       window.removeEventListener('storage', handleWalletUpdate)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearInterval(interval)
     }
   }, [])
 
@@ -97,25 +120,35 @@ export default function PocketBalancePage() {
   // Calculate cash collected (cash in hand)
   const cashCollected = balances.cashInHand || 0
   
-  // Calculate deductions (pending withdrawals or negative adjustments)
-  const deductions = balances.pendingWithdrawals || 0
+  // Deductions = actual deductions only (fees, penalties). Pending withdrawal is NOT a deduction.
+  const deductions = 0
   
-  // Minimum balance required (can be dynamic based on business logic)
-  const minBalanceRequired = 300
+  // Amount withdrawn = approved + pending (requested) withdrawals. Withdraw ki hui amount yahin dikhegi.
+  const amountWithdrawnDisplay = (balances.totalWithdrawn || 0) + (balances.pendingWithdrawals || 0)
+  
+  // Withdrawal limit from admin (min amount above which withdrawal is allowed)
+  const withdrawalLimit = Number(walletState?.deliveryWithdrawalLimit) || 100
   
   // Withdrawable amount = pocket balance (includes bonus + earnings)
-  // Pocket balance already includes bonus, so withdrawable amount should show it
   const withdrawableAmount = pocketBalance > 0 ? pocketBalance : 0
   
-  // Debug logging
+  // Withdrawal allowed only when withdrawable amount >= withdrawal limit
+  const canWithdraw = withdrawableAmount >= withdrawalLimit && withdrawableAmount > 0
+  
+  // Debug logging (cashInHand = Cash collected from backend)
   console.log('💰 PocketBalance Page Calculations:', {
+    walletStateCashInHand: walletState?.cashInHand,
+    balancesCashInHand: balances.cashInHand,
+    cashCollected,
     walletStateTotalBalance: walletState?.totalBalance,
     walletStatePocketBalance: walletState?.pocketBalance,
     balancesTotalBalance: balances.totalBalance,
     calculatedPocketBalance: pocketBalance,
     totalBonus: totalBonus,
     weeklyEarnings: weeklyEarnings,
-    withdrawableAmount: withdrawableAmount
+    withdrawableAmount: withdrawableAmount,
+    withdrawalLimit,
+    canWithdraw
   })
 
   // Get current week date range
@@ -136,6 +169,76 @@ export default function PocketBalancePage() {
     return `${formatDate(startOfWeek)} - ${formatDate(endOfWeek)}`
   }
 
+  const openWithdrawModal = () => {
+    setWithdrawAmount("")
+    setShowWithdrawModal(true)
+  }
+
+  const handleWithdrawSubmit = async () => {
+    const num = Number(withdrawAmount)
+    if (!Number.isFinite(num) || num <= 0) {
+      toast.error("Enter a valid amount")
+      return
+    }
+    if (num < withdrawalLimit) {
+      toast.error(`Minimum withdrawal is ${formatCurrency(withdrawalLimit)}`)
+      return
+    }
+    if (num > withdrawableAmount) {
+      toast.error(`Maximum withdrawable is ${formatCurrency(withdrawableAmount)}`)
+      return
+    }
+
+    let profile
+    try {
+      const res = await deliveryAPI.getProfile()
+      profile = res?.data?.data?.profile ?? res?.data?.profile
+    } catch (e) {
+      toast.error("Failed to load profile")
+      return
+    }
+
+    const b = profile?.documents?.bankDetails
+    const hasBank =
+      b?.accountHolderName?.trim() &&
+      b?.accountNumber?.trim() &&
+      b?.ifscCode?.trim() &&
+      b?.bankName?.trim()
+    if (!hasBank) {
+      toast.error("Add bank details first")
+      setShowWithdrawModal(false)
+      navigate("/delivery/profile/details")
+      return
+    }
+
+    setWithdrawSubmitting(true)
+    try {
+      const res = await deliveryAPI.createWithdrawalRequest({
+        amount: num,
+        paymentMethod: "bank_transfer",
+        bankDetails: {
+          accountHolderName: b.accountHolderName.trim(),
+          accountNumber: b.accountNumber.trim(),
+          ifscCode: b.ifscCode.trim(),
+          bankName: b.bankName.trim(),
+        },
+      })
+      if (res?.data?.success) {
+        toast.success("Withdrawal request submitted")
+        setShowWithdrawModal(false)
+        setWithdrawAmount("")
+        fetchWalletData()
+        window.dispatchEvent(new Event("deliveryWalletStateUpdated"))
+      } else {
+        toast.error(res?.data?.message || "Failed to submit withdrawal")
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to submit withdrawal")
+    } finally {
+      setWithdrawSubmitting(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-white text-black">
 
@@ -145,14 +248,20 @@ export default function PocketBalancePage() {
         <h1 className="text-lg font-semibold">Pocket balance</h1>
       </div>
 
-      {/* Warning Banner */}
-      <div className="bg-yellow-400 p-4 flex items-start gap-3 text-black">
-        <AlertTriangle size={20} />
-        <div className="text-sm leading-tight">
-          <p className="font-semibold">Withdraw currently disabled</p>
-          <p className="text-xs">Withdrawable amount is ₹0</p>
+      {/* Warning Banner – when withdraw disabled */}
+      {!canWithdraw && (
+        <div className="bg-yellow-400 p-4 flex items-start gap-3 text-black">
+          <AlertTriangle size={20} />
+          <div className="text-sm leading-tight">
+            <p className="font-semibold">Withdraw currently disabled</p>
+            <p className="text-xs">
+              {withdrawableAmount <= 0
+                ? "Withdrawable amount is ₹0"
+                : `Withdrawable amount is minimum (${formatCurrency(withdrawalLimit)}).`}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Withdraw Section */}
       <div className="px-5 py-6 flex flex-col items-center text-center">
@@ -160,9 +269,10 @@ export default function PocketBalancePage() {
         <p className="text-4xl font-bold mb-5">{formatCurrency(withdrawableAmount)}</p>
 
         <button
-          disabled={withdrawableAmount <= 0}
+          disabled={!canWithdraw}
+          onClick={() => canWithdraw && openWithdrawModal()}
           className={`w-full font-medium py-3 rounded-lg ${
-            withdrawableAmount > 0
+            canWithdraw
               ? "bg-black text-white hover:bg-gray-800"
               : "bg-gray-200 text-gray-500 cursor-not-allowed"
           }`}
@@ -170,6 +280,56 @@ export default function PocketBalancePage() {
           Withdraw
         </button>
       </div>
+
+      {/* Withdraw amount popup */}
+      <Dialog open={showWithdrawModal} onOpenChange={setShowWithdrawModal}>
+        <DialogContent className="max-w-sm bg-white p-0 rounded-xl">
+          <DialogHeader className="px-5 pt-5 pb-3">
+            <DialogTitle className="text-lg font-semibold text-black">Withdraw amount</DialogTitle>
+          </DialogHeader>
+          <div className="px-5 pb-5 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+              <input
+                type="number"
+                min={withdrawalLimit}
+                max={withdrawableAmount}
+                step="1"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                placeholder="Enter amount"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Min {formatCurrency(withdrawalLimit)} · Max {formatCurrency(withdrawableAmount)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWithdrawAmount(String(withdrawableAmount))}
+              className="w-full py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Use full amount ({formatCurrency(withdrawableAmount)})
+            </button>
+          </div>
+          <DialogFooter className="px-5 pb-5 flex gap-3">
+            <button
+              onClick={() => setShowWithdrawModal(false)}
+              className="flex-1 py-2.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleWithdrawSubmit}
+              disabled={withdrawSubmitting}
+              className="flex-1 py-2.5 text-sm font-medium rounded-lg bg-black text-white hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {withdrawSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {withdrawSubmitting ? "Submitting…" : "Withdraw"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Section Header */}
       <div className=" bg-gray-100 py-2 pt-4 text-center text-xs font-semibold text-gray-600">
@@ -189,13 +349,13 @@ export default function PocketBalancePage() {
         <DetailRow
           label={
             <div>
-              Min. balance required
+              Min. withdrawal amount
               <p className="text-xs text-gray-500">
-                Resets every Monday and increases with earnings
+                Withdrawal allowed only when withdrawable amount ≥ this
               </p>
             </div>
           }
-          value={formatCurrency(minBalanceRequired)}
+          value={formatCurrency(withdrawalLimit)}
           multiline
         />
 

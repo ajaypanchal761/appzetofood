@@ -154,9 +154,9 @@ export default function TripHistory() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center">
+    <div className="h-screen bg-white flex flex-col overflow-hidden">
+      {/* Sticky Header */}
+      <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center flex-shrink-0 sticky top-0 z-40">
         <button
           onClick={() => navigate(-1)}
           className="p-2 hover:bg-gray-100 rounded-full transition-colors mr-2"
@@ -180,8 +180,8 @@ export default function TripHistory() {
         </button>
       </div>
 
-      {/* Period Selection Tabs */}
-      <div className="px-4 py-4 border-b border-gray-200">
+      {/* Sticky Period Selection Tabs */}
+      <div className="bg-white px-4 py-4 border-b border-gray-200 flex-shrink-0 sticky top-[57px] z-30">
         <div className="flex gap-6">
           <button
             onClick={() => {
@@ -234,8 +234,8 @@ export default function TripHistory() {
         </div>
       </div>
 
-      {/* Filter Controls */}
-      <div className="px-4 py-4 border-b border-gray-200 flex gap-3">
+      {/* Sticky Filter Controls */}
+      <div className="bg-white px-4 py-4 border-b border-gray-200 flex gap-3 flex-shrink-0 sticky top-[129px] z-30">
         {/* Date/Period Selector */}
         <button
           onClick={(e) => {
@@ -267,7 +267,7 @@ export default function TripHistory() {
 
       {/* Date Picker Dropdown */}
       {showDatePicker && (
-        <div className="fixed left-4 right-4 top-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+        <div className="fixed left-4 right-4 top-[201px] bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
           {recentDates.map((date, index) => (
             <button
               key={index}
@@ -289,7 +289,7 @@ export default function TripHistory() {
 
       {/* Trip Type Picker Dropdown */}
       {showTripTypePicker && (
-        <div className="fixed right-4 top-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[150px]">
+        <div className="fixed right-4 top-[201px] bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[150px]">
           {tripTypes.map((type, index) => (
             <button
               key={index}
@@ -307,8 +307,8 @@ export default function TripHistory() {
         </div>
       )}
 
-      {/* Content Area */}
-      <div className="px-4 py-6">
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 pb-20">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <Loader2 className="w-12 h-12 text-green-600 animate-spin mb-4" />
@@ -336,9 +336,21 @@ export default function TripHistory() {
                 className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
               >
                 <div className="flex items-start justify-between mb-2">
-                  <div>
+                  <div className="flex-1">
                     <p className="text-base font-semibold text-black">{trip.orderId}</p>
-                    <p className="text-sm text-gray-600 mt-1">{trip.restaurant}</p>
+                    <p className="text-sm text-gray-600 mt-1">{trip.restaurant || trip.restaurantName || 'Unknown Restaurant'}</p>
+                    {/* Payment Method Badge */}
+                    {(() => {
+                      const paymentMethod = trip.paymentMethod || trip.payment?.method || 'razorpay';
+                      const isCOD = paymentMethod === 'cash' || paymentMethod === 'cod';
+                      return (
+                        <span className={`inline-block mt-2 text-xs font-medium px-2 py-1 rounded-full ${
+                          isCOD ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {isCOD ? 'COD' : 'Online'}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <span className={`text-sm font-medium ${
                     trip.status === 'Completed' ? 'text-green-600' :

@@ -147,6 +147,30 @@ export const sidebarMenuData = [
     items: [
       {
         type: "link",
+        label: "Delivery Cash Limit",
+        path: "/admin/delivery-cash-limit",
+        icon: "IndianRupee",
+      },
+      {
+        type: "link",
+        label: "Cash limit settlement",
+        path: "/admin/cash-limit-settlement",
+        icon: "Receipt",
+      },
+      {
+        type: "link",
+        label: "Delivery Withdrawal",
+        path: "/admin/delivery-withdrawal",
+        icon: "Wallet",
+      },
+      {
+        type: "link",
+        label: "Delivery boy Wallet",
+        path: "/admin/delivery-boy-wallet",
+        icon: "PiggyBank",
+      },
+      {
+        type: "link",
         label: "Delivery Boy Commission",
         path: "/admin/delivery-boy-commission",
         icon: "DollarSign",
@@ -249,12 +273,6 @@ export const sidebarMenuData = [
         type: "link",
         label: "Restaurant Withdraws",
         path: "/admin/restaurant-withdraws",
-        icon: "CreditCard",
-      },
-      {
-        type: "link",
-        label: "Delivery Man Payments",
-        path: "/admin/delivery-man-payments",
         icon: "CreditCard",
       },
     ],

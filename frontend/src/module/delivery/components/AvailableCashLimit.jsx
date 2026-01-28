@@ -1,10 +1,16 @@
-export default function AvailableCashLimit({onClose}) {
+import { formatCurrency } from "../../restaurant/utils/currency"
+
+export default function AvailableCashLimit({ onClose, walletData = {} }) {
+  const rawLimit = Number(walletData.totalCashLimit)
+  const totalCashLimit = Number.isFinite(rawLimit) && rawLimit >= 0 ? rawLimit : 0
+  const cashInHand = Number(walletData.cashInHand) || 0
+  const deductions = Number(walletData.deductions) || 0
+  const pocketWithdrawals = Number(walletData.pocketWithdrawals) || 0
+  const availableCashLimit = Math.max(0, totalCashLimit - cashInHand - deductions)
+
   return (
     <div className="min-h-screen bg-white text-black flex flex-col">
-
-      {/* Rows */}
       <div className="">
-        {/* Total cash limit with subtext */}
         <div className="py-3 flex justify-between border-b border-gray-200 items-start">
           <div>
             <div className="text-sm font-medium">Total cash limit</div>
@@ -13,23 +19,19 @@ export default function AvailableCashLimit({onClose}) {
               earnings
             </div>
           </div>
-          <div className="text-sm font-semibold">₹750</div>
+          <div className="text-sm font-semibold">{formatCurrency(totalCashLimit)}</div>
         </div>
 
-        {/* Other rows */}
-        <DetailRow label="Cash in hand" value="₹0" />
-        <DetailRow label="Deductions" value="₹0" />
-        <DetailRow label="Pocket withdrawals" value="₹0" />
-        <DetailRow label="Settlement adjustment" value="₹0" />
+        <DetailRow label="Cash in hand" value={formatCurrency(cashInHand)} />
+        <DetailRow label="Deductions" value={formatCurrency(deductions)} />
+        <DetailRow label="Pocket withdrawals" value={formatCurrency(pocketWithdrawals)} />
 
-        {/* Final total */}
         <div className="py-3 flex justify-between items-center border-b border-gray-200">
           <div className="text-sm font-medium">Available cash limit</div>
-          <div className="text-sm font-semibold">₹750</div>
+          <div className="text-sm font-semibold">{formatCurrency(availableCashLimit)}</div>
         </div>
       </div>
 
-      {/* Bottom Button */}
       <div onClick={onClose} className="mt-6">
         <button className="w-full bg-black text-white py-3 rounded-lg text-sm font-medium">
           Okay

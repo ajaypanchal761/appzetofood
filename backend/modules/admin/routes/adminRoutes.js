@@ -84,6 +84,20 @@ import {
   calculateCommission
 } from '../controllers/deliveryBoyCommissionController.js';
 import {
+  getDeliveryCashLimit,
+  updateDeliveryCashLimit
+} from '../controllers/deliveryCashLimitController.js';
+import { getCashLimitSettlements } from '../controllers/cashLimitSettlementController.js';
+import {
+  getDeliveryWithdrawalRequests,
+  approveDeliveryWithdrawal,
+  rejectDeliveryWithdrawal
+} from '../controllers/deliveryWithdrawalController.js';
+import {
+  getDeliveryBoyWallets,
+  addWalletAdjustment
+} from '../controllers/deliveryBoyWalletController.js';
+import {
   getEmergencyHelp,
   getEmergencyHelpPublic,
   createOrUpdateEmergencyHelp,
@@ -208,6 +222,19 @@ router.use(authenticateAdmin);
 
 // Dashboard
 router.get('/dashboard/stats', getDashboardStats);
+
+// Delivery Partner global cash limit (applies to all delivery boys)
+router.get('/delivery-cash-limit', getDeliveryCashLimit);
+router.put('/delivery-cash-limit', updateDeliveryCashLimit);
+router.get('/cash-limit-settlement', getCashLimitSettlements);
+
+// Delivery withdrawal requests (admin)
+router.get('/delivery-withdrawal/requests', getDeliveryWithdrawalRequests);
+router.post('/delivery-withdrawal/:id/approve', approveDeliveryWithdrawal);
+router.post('/delivery-withdrawal/:id/reject', rejectDeliveryWithdrawal);
+
+router.get('/delivery-boy-wallet', getDeliveryBoyWallets);
+router.post('/delivery-boy-wallet/adjustment', addWalletAdjustment);
 
 // Admin Management
 router.get('/admins', getAdmins);
