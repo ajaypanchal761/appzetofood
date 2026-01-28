@@ -15,6 +15,8 @@ export const useRestaurantNotifications = () => {
   const audioRef = useRef(null);
   const userInteractedRef = useRef(false); // Track user interaction for autoplay policy
   const [restaurantId, setRestaurantId] = useState(null);
+  const lastConnectErrorLogRef = useRef(0);
+  const CONNECT_ERROR_LOG_THROTTLE_MS = 10000;
 
   // Get restaurant ID from API
   useEffect(() => {
@@ -182,11 +184,10 @@ export const useRestaurantNotifications = () => {
     console.log('🔌 Is Production Deployment:', isProductionDeployment);
 
     // Initialize socket connection to restaurant namespace
-    // Use polling first as it's more reliable, websocket will upgrade automatically
+    // Use polling only to avoid repeated "WebSocket connection failed" when backend is down
     socketRef.current = io(socketUrl, {
-      path: '/socket.io/', // Explicitly set Socket.IO path
-      transports: ['polling'], // Start with polling only - more reliable
-      upgrade: false, // Disable WebSocket upgrade to prevent WebSocket connection errors
+      path: '/socket.io/',
+      transports: ['polling'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
@@ -196,10 +197,6 @@ export const useRestaurantNotifications = () => {
       autoConnect: true,
       auth: {
         token: localStorage.getItem('restaurant_accessToken') || localStorage.getItem('accessToken')
-      },
-      // Add query parameters if needed
-      query: {
-        transport: 'polling'
       }
     });
 
@@ -237,30 +234,26 @@ export const useRestaurantNotifications = () => {
       console.log('✅ Restaurant ID in room:', data?.restaurantId);
     });
 
-    // Listen for connection errors
+    // Listen for connection errors (throttle logs to avoid console spam on reconnect loops)
     socketRef.current.on('connect_error', (error) => {
-      // Always log connection errors on production to debug issues
-      console.error('❌ Restaurant Socket connection error:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        type: error.type,
-        description: error.description,
-        socketUrl: socketUrl,
-        backendUrl: backendUrl,
-        restaurantId: restaurantId
-      });
-      
-      // Check if error is due to CORS or wrong URL
+      const now = Date.now();
+      const shouldLog = now - lastConnectErrorLogRef.current >= CONNECT_ERROR_LOG_THROTTLE_MS;
+      if (shouldLog) {
+        lastConnectErrorLogRef.current = now;
+        const isTransportError = error.type === 'TransportError' || error.message?.includes('xhr poll error');
+        console.warn(
+          'Restaurant Socket:',
+          isTransportError
+            ? `Cannot reach backend at ${backendUrl}. Ensure the backend is running (e.g. npm run dev in backend).`
+            : error.message
+        );
+        if (!isTransportError) {
+          console.warn('Details:', { type: error.type, socketUrl, backendUrl });
+        }
+      }
       if (error.message?.includes('CORS') || error.message?.includes('Not allowed')) {
-        console.error('🚫 CORS Error: Socket.IO connection blocked by CORS');
-        console.error('💡 Fix: Add frontend URL to CORS_ORIGIN in backend .env');
+        console.warn('💡 Add frontend URL to CORS_ORIGIN in backend .env');
       }
-      
-      if (error.message?.includes('ECONNREFUSED') || error.message?.includes('Failed to fetch')) {
-        console.error('🚫 Connection Refused: Backend server not reachable at:', socketUrl);
-        console.error('💡 Fix: Check API_BASE_URL is set correctly for production');
-      }
-      
       setIsConnected(false);
     });
 

@@ -426,7 +426,7 @@ export default function OrdersMain() {
             const latestConfirmedOrder = confirmedOrders[0]
             const orderId = latestConfirmedOrder.orderId || latestConfirmedOrder._id
             
-            // Transform order to match newOrder format
+            // Transform order to match newOrder format (include payment so COD shows correctly)
             const orderForPopup = {
               orderId: latestConfirmedOrder.orderId,
               orderMongoId: latestConfirmedOrder._id,
@@ -439,7 +439,9 @@ export default function OrdersMain() {
               createdAt: latestConfirmedOrder.createdAt,
               estimatedDeliveryTime: latestConfirmedOrder.estimatedDeliveryTime || 30,
               note: latestConfirmedOrder.note || '',
-              sendCutlery: latestConfirmedOrder.sendCutlery
+              sendCutlery: latestConfirmedOrder.sendCutlery,
+              paymentMethod: latestConfirmedOrder.paymentMethod ?? latestConfirmedOrder.payment?.method,
+              payment: latestConfirmedOrder.payment
             }
             
             console.log('📦 Found confirmed order (fallback):', orderForPopup)
@@ -1223,6 +1225,21 @@ export default function OrdersMain() {
                       ₹{(popupOrder || newOrder)?.total || 0}
                     </span>
                   </div>
+
+                  {/* Payment method: treat cash/cod (any case) as COD */}
+                  {(() => {
+                    const raw = (popupOrder || newOrder)?.paymentMethod ?? (popupOrder || newOrder)?.payment?.method;
+                    const m = raw != null ? String(raw).toLowerCase().trim() : '';
+                    const isCod = m === 'cash' || m === 'cod';
+                    return (
+                      <div className="mb-4 flex items-center justify-between py-2">
+                        <span className="text-sm font-medium text-gray-700">Payment</span>
+                        <span className={`text-sm font-semibold ${isCod ? 'text-amber-600' : 'text-green-600'}`}>
+                          {isCod ? 'Cash on Delivery' : 'Online'}
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Preparation time */}
                   <div className="mb-4">

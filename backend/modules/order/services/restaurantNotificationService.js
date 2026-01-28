@@ -1,4 +1,5 @@
 import Order from '../models/Order.js';
+import Payment from '../../payment/models/Payment.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import mongoose from 'mongoose';
 
@@ -17,8 +18,9 @@ async function getIOInstance() {
  * Notify restaurant about new order via Socket.IO
  * @param {Object} order - Order document
  * @param {string} restaurantId - Restaurant ID
+ * @param {string} [paymentMethodOverride] - Explicit payment method ('cash' | 'razorpay') so restaurant sees correct value
  */
-export async function notifyRestaurantNewOrder(order, restaurantId) {
+export async function notifyRestaurantNewOrder(order, restaurantId, paymentMethodOverride) {
   try {
     const io = await getIOInstance();
 
@@ -66,6 +68,15 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
       // Still proceed but log warning
     }
 
+    // Resolve payment method: override > order.payment > Payment collection (COD fallback)
+    let resolvedPaymentMethod = paymentMethodOverride ?? order.payment?.method ?? 'razorpay';
+    if (resolvedPaymentMethod !== 'cash') {
+      try {
+        const paymentRecord = await Payment.findOne({ orderId: order._id }).select('method').lean();
+        if (paymentRecord?.method === 'cash') resolvedPaymentMethod = 'cash';
+      } catch (e) { /* ignore */ }
+    }
+
     // Prepare order notification data
     const orderNotification = {
       orderId: order.orderId,
@@ -88,8 +99,10 @@ export async function notifyRestaurantNewOrder(order, restaurantId) {
       createdAt: order.createdAt,
       estimatedDeliveryTime: order.estimatedDeliveryTime || 30,
       note: order.note || '',
-      sendCutlery: order.sendCutlery
+      sendCutlery: order.sendCutlery,
+      paymentMethod: resolvedPaymentMethod
     };
+    console.log('📢 Restaurant notification payload paymentMethod:', orderNotification.paymentMethod, { override: paymentMethodOverride, orderPaymentMethod: order.payment?.method });
 
     // Get restaurant namespace
     const restaurantNamespace = io.of('/restaurant');

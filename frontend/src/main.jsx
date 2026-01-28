@@ -190,7 +190,21 @@ console.error = (...args) => {
     // OTP errors are already displayed to users via UI error messages
     return
   }
-  
+
+  // Suppress Restaurant Socket transport errors (handled by useRestaurantNotifications with throttled message)
+  if (
+    errorStr.includes('Restaurant Socket connection error') ||
+    errorStr.includes('xhr poll error') ||
+    (typeof args[0] === 'object' && args[0]?.type === 'TransportError' && args[0]?.message?.includes('xhr poll error'))
+  ) {
+    return
+  }
+
+  // Suppress Socket.IO WebSocket failed (backend unreachable; hook shows throttled message)
+  if (errorStr.includes('WebSocket connection to') && errorStr.includes('socket.io') && errorStr.includes('failed')) {
+    return
+  }
+
   originalError.apply(console, args)
 }
 

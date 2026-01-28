@@ -1,4 +1,5 @@
 import Order from '../../order/models/Order.js';
+import Payment from '../../payment/models/Payment.js';
 import Restaurant from '../models/Restaurant.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
@@ -87,6 +88,19 @@ export const getRestaurantOrders = asyncHandler(async (req, res) => {
 
     const total = await Order.countDocuments(query);
 
+    // Resolve paymentMethod: order.payment.method or Payment collection (COD fallback)
+    const orderIds = orders.map(o => o._id);
+    const codOrderIds = new Set();
+    try {
+      const codPayments = await Payment.find({ orderId: { $in: orderIds }, method: 'cash' }).select('orderId').lean();
+      codPayments.forEach(p => codOrderIds.add(p.orderId?.toString()));
+    } catch (e) { /* ignore */ }
+    const ordersWithPaymentMethod = orders.map(o => {
+      let paymentMethod = o.payment?.method ?? 'razorpay';
+      if (paymentMethod !== 'cash' && codOrderIds.has(o._id?.toString())) paymentMethod = 'cash';
+      return { ...o, paymentMethod };
+    });
+
     // Log detailed order info for debugging
     console.log('✅ Found orders:', {
       count: orders.length,
@@ -128,7 +142,7 @@ export const getRestaurantOrders = asyncHandler(async (req, res) => {
     }
 
     return successResponse(res, 200, 'Orders retrieved successfully', {
-      orders,
+      orders: ordersWithPaymentMethod,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),

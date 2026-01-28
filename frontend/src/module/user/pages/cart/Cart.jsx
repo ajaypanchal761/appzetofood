@@ -88,6 +88,7 @@ export default function Cart() {
   const [showCoupons, setShowCoupons] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState(null)
   const [couponCode, setCouponCode] = useState("")
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("razorpay") // razorpay | cash
   const [deliveryFleet, setDeliveryFleet] = useState("standard")
   const [showFleetOptions, setShowFleetOptions] = useState(false)
   const [note, setNote] = useState("")
@@ -910,18 +911,7 @@ export default function Cart() {
         return;
       }
       
-      // Log final order details before sending
-      console.log('📤 FINAL: Sending order to backend with:', {
-        restaurantId: finalRestaurantId,
-        restaurantName: finalRestaurantName,
-        cartRestaurantId: cartRestaurantId,
-        cartRestaurantName: cart[0]?.restaurant,
-        itemCount: orderItems.length,
-        totalAmount: orderPricing.total
-      });
-      
-      // Create order in backend
-      const orderResponse = await orderAPI.createOrder({
+      const orderPayload = {
         items: orderItems,
         address: defaultAddress,
         restaurantId: finalRestaurantId,
@@ -930,12 +920,33 @@ export default function Cart() {
         deliveryFleet: deliveryFleet || 'standard',
         note: note || "",
         sendCutlery: sendCutlery !== false,
-        paymentMethod: "razorpay"
-      })
+        paymentMethod: selectedPaymentMethod
+      };
+      // Log final order details (including paymentMethod for COD debugging)
+      console.log('📤 FINAL: Sending order to backend with:', {
+        restaurantId: finalRestaurantId,
+        restaurantName: finalRestaurantName,
+        itemCount: orderItems.length,
+        totalAmount: orderPricing.total,
+        paymentMethod: orderPayload.paymentMethod
+      });
+
+      // Create order in backend
+      const orderResponse = await orderAPI.createOrder(orderPayload)
 
       console.log("✅ Order created successfully:", orderResponse.data)
 
       const { order, razorpay } = orderResponse.data.data
+
+      // Cash flow: order placed without online payment
+      if (selectedPaymentMethod === "cash") {
+        toast.success("Order placed with Cash on Delivery")
+        setPlacedOrderId(order?.orderId || order?.id || null)
+        setShowOrderSuccess(true)
+        clearCart()
+        setIsPlacingOrder(false)
+        return
+      }
 
       if (!razorpay || !razorpay.orderId || !razorpay.key) {
         console.error("❌ Razorpay initialization failed:", { razorpay, order })
@@ -1618,22 +1629,57 @@ export default function Cart() {
       {/* Bottom Sticky - Place Order */}
       <div className="bg-white dark:bg-[#1a1a1a] border-t dark:border-gray-800 shadow-lg z-30 flex-shrink-0 fixed bottom-0 left-0 right-0">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center px-4 md:px-6 py-4 md:py-5">
-            <Button
-              size="lg"
-              onClick={handlePlaceOrder}
-              disabled={isPlacingOrder}
-              className="w-full max-w-md md:max-w-lg bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700 text-white px-6 md:px-10 h-14 md:h-16 rounded-lg md:rounded-xl text-base md:text-lg font-bold shadow-lg"
-            >
-              <div className="text-left mr-3 md:mr-4">
-                <p className="text-sm md:text-base opacity-90">₹{total.toFixed(0)}</p>
-                <p className="text-xs md:text-sm opacity-75">TOTAL</p>
+          <div className="px-4 md:px-6 py-3 md:py-4">
+            <div className="w-full max-w-md md:max-w-lg mx-auto">
+              {/* Pay Using */}
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+                  <div className="leading-tight">
+                    <p className="text-[11px] md:text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      PAY USING
+                    </p>
+                    <p className="text-sm md:text-base font-medium text-gray-800 dark:text-gray-200">
+                      {selectedPaymentMethod === "razorpay" ? "Razorpay" : "Cash on Delivery"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={selectedPaymentMethod}
+                    onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                    className="appearance-none bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 pr-9 text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                  >
+                    <option value="razorpay">Razorpay</option>
+                    <option value="cash">COD</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-gray-400" />
+                </div>
               </div>
-              <span className="font-bold text-base md:text-lg">
-                {isPlacingOrder ? "Processing..." : "Place Order"}
-              </span>
-              <ChevronRight className="h-5 w-5 md:h-6 md:w-6 ml-2" />
-            </Button>
+
+              <Button
+                size="lg"
+                onClick={handlePlaceOrder}
+                disabled={isPlacingOrder}
+                className="w-full bg-green-700 hover:bg-green-800 dark:bg-green-600 dark:hover:bg-green-700 text-white px-6 md:px-10 h-14 md:h-16 rounded-lg md:rounded-xl text-base md:text-lg font-bold shadow-lg"
+              >
+                {selectedPaymentMethod === "razorpay" && (
+                  <div className="text-left mr-3 md:mr-4">
+                    <p className="text-sm md:text-base opacity-90">₹{total.toFixed(0)}</p>
+                    <p className="text-xs md:text-sm opacity-75">TOTAL</p>
+                  </div>
+                )}
+                <span className="font-bold text-base md:text-lg">
+                  {isPlacingOrder
+                    ? "Processing..."
+                    : selectedPaymentMethod === "razorpay"
+                      ? "Select Payment"
+                      : "Place Order"}
+                </span>
+                <ChevronRight className="h-5 w-5 md:h-6 md:w-6 ml-2" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -1660,7 +1706,9 @@ export default function Cart() {
                 </div>
                 <div>
                   <p className="text-lg font-semibold text-gray-900">
-                    Pay ₹{total.toFixed(2)} on delivery (UPI/cash)
+                    {selectedPaymentMethod === "razorpay"
+                      ? `Pay ₹${total.toFixed(2)} online (Razorpay)`
+                      : `Pay on delivery (COD)`}
                   </p>
                 </div>
               </div>

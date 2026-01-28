@@ -232,8 +232,9 @@ function smoothLocation(locationHistory) {
  * @param {Object} marker - Google Maps Marker instance
  * @param {Object} newPosition - {lat, lng} new position
  * @param {number} duration - Animation duration in milliseconds (default 1500ms)
+ * @param {React.RefObject} animationRef - Ref to store animation frame ID (from component)
  */
-function animateMarkerSmoothly(marker, newPosition, duration = 1500) {
+function animateMarkerSmoothly(marker, newPosition, duration = 1500, animationRef) {
   if (!marker || !newPosition) return
   
   const currentPosition = marker.getPosition()
@@ -248,9 +249,9 @@ function animateMarkerSmoothly(marker, newPosition, duration = 1500) {
   const endLat = newPosition.lat
   const endLng = newPosition.lng
   
-  // Cancel any ongoing animation
-  if (markerAnimationRef.current) {
-    cancelAnimationFrame(markerAnimationRef.current)
+  // Cancel any ongoing animation (use ref if passed)
+  if (animationRef?.current) {
+    cancelAnimationFrame(animationRef.current)
   }
   
   const startTime = Date.now()
@@ -268,13 +269,13 @@ function animateMarkerSmoothly(marker, newPosition, duration = 1500) {
     marker.setPosition({ lat: currentLat, lng: currentLng })
     
     if (progress < 1) {
-      markerAnimationRef.current = requestAnimationFrame(animate)
+      if (animationRef) animationRef.current = requestAnimationFrame(animate)
     } else {
-      markerAnimationRef.current = null
+      if (animationRef) animationRef.current = null
     }
   }
   
-  markerAnimationRef.current = requestAnimationFrame(animate)
+  if (animationRef) animationRef.current = requestAnimationFrame(animate)
 }
 
 export default function DeliveryHome() {
@@ -414,6 +415,15 @@ export default function DeliveryHome() {
   const [mapLoading, setMapLoading] = useState(false)
   const [directionsMapLoading, setDirectionsMapLoading] = useState(false)
   const isInitializingMapRef = useRef(false)
+
+  // Safety timeout: hide "Loading map..." overlay after max 2 seconds
+  useEffect(() => {
+    if (!mapLoading) return
+    const timer = setTimeout(() => {
+      setMapLoading(false)
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [mapLoading])
 
   // Seeded random number generator for consistent hotspots
   const createSeededRandom = (seed) => {
@@ -1813,17 +1823,10 @@ export default function DeliveryHome() {
           // Save smoothed location to localStorage
           localStorage.setItem('deliveryBoyLastLocation', JSON.stringify(smoothedLocation))
           
-          // Update live tracking polyline only for restaurant route
+          // Update live tracking polyline for any active route (pickup or delivery)
           const currentDirectionsResponse = directionsResponseRef.current;
-          const isOutForDelivery = selectedRestaurant?.orderStatus === 'out_for_delivery' || 
-                                   selectedRestaurant?.deliveryPhase === 'en_route_to_drop' ||
-                                   selectedRestaurant?.deliveryState?.currentPhase === 'en_route_to_drop';
-          
-          if (currentDirectionsResponse && currentDirectionsResponse.routes && currentDirectionsResponse.routes.length > 0 && !isOutForDelivery) {
+          if (currentDirectionsResponse && currentDirectionsResponse.routes && currentDirectionsResponse.routes.length > 0) {
             updateLiveTrackingPolyline(currentDirectionsResponse, smoothedLocation);
-          } else if (isOutForDelivery && liveTrackingPolylineRef.current) {
-            liveTrackingPolylineRef.current.setMap(null);
-            liveTrackingPolylineRef.current = null;
           }
           
           // ============================================
@@ -1838,7 +1841,7 @@ export default function DeliveryHome() {
           if (window.deliveryMapInstance) {
             if (bikeMarkerRef.current) {
               // Marker exists - animate smoothly to new position
-              animateMarkerSmoothly(bikeMarkerRef.current, newSmoothedLocation, 1500)
+              animateMarkerSmoothly(bikeMarkerRef.current, newSmoothedLocation, 1500, markerAnimationRef)
             } else {
               // Marker doesn't exist yet, create it immediately with correct location
               console.log('📍 Creating bike marker with smoothed location:', { lat: smoothedLat, lng: smoothedLng })
@@ -3544,12 +3547,9 @@ export default function DeliveryHome() {
                     setDirectionsResponse(directionsResult)
                     directionsResponseRef.current = directionsResult
 
-                    // Don't show polyline for customer route - remove live tracking polyline
-                    if (liveTrackingPolylineRef.current) {
-                      liveTrackingPolylineRef.current.setMap(null);
-                      liveTrackingPolylineRef.current = null;
-                    }
-                    console.log('✅ Customer route polyline removed - no polyline shown for customer delivery')
+                    // Initialize / update live tracking polyline for customer delivery route
+                    updateLiveTrackingPolyline(directionsResult, currentLocation)
+                    console.log('✅ Live tracking polyline initialized for customer delivery route')
 
                     // Show route polyline on main Feed map
                     if (window.deliveryMapInstance && window.google?.maps) {
@@ -4468,11 +4468,12 @@ export default function DeliveryHome() {
         if (error.code !== 'ERR_NETWORK' && error.code !== 'ECONNABORTED' && !error.message?.includes('timeout')) {
           console.error("Error checking bank details:", error)
         }
-        // Default to showing the banner if we can't check (only for approved users)
-        // For network/timeout errors, assume pending status to show verification message
+        // Default to showing the bank details banner if we can't check (only for approved users)
+        // For network/timeout errors, DON'T override deliveryStatus to 'pending'
+        // so that already-approved riders don't see the verification banner again.
         if (error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-          setDeliveryStatus('pending')
-          setBankDetailsFilled(true) // Hide bank details banner
+          // Keep existing deliveryStatus; just hide bank-details banner so UI doesn't block
+          setBankDetailsFilled(true)
         } else {
           setBankDetailsFilled(false)
         }
@@ -8191,7 +8192,7 @@ export default function DeliveryHome() {
           </motion.button>
 
           {/* Floating Banner - Status Message */}
-          {mapViewMode === "hotspot" && (
+          {mapViewMode === "hotspot" && (deliveryStatus === "pending" || deliveryStatus === "blocked") && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -9567,10 +9568,10 @@ export default function DeliveryHome() {
               Please verify the order ID with the restaurant before pickup
             </p>
             
-            {/* Order ID Display */}
-            <div className="bg-gray-50 rounded-xl p-6 mb-6">
+            {/* Order ID Display - single line, scroll horizontally if needed */}
+            <div className="bg-gray-50 rounded-xl p-6 mb-6 overflow-hidden">
               <p className="text-gray-500 text-xs mb-2">Order ID</p>
-              <p className="text-3xl font-bold text-gray-900 tracking-wider">
+              <p className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-wider whitespace-nowrap overflow-x-auto min-w-0">
                 {selectedRestaurant?.orderId || selectedRestaurant?.id || newOrder?.orderId || newOrder?.orderMongoId || 'ORD1234567890'}
               </p>
             </div>

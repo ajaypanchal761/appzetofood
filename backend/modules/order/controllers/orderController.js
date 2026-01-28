@@ -39,8 +39,18 @@ export const createOrder = async (req, res) => {
       deliveryFleet,
       note,
       sendCutlery,
-      paymentMethod
+      paymentMethod: bodyPaymentMethod
     } = req.body;
+    // Support both camelCase and snake_case from client
+    const paymentMethod = bodyPaymentMethod ?? req.body.payment_method;
+
+    // Normalize payment method: 'cod' / 'COD' / 'Cash on Delivery' → 'cash'
+    const normalizedPaymentMethod = (() => {
+      const m = (paymentMethod && String(paymentMethod).toLowerCase().trim()) || '';
+      if (m === 'cash' || m === 'cod' || m === 'cash on delivery') return 'cash';
+      return paymentMethod || 'razorpay';
+    })();
+    logger.info('Order create paymentMethod:', { raw: paymentMethod, normalized: normalizedPaymentMethod, bodyKeys: Object.keys(req.body || {}).filter(k => k.toLowerCase().includes('payment')) });
 
     // Validate required fields
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -194,7 +204,7 @@ export const createOrder = async (req, res) => {
       sendCutlery: sendCutlery !== false,
       status: 'pending',
       payment: {
-        method: paymentMethod || 'razorpay',
+        method: normalizedPaymentMethod,
         status: 'pending'
       }
     });
@@ -265,15 +275,88 @@ export const createOrder = async (req, res) => {
       userId: order.userId,
       status: order.status,
       total: order.pricing.total,
-      eta: order.eta ? `${order.eta.min}-${order.eta.max} mins` : 'N/A'
+      eta: order.eta ? `${order.eta.min}-${order.eta.max} mins` : 'N/A',
+      paymentMethod: normalizedPaymentMethod
     });
 
-    // Note: Restaurant notification will be sent after payment verification in verifyOrderPayment
-    // This ensures restaurant only receives orders after successful payment
+    // For cash-on-delivery orders, confirm immediately and notify restaurant.
+    // Online (Razorpay) orders follow the existing verifyOrderPayment flow.
+    if (normalizedPaymentMethod === 'cash') {
+      // Best-effort payment record; even if it fails we still proceed with order.
+      try {
+        const payment = new Payment({
+          paymentId: `PAY-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          orderId: order._id,
+          userId,
+          amount: order.pricing.total,
+          currency: 'INR',
+          method: 'cash',
+          status: 'pending',
+          logs: [{
+            action: 'pending',
+            timestamp: new Date(),
+            details: {
+              previousStatus: 'new',
+              newStatus: 'pending',
+              note: 'Cash on delivery order created'
+            }
+          }]
+        });
+        await payment.save();
+      } catch (paymentError) {
+        logger.error('❌ Error creating COD payment record (continuing without blocking order):', {
+          error: paymentError.message,
+          stack: paymentError.stack
+        });
+      }
 
-    // Create Razorpay order
+      // Mark order as confirmed so restaurant can prepare it (ensure payment.method is cash for notification)
+      order.payment.method = 'cash';
+      order.payment.status = 'pending';
+      order.status = 'confirmed';
+      order.tracking.confirmed = {
+        status: true,
+        timestamp: new Date()
+      };
+      await order.save();
+
+      // Notify restaurant about new COD order via Socket.IO (non-blocking)
+      try {
+        const notifyRestaurantResult = await notifyRestaurantNewOrder(order, assignedRestaurantId, 'cash');
+        logger.info('✅ COD order notification sent to restaurant', {
+          orderId: order.orderId,
+          restaurantId: assignedRestaurantId,
+          notifyRestaurantResult
+        });
+      } catch (notifyError) {
+        logger.error('❌ Error notifying restaurant about COD order (order still created):', {
+          error: notifyError.message,
+          stack: notifyError.stack
+        });
+      }
+
+      // Respond to client (no Razorpay details for COD)
+      return res.status(201).json({
+        success: true,
+        data: {
+          order: {
+            id: order._id.toString(),
+            orderId: order.orderId,
+            status: order.status,
+            total: pricing.total
+          },
+          razorpay: null
+        }
+      });
+    }
+
+    // Note: For Razorpay / online payments, restaurant notification will be sent
+    // after payment verification in verifyOrderPayment. This ensures restaurant
+    // only receives prepaid orders after successful payment.
+
+    // Create Razorpay order for online payments
     let razorpayOrder = null;
-    if (paymentMethod === 'razorpay' || !paymentMethod) {
+    if (normalizedPaymentMethod === 'razorpay' || !normalizedPaymentMethod) {
       try {
         razorpayOrder = await createRazorpayOrder({
           amount: Math.round(pricing.total * 100), // Convert to paise
