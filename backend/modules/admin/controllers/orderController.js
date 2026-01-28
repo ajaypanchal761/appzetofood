@@ -328,6 +328,10 @@ export const getOrders = asyncHandler(async (req, res) => {
         totalAmount: orderAmount,
         // Original fields
         paymentStatus: paymentStatusDisplay,
+        paymentType: (order.payment?.method === 'cash' || order.payment?.method === 'cod') ? 'Cash on Delivery' : 'Online',
+        paymentCollectionStatus: (order.payment?.method === 'cash' || order.payment?.method === 'cod')
+          ? (order.status === 'delivered' ? 'Collected' : 'Not Collected')
+          : 'Collected',
         orderStatus: orderStatusDisplay,
         status: order.status, // Backend status
         deliveryType: deliveryType,

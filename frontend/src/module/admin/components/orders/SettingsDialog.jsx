@@ -15,6 +15,8 @@ export default function SettingsDialog({ isOpen, onOpenChange, visibleColumns, t
     restaurant: "Restaurant",
     foodItems: "Food Items",
     totalAmount: "Total Amount",
+    paymentType: "Payment Type",
+    paymentCollectionStatus: "Payment Status",
     orderStatus: "Order Status",
     actions: "Actions",
   }

@@ -2309,6 +2309,7 @@ export default function DeliveryHome() {
                 customerLng: order.address?.location?.coordinates?.[0],
                 items: order.items || [],
                 total: order.pricing?.total || 0,
+                paymentMethod: order.paymentMethod ?? order.payment?.method ?? 'razorpay', // backend-resolved first (COD vs Online)
                 phone: order.restaurantId?.phone || order.restaurantId?.ownerPhone || null, // Restaurant phone number (prefer phone, fallback to ownerPhone)
                 ownerPhone: order.restaurantId?.ownerPhone || null, // Owner phone number (separate field for direct access)
                 orderStatus: order.status || 'preparing', // Store order status (pending, preparing, ready, out_for_delivery, delivered)
@@ -9943,6 +9944,28 @@ export default function DeliveryHome() {
               </div>
             </div>
           </div>
+
+          {/* Payment info: Online = amount paid, COD = collect from customer */}
+          {selectedRestaurant?.total != null && (() => {
+            const m = (selectedRestaurant.paymentMethod || '').toLowerCase()
+            const isCod = m === 'cash' || m === 'cod'
+            const total = Number(selectedRestaurant.total) || 0
+            return (
+              <div className={`rounded-xl p-4 mb-6 ${isCod ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <IndianRupee className={`w-4 h-4 ${isCod ? 'text-amber-600' : 'text-emerald-600'}`} />
+                    <span className={`text-sm font-medium ${isCod ? 'text-amber-800' : 'text-emerald-800'}`}>
+                      {isCod ? 'Collect from customer (COD)' : 'Amount paid (Online)'}
+                    </span>
+                  </div>
+                  <span className={`text-lg font-bold ${isCod ? 'text-amber-700' : 'text-emerald-700'}`}>
+                    ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Order Delivered Button with Swipe */}
           <div className="relative w-full">

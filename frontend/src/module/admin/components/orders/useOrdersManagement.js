@@ -24,6 +24,8 @@ export function useOrdersManagement(orders, statusKey, title) {
     restaurant: true,
     foodItems: true,
     totalAmount: true,
+    paymentType: true,
+    paymentCollectionStatus: true,
     orderStatus: true,
     actions: true,
   })
@@ -318,6 +320,8 @@ export function useOrdersManagement(orders, statusKey, title) {
       restaurant: true,
       foodItems: true,
       totalAmount: true,
+      paymentType: true,
+      paymentCollectionStatus: true,
       orderStatus: true,
       actions: true,
     })

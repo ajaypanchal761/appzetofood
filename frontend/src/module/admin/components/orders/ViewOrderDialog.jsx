@@ -27,7 +27,8 @@ const getStatusColor = (orderStatus) => {
 }
 
 const getPaymentStatusColor = (paymentStatus) => {
-  if (paymentStatus === "Paid") return "text-emerald-600"
+  if (paymentStatus === "Paid" || paymentStatus === "Collected") return "text-emerald-600"
+  if (paymentStatus === "Not Collected") return "text-amber-600"
   if (paymentStatus === "Unpaid" || paymentStatus === "Failed") return "text-red-600"
   return "text-slate-600"
 }
@@ -146,14 +147,20 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
                   )}
                 </div>
               )}
-              {order.paymentStatus && (
+              {(order.paymentStatus || order.paymentCollectionStatus != null) && (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                     <CreditCard className="w-4 h-4" />
                     Payment Status
                   </p>
-                  <p className={`text-sm font-medium ${getPaymentStatusColor(order.paymentStatus)}`}>
-                    {order.paymentStatus}
+                  <p className={`text-sm font-medium ${getPaymentStatusColor(
+                    order.paymentType === 'Cash on Delivery' || order.payment?.method === 'cash' || order.payment?.method === 'cod'
+                      ? (order.paymentCollectionStatus ?? (order.status === 'delivered' ? 'Collected' : 'Not Collected'))
+                      : order.paymentStatus
+                  )}`}>
+                    {order.paymentType === 'Cash on Delivery' || order.payment?.method === 'cash' || order.payment?.method === 'cod'
+                      ? (order.paymentCollectionStatus ?? (order.status === 'delivered' ? 'Collected' : 'Not Collected'))
+                      : order.paymentStatus}
                   </p>
                 </div>
               )}

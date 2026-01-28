@@ -2,6 +2,7 @@ import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import Delivery from '../models/Delivery.js';
 import Order from '../../order/models/Order.js';
+import Payment from '../../payment/models/Payment.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
 import DeliveryWallet from '../models/DeliveryWallet.js';
 import DeliveryBoyCommission from '../../admin/models/DeliveryBoyCommission.js';
@@ -110,8 +111,18 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
       return errorResponse(res, 404, 'Order not found');
     }
 
+    // Resolve payment method for delivery boy (COD vs Online)
+    let paymentMethod = order.payment?.method || 'razorpay';
+    if (paymentMethod !== 'cash') {
+      try {
+        const paymentRecord = await Payment.findOne({ orderId: order._id }).select('method').lean();
+        if (paymentRecord?.method === 'cash') paymentMethod = 'cash';
+      } catch (e) { /* ignore */ }
+    }
+    const orderWithPayment = { ...order, paymentMethod };
+
     return successResponse(res, 200, 'Order details retrieved successfully', {
-      order
+      order: orderWithPayment
     });
   } catch (error) {
     logger.error(`Error fetching order details: ${error.message}`, { error: error.stack });
@@ -233,8 +244,18 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     console.log(`✅ Order ${order.orderId} accepted by delivery partner ${delivery._id}`);
     console.log(`📍 Route calculated: ${routeData.distance.toFixed(2)} km, ${routeData.duration.toFixed(1)} mins`);
 
+    // Resolve payment method for delivery boy (COD vs Online) - use Payment collection if order.payment is wrong
+    let paymentMethod = updatedOrder.payment?.method || 'razorpay';
+    if (paymentMethod !== 'cash') {
+      try {
+        const paymentRecord = await Payment.findOne({ orderId: updatedOrder._id }).select('method').lean();
+        if (paymentRecord?.method === 'cash') paymentMethod = 'cash';
+      } catch (e) { /* ignore */ }
+    }
+    const orderWithPayment = { ...updatedOrder, paymentMethod };
+
     return successResponse(res, 200, 'Order accepted successfully', {
-      order: updatedOrder,
+      order: orderWithPayment,
       route: {
         coordinates: routeData.coordinates,
         distance: routeData.distance,
@@ -1020,6 +1041,19 @@ export const completeDelivery = asyncHandler(async (req, res) => {
 
     const orderIdForLog = updatedOrder.orderId || order.orderId || orderMongoId?.toString() || orderId;
     console.log(`✅ Order ${orderIdForLog} marked as delivered by delivery partner ${delivery._id}`);
+
+    // Mark COD payment as collected (admin Payment Status → Collected)
+    if (order.payment?.method === 'cash' || order.payment?.method === 'cod') {
+      try {
+        await Payment.updateOne(
+          { orderId: orderMongoId },
+          { $set: { status: 'completed', completedAt: new Date() } }
+        );
+        console.log(`✅ COD payment marked as collected for order ${orderIdForLog}`);
+      } catch (paymentUpdateError) {
+        console.warn('⚠️ Could not update COD payment status:', paymentUpdateError.message);
+      }
+    }
 
     // Release escrow and distribute funds (this handles all wallet credits)
     try {

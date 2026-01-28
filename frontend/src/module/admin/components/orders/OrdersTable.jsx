@@ -125,6 +125,22 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                   </div>
                 </th>
               )}
+              {(visibleColumns.paymentType !== false) && (
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <span>Payment Type</span>
+                    <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                  </div>
+                </th>
+              )}
+              {(visibleColumns.paymentCollectionStatus !== false) && (
+                <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <span>Payment Status</span>
+                    <ArrowUpDown className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-600" />
+                  </div>
+                </th>
+              )}
               {visibleColumns.orderStatus && (
                 <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                   <div className="flex items-center gap-2">
@@ -207,6 +223,26 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                     <div className={`text-xs mt-0.5 ${getPaymentStatusColor(order.paymentStatus)}`}>
                       {order.paymentStatus}
                     </div>
+                  </td>
+                )}
+                {(visibleColumns.paymentType !== false) && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`text-sm font-medium ${(order.paymentType || order.paymentMethod) === 'Cash on Delivery' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      {order.paymentType || (order.payment?.method === 'cash' || order.payment?.method === 'cod' ? 'Cash on Delivery' : 'Online')}
+                    </span>
+                  </td>
+                )}
+                {(visibleColumns.paymentCollectionStatus !== false) && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {(() => {
+                      const isCod = order.paymentType === 'Cash on Delivery' || order.payment?.method === 'cash' || order.payment?.method === 'cod'
+                      const status = order.paymentCollectionStatus ?? (isCod ? 'Not Collected' : 'Collected')
+                      return (
+                        <span className={`text-sm font-medium ${status === 'Collected' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {status}
+                        </span>
+                      )
+                    })()}
                   </td>
                 )}
                 {visibleColumns.orderStatus && (
