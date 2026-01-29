@@ -98,8 +98,8 @@ const httpServer = createServer(app);
 // Initialize Socket.IO with proper CORS configuration
 const allowedSocketOrigins = [
   process.env.CORS_ORIGIN,
-  'https://foods.appzeto.com',
-  'http://foods.appzeto.com',
+  'https://foozeto.appzeto.com',
+  'http://foozeto.appzeto.com',
   'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
@@ -314,6 +314,8 @@ const allowedOrigins = [
   process.env.CORS_ORIGIN,
   'https://foods.appzeto.com',
   'http://foods.appzeto.com',
+  'https://foozeto.appzeto.com',
+  'http://foozeto.appzeto.com',
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5174',
