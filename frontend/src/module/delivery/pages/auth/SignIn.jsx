@@ -1,6 +1,5 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -131,18 +130,6 @@ export default function DeliverySignIn() {
 
   return (
     <div className="max-h-screen h-screen bg-white flex flex-col">
-      {/* Header with Back Button */}
-      <div className="relative flex items-center justify-center py-4 px-4">
-        
-        <button
-          onClick={() => navigate("/delivery/sign-in")}
-          className="absolute left-4 top-1/2 -translate-y-1/2"
-          aria-label="Go back"
-        >
-          <ArrowLeft className="h-5 w-5 text-black" />
-        </button>
-      </div>
-
       {/* Top Section - Logo and Badge */}
       <div className="flex flex-col items-center pt-8 pb-6 px-6">
         {/* Appzeto Logo */}
@@ -223,14 +210,6 @@ export default function DeliverySignIn() {
                 {error}
               </p>
             )}
-
-            {/* Help Link */}
-            <p className="text-sm text-gray-600">
-              Lost your phone number?{" "}
-              <a href="#" className="text-blue-600 hover:underline">
-                Reach us
-              </a>
-            </p>
           </div>
         </div>
       </div>
