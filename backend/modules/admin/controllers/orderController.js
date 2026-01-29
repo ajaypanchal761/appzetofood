@@ -237,14 +237,16 @@ export const getOrders = asyncHandler(async (req, res) => {
       // Check if cancelled and determine who cancelled it
       let orderStatusDisplay;
       if (order.status === 'cancelled') {
-        // Check cancellation reason to determine who cancelled
-        const cancellationReason = order.cancellationReason || '';
-        const isRestaurantCancelled = /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i.test(cancellationReason);
-        
-        if (isRestaurantCancelled) {
+        // Check cancelledBy field to determine who cancelled
+        if (order.cancelledBy === 'restaurant') {
           orderStatusDisplay = 'Cancelled by Restaurant';
-        } else {
+        } else if (order.cancelledBy === 'user') {
           orderStatusDisplay = 'Cancelled by User';
+        } else {
+          // Fallback: check cancellation reason pattern for old orders
+          const cancellationReason = order.cancellationReason || '';
+          const isRestaurantCancelled = /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i.test(cancellationReason);
+          orderStatusDisplay = isRestaurantCancelled ? 'Cancelled by Restaurant' : 'Cancelled by User';
         }
       } else {
         const statusMap = {
@@ -343,8 +345,10 @@ export const getOrders = asyncHandler(async (req, res) => {
         deliveredAt: order.deliveredAt,
         cancellationReason: order.cancellationReason || null,
         cancelledAt: order.cancelledAt || null,
+        cancelledBy: order.cancelledBy || null,
         tracking: order.tracking || {},
         deliveryState: order.deliveryState || {},
+        billImageUrl: order.billImageUrl || null, // Bill image captured by delivery boy
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
         // Zone info from assignmentInfo
@@ -1538,12 +1542,15 @@ export const processRefund = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, 'Order is not cancelled');
     }
 
-    // Check if it's a restaurant cancelled order
-    const isRestaurantCancelled = order.cancellationReason && 
-      /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i.test(order.cancellationReason);
+    // Check if it's a cancelled order (by restaurant or user)
+    const isRestaurantCancelled = order.cancelledBy === 'restaurant' || 
+      (order.cancellationReason && 
+       /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i.test(order.cancellationReason));
+    
+    const isUserCancelled = order.cancelledBy === 'user';
 
-    if (!isRestaurantCancelled) {
-      return errorResponse(res, 400, 'This order was not cancelled by restaurant');
+    if (!isRestaurantCancelled && !isUserCancelled) {
+      return errorResponse(res, 400, 'This order was not cancelled by restaurant or user');
     }
 
     // Check if order is Home Delivery

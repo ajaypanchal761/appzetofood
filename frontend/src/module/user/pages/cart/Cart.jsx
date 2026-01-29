@@ -80,7 +80,7 @@ export default function Cart() {
     );
   }
   
-  const { cart, updateQuantity, addToCart, getCartCount, clearCart } = cartContext;
+  const { cart, updateQuantity, addToCart, getCartCount, clearCart, cleanCartForRestaurant } = cartContext;
   const { getDefaultAddress, getDefaultPaymentMethod, addresses, paymentMethods, userProfile } = useProfile()
   const { createOrder } = useOrders()
   const { location: currentLocation } = useUserLocation() // Get live location address
@@ -817,17 +817,22 @@ export default function Cart() {
       // CRITICAL: Validate that ALL cart items belong to the SAME restaurant
       const cartRestaurantIds = cart
         .map(item => item.restaurantId)
-        .filter(Boolean);
+        .filter(Boolean)
+        .map(id => String(id).trim()); // Normalize to string and trim
       
       const cartRestaurantNames = cart
         .map(item => item.restaurant)
-        .filter(Boolean);
+        .filter(Boolean)
+        .map(name => name.trim().toLowerCase()); // Normalize names
       
+      // Get unique values (after normalization)
       const uniqueRestaurantIds = [...new Set(cartRestaurantIds)];
       const uniqueRestaurantNames = [...new Set(cartRestaurantNames)];
       
       // Check if cart has items from multiple restaurants
-      if (uniqueRestaurantIds.length > 1) {
+      // Note: If restaurant names match, allow even if IDs differ (same restaurant, different ID format)
+      if (uniqueRestaurantNames.length > 1) {
+        // Different restaurant names = definitely different restaurants
         console.error('❌ CRITICAL ERROR: Cart contains items from multiple restaurants!', {
           restaurantIds: uniqueRestaurantIds,
           restaurantNames: uniqueRestaurantNames,
@@ -838,9 +843,38 @@ export default function Cart() {
             restaurantId: item.restaurantId
           }))
         });
-        alert('Error: Your cart contains items from different restaurants. Please clear cart and add items from one restaurant only.');
+        
+        // Automatically clean cart to keep items from the restaurant matching restaurantData
+        if (finalRestaurantId && finalRestaurantName) {
+          console.log('🧹 Auto-cleaning cart to keep items from:', finalRestaurantName);
+          cleanCartForRestaurant(finalRestaurantId, finalRestaurantName);
+          toast.error('Cart contained items from different restaurants. Items from other restaurants have been removed.');
+        } else {
+          // If restaurantData is not available, keep items from first restaurant in cart
+          const firstRestaurantId = cart[0]?.restaurantId;
+          const firstRestaurantName = cart[0]?.restaurant;
+          if (firstRestaurantId && firstRestaurantName) {
+            console.log('🧹 Auto-cleaning cart to keep items from first restaurant:', firstRestaurantName);
+            cleanCartForRestaurant(firstRestaurantId, firstRestaurantName);
+            toast.error('Cart contained items from different restaurants. Items from other restaurants have been removed.');
+          } else {
+            toast.error('Cart contains items from different restaurants. Please clear cart and try again.');
+          }
+        }
+        
         setIsPlacingOrder(false);
         return;
+      }
+      
+      // If restaurant names match but IDs differ, that's OK (same restaurant, different ID format)
+      // But log a warning in development
+      if (uniqueRestaurantIds.length > 1 && uniqueRestaurantNames.length === 1) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ Cart items have different restaurant IDs but same name. This is OK if IDs are in different formats.', {
+            restaurantIds: uniqueRestaurantIds,
+            restaurantName: uniqueRestaurantNames[0]
+          });
+        }
       }
       
       // Validate that cart items' restaurantId matches the restaurantData
@@ -1313,16 +1347,34 @@ export default function Cart() {
                               </div>
                             </div>
                             <button 
-                              onClick={() => addToCart({ 
-                                id: addon.id, 
-                                name: addon.name, 
-                                price: addon.price, 
-                                image: addon.image || (addon.images && addon.images[0]) || "",
-                                description: addon.description || "",
-                                isVeg: true,
-                                restaurant: restaurantName,
-                                restaurantId: restaurantId
-                              })}
+                              onClick={() => {
+                                // Use restaurant info from existing cart items to ensure format consistency
+                                const cartRestaurantId = cart[0]?.restaurantId || restaurantId;
+                                const cartRestaurantName = cart[0]?.restaurant || restaurantName;
+                                
+                                if (!cartRestaurantId || !cartRestaurantName) {
+                                  console.error('❌ Cannot add addon: Missing restaurant information', {
+                                    cartRestaurantId,
+                                    cartRestaurantName,
+                                    restaurantId,
+                                    restaurantName,
+                                    cartItem: cart[0]
+                                  });
+                                  toast.error('Restaurant information is missing. Please refresh the page.');
+                                  return;
+                                }
+                                
+                                addToCart({ 
+                                  id: addon.id, 
+                                  name: addon.name, 
+                                  price: addon.price, 
+                                  image: addon.image || (addon.images && addon.images[0]) || "",
+                                  description: addon.description || "",
+                                  isVeg: true,
+                                  restaurant: cartRestaurantName,
+                                  restaurantId: cartRestaurantId
+                                });
+                              }}
                               className="absolute bottom-1 md:bottom-2 right-1 md:right-2 w-6 h-6 md:w-7 md:h-7 bg-white border border-red-600 rounded flex items-center justify-center shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                             >
                               <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 text-red-600" />

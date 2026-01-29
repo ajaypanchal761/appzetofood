@@ -279,11 +279,15 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                       >
                         <Printer className="w-4 h-4" />
                       </button>
-                      {/* Show Refund button or Refunded status for cancelled Home Delivery orders */}
-                      {order.orderStatus === "Cancelled by Restaurant" && 
+                      {/* Show Refund button or Refunded status for cancelled Home Delivery orders (restaurant or user cancelled) */}
+                      {(order.orderStatus === "Cancelled by Restaurant" || 
+                        order.orderStatus === "Cancelled" || 
+                        order.orderStatus === "Cancelled by User" ||
+                        (order.status === "cancelled" && (order.cancelledBy === "user" || order.cancelledBy === "restaurant"))) && 
                        (order.deliveryType === "Home Delivery" || 
                         order.deliveryType === "home_delivery" ||
-                        order.deliveryFleet === "standard") && (
+                        order.deliveryFleet === "standard") &&
+                       (order.paymentMethod === "razorpay" || order.paymentMethod === "online" || order.payment?.paymentMethod === "razorpay" || order.payment?.method === "razorpay") && (
                         <>
                           {order.refundStatus === 'processed' || order.refundStatus === 'initiated' ? (
                             <span className="px-3 py-1.5 rounded-md bg-emerald-100 text-emerald-700 text-xs font-medium">

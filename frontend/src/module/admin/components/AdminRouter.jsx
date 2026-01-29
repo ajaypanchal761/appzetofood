@@ -73,12 +73,10 @@ import DisbursementReportDeliverymen from "../pages/reports/DisbursementReportDe
 import RegularOrderReport from "../pages/reports/RegularOrderReport";
 import CampaignOrderReport from "../pages/reports/CampaignOrderReport";
 import RestaurantReport from "../pages/reports/RestaurantReport";
-import CustomerWalletReport from "../pages/reports/CustomerWalletReport";
 import FeedbackExperienceReport from "../pages/reports/FeedbackExperienceReport";
 import TaxReport from "../pages/reports/TaxReport";
 import RestaurantVATReport from "../pages/reports/RestaurantVATReport";
 // Transaction Management
-import CollectCash from "../pages/transactions/CollectCash";
 import RestaurantWithdraws from "../pages/transactions/RestaurantWithdraws";
 import WithdrawMethod from "../pages/transactions/WithdrawMethod";
 // Employee Management
@@ -246,13 +244,11 @@ export default function AdminRouter() {
         {/* Restaurant Report */}
         <Route path="restaurant-report" element={<RestaurantReport />} />
         {/* Customer Report */}
-        <Route path="customer-report/wallet" element={<CustomerWalletReport />} />
         <Route path="customer-report/feedback-experience" element={<FeedbackExperienceReport />} />
         <Route path="tax-report" element={<TaxReport />} />
         <Route path="restaurant-vat-report" element={<RestaurantVATReport />} />
 
         {/* TRANSACTION MANAGEMENT */}
-        <Route path="collect-cash" element={<CollectCash />} />
         <Route path="restaurant-withdraws" element={<RestaurantWithdraws />} />
         <Route path="withdraw-method" element={<WithdrawMethod />} />
 

@@ -49,7 +49,7 @@ export default function RestaurantDetails() {
   const [searchParams] = useSearchParams()
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
-  const { vegMode, addDishFavorite, removeDishFavorite, isDishFavorite, getDishFavorites, getFavorites } = useProfile()
+  const { vegMode, addDishFavorite, removeDishFavorite, isDishFavorite, getDishFavorites, getFavorites, addFavorite, removeFavorite, isFavorite } = useProfile()
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [quantities, setQuantities] = useState({})
@@ -73,8 +73,6 @@ export default function RestaurantDetails() {
   const [filters, setFilters] = useState({
     sortBy: null, // "low-to-high" | "high-to-low"
     vegNonVeg: null, // "veg" | "non-veg"
-    highlyReordered: false,
-    spicy: false,
   })
 
   // Restaurant data state
@@ -611,8 +609,6 @@ export default function RestaurantDetails() {
     let count = 0
     if (filters.sortBy) count++
     if (filters.vegNonVeg) count++
-    if (filters.highlyReordered) count++
-    if (filters.spicy) count++
     return count
   }
 
@@ -658,6 +654,78 @@ export default function RestaurantDetails() {
       toast.success("Dish added to favorites")
     }
   }
+
+  // Handle add to collection
+  const handleAddToCollection = () => {
+    const restaurantSlug = restaurant?.slug || slug || ""
+    
+    if (!restaurantSlug) {
+      toast.error("Restaurant information is missing")
+      return
+    }
+
+    if (!restaurant) {
+      toast.error("Restaurant data not available")
+      return
+    }
+
+    const isAlreadyFavorite = isFavorite(restaurantSlug)
+    
+    if (isAlreadyFavorite) {
+      // Remove from collection
+      removeFavorite(restaurantSlug)
+      toast.success("Restaurant removed from collection")
+    } else {
+      // Add to collection
+      addFavorite({
+        slug: restaurantSlug,
+        name: restaurant.name || "",
+        cuisine: restaurant.cuisine || "",
+        rating: restaurant.rating || 0,
+        deliveryTime: restaurant.deliveryTime || restaurant.estimatedDeliveryTime || "",
+        distance: restaurant.distance || "",
+        priceRange: restaurant.priceRange || "",
+        image: restaurant.profileImageUrl?.url || restaurant.image || ""
+      })
+      toast.success("Restaurant added to collection")
+    }
+    
+    setShowMenuOptionsSheet(false)
+  }
+
+  // Handle share restaurant
+  const handleShareRestaurant = async () => {
+    const restaurantSlug = restaurant?.slug || slug || ""
+    const restaurantName = restaurant?.name || "this restaurant"
+    
+    // Create share URL
+    const shareUrl = `${window.location.origin}/user/restaurants/${restaurantSlug}`
+    const shareText = `Check out ${restaurantName} on AppzetoFood! ${shareUrl}`
+    
+    // Try Web Share API first (mobile)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: restaurantName,
+          text: shareText,
+          url: shareUrl,
+        })
+        toast.success("Restaurant shared successfully")
+        setShowMenuOptionsSheet(false)
+      } catch (error) {
+        // User cancelled or error occurred
+        if (error.name !== "AbortError") {
+          // Fallback to copy to clipboard
+          await copyToClipboard(shareUrl)
+        }
+      }
+    } else {
+      // Fallback to copy to clipboard
+      await copyToClipboard(shareUrl)
+    }
+  }
+
+
 
   // Handle share click
   const handleShareClick = async (item) => {
@@ -771,11 +839,6 @@ export default function RestaurantDetails() {
         if (item.foodType !== "Non-Veg") return false
       }
 
-      // Spicy filter
-      if (filters.spicy && !item.isSpicy) return false
-
-      // Highly reordered filter (items with customisable are shown as highly reordered)
-      if (filters.highlyReordered && !item.customisable) return false
 
       return true
     })
@@ -1026,27 +1089,10 @@ export default function RestaurantDetails() {
 
           {/* Delivery Time */}
           <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                // Set default selections if not set
-                if (!selectedDate) {
-                  const today = new Date()
-                  setSelectedDate(today.toISOString().split('T')[0])
-                }
-                if (!selectedTimeSlot) {
-                  setSelectedTimeSlot("6:30 - 7 PM")
-                }
-                setShowScheduleSheet(true)
-              }}
-              className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
-            >
+            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <Clock className="h-4 w-4" />
-              <span>{restaurant?.deliveryTime || "25-30 mins"} · Schedule for later</span>
-              <ChevronDown className="h-4 w-4" />
-            </button>
+              <span>{restaurant?.deliveryTime || "25-30 mins"}</span>
+            </div>
           </div>
 
           {/* Offers */}
@@ -1121,42 +1167,6 @@ export default function RestaurantDetails() {
                 <div className="h-3 w-3 rounded-full bg-amber-700" />
                 Non-veg
                 {filters.vegNonVeg === "non-veg" && (
-                  <X className="h-3 w-3 text-gray-600" />
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className={`flex items-center gap-1.5 whitespace-nowrap border-gray-300 bg-white rounded-full ${filters.spicy ? "border-red-500 bg-red-50" : ""
-                  }`}
-                onClick={() =>
-                  setFilters((prev) => ({
-                    ...prev,
-                    spicy: !prev.spicy,
-                  }))
-                }
-              >
-                <Flame className="h-3 w-3 text-red-500" />
-                Spicy
-                {filters.spicy && (
-                  <X className="h-3 w-3 text-gray-600" />
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className={`flex items-center gap-1.5 whitespace-nowrap border-gray-300 bg-white rounded-full ${filters.highlyReordered ? "border-green-500 bg-green-50" : ""
-                  }`}
-                onClick={() =>
-                  setFilters((prev) => ({
-                    ...prev,
-                    highlyReordered: !prev.highlyReordered,
-                  }))
-                }
-              >
-                <div className="h-3 w-3 rounded-full bg-green-500 rotate-45" />
-                Highly
-                {filters.highlyReordered && (
                   <X className="h-3 w-3 text-gray-600" />
                 )}
               </Button>
@@ -2607,74 +2617,23 @@ export default function RestaurantDetails() {
                       {/* Add to Collection */}
                       <button
                         className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
-                        onClick={() => {
-                          // Handle add to collection
-                          setShowMenuOptionsSheet(false)
-                        }}
+                        onClick={handleAddToCollection}
                       >
                         <Bookmark className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                        <span className="text-base text-gray-900 dark:text-white">Add to Collection</span>
-                      </button>
-
-                      {/* Group Order */}
-                      <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
-                        onClick={() => {
-                          // Handle group order
-                          setShowMenuOptionsSheet(false)
-                        }}
-                      >
-                        <Users className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                        <span className="text-base text-gray-900 dark:text-white">Group Order</span>
-                      </button>
-
-                      {/* See more about this restaurant */}
-                      <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
-                        onClick={() => {
-                          // Handle see more
-                          setShowMenuOptionsSheet(false)
-                        }}
-                      >
-                        <Info className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                        <span className="text-base text-gray-900 dark:text-white">See more about this restaurant</span>
+                        <span className="text-base text-gray-900 dark:text-white">
+                          {isFavorite(restaurant?.slug || slug || "") ? "Remove from Collection" : "Add to Collection"}
+                        </span>
                       </button>
 
                       {/* Share this restaurant */}
                       <button
                         className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
-                        onClick={() => {
-                          // Handle share
-                          setShowMenuOptionsSheet(false)
-                        }}
+                        onClick={handleShareRestaurant}
                       >
                         <Share2 className="h-5 w-5 text-gray-700 dark:text-gray-300" />
                         <span className="text-base text-gray-900 dark:text-white">Share this restaurant</span>
                       </button>
 
-                      {/* Hide this restaurant */}
-                      <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
-                        onClick={() => {
-                          // Handle hide restaurant
-                          setShowMenuOptionsSheet(false)
-                        }}
-                      >
-                        <Eye className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                        <span className="text-base text-gray-900 dark:text-white">Hide this restaurant</span>
-                      </button>
-
-                      {/* Report fraud or bad practices */}
-                      <button
-                        className="w-full flex items-center gap-4 px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors text-left"
-                        onClick={() => {
-                          // Handle report
-                          setShowMenuOptionsSheet(false)
-                        }}
-                      >
-                        <AlertCircle className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                        <span className="text-base text-gray-900 dark:text-white">Report fraud or bad practices</span>
-                      </button>
                     </div>
 
                     {/* Disclaimer Text */}

@@ -423,7 +423,7 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
   try {
     const delivery = req.delivery;
     const { orderId } = req.params;
-    const { confirmedOrderId } = req.body; // Order ID confirmed by delivery boy
+    const { confirmedOrderId, billImageUrl } = req.body; // Order ID confirmed by delivery boy, bill image URL
     const { currentLat, currentLng } = req.body; // Current location for route calculation
 
     // Find order by _id or orderId field
@@ -607,27 +607,49 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
     if (!orderMongoId) {
       return errorResponse(res, 500, 'Order ID not found in order object');
     }
+    const updateData = {
+      'deliveryState.status': 'order_confirmed',
+      'deliveryState.currentPhase': 'en_route_to_delivery',
+      'deliveryState.orderIdConfirmedAt': new Date(),
+      'deliveryState.routeToDelivery': {
+        coordinates: routeData.coordinates,
+        distance: routeData.distance,
+        duration: routeData.duration,
+        calculatedAt: new Date(),
+        method: routeData.method
+      },
+      status: 'out_for_delivery',
+      'tracking.outForDelivery': {
+        status: true,
+        timestamp: new Date()
+      }
+    };
+
+    // Add bill image URL if provided (with validation)
+    if (billImageUrl) {
+      // Validate URL format
+      try {
+        const url = new URL(billImageUrl);
+        // Ensure it's a valid HTTP/HTTPS URL
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          return errorResponse(res, 400, 'Bill image URL must be HTTP or HTTPS');
+        }
+        // Optional: Validate it's from Cloudinary (security check)
+        if (!url.hostname.includes('cloudinary.com') && !url.hostname.includes('res.cloudinary.com')) {
+          console.warn(`⚠️ Bill image URL is not from Cloudinary: ${url.hostname}`);
+          // Don't reject, but log warning for monitoring
+        }
+        updateData.billImageUrl = billImageUrl;
+        console.log(`📸 Bill image URL validated and saved for order ${order.orderId}`);
+      } catch (urlError) {
+        console.error(`❌ Invalid bill image URL format: ${billImageUrl}`, urlError);
+        return errorResponse(res, 400, 'Invalid bill image URL format');
+      }
+    }
+
     const updatedOrder = await Order.findByIdAndUpdate(
       orderMongoId,
-      {
-        $set: {
-          'deliveryState.status': 'order_confirmed',
-          'deliveryState.currentPhase': 'en_route_to_delivery',
-          'deliveryState.orderIdConfirmedAt': new Date(),
-          'deliveryState.routeToDelivery': {
-            coordinates: routeData.coordinates,
-            distance: routeData.distance,
-            duration: routeData.duration,
-            calculatedAt: new Date(),
-            method: routeData.method
-          },
-          status: 'out_for_delivery',
-          'tracking.outForDelivery': {
-            status: true,
-            timestamp: new Date()
-          }
-        }
-      },
+      { $set: updateData },
       { new: true }
     )
       .populate('userId', 'name phone')

@@ -458,6 +458,7 @@ export const rejectOrder = asyncHandler(async (req, res) => {
 
     order.status = 'cancelled';
     order.cancellationReason = reason || 'Rejected by restaurant';
+    order.cancelledBy = 'restaurant';
     order.cancelledAt = new Date();
     await order.save();
 

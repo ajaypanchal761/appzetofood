@@ -252,7 +252,6 @@ export const sidebarMenuData = [
         label: "Customer Report",
         icon: "FileText",
         subItems: [
-          { label: "Customer Wallet Report", path: "/admin/customer-report/wallet" },
           { label: "Feedback Experience", path: "/admin/customer-report/feedback-experience" },
         ],
       },
@@ -263,12 +262,6 @@ export const sidebarMenuData = [
     type: "section",
     label: "TRANSACTION MANAGEMENT",
     items: [
-      {
-        type: "link",
-        label: "Collect Cash",
-        path: "/admin/collect-cash",
-        icon: "DollarSign",
-      },
       {
         type: "link",
         label: "Restaurant Withdraws",

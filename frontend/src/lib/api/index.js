@@ -1408,6 +1408,11 @@ export const orderAPI = {
   getOrderDetails: (orderId) => {
     return apiClient.get(API_ENDPOINTS.ORDER.DETAILS.replace(':id', orderId));
   },
+
+  // Cancel order
+  cancelOrder: (orderId, reason) => {
+    return apiClient.patch(API_ENDPOINTS.ORDER.CANCEL.replace(':id', orderId), { reason });
+  },
 };
 
 // Export dining API helper functions

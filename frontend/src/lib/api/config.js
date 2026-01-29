@@ -344,6 +344,7 @@ export const API_ENDPOINTS = {
     UPDATE_STATUS: '/order/:id/status',
     VERIFY_PAYMENT: '/order/verify-payment',
     CALCULATE: '/order/calculate',
+    CANCEL: '/order/:id/cancel',
   },
   // Payment endpoints
   PAYMENT: {

@@ -220,8 +220,6 @@ export default function RestaurantOnboarding() {
 
   const [step4, setStep4] = useState({
     estimatedDeliveryTime: "",
-    distance: "",
-    priceRange: "$$",
     featuredDish: "",
     featuredPrice: "",
     offer: "",
@@ -290,8 +288,6 @@ export default function RestaurantOnboarding() {
       if (localData.step4) {
         setStep4({
           estimatedDeliveryTime: localData.step4.estimatedDeliveryTime || "",
-          distance: localData.step4.distance || "",
-          priceRange: localData.step4.priceRange || "$$",
           featuredDish: localData.step4.featuredDish || "",
           featuredPrice: localData.step4.featuredPrice || "",
           offer: localData.step4.offer || "",
@@ -370,8 +366,6 @@ export default function RestaurantOnboarding() {
           if (data.step4) {
             setStep4({
               estimatedDeliveryTime: data.step4.estimatedDeliveryTime || "",
-              distance: data.step4.distance || "",
-              priceRange: data.step4.priceRange || "$$",
               featuredDish: data.step4.featuredDish || "",
               featuredPrice: data.step4.featuredPrice || "",
               offer: data.step4.offer || "",
@@ -475,22 +469,16 @@ export default function RestaurantOnboarding() {
 
   const validateStep4 = () => {
     const errors = []
-    if (!step4.estimatedDeliveryTime.trim()) {
+    if (!step4.estimatedDeliveryTime || !step4.estimatedDeliveryTime.trim()) {
       errors.push("Estimated delivery time is required")
     }
-    if (!step4.distance.trim()) {
-      errors.push("Distance is required")
-    }
-    if (!step4.priceRange) {
-      errors.push("Price range is required")
-    }
-    if (!step4.featuredDish.trim()) {
+    if (!step4.featuredDish || !step4.featuredDish.trim()) {
       errors.push("Featured dish name is required")
     }
-    if (!step4.featuredPrice || parseFloat(step4.featuredPrice) <= 0) {
+    if (!step4.featuredPrice || step4.featuredPrice === "" || isNaN(parseFloat(step4.featuredPrice)) || parseFloat(step4.featuredPrice) <= 0) {
       errors.push("Featured dish price is required and must be greater than 0")
     }
-    if (!step4.offer.trim()) {
+    if (!step4.offer || !step4.offer.trim()) {
       errors.push("Special offer/promotion is required")
     }
     return errors
@@ -588,8 +576,6 @@ export default function RestaurantOnboarding() {
       } else if (step === 4) {
         setStep4({
           estimatedDeliveryTime: "25-30 mins",
-          distance: "1.2 km",
-          priceRange: "$$",
           featuredDish: "Butter Chicken Special",
           featuredPrice: "249",
           offer: "Flat ₹50 OFF above ₹199",
@@ -611,6 +597,14 @@ export default function RestaurantOnboarding() {
       validationErrors = validateStep3()
     } else if (step === 4) {
       validationErrors = validateStep4()
+      console.log('🔍 Step 4 validation:', { 
+        step4, 
+        errors: validationErrors,
+        estimatedDeliveryTime: step4.estimatedDeliveryTime,
+        featuredDish: step4.featuredDish,
+        featuredPrice: step4.featuredPrice,
+        offer: step4.offer
+      })
     }
     
     if (validationErrors.length > 0) {
@@ -622,6 +616,7 @@ export default function RestaurantOnboarding() {
           })
         }, index * 100)
       })
+      console.log('❌ Validation failed:', validationErrors)
       return
     }
     
@@ -767,17 +762,17 @@ export default function RestaurantOnboarding() {
         }
         setStep(4)
       } else if (step === 4) {
+        console.log('📤 Submitting Step 4:', step4)
         const payload = {
           step4: {
             estimatedDeliveryTime: step4.estimatedDeliveryTime,
-            distance: step4.distance,
-            priceRange: step4.priceRange,
             featuredDish: step4.featuredDish,
             featuredPrice: parseFloat(step4.featuredPrice) || 249,
             offer: step4.offer,
           },
           completedSteps: 4,
         }
+        console.log('📤 Step 4 payload:', payload)
         const response = await api.put("/restaurant/onboarding", payload)
         console.log('✅ Step4 completed, response:', response?.data)
         
@@ -1423,34 +1418,6 @@ export default function RestaurantOnboarding() {
             className="mt-1 bg-white text-sm"
             placeholder="e.g., 25-30 mins"
           />
-        </div>
-
-        <div>
-          <Label className="text-xs text-gray-700">Distance from City Center*</Label>
-          <Input
-            value={step4.distance || ""}
-            onChange={(e) => setStep4({ ...step4, distance: e.target.value })}
-            className="mt-1 bg-white text-sm"
-            placeholder="e.g., 1.2 km"
-          />
-        </div>
-
-        <div>
-          <Label className="text-xs text-gray-700">Price Range*</Label>
-          <Select
-            value={step4.priceRange || "$$"}
-            onValueChange={(value) => setStep4({ ...step4, priceRange: value || "$$" })}
-          >
-            <SelectTrigger className="mt-1 bg-white text-sm">
-              <SelectValue placeholder="Select price range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="$">$ - Budget Friendly</SelectItem>
-              <SelectItem value="$$">$$ - Moderate</SelectItem>
-              <SelectItem value="$$$">$$$ - Expensive</SelectItem>
-              <SelectItem value="$$$$">$$$$ - Very Expensive</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
 
         <div>

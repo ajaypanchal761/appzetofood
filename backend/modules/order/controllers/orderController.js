@@ -787,6 +787,111 @@ export const getOrderDetails = async (req, res) => {
 };
 
 /**
+ * Cancel order by user
+ * PATCH /api/order/:id/cancel
+ */
+export const cancelOrder = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cancellation reason is required'
+      });
+    }
+
+    // Find order by MongoDB _id or orderId
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
+      order = await Order.findOne({
+        _id: id,
+        userId
+      });
+    }
+
+    if (!order) {
+      order = await Order.findOne({
+        orderId: id,
+        userId
+      });
+    }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Check if order can be cancelled
+    if (order.status === 'cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Order is already cancelled'
+      });
+    }
+
+    if (order.status === 'delivered') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot cancel a delivered order'
+      });
+    }
+
+    // Only allow cancellation for online payment orders (Razorpay)
+    const payment = await Payment.findOne({ orderId: order._id });
+    if (!payment || payment.paymentMethod !== 'razorpay' || payment.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Order cancellation is only available for online payment orders'
+      });
+    }
+
+    // Update order status
+    order.status = 'cancelled';
+    order.cancellationReason = reason.trim();
+    order.cancelledBy = 'user';
+    order.cancelledAt = new Date();
+    await order.save();
+
+    // Calculate refund amount (but don't process - admin needs to approve)
+    try {
+      const { calculateCancellationRefund } = await import('../services/cancellationRefundService.js');
+      await calculateCancellationRefund(order._id, reason);
+      logger.info(`Cancellation refund calculated for order ${order.orderId} - awaiting admin approval`);
+    } catch (refundError) {
+      logger.error(`Error calculating cancellation refund for order ${order.orderId}:`, refundError);
+      // Don't fail the cancellation if refund calculation fails
+    }
+
+    res.json({
+      success: true,
+      message: 'Order cancelled successfully. Refund will be processed after admin approval.',
+      data: {
+        order: {
+          orderId: order.orderId,
+          status: order.status,
+          cancellationReason: order.cancellationReason,
+          cancelledAt: order.cancelledAt
+        }
+      }
+    });
+  } catch (error) {
+    logger.error(`Error cancelling order: ${error.message}`, {
+      error: error.message,
+      stack: error.stack
+    });
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to cancel order'
+    });
+  }
+};
+
+/**
  * Calculate order pricing
  */
 export const calculateOrder = async (req, res) => {

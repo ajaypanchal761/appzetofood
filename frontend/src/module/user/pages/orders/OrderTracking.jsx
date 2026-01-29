@@ -23,6 +23,14 @@ import {
 import AnimatedPage from "../../components/AnimatedPage"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { useOrders } from "../../context/OrdersContext"
 import { useProfile } from "../../context/ProfileContext"
 import { useLocation as useUserLocation } from "../../hooks/useLocation"
@@ -216,6 +224,9 @@ export default function OrderTracking() {
   const [orderStatus, setOrderStatus] = useState('placed')
   const [estimatedTime, setEstimatedTime] = useState(29)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [cancellationReason, setCancellationReason] = useState("")
+  const [isCancelling, setIsCancelling] = useState(false)
 
   const defaultAddress = getDefaultAddress()
 
@@ -495,6 +506,59 @@ export default function OrderTracking() {
       window.removeEventListener('orderStatusNotification', handleOrderStatusNotification);
     };
   }, [])
+
+  const handleCancelOrder = () => {
+    // Check if order can be cancelled (only Razorpay orders that aren't delivered/cancelled)
+    if (!order) return;
+    
+    if (order.status === 'cancelled') {
+      toast.error('Order is already cancelled');
+      return;
+    }
+    
+    if (order.status === 'delivered') {
+      toast.error('Cannot cancel a delivered order');
+      return;
+    }
+    
+    // Check if payment method is Razorpay (online payment)
+    const paymentMethod = order.payment?.paymentMethod || order.paymentMethod;
+    if (paymentMethod !== 'razorpay' && paymentMethod !== 'online') {
+      toast.error('Order cancellation is only available for online payment orders');
+      return;
+    }
+    
+    setShowCancelDialog(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancellationReason.trim()) {
+      toast.error('Please provide a reason for cancellation');
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      const response = await orderAPI.cancelOrder(orderId, cancellationReason.trim());
+      if (response.data?.success) {
+        toast.success('Order cancelled successfully. Refund will be processed after admin approval.');
+        setShowCancelDialog(false);
+        setCancellationReason("");
+        // Refresh order data
+        const orderResponse = await orderAPI.getOrderDetails(orderId);
+        if (orderResponse.data?.success && orderResponse.data.data?.order) {
+          setOrder(orderResponse.data.data.order);
+        }
+      } else {
+        toast.error(response.data?.message || 'Failed to cancel order');
+      }
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      toast.error(error.response?.data?.message || 'Failed to cancel order');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -980,6 +1044,7 @@ export default function OrderTracking() {
             icon={CircleSlash}
             title="Cancel order"
             subtitle=""
+            onClick={handleCancelOrder}
           />
         </motion.div>
 
@@ -1002,6 +1067,61 @@ export default function OrderTracking() {
           </Link>
         </motion.div>
       </div>
+
+      {/* Cancel Order Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-gray-900">
+              Cancel Order
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              Please provide a reason for cancelling this order. Refund will be processed after admin approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Cancellation Reason <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+                placeholder="e.g., Changed my mind, Wrong address, etc."
+                className="min-h-[100px] resize-none"
+                disabled={isCancelling}
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCancelDialog(false);
+                  setCancellationReason("");
+                }}
+                disabled={isCancelling}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmCancel}
+                disabled={isCancelling || !cancellationReason.trim()}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isCancelling ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Cancelling...
+                  </>
+                ) : (
+                  'Confirm Cancellation'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

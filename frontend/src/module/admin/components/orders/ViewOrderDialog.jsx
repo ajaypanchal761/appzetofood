@@ -1,4 +1,4 @@
-import { Eye, MapPin, Package, User, Phone, Mail, Calendar, Clock, Truck, CreditCard, X } from "lucide-react"
+import { Eye, MapPin, Package, User, Phone, Mail, Calendar, Clock, Truck, CreditCard, X, Receipt } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,17 @@ const getPaymentStatusColor = (paymentStatus) => {
 
 export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
   if (!order) return null
+
+  // Debug: Log order data to check billImageUrl
+  if (order.billImageUrl) {
+    console.log('📸 Bill Image URL found:', order.billImageUrl)
+  } else {
+    console.log('⚠️ Bill Image URL not found in order:', {
+      orderId: order.orderId,
+      hasBillImageUrl: !!order.billImageUrl,
+      orderKeys: Object.keys(order)
+    })
+  }
 
   // Format address for display
   const formatAddress = (address) => {
@@ -131,7 +142,11 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
                   </span>
                   {order.cancellationReason && (
                     <p className="text-xs text-red-600 mt-1">
-                      <span className="font-medium">Reason:</span> {order.cancellationReason}
+                      <span className="font-medium">
+                        {order.cancelledBy === 'user' ? 'Cancelled by User - ' : 
+                         order.cancelledBy === 'restaurant' ? 'Cancelled by Restaurant - ' : 
+                         'Cancellation '}Reason:
+                      </span> {order.cancellationReason}
                     </p>
                   )}
                   {order.cancelledAt && (
@@ -250,6 +265,58 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order }) {
                     </p>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Bill Image (Captured by Delivery Boy) */}
+          {(order.billImageUrl || order.billImage || order.deliveryState?.billImageUrl) && (
+            <div className="border-t border-slate-200 pt-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-orange-600" />
+                Bill Image (Captured by Delivery Boy)
+              </h3>
+              <div className="space-y-3">
+                <div className="relative w-full max-w-2xl border-2 border-slate-300 rounded-xl overflow-hidden bg-white shadow-sm">
+                  <img
+                    src={order.billImageUrl || order.billImage || order.deliveryState?.billImageUrl}
+                    alt="Order Bill"
+                    className="w-full h-auto object-contain max-h-[500px] mx-auto block"
+                    loading="lazy"
+                    onError={(e) => {
+                      console.error('❌ Failed to load bill image:', e.target.src)
+                      e.target.style.display = 'none';
+                      const errorDiv = e.target.parentElement.querySelector('.error-message');
+                      if (errorDiv) errorDiv.style.display = 'block';
+                    }}
+                    onLoad={() => {
+                      console.log('✅ Bill image loaded successfully')
+                    }}
+                  />
+                  <div className="error-message hidden p-6 text-center text-slate-500 text-sm bg-slate-50">
+                    <Receipt className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+                    Failed to load bill image
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={order.billImageUrl || order.billImage || order.deliveryState?.billImageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
+                  >
+                    <Eye className="w-4 h-4" />
+                    View Full Size
+                  </a>
+                  <a
+                    href={order.billImageUrl || order.billImage || order.deliveryState?.billImageUrl}
+                    download
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    <Package className="w-4 h-4" />
+                    Download
+                  </a>
+                </div>
               </div>
             </div>
           )}

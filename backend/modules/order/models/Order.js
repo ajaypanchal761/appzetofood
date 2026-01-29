@@ -209,11 +209,20 @@ const orderSchema = new mongoose.Schema({
   deliveredAt: {
     type: Date
   },
+  billImageUrl: {
+    type: String,
+    default: null
+  },
   cancelledAt: {
     type: Date
   },
   cancellationReason: {
     type: String
+  },
+  cancelledBy: {
+    type: String,
+    enum: ['user', 'restaurant', 'admin'],
+    default: null
   },
   // Customer Review and Rating
   review: {
