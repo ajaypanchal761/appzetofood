@@ -124,6 +124,10 @@ export const API_ENDPOINTS = {
     REVERSE_GEOCODE: '/location/reverse',
     NEARBY: '/location/nearby',
   },
+  // Zone endpoints
+  ZONE: {
+    DETECT: '/zones/detect', // Public endpoint for zone detection
+  },
   // Restaurant endpoints
   RESTAURANT: {
     AUTH: {

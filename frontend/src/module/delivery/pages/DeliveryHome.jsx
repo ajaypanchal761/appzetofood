@@ -171,8 +171,27 @@ function shouldAcceptLocation(position, lastValidLocation, lastLocationTime) {
   const latitude = position.coords.latitude
   const longitude = position.coords.longitude
   
-  // Filter 1: Ignore if accuracy > 30 meters
-  if (accuracy > 30) {
+  // CRITICAL: Always accept first location (no previous location) to ensure admin map shows delivery boy
+  // Even if accuracy is poor, we need at least one location update
+  const isFirstLocation = !lastValidLocation || !lastLocationTime
+  
+  if (isFirstLocation) {
+    // For first location, accept if accuracy < 1000m (very lenient)
+    if (accuracy > 1000) {
+      console.log('🚫 First location rejected: accuracy extremely poor', { accuracy: accuracy.toFixed(2) + 'm' })
+      return false
+    }
+    console.log('✅ Accepting first location (will be used for admin map):', { 
+      accuracy: accuracy.toFixed(2) + 'm',
+      lat: latitude,
+      lng: longitude
+    })
+    return true
+  }
+  
+  // Filter 1: For subsequent locations, use relaxed accuracy threshold (200m instead of 30m)
+  // This allows GPS to work even in areas with poor signal
+  if (accuracy > 200) {
     console.log('🚫 Location rejected: accuracy too poor', { accuracy: accuracy.toFixed(2) + 'm' })
     return false
   }
@@ -1703,7 +1722,37 @@ export default function DeliveryHome() {
           )
           
           if (!shouldAccept) {
-            // Location rejected by filter - keep using last valid location
+            // Location rejected by filter - but send to backend if it's been > 30 seconds since last update
+            // This ensures admin map always shows delivery boy even with poor GPS
+            if (isOnlineRef.current && lastValidLocationRef.current) {
+              const now = Date.now();
+              const lastSentTime = window.lastLocationSentTime || 0;
+              const timeSinceLastSend = now - lastSentTime;
+              
+              // Fallback: Send last valid location every 30 seconds even if new location is rejected
+              if (timeSinceLastSend >= 30000) {
+                const [lat, lng] = lastValidLocationRef.current;
+                if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                  console.log('📤 Sending fallback location to backend (filter rejected new location):', { 
+                    lat, 
+                    lng,
+                    accuracy: accuracy.toFixed(2) + 'm',
+                    timeSinceLastSend: (timeSinceLastSend / 1000).toFixed(0) + 's'
+                  });
+                  deliveryAPI.updateLocation(lat, lng, true)
+                    .then(() => {
+                      window.lastLocationSentTime = now;
+                      console.log('✅ Fallback location sent to backend successfully');
+                    })
+                    .catch(error => {
+                      if (error.code !== 'ERR_NETWORK' && error.message !== 'Network Error') {
+                        console.error('❌ Error sending fallback location:', error);
+                      }
+                    });
+                }
+              }
+            }
+            // Keep using last valid location
             return
           }
           
@@ -2158,28 +2207,30 @@ export default function DeliveryHome() {
                 restaurantAddress = restaurantLocation.address
                 console.log('✅ Using location.address:', restaurantAddress)
               }
-              // Priority 4: Build from street components
-              else if (restaurantLocation?.street) {
-                const addressParts = [
-                  restaurantLocation.street,
-                  restaurantLocation.area,
-                  restaurantLocation.city,
-                  restaurantLocation.state,
-                  restaurantLocation.zipCode || restaurantLocation.pincode || restaurantLocation.postalCode
-                ].filter(Boolean)
-                restaurantAddress = addressParts.join(', ')
-                console.log('✅ Built address from components:', restaurantAddress)
-              }
-              // Priority 5: Build from addressLine1
+              // Priority 4: Build from addressLine1 (with zone and pin code)
               else if (restaurantLocation?.addressLine1) {
                 const addressParts = [
                   restaurantLocation.addressLine1,
                   restaurantLocation.addressLine2,
+                  restaurantLocation.area, // Zone
                   restaurantLocation.city,
-                  restaurantLocation.state
+                  restaurantLocation.state,
+                  restaurantLocation.pincode || restaurantLocation.zipCode || restaurantLocation.postalCode
                 ].filter(Boolean)
                 restaurantAddress = addressParts.join(', ')
-                console.log('✅ Built address from addressLine1:', restaurantAddress)
+                console.log('✅ Built address from addressLine1 with zone and pin:', restaurantAddress)
+              }
+              // Priority 5: Build from street components (with zone and pin code)
+              else if (restaurantLocation?.street) {
+                const addressParts = [
+                  restaurantLocation.street,
+                  restaurantLocation.area, // Zone
+                  restaurantLocation.city,
+                  restaurantLocation.state,
+                  restaurantLocation.pincode || restaurantLocation.zipCode || restaurantLocation.postalCode
+                ].filter(Boolean)
+                restaurantAddress = addressParts.join(', ')
+                console.log('✅ Built address from street components with zone and pin:', restaurantAddress)
               }
               // Priority 6: Check restaurantId directly for address fields
               else if (order.restaurantId?.street || order.restaurantId?.city) {
@@ -2231,25 +2282,27 @@ export default function DeliveryHome() {
                         } else if (restLocation?.address) {
                           restaurantAddress = restLocation.address
                           console.log('✅ Fetched restaurant.location.address:', restaurantAddress)
-                        } else if (restLocation?.street) {
-                          const addressParts = [
-                            restLocation.street,
-                            restLocation.area,
-                            restLocation.city,
-                            restLocation.state,
-                            restLocation.zipCode || restLocation.pincode || restLocation.postalCode
-                          ].filter(Boolean)
-                          restaurantAddress = addressParts.join(', ')
-                          console.log('✅ Built address from restaurant location components:', restaurantAddress)
                         } else if (restLocation?.addressLine1) {
                           const addressParts = [
                             restLocation.addressLine1,
                             restLocation.addressLine2,
+                            restLocation.area, // Zone
                             restLocation.city,
-                            restLocation.state
+                            restLocation.state,
+                            restLocation.pincode || restLocation.zipCode || restLocation.postalCode
                           ].filter(Boolean)
                           restaurantAddress = addressParts.join(', ')
-                          console.log('✅ Built address from restaurant location addressLine1:', restaurantAddress)
+                          console.log('✅ Built address from restaurant location addressLine1 with zone and pin:', restaurantAddress)
+                        } else if (restLocation?.street) {
+                          const addressParts = [
+                            restLocation.street,
+                            restLocation.area, // Zone
+                            restLocation.city,
+                            restLocation.state,
+                            restLocation.pincode || restLocation.zipCode || restLocation.postalCode
+                          ].filter(Boolean)
+                          restaurantAddress = addressParts.join(', ')
+                          console.log('✅ Built address from restaurant location components with zone and pin:', restaurantAddress)
                         }
                       }
                     } catch (restaurantError) {
@@ -6466,13 +6519,23 @@ export default function DeliveryHome() {
           restaurantLocation.state
         ].filter(Boolean)
         restaurantAddress = addressParts.join(', ')
+      } else if (order.restaurantId?.addressLine1) {
+        const addressParts = [
+          order.restaurantId.addressLine1,
+          order.restaurantId.addressLine2,
+          order.restaurantId.area, // Zone
+          order.restaurantId.city,
+          order.restaurantId.state,
+          order.restaurantId.pincode || order.restaurantId.zipCode || order.restaurantId.postalCode
+        ].filter(Boolean)
+        restaurantAddress = addressParts.join(', ')
       } else if (order.restaurantId?.street || order.restaurantId?.city) {
         const addressParts = [
           order.restaurantId.street,
-          order.restaurantId.area,
+          order.restaurantId.area, // Zone
           order.restaurantId.city,
           order.restaurantId.state,
-          order.restaurantId.zipCode || order.restaurantId.pincode || order.restaurantId.postalCode
+          order.restaurantId.pincode || order.restaurantId.zipCode || order.restaurantId.postalCode
         ].filter(Boolean)
         restaurantAddress = addressParts.join(', ')
       } else if (order.restaurantAddress) {

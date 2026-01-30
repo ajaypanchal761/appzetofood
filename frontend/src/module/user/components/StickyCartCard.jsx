@@ -7,44 +7,17 @@ import { motion, AnimatePresence } from "framer-motion"
 export default function StickyCartCard() {
   const { cart, getCartCount } = useCart()
   const [isVisible, setIsVisible] = useState(true)
-  const [bottomPosition, setBottomPosition] = useState("bottom-[54px]") // bottom-18 equivalent
-  const lastScrollY = useRef(0)
+  const [bottomPosition, setBottomPosition] = useState("bottom-[70px]") // Fixed above bottom navigation
   const cartCount = getCartCount()
 
-  // Scroll detection for positioning (only on mobile)
+  // Set fixed position above bottom navigation (no scroll-based movement)
   useEffect(() => {
-    const handleScroll = () => {
-      // Only apply scroll-based positioning on mobile - desktop stays fixed
-      if (window.innerWidth >= 768) {
-        return // Desktop: don't change position
-      }
-
-      const currentScrollY = window.scrollY
-      const scrollDifference = Math.abs(currentScrollY - lastScrollY.current)
-
-      // Only update if scroll difference is significant (avoid flickering)
-      if (scrollDifference < 5) {
-        return
-      }
-
-      // Scroll down -> bottom-0, Scroll up -> bottom-[54px] (bottom-18)
-      if (currentScrollY > lastScrollY.current) {
-        // Scrolling down
-        setBottomPosition("bottom-0")
-      } else if (currentScrollY < lastScrollY.current) {
-        // Scrolling up
-        setBottomPosition("bottom-[54px]")
-      }
-
-      lastScrollY.current = currentScrollY
-    }
-
     // Set initial position based on screen size
     const setInitialPosition = () => {
       if (window.innerWidth >= 768) {
         setBottomPosition("bottom-6") // Desktop: fixed position
       } else {
-        setBottomPosition("bottom-[54px]") // Mobile: above bottom nav
+        setBottomPosition("bottom-[70px]") // Mobile: above bottom nav (fixed, doesn't move with scroll)
       }
     }
 
@@ -54,18 +27,13 @@ export default function StickyCartCard() {
       if (window.innerWidth >= 768) {
         setBottomPosition("bottom-6") // Desktop: always fixed
       } else {
-        setBottomPosition("bottom-[54px]") // Mobile: above bottom nav
+        setBottomPosition("bottom-[70px]") // Mobile: above bottom nav (fixed)
       }
     }
 
-    // Only add scroll listener on mobile
-    if (window.innerWidth < 768) {
-      window.addEventListener("scroll", handleScroll, { passive: true })
-    }
     window.addEventListener("resize", handleResize)
 
     return () => {
-      window.removeEventListener("scroll", handleScroll)
       window.removeEventListener("resize", handleResize)
     }
   }, [])

@@ -7,8 +7,11 @@ import OrderSettlement from '../../order/models/OrderSettlement.js';
 import AdminWallet from '../models/AdminWallet.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
+import { normalizePhoneNumber } from '../../../shared/utils/phoneUtils.js';
 import winston from 'winston';
 import mongoose from 'mongoose';
+import { uploadToCloudinary } from '../../../shared/utils/cloudinaryService.js';
+import { initializeCloudinary } from '../../../config/cloudinary.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -19,6 +22,7 @@ const logger = winston.createLogger({
     })
   ]
 });
+
 
 /**
  * Get Admin Dashboard Statistics
@@ -1440,6 +1444,327 @@ export const reverifyRestaurant = asyncHandler(async (req, res) => {
   } catch (error) {
     logger.error(`Error reverifying restaurant: ${error.message}`, { error: error.stack });
     return errorResponse(res, 500, 'Failed to reverify restaurant');
+  }
+});
+
+/**
+ * Create Restaurant by Admin
+ * POST /api/admin/restaurants
+ */
+export const createRestaurant = asyncHandler(async (req, res) => {
+  try {
+    const adminId = req.user._id;
+    const {
+      // Step 1: Basic Info
+      restaurantName,
+      ownerName,
+      ownerEmail,
+      ownerPhone,
+      primaryContactNumber,
+      location,
+      // Step 2: Images & Operational
+      menuImages, // Array of image URLs or base64
+      profileImage, // Image URL or base64
+      cuisines,
+      openingTime,
+      closingTime,
+      openDays,
+      // Step 3: Documents
+      panNumber,
+      nameOnPan,
+      panImage, // Image URL or base64
+      gstRegistered,
+      gstNumber,
+      gstLegalName,
+      gstAddress,
+      gstImage, // Image URL or base64
+      fssaiNumber,
+      fssaiExpiry,
+      fssaiImage, // Image URL or base64
+      accountNumber,
+      ifscCode,
+      accountHolderName,
+      accountType,
+      // Step 4: Display Info
+      estimatedDeliveryTime,
+      featuredDish,
+      featuredPrice,
+      offer,
+      // Authentication
+      email,
+      phone,
+      password,
+      signupMethod = 'email'
+    } = req.body;
+
+    // Validation
+    if (!restaurantName || !ownerName || !ownerEmail) {
+      return errorResponse(res, 400, 'Restaurant name, owner name, and owner email are required');
+    }
+
+    if (!email && !phone) {
+      return errorResponse(res, 400, 'Either email or phone is required');
+    }
+
+    // Normalize phone number if provided
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : null;
+    if (phone && !normalizedPhone) {
+      return errorResponse(res, 400, 'Invalid phone number format');
+    }
+
+    // Generate random password if email is provided but password is not
+    let finalPassword = password;
+    if (email && !password) {
+      // Generate a random 12-character password
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+      finalPassword = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
+
+    // Check if restaurant already exists with same email or phone
+    const existingRestaurant = await Restaurant.findOne({
+      $or: [
+        ...(email ? [{ email: email.toLowerCase().trim() }] : []),
+        ...(normalizedPhone ? [{ phone: normalizedPhone }] : [])
+      ]
+    });
+
+    if (existingRestaurant) {
+      if (email && existingRestaurant.email === email.toLowerCase().trim()) {
+        return errorResponse(res, 400, 'Restaurant with this email already exists');
+      }
+      if (normalizedPhone && existingRestaurant.phone === normalizedPhone) {
+        return errorResponse(res, 400, 'Restaurant with this phone number already exists. Please use a different phone number.');
+      }
+    }
+
+    // Initialize Cloudinary
+    await initializeCloudinary();
+
+    // Upload images if provided as base64 or files
+    let profileImageData = null;
+    if (profileImage) {
+      if (typeof profileImage === 'string' && profileImage.startsWith('data:')) {
+        // Base64 image - convert to buffer and upload
+        const base64Data = profileImage.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const result = await uploadToCloudinary(buffer, {
+          folder: 'appzeto/restaurant/profile',
+          resource_type: 'image'
+        });
+        profileImageData = { url: result.secure_url, publicId: result.public_id };
+      } else if (typeof profileImage === 'string' && profileImage.startsWith('http')) {
+        // Already a URL
+        profileImageData = { url: profileImage };
+      } else if (profileImage.url) {
+        // Already an object with url
+        profileImageData = profileImage;
+      }
+    }
+
+    let menuImagesData = [];
+    if (menuImages && Array.isArray(menuImages) && menuImages.length > 0) {
+      for (const img of menuImages) {
+        if (typeof img === 'string' && img.startsWith('data:')) {
+          const base64Data = img.replace(/^data:image\/\w+;base64,/, '');
+          const buffer = Buffer.from(base64Data, 'base64');
+          const result = await uploadToCloudinary(buffer, {
+            folder: 'appzeto/restaurant/menu',
+            resource_type: 'image'
+          });
+          menuImagesData.push({ url: result.secure_url, publicId: result.public_id });
+        } else if (typeof img === 'string' && img.startsWith('http')) {
+          menuImagesData.push({ url: img });
+        } else if (img.url) {
+          menuImagesData.push(img);
+        }
+      }
+    }
+
+    // Upload document images
+    let panImageData = null;
+    if (panImage) {
+      if (typeof panImage === 'string' && panImage.startsWith('data:')) {
+        const base64Data = panImage.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const result = await uploadToCloudinary(buffer, {
+          folder: 'appzeto/restaurant/pan',
+          resource_type: 'image'
+        });
+        panImageData = { url: result.secure_url, publicId: result.public_id };
+      } else if (typeof panImage === 'string' && panImage.startsWith('http')) {
+        panImageData = { url: panImage };
+      } else if (panImage.url) {
+        panImageData = panImage;
+      }
+    }
+
+    let gstImageData = null;
+    if (gstRegistered && gstImage) {
+      if (typeof gstImage === 'string' && gstImage.startsWith('data:')) {
+        const base64Data = gstImage.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const result = await uploadToCloudinary(buffer, {
+          folder: 'appzeto/restaurant/gst',
+          resource_type: 'image'
+        });
+        gstImageData = { url: result.secure_url, publicId: result.public_id };
+      } else if (typeof gstImage === 'string' && gstImage.startsWith('http')) {
+        gstImageData = { url: gstImage };
+      } else if (gstImage.url) {
+        gstImageData = gstImage;
+      }
+    }
+
+    let fssaiImageData = null;
+    if (fssaiImage) {
+      if (typeof fssaiImage === 'string' && fssaiImage.startsWith('data:')) {
+        const base64Data = fssaiImage.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const result = await uploadToCloudinary(buffer, {
+          folder: 'appzeto/restaurant/fssai',
+          resource_type: 'image'
+        });
+        fssaiImageData = { url: result.secure_url, publicId: result.public_id };
+      } else if (typeof fssaiImage === 'string' && fssaiImage.startsWith('http')) {
+        fssaiImageData = { url: fssaiImage };
+      } else if (fssaiImage.url) {
+        fssaiImageData = fssaiImage;
+      }
+    }
+
+    // Create restaurant data
+    const restaurantData = {
+      name: restaurantName,
+      ownerName,
+      ownerEmail,
+      ownerPhone: ownerPhone ? normalizePhoneNumber(ownerPhone) || normalizedPhone : normalizedPhone,
+      primaryContactNumber: primaryContactNumber ? normalizePhoneNumber(primaryContactNumber) || normalizedPhone : normalizedPhone,
+      location: location || {},
+      profileImage: profileImageData,
+      menuImages: menuImagesData,
+      cuisines: cuisines || [],
+      deliveryTimings: {
+        openingTime: openingTime || '09:00',
+        closingTime: closingTime || '22:00'
+      },
+      openDays: openDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      estimatedDeliveryTime: estimatedDeliveryTime || '25-30 mins',
+      featuredDish: featuredDish || '',
+      featuredPrice: featuredPrice || 249,
+      offer: offer || '',
+      signupMethod,
+      // Admin created restaurants are active by default
+      isActive: true,
+      isAcceptingOrders: true,
+      approvedAt: new Date(),
+      approvedBy: adminId
+    };
+
+    // Add authentication fields
+    if (email) {
+      restaurantData.email = email.toLowerCase().trim();
+      restaurantData.password = finalPassword; // Will be hashed by pre-save hook
+    }
+    if (normalizedPhone) {
+      restaurantData.phone = normalizedPhone;
+      restaurantData.phoneVerified = true; // Admin created, so verified
+    }
+
+    // Add onboarding data
+    restaurantData.onboarding = {
+      step1: {
+        restaurantName,
+        ownerName,
+        ownerEmail,
+        ownerPhone: ownerPhone ? normalizePhoneNumber(ownerPhone) || normalizedPhone : normalizedPhone,
+        primaryContactNumber: primaryContactNumber ? normalizePhoneNumber(primaryContactNumber) || normalizedPhone : normalizedPhone,
+        location: location || {}
+      },
+      step2: {
+        menuImageUrls: menuImagesData,
+        profileImageUrl: profileImageData,
+        cuisines: cuisines || [],
+        deliveryTimings: {
+          openingTime: openingTime || '09:00',
+          closingTime: closingTime || '22:00'
+        },
+        openDays: openDays || []
+      },
+      step3: {
+        pan: {
+          panNumber: panNumber || '',
+          nameOnPan: nameOnPan || '',
+          image: panImageData
+        },
+        gst: {
+          isRegistered: gstRegistered || false,
+          gstNumber: gstNumber || '',
+          legalName: gstLegalName || '',
+          address: gstAddress || '',
+          image: gstImageData
+        },
+        fssai: {
+          registrationNumber: fssaiNumber || '',
+          expiryDate: fssaiExpiry || null,
+          image: fssaiImageData
+        },
+        bank: {
+          accountNumber: accountNumber || '',
+          ifscCode: ifscCode || '',
+          accountHolderName: accountHolderName || '',
+          accountType: accountType || ''
+        }
+      },
+      step4: {
+        estimatedDeliveryTime: estimatedDeliveryTime || '25-30 mins',
+        featuredDish: featuredDish || '',
+        featuredPrice: featuredPrice || 249,
+        offer: offer || ''
+      },
+      completedSteps: 4
+    };
+
+    // Create restaurant
+    const restaurant = await Restaurant.create(restaurantData);
+
+    logger.info(`Restaurant created by admin: ${restaurant._id}`, {
+      createdBy: adminId,
+      restaurantName: restaurant.name,
+      email: restaurant.email,
+      phone: restaurant.phone
+    });
+
+    // Prepare response data
+    const responseData = {
+      restaurant: {
+        id: restaurant._id,
+        restaurantId: restaurant.restaurantId,
+        name: restaurant.name,
+        email: restaurant.email,
+        phone: restaurant.phone,
+        isActive: restaurant.isActive,
+        slug: restaurant.slug
+      }
+    };
+
+    // Include generated password in response if email was provided and password was auto-generated
+    // This allows admin to share the password with the restaurant
+    if (email && !password && finalPassword) {
+      responseData.generatedPassword = finalPassword;
+      responseData.message = 'Restaurant created successfully. Please share the generated password with the restaurant.';
+    }
+
+    return successResponse(res, 201, 'Restaurant created successfully', responseData);
+  } catch (error) {
+    logger.error(`Error creating restaurant: ${error.message}`, { error: error.stack });
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0];
+      return errorResponse(res, 400, `Restaurant with this ${field} already exists`);
+    }
+    
+    return errorResponse(res, 500, `Failed to create restaurant: ${error.message}`);
   }
 });
 

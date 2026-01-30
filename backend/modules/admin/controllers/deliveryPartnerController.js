@@ -292,7 +292,9 @@ export const getDeliveryPartners = asyncHandler(async (req, res) => {
       status, 
       page = 1, 
       limit = 50,
-      search
+      search,
+      isActive,
+      includeAvailability
     } = req.query;
 
     // Build query - only get approved/active delivery partners for list
@@ -303,6 +305,11 @@ export const getDeliveryPartners = asyncHandler(async (req, res) => {
     // Status filter (if provided, override default)
     if (status) {
       query.status = status;
+    }
+
+    // isActive filter (if provided)
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true' || isActive === true;
     }
 
     // Search filter
@@ -318,13 +325,27 @@ export const getDeliveryPartners = asyncHandler(async (req, res) => {
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    // Build select fields - always include availability when requested
+    // Note: In Mongoose, if a field is not explicitly excluded, it's included by default
+    // So we just need to make sure we're not excluding availability
+    let selectFields = '-password -refreshToken';
+    
     // Fetch delivery partners
     const deliveries = await Delivery.find(query)
-      .select('-password -refreshToken')
+      .select(selectFields)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
+    
+    // Log for debugging
+    if (includeAvailability === 'true' || includeAvailability === true) {
+      console.log(`📦 Fetching ${deliveries.length} delivery partners with availability data`);
+      deliveries.forEach((d, idx) => {
+        const hasLocation = d.availability?.currentLocation?.coordinates;
+        console.log(`  ${idx + 1}. ${d.name}: online=${d.availability?.isOnline}, hasLocation=${!!hasLocation}`);
+      });
+    }
 
     // Import Order model for order counts
     const Order = (await import('../../order/models/Order.js')).default;
@@ -400,6 +421,10 @@ export const getDeliveryPartners = asyncHandler(async (req, res) => {
         deliveryId: delivery.deliveryId || 'N/A',
         isActive: delivery.isActive !== false,
         profileImage: delivery.profileImage?.url || null,
+        // Include availability data when requested
+        ...(includeAvailability === 'true' || includeAvailability === true ? {
+          availability: delivery.availability || null
+        } : {}),
         // Include full data
         fullData: {
           ...delivery,

@@ -1,10 +1,96 @@
 import Restaurant from '../models/Restaurant.js';
 import Menu from '../models/Menu.js';
+import Zone from '../../admin/models/Zone.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../../../shared/utils/cloudinaryService.js';
 import { initializeCloudinary } from '../../../config/cloudinary.js';
 import asyncHandler from '../../../shared/middleware/asyncHandler.js';
 import mongoose from 'mongoose';
+
+/**
+ * Check if a point is within a zone polygon using ray casting algorithm
+ * @param {number} lat - Latitude
+ * @param {number} lng - Longitude
+ * @param {Array} zoneCoordinates - Zone coordinates array
+ * @returns {boolean}
+ */
+function isPointInZone(lat, lng, zoneCoordinates) {
+  if (!zoneCoordinates || zoneCoordinates.length < 3) return false;
+  
+  let inside = false;
+  for (let i = 0, j = zoneCoordinates.length - 1; i < zoneCoordinates.length; j = i++) {
+    const coordI = zoneCoordinates[i];
+    const coordJ = zoneCoordinates[j];
+    
+    const xi = typeof coordI === 'object' ? (coordI.latitude || coordI.lat) : null;
+    const yi = typeof coordI === 'object' ? (coordI.longitude || coordI.lng) : null;
+    const xj = typeof coordJ === 'object' ? (coordJ.latitude || coordJ.lat) : null;
+    const yj = typeof coordJ === 'object' ? (coordJ.longitude || coordJ.lng) : null;
+    
+    if (xi === null || yi === null || xj === null || yj === null) continue;
+    
+    const intersect = ((yi > lng) !== (yj > lng)) && 
+                     (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Check if a restaurant's location (pin) is within any active zone
+ * @param {number} restaurantLat - Restaurant latitude
+ * @param {number} restaurantLng - Restaurant longitude
+ * @param {Array} activeZones - Array of active zones (cached)
+ * @returns {boolean}
+ */
+function isRestaurantInAnyZone(restaurantLat, restaurantLng, activeZones) {
+  if (!restaurantLat || !restaurantLng) return false;
+  
+  for (const zone of activeZones) {
+    if (!zone.coordinates || zone.coordinates.length < 3) continue;
+    
+    let isInZone = false;
+    if (typeof zone.containsPoint === 'function') {
+      isInZone = zone.containsPoint(restaurantLat, restaurantLng);
+    } else {
+      isInZone = isPointInZone(restaurantLat, restaurantLng, zone.coordinates);
+    }
+    
+    if (isInZone) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Get restaurant's zoneId based on location
+ * @param {number} restaurantLat - Restaurant latitude
+ * @param {number} restaurantLng - Restaurant longitude
+ * @param {Array} activeZones - Array of active zones
+ * @returns {string|null} Zone ID or null
+ */
+function getRestaurantZoneId(restaurantLat, restaurantLng, activeZones) {
+  if (!restaurantLat || !restaurantLng) return null;
+  
+  for (const zone of activeZones) {
+    if (!zone.coordinates || zone.coordinates.length < 3) continue;
+    
+    let isInZone = false;
+    if (typeof zone.containsPoint === 'function') {
+      isInZone = zone.containsPoint(restaurantLat, restaurantLng);
+    } else {
+      isInZone = isPointInZone(restaurantLat, restaurantLng, zone.coordinates);
+    }
+    
+    if (isInZone) {
+      return zone._id.toString();
+    }
+  }
+  
+  return null;
+}
 
 // Get all restaurants (for user module)
 export const getRestaurants = async (req, res) => {
@@ -18,8 +104,19 @@ export const getRestaurants = async (req, res) => {
       maxDeliveryTime,
       maxDistance,
       maxPrice,
-      hasOffers
+      hasOffers,
+      zoneId // User's zone ID (optional - if provided, filters by zone)
     } = req.query;
+    
+    // Optional: Zone-based filtering - if zoneId is provided, validate and filter by zone
+    let userZone = null;
+    if (zoneId) {
+      // Validate zone exists and is active
+      userZone = await Zone.findById(zoneId).lean();
+      if (!userZone || !userZone.isActive) {
+        return errorResponse(res, 400, 'Invalid or inactive zone. Please detect your zone again.');
+      }
+    }
     
     // Build query
     const query = { isActive: true };
@@ -100,13 +197,16 @@ export const getRestaurants = async (req, res) => {
       }
     }
     
-    // Fetch restaurants
+    // Fetch restaurants - Show ALL restaurants regardless of zone
     let restaurants = await Restaurant.find(query)
       .select('-owner -createdAt -updatedAt -password')
       .sort(sortObj)
       .limit(parseInt(limit))
       .skip(parseInt(offset))
       .lean();
+    
+    // Note: We show all restaurants regardless of zone. Zone-based filtering is removed.
+    // Users in any zone will see all restaurants.
     
     // Apply string-based filters that can't be done in MongoDB query
     if (maxDeliveryTime) {
@@ -710,6 +810,18 @@ export const deleteRestaurantAccount = asyncHandler(async (req, res) => {
 // Get restaurants with dishes under ₹250
 export const getRestaurantsWithDishesUnder250 = async (req, res) => {
   try {
+    const { zoneId } = req.query; // User's zone ID (optional - if provided, filters by zone)
+    
+    // Optional: Zone-based filtering - if zoneId is provided, validate and filter by zone
+    let userZone = null;
+    if (zoneId) {
+      // Validate zone exists and is active
+      userZone = await Zone.findById(zoneId).lean();
+      if (!userZone || !userZone.isActive) {
+        return errorResponse(res, 400, 'Invalid or inactive zone. Please detect your zone again.');
+      }
+    }
+
     const MAX_PRICE = 250;
     
     // Helper function to calculate final price after discount
@@ -812,11 +924,14 @@ export const getRestaurantsWithDishesUnder250 = async (req, res) => {
       }
     };
 
-    // Get all active restaurants
-    const restaurants = await Restaurant.find({ isActive: true })
+    // Get all active restaurants - Show ALL restaurants regardless of zone
+    let restaurants = await Restaurant.find({ isActive: true })
       .select('-owner -createdAt -updatedAt')
       .lean()
       .limit(100); // Limit to first 100 restaurants for performance
+
+    // Note: We show all restaurants regardless of zone. Zone-based filtering is removed.
+    // Users in any zone will see all restaurants.
 
     // Process restaurants in parallel (batch processing for better performance)
     const batchSize = 10; // Process 10 restaurants at a time

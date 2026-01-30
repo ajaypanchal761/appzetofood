@@ -370,17 +370,8 @@ export default function ViewZone() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Service Location</label>
-                  <p className="text-sm text-slate-900">{zone.serviceLocation || "N/A"}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Restaurant</label>
-                  <p className="text-sm text-slate-900">
-                    {zone.restaurantId?.name || 
-                     (typeof zone.restaurantId === 'object' && zone.restaurantId?.name) ||
-                     "N/A"}
-                  </p>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Country</label>
+                  <p className="text-sm text-slate-900">{zone.country || "N/A"}</p>
                 </div>
 
                 <div>

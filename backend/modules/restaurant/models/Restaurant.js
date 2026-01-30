@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { normalizePhoneNumber } from '../../../shared/utils/phoneUtils.js';
 
 const locationSchema = new mongoose.Schema({
   latitude: Number,
@@ -277,13 +278,37 @@ restaurantSchema.index({ email: 1 }, { unique: true, sparse: true });
 restaurantSchema.index({ phone: 1 }, { unique: true, sparse: true });
 restaurantSchema.index({ googleId: 1 }, { unique: true, sparse: true });
 
-// Hash password before saving
-restaurantSchema.pre('save', async function(next) {
-  // Generate restaurantId FIRST (before any validation)
-  if (!this.restaurantId) {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 10000);
-    this.restaurantId = `REST-${timestamp}-${random}`;
+  // Hash password before saving
+  restaurantSchema.pre('save', async function(next) {
+    // Generate restaurantId FIRST (before any validation)
+    if (!this.restaurantId) {
+      const timestamp = Date.now();
+      const random = Math.floor(Math.random() * 10000);
+      this.restaurantId = `REST-${timestamp}-${random}`;
+    }
+  
+  // Normalize phone number if it exists and is modified
+  if (this.isModified('phone') && this.phone) {
+    const normalized = normalizePhoneNumber(this.phone);
+    if (normalized) {
+      this.phone = normalized;
+    }
+  }
+  
+  // Normalize ownerPhone if it exists and is modified
+  if (this.isModified('ownerPhone') && this.ownerPhone) {
+    const normalized = normalizePhoneNumber(this.ownerPhone);
+    if (normalized) {
+      this.ownerPhone = normalized;
+    }
+  }
+  
+  // Normalize primaryContactNumber if it exists and is modified
+  if (this.isModified('primaryContactNumber') && this.primaryContactNumber) {
+    const normalized = normalizePhoneNumber(this.primaryContactNumber);
+    if (normalized) {
+      this.primaryContactNumber = normalized;
+    }
   }
   
   // Generate slug from name (always generate if name exists and slug doesn't)
@@ -321,7 +346,7 @@ restaurantSchema.pre('save', async function(next) {
   
   // Set default ownerEmail if not set and phone exists
   if (!this.ownerEmail && this.phone && !this.email) {
-    this.ownerEmail = `${this.phone.replace(/\s+/g, '')}@restaurant.appzeto.com`;
+    this.ownerEmail = `${this.phone.replace(/\D/g, '')}@restaurant.appzeto.com`;
   }
   
   // Set ownerEmail from email if email exists and ownerEmail not set

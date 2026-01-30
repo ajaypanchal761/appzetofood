@@ -2,15 +2,18 @@ import { Link, useNavigate } from "react-router-dom"
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { Star, Clock, MapPin, ArrowDownUp, Timer, ArrowRight, ChevronDown, Bookmark, Share2, Plus, Minus, X } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { toast } from "sonner"
 import AnimatedPage from "../components/AnimatedPage"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useLocationSelector } from "../components/UserLayout"
 import { useLocation } from "../hooks/useLocation"
+import { useZone } from "../hooks/useZone"
 import { useCart } from "../context/CartContext"
 import PageNavbar from "../components/PageNavbar"
 import { foodImages } from "@/constants/images"
 import appzetoFoodLogo from "@/assets/appzetologo.png"
+import offerImage from "@/assets/offerimage.png"
 import AddToCartAnimation from "../components/AddToCartAnimation"
 import OptimizedImage from "@/components/OptimizedImage"
 import api from "@/lib/api"
@@ -18,6 +21,7 @@ import { restaurantAPI } from "@/lib/api"
 
 export default function Under250() {
   const { location } = useLocation()
+  const { zoneId, zoneStatus, isInService, isOutOfService } = useZone(location)
   const navigate = useNavigate()
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
   const [activeCategory, setActiveCategory] = useState(null)
@@ -156,7 +160,8 @@ export default function Under250() {
     const fetchRestaurantsUnder250 = async () => {
       try {
         setLoadingRestaurants(true)
-        const response = await restaurantAPI.getRestaurantsUnder250()
+        // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
+        const response = await restaurantAPI.getRestaurantsUnder250(zoneId)
         if (response.data.success && response.data.data.restaurants) {
           setUnder250Restaurants(response.data.data.restaurants)
         } else {
@@ -171,7 +176,7 @@ export default function Under250() {
     }
 
     fetchRestaurantsUnder250()
-  }, [])
+  }, [zoneId, isOutOfService])
 
   // Fetch categories from admin API
   useEffect(() => {
@@ -252,6 +257,12 @@ export default function Under250() {
 
   // Helper function to update item quantity in both local state and cart
   const updateItemQuantity = (item, newQuantity, event = null, restaurantName = null) => {
+    // CRITICAL: Check if user is in service zone
+    if (isOutOfService) {
+      toast.error('You are outside the service zone. Please select a location within the service area.')
+      return
+    }
+
     // Update local state
     setQuantities((prev) => ({
       ...prev,
@@ -356,9 +367,12 @@ export default function Under250() {
     })
   }
 
+  // Check if should show grayscale (only when user is out of service)
+  const shouldShowGrayscale = isOutOfService
+
   return (
 
-    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a]">
+    <div className={`relative min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Banner Section with Navbar */}
       <div className="relative w-full overflow-hidden min-h-[39vh] lg:min-h-[50vh] md:pt-16">
         {/* Banner Image */}
@@ -407,7 +421,7 @@ export default function Under250() {
               >
                 <div className="w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-full overflow-hidden shadow-md transition-all">
                   <OptimizedImage
-                    src={foodImages[5]}
+                    src={offerImage}
                     alt="All"
                     className="w-full h-full bg-white rounded-full"
                     objectFit="cover"
@@ -622,10 +636,17 @@ export default function Under250() {
                               <Button
                                 variant={"outline"}
                                 size="sm"
-                                className="bg-green-600/10 text-green-500 border-green-500 hover:bg-green-700 hover:text-white h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base"
+                                disabled={shouldShowGrayscale}
+                                className={`h-7 md:h-8 lg:h-9 px-3 md:px-4 lg:px-5 text-xs md:text-sm lg:text-base ${
+                                  shouldShowGrayscale 
+                                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50' 
+                                    : 'bg-green-600/10 text-green-500 border-green-500 hover:bg-green-700 hover:text-white'
+                                }`}
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleItemClick(item, restaurant)
+                                  if (!shouldShowGrayscale) {
+                                    handleItemClick(item, restaurant)
+                                  }
                                 }}
                               >
                                 Add
@@ -880,24 +901,44 @@ export default function Under250() {
               <div className="border-t dark:border-gray-800 border-gray-200 px-4 md:px-6 lg:px-8 xl:px-10 py-4 md:py-5 lg:py-6 bg-white dark:bg-[#1a1a1a]">
                 <div className="flex items-center gap-4 md:gap-5 lg:gap-6">
                       {/* Quantity Selector */}
-                      <div className="flex items-center gap-3 md:gap-4 lg:gap-5 border-2 dark:border-gray-700 border-gray-300 rounded-lg md:rounded-xl px-3 md:px-4 lg:px-5 h-[44px] md:h-[50px] lg:h-[56px]">
+                      <div className={`flex items-center gap-3 md:gap-4 lg:gap-5 border-2 rounded-lg md:rounded-xl px-3 md:px-4 lg:px-5 h-[44px] md:h-[50px] lg:h-[56px] ${
+                        shouldShowGrayscale 
+                          ? 'border-gray-300 dark:border-gray-700 opacity-50' 
+                          : 'border-gray-300 dark:border-gray-700'
+                      }`}>
                         <button
-                          onClick={(e) =>
-                            updateItemQuantity(selectedItem, Math.max(0, (quantities[selectedItem.id] || 0) - 1), e)
-                          }
-                          disabled={(quantities[selectedItem.id] || 0) === 0}
-                          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
+                          onClick={(e) => {
+                            if (!shouldShowGrayscale) {
+                              updateItemQuantity(selectedItem, Math.max(0, (quantities[selectedItem.id] || 0) - 1), e)
+                            }
+                          }}
+                          disabled={(quantities[selectedItem.id] || 0) === 0 || shouldShowGrayscale}
+                          className={`${
+                            shouldShowGrayscale 
+                              ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' 
+                              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed'
+                          }`}
                         >
                           <Minus className="h-5 w-5 md:h-6 md:w-6 lg:h-7 lg:w-7" />
                         </button>
-                        <span className="text-lg md:text-xl lg:text-2xl font-semibold text-gray-900 dark:text-white min-w-[2rem] md:min-w-[2.5rem] lg:min-w-[3rem] text-center">
+                        <span className={`text-lg md:text-xl lg:text-2xl font-semibold min-w-[2rem] md:min-w-[2.5rem] lg:min-w-[3rem] text-center ${
+                          shouldShowGrayscale 
+                            ? 'text-gray-400 dark:text-gray-600' 
+                            : 'text-gray-900 dark:text-white'
+                        }`}>
                           {quantities[selectedItem.id] || 0}
                         </span>
                         <button
-                          onClick={(e) =>
-                            updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
+                          onClick={(e) => {
+                            if (!shouldShowGrayscale) {
+                              updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
+                            }
+                          }}
+                          disabled={shouldShowGrayscale}
+                          className={shouldShowGrayscale 
+                            ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' 
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
                           }
-                          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                         >
                           <Plus className="h-5 w-5 md:h-6 md:w-6 lg:h-7 lg:w-7" />
                         </button>
@@ -905,11 +946,18 @@ export default function Under250() {
 
                   {/* Add Item Button */}
                   <Button
-                    className="flex-1 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white h-[44px] md:h-[50px] lg:h-[56px] rounded-lg md:rounded-xl font-semibold flex items-center justify-center gap-2 text-sm md:text-base lg:text-lg"
+                    className={`flex-1 h-[44px] md:h-[50px] lg:h-[56px] rounded-lg md:rounded-xl font-semibold flex items-center justify-center gap-2 text-sm md:text-base lg:text-lg ${
+                      shouldShowGrayscale 
+                        ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50' 
+                        : 'bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white'
+                    }`}
                     onClick={(e) => {
-                      updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
-                      setShowItemDetail(false)
+                      if (!shouldShowGrayscale) {
+                        updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
+                        setShowItemDetail(false)
+                      }
                     }}
+                    disabled={shouldShowGrayscale}
                   >
                     <span>Add item</span>
                     <div className="flex items-center gap-1 md:gap-2">

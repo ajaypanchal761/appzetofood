@@ -103,16 +103,20 @@ export default function DeliveryBoyViewMap() {
       
       if (response.data?.success && response.data.data?.deliveryPartners) {
         // Filter only online delivery boys with valid location
-        // Check both formatted data and fullData
+        // Check both formatted data and fullData, and also top-level availability
         const onlineBoys = response.data.data.deliveryPartners.filter(boy => {
-          // Try to get availability from fullData first, then from boy directly
-          const fullData = boy.fullData || boy
-          const availability = fullData.availability || boy.availability
+          // Try multiple sources for availability data
+          const availability = boy.availability || boy.fullData?.availability || (boy.fullData && boy.fullData.availability)
           
-          const isOnline = availability?.isOnline === true
+          if (!availability) {
+            console.log("⚠️ No availability data for:", boy.name || boy.fullData?.name)
+            return false
+          }
+          
+          const isOnline = availability.isOnline === true
           
           // Check for location in different possible formats
-          const currentLocation = availability?.currentLocation || fullData.availability?.currentLocation
+          const currentLocation = availability.currentLocation
           const coordinates = currentLocation?.coordinates
           
           const hasLocation = coordinates && 
@@ -123,10 +127,17 @@ export default function DeliveryBoyViewMap() {
           
           if (isOnline && hasLocation) {
             console.log("✅ Found online delivery boy:", {
-              name: boy.name || fullData.name,
+              name: boy.name || boy.fullData?.name,
               isOnline,
               coordinates,
-              availability
+              hasLocation: true
+            })
+          } else {
+            console.log("⚠️ Delivery boy filtered out:", {
+              name: boy.name || boy.fullData?.name,
+              isOnline,
+              hasLocation: !!hasLocation,
+              coordinates: coordinates ? `[${coordinates[0]}, ${coordinates[1]}]` : 'none'
             })
           }
           
@@ -378,9 +389,10 @@ export default function DeliveryBoyViewMap() {
 
     // Process all delivery boys and create markers
     for (const boy of deliveryBoys) {
-      // Get data from fullData if available, otherwise use boy directly
+      // Get data from multiple sources
       const fullData = boy.fullData || boy
-      const availability = fullData.availability || boy.availability
+      // Try multiple sources for availability
+      const availability = boy.availability || fullData?.availability || (fullData && fullData.availability)
       const currentLocation = availability?.currentLocation
       
       if (!currentLocation?.coordinates) {

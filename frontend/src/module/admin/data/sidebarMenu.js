@@ -17,18 +17,27 @@ export const sidebarMenuData = [
     label: "FOOD MANAGEMENT",
     items: [
       {
+        type: "link",
+        label: "Food Approval",
+        path: "/admin/food-approval",
+        icon: "CheckCircle2",
+      },
+      {
+        type: "expandable",
+        label: "Foods",
+        icon: "Utensils",
+        subItems: [
+          { label: "Restaurant Foods List", path: "/admin/foods" },
+          { label: "Restaurant Addons List", path: "/admin/addons" },
+        ],
+      },
+      {
         type: "expandable",
         label: "Categories",
         icon: "FolderTree",
         subItems: [
           { label: "Category", path: "/admin/categories" },
         ],
-      },
-      {
-        type: "link",
-        label: "Delivery & Platform Fee",
-        path: "/admin/fee-settings",
-        icon: "DollarSign",
       },
     ],
   },
@@ -43,12 +52,6 @@ export const sidebarMenuData = [
         icon: "MapPin",
       },
       {
-        type: "link",
-        label: "Food Approval",
-        path: "/admin/food-approval",
-        icon: "CheckCircle2",
-      },
-      {
         type: "expandable",
         label: "Restaurants",
         icon: "UtensilsCrossed",
@@ -56,15 +59,6 @@ export const sidebarMenuData = [
           { label: "Restaurants List", path: "/admin/restaurants" },
           { label: "New Joining Request", path: "/admin/restaurants/joining-request" },
           { label: "Restaurant Commission", path: "/admin/restaurants/commission" },
-        ],
-      },
-      {
-        type: "expandable",
-        label: "Foods",
-        icon: "Utensils",
-        subItems: [
-          { label: "Restaurant Foods List", path: "/admin/foods" },
-          { label: "Restaurant Addons List", path: "/admin/addons" },
         ],
       },
     ],
@@ -142,6 +136,12 @@ export const sidebarMenuData = [
         label: "Delivery Cash Limit",
         path: "/admin/delivery-cash-limit",
         icon: "IndianRupee",
+      },
+      {
+        type: "link",
+        label: "Delivery & Platform Fee",
+        path: "/admin/fee-settings",
+        icon: "DollarSign",
       },
       {
         type: "link",
@@ -264,7 +264,7 @@ export const sidebarMenuData = [
   },
   {
     type: "section",
-    label: "SYSTEM SETTINGS",
+    label: "BANNER SETTINGS",
     items: [
       {
         type: "link",
@@ -309,7 +309,7 @@ export const sidebarMenuData = [
 
   {
     type: "section",
-    label: "SYSTEM ADDONS",
+    label: "SYSTEM ENV",
     items: [
       {
         type: "link",

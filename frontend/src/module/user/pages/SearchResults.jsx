@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import StickyCartCard from "../components/StickyCartCard"
 import { useProfile } from "../context/ProfileContext"
+import { useLocation } from "../hooks/useLocation"
+import { useZone } from "../hooks/useZone"
 import { restaurantAPI, adminAPI } from "@/lib/api"
 
 // Import shared food images - prevents duplication
@@ -26,6 +28,8 @@ export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams()
   const query = searchParams.get("q") || ""
   const navigate = useNavigate()
+  const { location } = useLocation()
+  const { zoneId, isOutOfService } = useZone(location)
   const [searchQuery, setSearchQuery] = useState(query)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [activeFilters, setActiveFilters] = useState(new Set())
@@ -163,7 +167,12 @@ export default function SearchResults() {
       try {
         setLoadingRestaurants(true)
         console.log('🔄 Fetching restaurants from API...')
-        const response = await restaurantAPI.getRestaurants()
+        // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
+        const params = {}
+        if (zoneId) {
+          params.zoneId = zoneId
+        }
+        const response = await restaurantAPI.getRestaurants(params)
         
         console.log('📦 Full API Response:', response)
         console.log('📦 Response Data:', response?.data)
@@ -380,7 +389,7 @@ export default function SearchResults() {
     }
     
     fetchRestaurants()
-  }, [])
+  }, [zoneId, isOutOfService])
 
   // Update search query when URL changes
   useEffect(() => {
@@ -637,8 +646,11 @@ export default function SearchResults() {
     return filtered
   }, [query, selectedCategory, activeFilters, restaurantsData, categoryKeywords, loadingCategories])
 
+  // Check if should show grayscale (user out of service)
+  const shouldShowGrayscale = isOutOfService
+
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0a0a0a]">
+    <div className={`min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm">
         <div className="max-w-7xl mx-auto">
@@ -776,13 +788,14 @@ export default function SearchResults() {
             
             {/* Small Restaurant Cards - Horizontal Scroll */}
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3 sm:gap-4 lg:gap-5">
-              {filteredRecommended.slice(0, 6).map((restaurant) => (
-                <Link 
-                  key={restaurant.id} 
-                  to={`/user/restaurants/${restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="block"
-                >
-                  <div className="group">
+              {filteredRecommended.slice(0, 6).map((restaurant) => {
+                return (
+                  <Link 
+                    key={restaurant.id} 
+                    to={`/user/restaurants/${restaurant.slug || restaurant.name.toLowerCase().replace(/\s+/g, '-')}`}
+                    className="block"
+                  >
+                    <div className={`group ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
                     {/* Image Container */}
                     <div className="relative aspect-square rounded-xl overflow-hidden mb-2 bg-gray-200 dark:bg-gray-800">
                               {restaurant.image ? (
@@ -827,9 +840,10 @@ export default function SearchResults() {
                         <span>{restaurant.deliveryTime}</span>
                       </div>
                     )}
-                  </div>
-                </Link>
-              ))}
+                    </div>
+                  </Link>
+                )
+              })}
             </div>
           </section>
         )}
@@ -848,7 +862,9 @@ export default function SearchResults() {
 
               return (
                 <Link key={restaurant.id} to={`/user/restaurants/${restaurant.slug || restaurantSlug}`} className="h-full flex">
-                  <Card className="overflow-hidden cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-md flex flex-col h-full w-full">
+                  <Card className={`overflow-hidden cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-md flex flex-col h-full w-full ${
+                    shouldShowGrayscale ? 'grayscale opacity-75' : ''
+                  }`}>
                     {/* Image Section */}
                     <div className="relative h-44 sm:h-52 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0 bg-gray-200 dark:bg-gray-800">
                         {restaurant.image ? (

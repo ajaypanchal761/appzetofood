@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react"
-import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Layout, Tag, UtensilsCrossed, Trophy, ChefHat } from "lucide-react"
+import { Upload, Trash2, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, ArrowUp, ArrowDown, Layout, Tag, UtensilsCrossed, Trophy, ChefHat, Megaphone, Search } from "lucide-react"
 import api from "@/lib/api"
 import { adminAPI } from "@/lib/api"
 import { getModuleToken } from "@/lib/utils/auth"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 
 export default function LandingPageManagement() {
   const [activeTab, setActiveTab] = useState('banners')
@@ -75,6 +77,13 @@ export default function LandingPageManagement() {
   // Common
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+
+  // Restaurant Selection Modal for Banner Advertising
+  const [showRestaurantModal, setShowRestaurantModal] = useState(false)
+  const [selectedBannerId, setSelectedBannerId] = useState(null)
+  const [selectedRestaurantIds, setSelectedRestaurantIds] = useState([])
+  const [restaurantSearchQuery, setRestaurantSearchQuery] = useState("")
+  const [linkingRestaurants, setLinkingRestaurants] = useState(false)
 
   // Helper function to filter out token-related errors
   const setErrorSafely = (errorMessage) => {
@@ -314,6 +323,54 @@ export default function LandingPageManagement() {
       setErrorSafely('Failed to update banner order.')
     }
   }
+
+  // Handle restaurant selection for banner advertising
+  const handleLinkRestaurants = async () => {
+    if (!selectedBannerId) return
+
+    try {
+      setLinkingRestaurants(true)
+      setError(null)
+      setSuccess(null)
+
+      const response = await api.patch(
+        `/hero-banners/${selectedBannerId}/link-restaurants`,
+        { restaurantIds: selectedRestaurantIds },
+        getAuthConfig()
+      )
+
+      if (response.data.success) {
+        setSuccess('Restaurants linked to banner successfully!')
+        setShowRestaurantModal(false)
+        setSelectedBannerId(null)
+        setSelectedRestaurantIds([])
+        setRestaurantSearchQuery("")
+        await fetchBanners()
+        setTimeout(() => setSuccess(null), 3000)
+      }
+    } catch (err) {
+      setErrorSafely(err.response?.data?.message || 'Failed to link restaurants to banner.')
+    } finally {
+      setLinkingRestaurants(false)
+    }
+  }
+
+  const toggleRestaurantSelection = (restaurantId) => {
+    setSelectedRestaurantIds(prev => {
+      if (prev.includes(restaurantId)) {
+        return prev.filter(id => id !== restaurantId)
+      } else {
+        return [...prev, restaurantId]
+      }
+    })
+  }
+
+  const filteredRestaurantsForModal = allRestaurants.filter(restaurant => {
+    if (!restaurantSearchQuery.trim()) return true
+    const query = restaurantSearchQuery.toLowerCase()
+    return restaurant.name?.toLowerCase().includes(query) ||
+           restaurant.restaurantId?.toLowerCase().includes(query)
+  })
 
   // ==================== CATEGORIES ====================
   const fetchCategories = async () => {
@@ -1317,7 +1374,7 @@ export default function LandingPageManagement() {
                         </div>
                       </div>
                       <div className="p-4 bg-white">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-1">
                             <button onClick={() => handleBannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
                               <ArrowUp className="w-4 h-4 text-slate-600" />
@@ -1326,13 +1383,43 @@ export default function LandingPageManagement() {
                               <ArrowDown className="w-4 h-4 text-slate-600" />
                             </button>
                           </div>
-                          <button onClick={() => handleToggleBannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                            {banner.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button onClick={() => handleDeleteBanner(banner._id)} disabled={bannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
-                            {bannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                          </button>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button 
+                              onClick={() => {
+                                setSelectedBannerId(banner._id)
+                                setSelectedRestaurantIds(banner.linkedRestaurants?.map(r => r._id || r) || [])
+                                setShowRestaurantModal(true)
+                              }}
+                              className="px-3 py-1.5 rounded text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 flex items-center gap-1"
+                            >
+                              <Megaphone className="w-4 h-4" />
+                              Advertise
+                            </button>
+                            <button onClick={() => handleToggleBannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                              {banner.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button onClick={() => handleDeleteBanner(banner._id)} disabled={bannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
+                              {bannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            </button>
+                          </div>
                         </div>
+                        {banner.linkedRestaurants && banner.linkedRestaurants.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-slate-200">
+                            <p className="text-xs text-slate-600 mb-1">Linked Restaurants ({banner.linkedRestaurants.length}):</p>
+                            <div className="flex flex-wrap gap-1">
+                              {banner.linkedRestaurants.slice(0, 3).map((restaurant) => (
+                                <span key={restaurant._id || restaurant} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+                                  {restaurant.name || 'Restaurant'}
+                                </span>
+                              ))}
+                              {banner.linkedRestaurants.length > 3 && (
+                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">
+                                  +{banner.linkedRestaurants.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1816,6 +1903,184 @@ export default function LandingPageManagement() {
             )}
           </>
         )}
+
+        {/* Restaurant Selection Modal */}
+        <Dialog open={showRestaurantModal} onOpenChange={setShowRestaurantModal}>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col p-0">
+            <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200">
+              <DialogTitle className="text-2xl font-bold text-slate-900">Select Restaurants to Link with Banner</DialogTitle>
+              <DialogDescription className="text-slate-600 mt-2">
+                Select restaurants that will be linked to this banner. When users click on this banner, they will be redirected to the selected restaurants.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {/* Search Bar and Selected Count */}
+              <div className="px-6 pt-4 pb-3 space-y-3 bg-slate-50 border-b border-slate-200">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search restaurants by name or ID..."
+                    value={restaurantSearchQuery}
+                    onChange={(e) => setRestaurantSearchQuery(e.target.value)}
+                    className="pl-10 h-11 bg-white border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+                {selectedRestaurantIds.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
+                      {selectedRestaurantIds.length} restaurant{selectedRestaurantIds.length > 1 ? 's' : ''} selected
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedRestaurantIds([])}
+                      className="text-xs text-slate-600 hover:text-slate-900"
+                    >
+                      Clear selection
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Restaurant List */}
+              <div className="flex-1 overflow-y-auto bg-white">
+                {restaurantsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-3" />
+                    <p className="text-slate-500">Loading restaurants...</p>
+                  </div>
+                ) : filteredRestaurantsForModal.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+                    <ImageIcon className="w-16 h-16 text-slate-300 mb-4" />
+                    <p className="text-slate-600 font-medium mb-1">No restaurants found</p>
+                    <p className="text-sm text-slate-500">
+                      {restaurantSearchQuery ? 'Try a different search term' : 'No restaurants available'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {filteredRestaurantsForModal.map((restaurant) => {
+                      const isSelected = selectedRestaurantIds.includes(restaurant._id)
+                      const profileImageUrl = restaurant.profileImage?.url || restaurant.profileImage || null
+                      
+                      return (
+                        <div
+                          key={restaurant._id}
+                          className={`px-6 py-4 transition-all cursor-pointer ${
+                            isSelected 
+                              ? 'bg-blue-50 border-l-4 border-l-blue-500' 
+                              : 'hover:bg-slate-50'
+                          }`}
+                          onClick={() => toggleRestaurantSelection(restaurant._id)}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="flex-shrink-0">
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleRestaurantSelection(restaurant._id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-5 h-5"
+                              />
+                            </div>
+                            
+                            {/* Restaurant Image */}
+                            <div className="flex-shrink-0">
+                              {profileImageUrl ? (
+                                <img
+                                  src={profileImageUrl}
+                                  alt={restaurant.name}
+                                  className="w-16 h-16 rounded-xl object-cover border-2 border-slate-200"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none'
+                                    e.target.nextSibling.style.display = 'flex'
+                                  }}
+                                />
+                              ) : null}
+                              <div 
+                                className={`w-16 h-16 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg ${
+                                  profileImageUrl ? 'hidden' : 'flex'
+                                }`}
+                              >
+                                {restaurant.name?.charAt(0)?.toUpperCase() || 'R'}
+                              </div>
+                            </div>
+                            
+                            {/* Restaurant Info */}
+                            <div className="flex-1 min-w-0">
+                              <h3 className={`font-semibold text-base mb-1 ${
+                                isSelected ? 'text-blue-900' : 'text-slate-900'
+                              }`}>
+                                {restaurant.name || 'Unnamed Restaurant'}
+                              </h3>
+                              <p className="text-sm text-slate-500 truncate">
+                                ID: {restaurant.restaurantId || restaurant._id}
+                              </p>
+                              {restaurant.rating && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <span className="text-xs text-slate-400">★</span>
+                                  <span className="text-xs text-slate-600">{restaurant.rating}</span>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Selected Indicator */}
+                            {isSelected && (
+                              <div className="flex-shrink-0">
+                                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                                  <CheckCircle2 className="w-5 h-5 text-white" />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between gap-3 px-6 py-4 bg-slate-50 border-t border-slate-200">
+                <div className="text-sm text-slate-600">
+                  {filteredRestaurantsForModal.length} restaurant{filteredRestaurantsForModal.length !== 1 ? 's' : ''} available
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowRestaurantModal(false)
+                      setSelectedBannerId(null)
+                      setSelectedRestaurantIds([])
+                      setRestaurantSearchQuery("")
+                    }}
+                    className="px-6"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleLinkRestaurants}
+                    disabled={linkingRestaurants || selectedRestaurantIds.length === 0}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 min-w-[140px]"
+                  >
+                    {linkingRestaurants ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Linking...
+                      </>
+                    ) : (
+                      <>
+                        <Megaphone className="w-4 h-4 mr-2" />
+                        Link {selectedRestaurantIds.length > 0 ? `(${selectedRestaurantIds.length})` : ''} Restaurant{selectedRestaurantIds.length !== 1 ? 's' : ''}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
       </div>
     </div>

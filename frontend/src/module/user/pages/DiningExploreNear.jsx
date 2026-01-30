@@ -9,7 +9,8 @@ import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
 import { FaLocationDot } from "react-icons/fa6"
-import nearAndTopRated from "@/assets/diningpage/nearandtoprated.png"
+// Using placeholder for near and top rated banner
+const nearAndTopRated = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=200&fit=crop"
 
 const popularRestaurants = [
   {

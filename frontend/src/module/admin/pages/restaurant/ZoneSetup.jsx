@@ -8,11 +8,9 @@ export default function ZoneSetup() {
   const [zones, setZones] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [restaurants, setRestaurants] = useState([])
 
   useEffect(() => {
     fetchZones()
-    fetchRestaurants()
   }, [])
 
   const fetchZones = async () => {
@@ -30,16 +28,6 @@ export default function ZoneSetup() {
     }
   }
 
-  const fetchRestaurants = async () => {
-    try {
-      const response = await adminAPI.getRestaurants({ limit: 100 })
-      if (response.data?.success && response.data.data?.restaurants) {
-        setRestaurants(response.data.data.restaurants)
-      }
-    } catch (error) {
-      console.error("Error fetching restaurants:", error)
-    }
-  }
 
   const handleDeleteZone = async (zoneId) => {
     if (!window.confirm("Are you sure you want to delete this zone?")) {
@@ -173,23 +161,6 @@ export default function ZoneSetup() {
                   </div>
                 </div>
                 <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">Restaurant:</span>
-                    <span className="font-medium text-slate-900">
-                      {(() => {
-                        // If restaurantId is populated (object with name), use it directly
-                        if (zone.restaurantId && typeof zone.restaurantId === 'object' && zone.restaurantId.name) {
-                          return zone.restaurantId.name
-                        }
-                        // Otherwise, find in restaurants array
-                        const restaurant = restaurants.find(r => {
-                          const zoneRestId = typeof zone.restaurantId === 'object' ? zone.restaurantId?._id : zone.restaurantId
-                          return r._id?.toString() === zoneRestId?.toString() || r._id === zoneRestId
-                        })
-                        return restaurant?.name || "N/A"
-                      })()}
-                    </span>
-                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-600">Unit:</span>
                     <span className="font-medium text-slate-900">{zone.unit || "km"}</span>

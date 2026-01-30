@@ -9,6 +9,7 @@ import {
   deleteHeroBanner,
   updateBannerOrder,
   toggleBannerStatus,
+  linkRestaurantsToBanner,
   getLandingConfig,
   getLandingCategories,
   createLandingCategory,
@@ -79,6 +80,7 @@ router.post(
 router.delete('/:id', authenticateAdmin, deleteHeroBanner);
 router.patch('/:id/order', authenticateAdmin, updateBannerOrder);
 router.patch('/:id/status', authenticateAdmin, toggleBannerStatus);
+router.patch('/:id/link-restaurants', authenticateAdmin, linkRestaurantsToBanner);
 
 // Admin routes - Landing Page Categories
 router.get('/landing/categories', authenticateAdmin, getLandingCategories);

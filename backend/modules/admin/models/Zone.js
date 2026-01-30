@@ -20,13 +20,24 @@ const zoneSchema = new mongoose.Schema(
     },
     serviceLocation: {
       type: String,
+      required: false,
+      trim: true
+    },
+    country: {
+      type: String,
       required: true,
+      trim: true,
+      default: 'India'
+    },
+    zoneName: {
+      type: String,
+      required: false,
       trim: true
     },
     restaurantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Restaurant',
-      required: true
+      required: false
     },
     unit: {
       type: String,

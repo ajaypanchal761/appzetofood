@@ -23,7 +23,9 @@ export const getZones = asyncHandler(async (req, res) => {
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
-        { serviceLocation: { $regex: search, $options: 'i' } }
+        { zoneName: { $regex: search, $options: 'i' } },
+        { serviceLocation: { $regex: search, $options: 'i' } },
+        { country: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -38,9 +40,13 @@ export const getZones = asyncHandler(async (req, res) => {
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Fetch zones with restaurant details
+    // Fetch zones with restaurant details (if restaurantId exists)
     const zones = await Zone.find(query)
-      .populate('restaurantId', 'name email phone')
+      .populate({
+        path: 'restaurantId',
+        select: 'name email phone',
+        match: { _id: { $exists: true } }
+      })
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
@@ -74,7 +80,11 @@ export const getZoneById = asyncHandler(async (req, res) => {
     const { id } = req.params;
 
     const zone = await Zone.findById(id)
-      .populate('restaurantId', 'name email phone')
+      .populate({
+        path: 'restaurantId',
+        select: 'name email phone',
+        match: { _id: { $exists: true } }
+      })
       .populate('createdBy', 'name email')
       .lean();
 
@@ -99,6 +109,8 @@ export const createZone = asyncHandler(async (req, res) => {
   try {
     const {
       name,
+      zoneName,
+      country,
       serviceLocation,
       restaurantId,
       unit,
@@ -111,9 +123,15 @@ export const createZone = asyncHandler(async (req, res) => {
       isActive
     } = req.body;
 
-    // Validation
-    if (!name || !serviceLocation || !restaurantId || !coordinates) {
-      return errorResponse(res, 400, 'Name, service location, restaurant ID, and coordinates are required');
+    // Validation - For customer zones, country and zoneName are required instead of restaurantId
+    if (!name && !zoneName) {
+      return errorResponse(res, 400, 'Zone name is required');
+    }
+    if (!country) {
+      return errorResponse(res, 400, 'Country is required');
+    }
+    if (!coordinates) {
+      return errorResponse(res, 400, 'Coordinates are required');
     }
 
     if (!Array.isArray(coordinates) || coordinates.length < 3) {
@@ -133,18 +151,22 @@ export const createZone = asyncHandler(async (req, res) => {
       }
     }
 
-    // Check if restaurant exists
-    const Restaurant = mongoose.model('Restaurant');
-    const restaurant = await Restaurant.findById(restaurantId);
-    if (!restaurant) {
-      return errorResponse(res, 404, 'Restaurant not found');
+    // Check if restaurant exists (only if restaurantId is provided)
+    if (restaurantId) {
+      const Restaurant = mongoose.model('Restaurant');
+      const restaurant = await Restaurant.findById(restaurantId);
+      if (!restaurant) {
+        return errorResponse(res, 404, 'Restaurant not found');
+      }
     }
 
     // Create zone
     const zoneData = {
-      name,
-      serviceLocation,
-      restaurantId: new mongoose.Types.ObjectId(restaurantId),
+      name: name || zoneName,
+      zoneName: zoneName || name,
+      country: country || 'India',
+      serviceLocation: serviceLocation || country,
+      restaurantId: restaurantId ? new mongoose.Types.ObjectId(restaurantId) : null,
       unit: unit || 'kilometer',
       coordinates,
       peakZoneRideCount: peakZoneRideCount || 0,
@@ -159,8 +181,10 @@ export const createZone = asyncHandler(async (req, res) => {
     const zone = new Zone(zoneData);
     await zone.save();
 
-    // Populate before returning
-    await zone.populate('restaurantId', 'name email phone');
+    // Populate before returning (only if restaurantId exists)
+    if (zone.restaurantId) {
+      await zone.populate('restaurantId', 'name email phone');
+    }
     if (zone.createdBy) {
       await zone.populate('createdBy', 'name email');
     }
@@ -209,8 +233,10 @@ export const updateZone = asyncHandler(async (req, res) => {
     Object.assign(zone, updateData);
     await zone.save();
 
-    // Populate before returning
-    await zone.populate('restaurantId', 'name email phone');
+    // Populate before returning (only if restaurantId exists)
+    if (zone.restaurantId) {
+      await zone.populate('restaurantId', 'name email phone');
+    }
     if (zone.createdBy) {
       await zone.populate('createdBy', 'name email');
     }
@@ -284,7 +310,11 @@ export const getZonesByRestaurant = asyncHandler(async (req, res) => {
       restaurantId: new mongoose.Types.ObjectId(restaurantId),
       isActive: true 
     })
-      .populate('restaurantId', 'name email phone')
+      .populate({
+        path: 'restaurantId',
+        select: 'name email phone',
+        match: { _id: { $exists: true } }
+      })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -296,6 +326,164 @@ export const getZonesByRestaurant = asyncHandler(async (req, res) => {
     return errorResponse(res, 500, 'Failed to fetch zones');
   }
 });
+
+/**
+ * Detect user's zone based on location (PUBLIC API for user module)
+ * GET /api/zones/detect?lat=&lng=
+ */
+export const detectUserZone = asyncHandler(async (req, res) => {
+  try {
+    const { lat, lng, latitude, longitude } = req.query;
+    
+    // Support both lat/lng and latitude/longitude
+    const userLat = parseFloat(lat || latitude);
+    const userLng = parseFloat(lng || longitude);
+
+    if (!userLat || !userLng || isNaN(userLat) || isNaN(userLng)) {
+      return errorResponse(res, 400, 'Latitude and longitude are required');
+    }
+
+    if (userLat < -90 || userLat > 90 || userLng < -180 || userLng > 180) {
+      return errorResponse(res, 400, 'Invalid coordinates');
+    }
+
+    // Get all active zones
+    const activeZones = await Zone.find({ isActive: true }).lean();
+
+    if (activeZones.length === 0) {
+      return successResponse(res, 200, 'No active zones found', {
+        status: 'OUT_OF_SERVICE',
+        zoneId: null,
+        zone: null,
+        message: 'No delivery zones are currently active'
+      });
+    }
+
+    // Check which zone the user belongs to
+    let userZone = null;
+    let minDistance = Infinity;
+
+    for (const zone of activeZones) {
+      if (!zone.coordinates || zone.coordinates.length < 3) continue;
+
+      let isInZone = false;
+      if (typeof zone.containsPoint === 'function') {
+        isInZone = zone.containsPoint(userLat, userLng);
+      } else {
+        // Ray casting algorithm
+        let inside = false;
+        for (let i = 0, j = zone.coordinates.length - 1; i < zone.coordinates.length; j = i++) {
+          const coordI = zone.coordinates[i];
+          const coordJ = zone.coordinates[j];
+          const xi = typeof coordI === 'object' ? (coordI.latitude || coordI.lat) : null;
+          const yi = typeof coordI === 'object' ? (coordI.longitude || coordI.lng) : null;
+          const xj = typeof coordJ === 'object' ? (coordJ.latitude || coordJ.lat) : null;
+          const yj = typeof coordJ === 'object' ? (coordJ.longitude || coordJ.lng) : null;
+          
+          if (xi === null || yi === null || xj === null || yj === null) continue;
+          
+          const intersect = ((yi > userLng) !== (yj > userLng)) && 
+                           (userLat < (xj - xi) * (userLng - yi) / (yj - yi) + xi);
+          if (intersect) inside = !inside;
+        }
+        isInZone = inside;
+      }
+
+      if (isInZone) {
+        // Calculate distance to zone centroid for buffer logic
+        const centroid = calculateZoneCentroid(zone.coordinates);
+        const distance = calculateDistance(userLat, userLng, centroid.lat, centroid.lng);
+        
+        if (distance < minDistance) {
+          minDistance = distance;
+          userZone = zone;
+        }
+      }
+    }
+
+    // If user is not in any zone, check buffer area (50-100 meters)
+    if (!userZone) {
+      const BUFFER_DISTANCE = 0.1; // 100 meters in km
+      
+      for (const zone of activeZones) {
+        if (!zone.coordinates || zone.coordinates.length < 3) continue;
+        
+        const centroid = calculateZoneCentroid(zone.coordinates);
+        const distance = calculateDistance(userLat, userLng, centroid.lat, centroid.lng);
+        
+        // Find nearest zone within buffer
+        if (distance <= BUFFER_DISTANCE && distance < minDistance) {
+          minDistance = distance;
+          userZone = zone;
+        }
+      }
+    }
+
+    if (!userZone) {
+      return successResponse(res, 200, 'User location is outside all service zones', {
+        status: 'OUT_OF_SERVICE',
+        zoneId: null,
+        zone: null,
+        message: 'Your location is not within any active delivery zone. Please check if delivery is available in your area.'
+      });
+    }
+
+    return successResponse(res, 200, 'Zone detected successfully', {
+      status: 'IN_SERVICE',
+      zoneId: userZone._id.toString(),
+      zone: {
+        _id: userZone._id.toString(),
+        name: userZone.name || userZone.zoneName,
+        zoneName: userZone.zoneName || userZone.name,
+        country: userZone.country,
+        unit: userZone.unit
+      },
+      message: 'Service available in your area'
+    });
+  } catch (error) {
+    console.error('Error detecting user zone:', error);
+    return errorResponse(res, 500, 'Failed to detect zone');
+  }
+});
+
+/**
+ * Calculate zone centroid (average of all coordinates)
+ */
+function calculateZoneCentroid(coordinates) {
+  let sumLat = 0;
+  let sumLng = 0;
+  let count = 0;
+
+  for (const coord of coordinates) {
+    const lat = typeof coord === 'object' ? (coord.latitude || coord.lat) : null;
+    const lng = typeof coord === 'object' ? (coord.longitude || coord.lng) : null;
+    if (lat !== null && lng !== null) {
+      sumLat += lat;
+      sumLng += lng;
+      count++;
+    }
+  }
+
+  return {
+    lat: count > 0 ? sumLat / count : 0,
+    lng: count > 0 ? sumLng / count : 0
+  };
+}
+
+/**
+ * Calculate distance between two points (Haversine formula)
+ */
+function calculateDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 /**
  * Check if a location is within any zone for a restaurant
@@ -334,7 +522,9 @@ export const checkLocationInZone = asyncHandler(async (req, res) => {
       isInZone: matchingZones.length > 0,
       zones: matchingZones.map(zone => ({
         _id: zone._id,
-        name: zone.name,
+        name: zone.name || zone.zoneName,
+        zoneName: zone.zoneName || zone.name,
+        country: zone.country,
         serviceLocation: zone.serviceLocation
       }))
     });

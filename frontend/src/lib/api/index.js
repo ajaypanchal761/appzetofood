@@ -229,6 +229,16 @@ export const locationAPI = {
   },
 };
 
+// Export zone API helper functions
+export const zoneAPI = {
+  // Detect user's zone based on location
+  detectZone: (lat, lng) => {
+    return apiClient.get(API_ENDPOINTS.ZONE.DETECT, {
+      params: { lat, lng }
+    });
+  },
+};
+
 // Export restaurant API helper functions
 export const restaurantAPI = {
   // Restaurant Authentication
@@ -454,8 +464,9 @@ export const restaurantAPI = {
   },
 
   // Get restaurants with dishes under ₹250
-  getRestaurantsUnder250: () => {
-    return apiClient.get(API_ENDPOINTS.RESTAURANT.UNDER_250);
+  getRestaurantsUnder250: (zoneId) => {
+    const params = zoneId ? { zoneId } : {};
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.UNDER_250, { params });
   },
 
   // Get restaurant by ID or slug
@@ -851,6 +862,11 @@ export const adminAPI = {
   // Get restaurants
   getRestaurants: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANTS, { params });
+  },
+
+  // Create restaurant
+  createRestaurant: (data) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.RESTAURANTS, data);
   },
 
   // Get restaurant by ID

@@ -12,6 +12,8 @@ import { foodImages } from "@/constants/images"
 import api from "@/lib/api"
 import { restaurantAPI, adminAPI } from "@/lib/api"
 import { useProfile } from "../context/ProfileContext"
+import { useLocation } from "../hooks/useLocation"
+import { useZone } from "../hooks/useZone"
 
 // Filter options
 const filterOptions = [
@@ -28,6 +30,8 @@ export default function CategoryPage() {
   const { category } = useParams()
   const navigate = useNavigate()
   const { vegMode } = useProfile()
+  const { location } = useLocation()
+  const { zoneId, isOutOfService } = useZone(location)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState(category?.toLowerCase() || 'all')
   const [activeFilters, setActiveFilters] = useState(new Set())
@@ -196,7 +200,12 @@ export default function CategoryPage() {
     const fetchRestaurants = async () => {
       try {
         setLoadingRestaurants(true)
-        const response = await restaurantAPI.getRestaurants()
+        // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
+        const params = {}
+        if (zoneId) {
+          params.zoneId = zoneId
+        }
+        const response = await restaurantAPI.getRestaurants(params)
         
         if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
           const restaurantsArray = response.data.data.restaurants
@@ -356,7 +365,7 @@ export default function CategoryPage() {
     }
 
     fetchRestaurants()
-  }, [])
+  }, [zoneId, isOutOfService])
 
   // Update selected category when URL changes
   useEffect(() => {
@@ -635,8 +644,11 @@ export default function CategoryPage() {
     }
   }
 
+  // Check if should show grayscale (user out of service)
+  const shouldShowGrayscale = isOutOfService
+
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0a0a0a]">
+    <div className={`min-h-screen bg-white dark:bg-[#0a0a0a] ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 bg-white dark:bg-[#1a1a1a] shadow-sm">
         <div className="max-w-7xl mx-auto">
@@ -823,13 +835,14 @@ export default function CategoryPage() {
                 {(selectedCategory && selectedCategory !== 'all' 
                   ? filteredRecommended 
                   : filteredRecommended.slice(0, 6)
-                ).map((restaurant) => (
+                ).map((restaurant) => {
+                  return (
                   <Link 
                     key={restaurant.id}
                     to={`/user/restaurants/${restaurant.name.toLowerCase().replace(/\s+/g, '-')}`}
                     className="block"
                   >
-                    <div className="group">
+                    <div className={`group ${shouldShowGrayscale ? 'grayscale opacity-75' : ''}`}>
                       {/* Image Container */}
                       <div className="relative aspect-square rounded-xl md:rounded-2xl overflow-hidden mb-2">
                         {/* Use category dish image if available, otherwise restaurant image */}
@@ -896,7 +909,8 @@ export default function CategoryPage() {
                       </div>
                     </div>
                   </Link>
-                ))}
+                  )
+                })}
               </div>
             </section>
           )}
@@ -925,7 +939,9 @@ export default function CategoryPage() {
 
                 return (
                   <Link key={restaurant.id} to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
-                    <Card className="overflow-hidden cursor-pointer gap-0 border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-md h-full flex flex-col w-full">
+                    <Card className={`overflow-hidden cursor-pointer gap-0 border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] shadow-md hover:shadow-xl transition-all duration-300 py-0 rounded-md h-full flex flex-col w-full ${
+                      shouldShowGrayscale ? 'grayscale opacity-75' : ''
+                    }`}>
                       {/* Image Section */}
                       <div className="relative h-44 sm:h-52 md:h-60 lg:h-64 xl:h-72 w-full overflow-hidden rounded-t-md flex-shrink-0">
                         {/* Use category dish image if available, otherwise restaurant image */}

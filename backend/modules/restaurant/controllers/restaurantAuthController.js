@@ -4,7 +4,40 @@ import jwtService from '../../auth/services/jwtService.js';
 import firebaseAuthService from '../../auth/services/firebaseAuthService.js';
 import { successResponse, errorResponse } from '../../../shared/utils/response.js';
 import { asyncHandler } from '../../../shared/middleware/asyncHandler.js';
+import { normalizePhoneNumber } from '../../../shared/utils/phoneUtils.js';
 import winston from 'winston';
+
+/**
+ * Build phone query that searches in multiple formats (with/without country code)
+ * This handles both old data (without country code) and new data (with country code)
+ */
+const buildPhoneQuery = (normalizedPhone) => {
+  if (!normalizedPhone) return null;
+  
+  // Check if normalized phone has country code (starts with 91 and is 12 digits)
+  if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+    // Search for both: with country code (917610416911) and without (7610416911)
+    const phoneWithoutCountryCode = normalizedPhone.substring(2);
+    return {
+      $or: [
+        { phone: normalizedPhone },
+        { phone: phoneWithoutCountryCode },
+        { phone: `+${normalizedPhone}` },
+        { phone: `+91${phoneWithoutCountryCode}` }
+      ]
+    };
+  } else {
+    // If it's already without country code, also check with country code
+    return {
+      $or: [
+        { phone: normalizedPhone },
+        { phone: `91${normalizedPhone}` },
+        { phone: `+91${normalizedPhone}` },
+        { phone: `+${normalizedPhone}` }
+      ]
+    };
+  }
+};
 
 const logger = winston.createLogger({
   level: 'info',
@@ -70,15 +103,22 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 
   try {
     let restaurant;
-    const identifier = phone || email;
-    const identifierType = phone ? 'phone' : 'email';
+    // Normalize phone number if provided
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : null;
+    if (phone && !normalizedPhone) {
+      return errorResponse(res, 400, 'Invalid phone number format');
+    }
+    
+    const identifier = normalizedPhone || email;
+    const identifierType = normalizedPhone ? 'phone' : 'email';
 
     if (purpose === 'register') {
       // Registration flow
-      // Check if restaurant already exists
-      const findQuery = phone 
-        ? { phone } 
-        : { email };
+      // Check if restaurant already exists with normalized phone
+      // For phone, search in both formats (with and without country code) to handle old data
+      const findQuery = normalizedPhone 
+        ? buildPhoneQuery(normalizedPhone)
+        : { email: email?.toLowerCase().trim() };
       restaurant = await Restaurant.findOne(findQuery);
 
       if (restaurant) {
@@ -95,21 +135,21 @@ export const verifyOTP = asyncHandler(async (req, res) => {
 
       const restaurantData = {
         name,
-        signupMethod: phone ? 'phone' : 'email'
+        signupMethod: normalizedPhone ? 'phone' : 'email'
       };
 
-      if (phone) {
-        restaurantData.phone = phone;
+      if (normalizedPhone) {
+        restaurantData.phone = normalizedPhone;
         restaurantData.phoneVerified = true;
-        restaurantData.ownerPhone = phone;
+        restaurantData.ownerPhone = normalizedPhone;
         // For phone signup, set ownerEmail to empty string or phone-based email
-        restaurantData.ownerEmail = email || `${phone.replace(/\s+/g, '')}@restaurant.appzeto.com`;
+        restaurantData.ownerEmail = email || `${normalizedPhone}@restaurant.appzeto.com`;
         // CRITICAL: Do NOT set email field for phone signups to avoid null duplicate key error
         // Email field should be completely omitted, not set to null or undefined
       }
       if (email) {
-        restaurantData.email = email;
-        restaurantData.ownerEmail = email;
+        restaurantData.email = email.toLowerCase().trim();
+        restaurantData.ownerEmail = email.toLowerCase().trim();
       }
       // Ensure email is not set to null or undefined
       if (!email && !phone) {
@@ -195,20 +235,22 @@ export const verifyOTP = asyncHandler(async (req, res) => {
               });
               // Check if it's still a duplicate key error
               if (retryError.code === 11000) {
-                // Try to find restaurant again
-                restaurant = await Restaurant.findOne({ phone });
+                // Try to find restaurant again (search in both formats)
+                const phoneQuery = buildPhoneQuery(normalizedPhone) || { phone: normalizedPhone };
+                restaurant = await Restaurant.findOne(phoneQuery);
                 if (restaurant) {
                   return errorResponse(res, 400, `Restaurant already exists with this phone number. Please login.`);
                 }
               }
               throw new Error(`Failed to create restaurant: ${retryError.message}. Please contact support.`);
             }
-          } else if (createError.keyPattern && createError.keyPattern.phone) {
-            // Phone duplicate key error
-            restaurant = await Restaurant.findOne({ phone });
-            if (restaurant) {
-              return errorResponse(res, 400, `Restaurant already exists with this phone number. Please login.`);
-            }
+            } else if (createError.keyPattern && createError.keyPattern.phone) {
+              // Phone duplicate key error - search in both formats
+              const phoneQuery = buildPhoneQuery(normalizedPhone) || { phone: normalizedPhone };
+              restaurant = await Restaurant.findOne(phoneQuery);
+                if (restaurant) {
+                  return errorResponse(res, 400, `Restaurant already exists with this phone number. Please login.`);
+                }
             throw new Error(`Phone number already exists: ${createError.message}`);
           } else if (createError.keyPattern && createError.keyPattern.slug) {
             // Check if it's a slug conflict
@@ -233,9 +275,9 @@ export const verifyOTP = asyncHandler(async (req, res) => {
               });
             } catch (retryError) {
               // If still fails, check if restaurant exists
-              const findQuery = phone 
-                ? { phone } 
-                : { email };
+              const findQuery = normalizedPhone 
+                ? { phone: normalizedPhone } 
+                : { email: email?.toLowerCase().trim() };
               restaurant = await Restaurant.findOne(findQuery);
               if (!restaurant) {
                 throw retryError;
@@ -244,9 +286,9 @@ export const verifyOTP = asyncHandler(async (req, res) => {
             }
           } else {
             // Other duplicate key errors (email, phone)
-            const findQuery = phone 
-              ? { phone } 
-              : { email };
+            const findQuery = normalizedPhone 
+              ? { phone: normalizedPhone } 
+              : { email: email?.toLowerCase().trim() };
             restaurant = await Restaurant.findOne(findQuery);
             if (!restaurant) {
               throw createError;
@@ -259,9 +301,35 @@ export const verifyOTP = asyncHandler(async (req, res) => {
       }
     } else {
       // Login (with optional auto-registration)
-      const findQuery = phone 
-        ? { phone } 
-        : { email };
+      // For phone, search in both formats (with and without country code) to handle old data
+      let findQuery;
+      if (normalizedPhone) {
+        // Check if normalized phone has country code (starts with 91 and is 12 digits)
+        if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+          // Search for both: with country code (917610416911) and without (7610416911)
+          const phoneWithoutCountryCode = normalizedPhone.substring(2);
+          findQuery = {
+            $or: [
+              { phone: normalizedPhone },
+              { phone: phoneWithoutCountryCode },
+              { phone: `+${normalizedPhone}` },
+              { phone: `+91${phoneWithoutCountryCode}` }
+            ]
+          };
+        } else {
+          // If it's already without country code, also check with country code
+          findQuery = {
+            $or: [
+              { phone: normalizedPhone },
+              { phone: `91${normalizedPhone}` },
+              { phone: `+91${normalizedPhone}` },
+              { phone: `+${normalizedPhone}` }
+            ]
+          };
+        }
+      } else {
+        findQuery = { email: email?.toLowerCase().trim() };
+      }
       restaurant = await Restaurant.findOne(findQuery);
 
       if (!restaurant && !name) {
@@ -293,20 +361,20 @@ export const verifyOTP = asyncHandler(async (req, res) => {
         // Auto-register new restaurant after OTP verification
         const restaurantData = {
           name,
-          signupMethod: phone ? 'phone' : 'email'
+          signupMethod: normalizedPhone ? 'phone' : 'email'
         };
 
-        if (phone) {
-          restaurantData.phone = phone;
+        if (normalizedPhone) {
+          restaurantData.phone = normalizedPhone;
           restaurantData.phoneVerified = true;
-          restaurantData.ownerPhone = phone;
+          restaurantData.ownerPhone = normalizedPhone;
           // For phone signup, set ownerEmail to empty string or phone-based email
-          restaurantData.ownerEmail = email || `${phone.replace(/\s+/g, '')}@restaurant.appzeto.com`;
+          restaurantData.ownerEmail = email || `${normalizedPhone}@restaurant.appzeto.com`;
           // Explicitly don't set email field for phone signups to avoid null duplicate key error
         }
         if (email) {
-          restaurantData.email = email;
-          restaurantData.ownerEmail = email;
+          restaurantData.email = email.toLowerCase().trim();
+          restaurantData.ownerEmail = email.toLowerCase().trim();
         }
         // Ensure email is not set to null or undefined
         if (!email && !phone) {
@@ -353,8 +421,9 @@ export const verifyOTP = asyncHandler(async (req, res) => {
                 error: createError.message,
                 keyPattern: createError.keyPattern
               });
-              // Try to find existing restaurant by phone
-              restaurant = await Restaurant.findOne({ phone });
+              // Try to find existing restaurant by phone (search in both formats)
+              const phoneQuery = buildPhoneQuery(normalizedPhone) || { phone };
+              restaurant = await Restaurant.findOne(phoneQuery);
               if (restaurant) {
                 logger.info(`Restaurant found after email null duplicate key error: ${restaurant._id}`);
                 // Continue with login flow
@@ -389,8 +458,9 @@ export const verifyOTP = asyncHandler(async (req, res) => {
                   });
                   // Check if it's still a duplicate key error
                   if (retryError.code === 11000) {
-                    // Try to find restaurant again
-                    restaurant = await Restaurant.findOne({ phone });
+                    // Try to find restaurant again (search in both formats)
+                    const phoneQuery = buildPhoneQuery(normalizedPhone) || { phone };
+                    restaurant = await Restaurant.findOne(phoneQuery);
                     if (restaurant) {
                       logger.info(`Restaurant found after retry error: ${restaurant._id}`);
                       // Continue with login flow
@@ -515,16 +585,25 @@ export const register = asyncHandler(async (req, res) => {
     return errorResponse(res, 400, 'Restaurant name, email, and password are required');
   }
 
+  // Normalize phone number if provided
+  const normalizedPhone = phone ? normalizePhoneNumber(phone) : null;
+  if (phone && !normalizedPhone) {
+    return errorResponse(res, 400, 'Invalid phone number format');
+  }
+
   // Check if restaurant already exists
   const existingRestaurant = await Restaurant.findOne({ 
-    $or: [{ email }, { phone: phone || null }]
+    $or: [
+      { email: email.toLowerCase().trim() },
+      ...(normalizedPhone ? [{ phone: normalizedPhone }] : [])
+    ]
   });
 
   if (existingRestaurant) {
-    if (existingRestaurant.email === email) {
+    if (existingRestaurant.email === email.toLowerCase().trim()) {
       return errorResponse(res, 400, 'Restaurant with this email already exists. Please login.');
     }
-    if (existingRestaurant.phone === phone) {
+    if (normalizedPhone && existingRestaurant.phone === normalizedPhone) {
       return errorResponse(res, 400, 'Restaurant with this phone number already exists. Please login.');
     }
   }
@@ -532,19 +611,19 @@ export const register = asyncHandler(async (req, res) => {
   // Create new restaurant
   const restaurantData = {
     name,
-    email,
+    email: email.toLowerCase().trim(),
     password, // Will be hashed by pre-save hook
     ownerName: ownerName || name,
-    ownerEmail: ownerEmail || email,
+    ownerEmail: (ownerEmail || email).toLowerCase().trim(),
     signupMethod: 'email',
     // Set isActive to false - restaurant needs admin approval before becoming active
     isActive: false
   };
   
   // Only include phone if provided (don't set to null)
-  if (phone) {
-    restaurantData.phone = phone;
-    restaurantData.ownerPhone = ownerPhone || phone;
+  if (normalizedPhone) {
+    restaurantData.phone = normalizedPhone;
+    restaurantData.ownerPhone = ownerPhone ? normalizePhoneNumber(ownerPhone) : normalizedPhone;
   }
   
   const restaurant = await Restaurant.create(restaurantData);

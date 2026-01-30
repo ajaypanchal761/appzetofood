@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useLocation } from "../hooks/useLocation"
+import { useZone } from "../hooks/useZone"
 import appzetoFoodLogo from "@/assets/appzetologo.png"
 import offerImage from "@/assets/offerimage.png"
 import api, { restaurantAPI } from "@/lib/api"
@@ -225,6 +226,7 @@ export default function Home() {
   const vegModeToggleRef = useRef(null)
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0)
   const [heroBannerImages, setHeroBannerImages] = useState([])
+  const [heroBannersData, setHeroBannersData] = useState([]) // Store full banner data with linked restaurants
   const [loadingBanners, setLoadingBanners] = useState(true)
   const [landingCategories, setLandingCategories] = useState([])
   const [landingExploreMore, setLandingExploreMore] = useState([])
@@ -313,12 +315,16 @@ export default function Home() {
         setLoadingBanners(true)
         const response = await api.get('/hero-banners/public')
         if (response.data.success && response.data.data.banners) {
-          setHeroBannerImages(response.data.data.banners)
+          const banners = response.data.data.banners
+          setHeroBannersData(banners)
+          // Extract image URLs for display
+          setHeroBannerImages(banners.map(b => b.imageUrl || b))
         }
       } catch (error) {
         console.error('Error fetching hero banners:', error)
         // Fallback to empty array if API fails
         setHeroBannerImages([])
+        setHeroBannersData([])
       } finally {
         setLoadingBanners(false)
       }
@@ -559,6 +565,7 @@ export default function Home() {
   const { addFavorite, removeFavorite, isFavorite, getFavorites } = profileContext
   const { addToCart, cart } = useCart()
   const { location, loading, requestLocation } = useLocation()
+  const { zoneId, zoneStatus, isInService, isOutOfService, loading: zoneLoading } = useZone(location)
   const [showToast, setShowToast] = useState(false)
   const [showManageCollections, setShowManageCollections] = useState(false)
   const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState(null)
@@ -701,6 +708,12 @@ export default function Home() {
         params.trusted = 'true'
       }
       
+      // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
+      if (zoneId) {
+        params.zoneId = zoneId
+      }
+      // Note: We show all restaurants regardless of zone, but apply grayscale styling if user is out of service
+      
       console.log('Fetching restaurants with params:', params)
       const response = await restaurantAPI.getRestaurants(params)
       console.log('Restaurants API response:', response.data)
@@ -716,11 +729,49 @@ export default function Home() {
           return
         }
         
+        // Calculate distance helper function
+        const calculateDistance = (lat1, lng1, lat2, lng2) => {
+          const R = 6371 // Earth's radius in kilometers
+          const dLat = (lat2 - lat1) * Math.PI / 180
+          const dLng = (lng2 - lng1) * Math.PI / 180
+          const a = 
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+          return R * c // Distance in kilometers
+        }
+
+        // Get user coordinates
+        const userLat = location?.latitude
+        const userLng = location?.longitude
+
         // Transform API data to match expected format
         const transformedRestaurants = restaurantsArray.map((restaurant, index) => {
           // Use restaurant data if available, otherwise use defaults
           const deliveryTime = restaurant.estimatedDeliveryTime || "25-30 mins"
-          const distance = restaurant.distance || "1.2 km"
+          
+          // Calculate distance from user to restaurant
+          let distance = restaurant.distance || "1.2 km"
+          
+          // Get restaurant coordinates
+          const restaurantLocation = restaurant.location
+          const restaurantLat = restaurantLocation?.latitude || (restaurantLocation?.coordinates && Array.isArray(restaurantLocation.coordinates) ? restaurantLocation.coordinates[1] : null)
+          const restaurantLng = restaurantLocation?.longitude || (restaurantLocation?.coordinates && Array.isArray(restaurantLocation.coordinates) ? restaurantLocation.coordinates[0] : null)
+          
+          // Calculate distance if both user and restaurant coordinates are available
+          let distanceInKm = null
+          if (userLat && userLng && restaurantLat && restaurantLng && 
+              !isNaN(userLat) && !isNaN(userLng) && !isNaN(restaurantLat) && !isNaN(restaurantLng)) {
+            distanceInKm = calculateDistance(userLat, userLng, restaurantLat, restaurantLng)
+            // Format distance: show 1 decimal place if >= 1km, otherwise show in meters
+            if (distanceInKm >= 1) {
+              distance = `${distanceInKm.toFixed(1)} km`
+            } else {
+              const distanceInMeters = Math.round(distanceInKm * 1000)
+              distance = `${distanceInMeters} m`
+            }
+          }
           
           // Get first cuisine or default
           const cuisine = restaurant.cuisines && restaurant.cuisines.length > 0 
@@ -756,6 +807,7 @@ export default function Home() {
             rating: restaurant.rating || 4.5,
             deliveryTime: deliveryTime,
             distance: distance,
+            distanceInKm: distanceInKm, // Store numeric distance for sorting
             image: image,
             images: allImages, // Array of cover images for carousel (separate from menu images)
             priceRange: restaurant.priceRange || "$$", // Use from API or default
@@ -766,9 +818,31 @@ export default function Home() {
             offer: restaurant.offer || "Flat ₹50 OFF above ₹199", // Use from API or default
             slug: restaurant.slug,
             restaurantId: restaurant.restaurantId,
+            location: restaurant.location, // Store location for distance recalculation
+            isActive: restaurant.isActive !== false, // Default to true if not specified
+            isAcceptingOrders: restaurant.isAcceptingOrders !== false, // Default to true if not specified
           }
         })
-        console.log('Transformed restaurants:', transformedRestaurants)
+        
+        // Sort restaurants by distance (nearby first) - only if user location is available
+        if (userLat && userLng) {
+          transformedRestaurants.sort((a, b) => {
+            // Available restaurants first, then unavailable
+            const aAvailable = a.isActive && a.isAcceptingOrders
+            const bAvailable = b.isActive && b.isAcceptingOrders
+            
+            if (aAvailable !== bAvailable) {
+              return aAvailable ? -1 : 1 // Available restaurants come first
+            }
+            
+            // If both have same availability, sort by distance
+            const aDistance = a.distanceInKm !== null ? a.distanceInKm : Infinity
+            const bDistance = b.distanceInKm !== null ? b.distanceInKm : Infinity
+            return aDistance - bDistance
+          })
+        }
+        
+        console.log('Transformed and sorted restaurants:', transformedRestaurants)
         setRestaurantsData(transformedRestaurants)
       } else {
         console.warn('Invalid API response structure:', response.data)
@@ -784,12 +858,65 @@ export default function Home() {
         setLoadingRestaurants(false)
         console.log('Restaurant loading completed. restaurantsData length:', restaurantsData.length)
       }
-  }, [])
+  }, [zoneId])
   
   // Fetch restaurants when appliedFilters change
   useEffect(() => {
     fetchRestaurants(appliedFilters)
   }, [appliedFilters, fetchRestaurants])
+
+  // Recalculate distances when user location updates
+  useEffect(() => {
+    if (!restaurantsData || restaurantsData.length === 0 || !location?.latitude || !location?.longitude) return
+
+    const calculateDistance = (lat1, lng1, lat2, lng2) => {
+      const R = 6371 // Earth's radius in kilometers
+      const dLat = (lat2 - lat1) * Math.PI / 180
+      const dLng = (lng2 - lng1) * Math.PI / 180
+      const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2)
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+      return R * c // Distance in kilometers
+    }
+
+    const userLat = location.latitude
+    const userLng = location.longitude
+
+    // Recalculate distances for all restaurants
+    const updatedRestaurants = restaurantsData.map(restaurant => {
+      if (!restaurant.location) return restaurant
+
+      const restaurantLat = restaurant.location?.latitude || (restaurant.location?.coordinates && Array.isArray(restaurant.location.coordinates) ? restaurant.location.coordinates[1] : null)
+      const restaurantLng = restaurant.location?.longitude || (restaurant.location?.coordinates && Array.isArray(restaurant.location.coordinates) ? restaurant.location.coordinates[0] : null)
+
+      if (!restaurantLat || !restaurantLng || 
+          isNaN(restaurantLat) || isNaN(restaurantLng)) {
+        return restaurant
+      }
+
+      const distanceInKm = calculateDistance(userLat, userLng, restaurantLat, restaurantLng)
+      let calculatedDistance = null
+      
+      // Format distance: show 1 decimal place if >= 1km, otherwise show in meters
+      if (distanceInKm >= 1) {
+        calculatedDistance = `${distanceInKm.toFixed(1)} km`
+      } else {
+        const distanceInMeters = Math.round(distanceInKm * 1000)
+        calculatedDistance = `${distanceInMeters} m`
+      }
+
+      return {
+        ...restaurant,
+        distance: calculatedDistance,
+        distanceInKm: distanceInKm // Preserve numeric distance for sorting
+      }
+    })
+
+    setRestaurantsData(updatedRestaurants)
+    console.log('🔄 Recalculated distances for all restaurants based on user location')
+  }, [location?.latitude, location?.longitude])
 
   // Filter restaurants and foods based on active filters
   const filteredRestaurants = useMemo(() => {
@@ -872,6 +999,23 @@ export default function Home() {
       filtered.sort((a, b) => b.rating - a.rating)
     } else if (sortBy === 'rating-low') {
       filtered.sort((a, b) => a.rating - b.rating)
+    } else {
+      // Default sorting: Available restaurants first, then by distance (nearby first)
+      // This ensures all restaurants in zone are shown, but nearby ones appear first
+      filtered.sort((a, b) => {
+        // Available restaurants first, then unavailable
+        const aAvailable = a.isActive && a.isAcceptingOrders
+        const bAvailable = b.isActive && b.isAcceptingOrders
+        
+        if (aAvailable !== bAvailable) {
+          return aAvailable ? -1 : 1 // Available restaurants come first
+        }
+        
+        // If both have same availability, sort by distance
+        const aDistance = a.distanceInKm !== null && a.distanceInKm !== undefined ? a.distanceInKm : Infinity
+        const bDistance = b.distanceInKm !== null && b.distanceInKm !== undefined ? b.distanceInKm : Infinity
+        return aDistance - bDistance
+      })
     }
 
     return filtered
@@ -935,7 +1079,7 @@ export default function Home() {
   )
 
   return (
-    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-24">
+    <div className="relative min-h-screen bg-white dark:bg-[#0a0a0a] pb-28 md:pb-24">
       {/* Unified Background for Entire Page - Vibrant Food Theme */}
       <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background */}
@@ -1080,23 +1224,37 @@ export default function Home() {
                 width: `${heroBannerImages.length * 100}vw`
               }}
             >
-              {heroBannerImages.map((image, index) => (
-                <div
-                  key={index}
-                  className="h-full flex-shrink-0"
-                  style={{ width: '100vw' }}
-                >
-                  <OptimizedImage
-                    src={image}
-                    alt={`Hero Banner ${index + 1}`}
-                    className="w-full h-full"
-                    priority={index === 0}
-                    sizes="100vw"
-                    objectFit="cover"
-                    placeholder="blur"
-                  />
-                </div>
-              ))}
+              {heroBannerImages.map((image, index) => {
+                const bannerData = heroBannersData[index]
+                const linkedRestaurants = bannerData?.linkedRestaurants || []
+                const hasLinkedRestaurants = linkedRestaurants.length > 0
+                
+                return (
+                  <div
+                    key={index}
+                    className="h-full flex-shrink-0"
+                    style={{ width: '100vw', cursor: hasLinkedRestaurants ? 'pointer' : 'default' }}
+                    onClick={() => {
+                      if (hasLinkedRestaurants) {
+                        // Redirect to first linked restaurant
+                        const firstRestaurant = linkedRestaurants[0]
+                        const restaurantSlug = firstRestaurant.slug || firstRestaurant.restaurantId || firstRestaurant._id
+                        navigate(`/restaurants/${restaurantSlug}`)
+                      }
+                    }}
+                  >
+                    <OptimizedImage
+                      src={image}
+                      alt={`Hero Banner ${index + 1}`}
+                      className="w-full h-full"
+                      priority={index === 0}
+                      sizes="100vw"
+                      objectFit="cover"
+                      placeholder="blur"
+                    />
+                  </div>
+                )
+              })}
             </motion.div>
           </div>
         ) : (
@@ -1600,7 +1758,7 @@ export default function Home() {
 
         {/* Restaurants - Enhanced with Animations */}
         <motion.section 
-          className="space-y-0 pt-3 sm:pt-4 lg:pt-6"
+          className="space-y-0 pt-3 sm:pt-4 lg:pt-6 pb-20 md:pb-24"
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true, margin: "-100px" }}
@@ -1713,7 +1871,9 @@ export default function Home() {
                       }}
                     >
                       <Link to={`/user/restaurants/${restaurantSlug}`} className="h-full flex">
-                        <Card className="overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] border-background transition-all duration-500 py-0 rounded-md flex flex-col h-full w-full relative">
+                        <Card className={`overflow-hidden gap-0 cursor-pointer border-0 dark:border-gray-800 group bg-white dark:bg-[#1a1a1a] border-background transition-all duration-500 py-0 rounded-md flex flex-col h-full w-full relative ${
+                          isOutOfService ? 'grayscale opacity-75' : ''
+                        }`}>
                           {/* Image Section with Carousel */}
                           <div className="relative">
                             <RestaurantImageCarousel 

@@ -208,11 +208,6 @@ export default function AllZonesMap() {
 
       if (path.length < 3) return
 
-      // Get restaurant name for the zone
-      const restaurantName = zone.restaurantId && typeof zone.restaurantId === 'object' 
-        ? zone.restaurantId.name 
-        : restaurants.find(r => r._id === zone.restaurantId)?.name || 'Unknown Restaurant'
-
       // Select color based on index
       const color = colors[index % colors.length]
 
@@ -238,14 +233,11 @@ export default function AllZonesMap() {
         content: `
           <div style="padding: 12px; min-width: 200px;">
             <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #1e293b;">
-              ${zone.name || 'Unnamed Zone'}
+              ${zone.name || zone.zoneName || 'Unnamed Zone'}
             </h3>
             <div style="font-size: 13px; color: #64748b; line-height: 1.6;">
               <div style="margin-bottom: 4px;">
-                <strong>Restaurant:</strong> ${restaurantName}
-              </div>
-              <div style="margin-bottom: 4px;">
-                <strong>Location:</strong> ${zone.serviceLocation || 'N/A'}
+                <strong>Country:</strong> ${zone.country || 'N/A'}
               </div>
               <div style="margin-bottom: 4px;">
                 <strong>Unit:</strong> ${zone.unit || 'km'}

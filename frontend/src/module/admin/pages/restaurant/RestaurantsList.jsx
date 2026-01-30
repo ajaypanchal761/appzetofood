@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react"
-import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, MapPin, Phone, Mail, Clock, Star, Building2, User, FileText, CreditCard, Calendar, Image as ImageIcon, ExternalLink, ShieldX, AlertTriangle, Trash2 } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, MapPin, Phone, Mail, Clock, Star, Building2, User, FileText, CreditCard, Calendar, Image as ImageIcon, ExternalLink, ShieldX, AlertTriangle, Trash2, Plus } from "lucide-react"
 import { adminAPI, restaurantAPI } from "../../../../lib/api"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { exportRestaurantsToPDF } from "../../components/restaurants/restaurantsExportUtils"
@@ -10,6 +11,7 @@ import restaurantIcon from "../../assets/Dashboard-icons/image2.png"
 import inactiveIcon from "../../assets/Dashboard-icons/image3.png"
 
 export default function RestaurantsList() {
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
   const [restaurants, setRestaurants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -447,6 +449,13 @@ export default function RestaurantsList() {
             <h2 className="text-xl font-bold text-slate-900">Restaurants List</h2>
 
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate("/admin/restaurants/add")}
+                className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Restaurant</span>
+              </button>
               <div className="relative flex-1 sm:flex-initial min-w-[250px]">
                 <input
                   type="text"

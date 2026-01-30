@@ -10,6 +10,7 @@ import { useCart } from "../../context/CartContext"
 import { useProfile } from "../../context/ProfileContext"
 import { useOrders } from "../../context/OrdersContext"
 import { useLocation as useUserLocation } from "../../hooks/useLocation"
+import { useZone } from "../../hooks/useZone"
 import { orderAPI, restaurantAPI, adminAPI, userAPI, API_ENDPOINTS } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
 import { initRazorpayPayment } from "@/lib/utils/razorpay"
@@ -84,6 +85,7 @@ export default function Cart() {
   const { getDefaultAddress, getDefaultPaymentMethod, addresses, paymentMethods, userProfile } = useProfile()
   const { createOrder } = useOrders()
   const { location: currentLocation } = useUserLocation() // Get live location address
+  const { zoneId } = useZone(currentLocation) // Get user's zone
   
   const [showCoupons, setShowCoupons] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState(null)
@@ -975,7 +977,8 @@ export default function Cart() {
         deliveryFleet: deliveryFleet || 'standard',
         note: note || "",
         sendCutlery: sendCutlery !== false,
-        paymentMethod: selectedPaymentMethod
+        paymentMethod: selectedPaymentMethod,
+        zoneId: zoneId // CRITICAL: Pass zoneId for strict zone validation
       };
       // Log final order details (including paymentMethod for COD debugging)
       console.log('📤 FINAL: Sending order to backend with:', {

@@ -14,17 +14,21 @@ import api from "@/lib/api"
 import PageNavbar from "../components/PageNavbar"
 import OptimizedImage from "@/components/OptimizedImage"
 import appzetoFoodLogo from "@/assets/appzetologo.png"
+// Using placeholders for dining card images
+const diningCard1 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop"
+const diningCard2 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop"
+const diningCard3 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop"
+const diningCard4 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop"
+const diningCard5 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop"
+const diningCard6 = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=300&fit=crop"
+
 // Using placeholder for dining banner
 const diningBanner = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&h=400&fit=crop"
-import diningCard1 from "@/assets/dining images/diningcard1.png"
-import diningCard2 from "@/assets/dining images/diningcard2.png"
-import diningCard3 from "@/assets/dining images/diningcard3.png"
-import diningCard4 from "@/assets/dining images/diningcard4.png"
-import diningCard5 from "@/assets/dining images/diningcard5.png"
-import diningCard6 from "@/assets/dining images/diningcard6.png"
-import upto50off from "@/assets/diningpage/upto50off.png"
-import nearAndTopRated from "@/assets/diningpage/nearandtoprated.png"
-import coffeeBanner from "@/assets/diningpage/coffeebanner.png"
+// Using placeholders for dining page images
+const upto50off = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=200&fit=crop"
+const nearAndTopRated = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&h=200&fit=crop"
+// Using placeholder for coffee banner
+const coffeeBanner = "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=1200&h=400&fit=crop"
 // Using placeholders for bank logos
 const axisLogo = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=200&h=100&fit=crop"
 const barodaLogo = "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=200&h=100&fit=crop"

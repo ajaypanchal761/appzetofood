@@ -18,13 +18,12 @@ export default function AddZone() {
   
   const [googleMapsApiKey, setGoogleMapsApiKey] = useState("")
   const [mapLoading, setMapLoading] = useState(true)
-  const [restaurants, setRestaurants] = useState([])
   const [loading, setLoading] = useState(false)
   
   // Form state
   const [formData, setFormData] = useState({
-    serviceLocation: "",
-    restaurantId: "",
+    country: "India",
+    zoneName: "",
     unit: "kilometer",
   })
   
@@ -37,7 +36,6 @@ export default function AddZone() {
   const existingZonesPolygonsRef = useRef([])
 
   useEffect(() => {
-    fetchRestaurants()
     fetchExistingZones()
     loadGoogleMaps()
     if (isEditMode && id) {
@@ -45,14 +43,14 @@ export default function AddZone() {
     }
   }, [id, isEditMode])
 
-  // Center map on India when service location is selected
+  // Center map on India when country is selected
   useEffect(() => {
-    if (formData.serviceLocation === "India" && mapInstanceRef.current) {
+    if (formData.country === "India" && mapInstanceRef.current) {
       const indiaCenter = { lat: 20.5937, lng: 78.9629 }
       mapInstanceRef.current.setCenter(indiaCenter)
       mapInstanceRef.current.setZoom(5)
     }
-  }, [formData.serviceLocation])
+  }, [formData.country])
 
   // Initialize Places Autocomplete when map is loaded
   useEffect(() => {
@@ -96,22 +94,6 @@ export default function AddZone() {
     }
   }, [isEditMode, coordinates.length, mapLoading])
 
-  const fetchRestaurants = async () => {
-    try {
-      const response = await adminAPI.getRestaurants({ limit: 100 })
-      if (response.data?.success && response.data.data?.restaurants) {
-        setRestaurants(response.data.data.restaurants)
-      }
-    } catch (error) {
-      console.error("Error fetching restaurants:", error)
-      // Check if it's a network error
-      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error' || !error.response) {
-        console.error("Network error: Backend server might not be running")
-      } else {
-        console.error("API error:", error.response?.data || error.message)
-      }
-    }
-  }
 
   const fetchExistingZones = async () => {
     try {
@@ -136,10 +118,8 @@ export default function AddZone() {
       if (response.data?.success && response.data.data?.zone) {
         const zoneData = response.data.data.zone
         setFormData({
-          serviceLocation: zoneData.serviceLocation || "",
-          restaurantId: typeof zoneData.restaurantId === 'object' 
-            ? zoneData.restaurantId._id 
-            : zoneData.restaurantId || "",
+          country: zoneData.country || "India",
+          zoneName: zoneData.name || zoneData.zoneName || "",
           unit: zoneData.unit || "kilometer",
         })
         
@@ -403,11 +383,6 @@ export default function AddZone() {
 
       if (path.length < 3) return
 
-      // Get restaurant name for the zone
-      const restaurantName = zone.restaurantId && typeof zone.restaurantId === 'object' 
-        ? zone.restaurantId.name 
-        : restaurants.find(r => r._id === zone.restaurantId)?.name || 'Unknown Restaurant'
-
       // Create polygon for existing zone with different color (gray/blue)
       const polygon = new google.maps.Polygon({
         paths: path,
@@ -429,9 +404,8 @@ export default function AddZone() {
       const infoWindow = new google.maps.InfoWindow({
         content: `
           <div style="padding: 8px;">
-            <strong>${zone.name || 'Unnamed Zone'}</strong><br/>
-            <small>Restaurant: ${restaurantName}</small><br/>
-            <small>Location: ${zone.serviceLocation || 'N/A'}</small>
+            <strong>${zone.name || zone.zoneName || 'Unnamed Zone'}</strong><br/>
+            <small>Country: ${zone.country || 'N/A'}</small>
           </div>
         `
       })
@@ -445,10 +419,10 @@ export default function AddZone() {
 
   // Redraw existing zones when zones data changes or map is ready
   useEffect(() => {
-    if (!mapLoading && mapInstanceRef.current && existingZones.length > 0 && window.google && restaurants.length > 0) {
+    if (!mapLoading && mapInstanceRef.current && existingZones.length > 0 && window.google) {
       drawExistingZonesOnMap(window.google, mapInstanceRef.current)
     }
-  }, [existingZones, mapLoading, restaurants])
+  }, [existingZones, mapLoading])
 
   const updateCoordinatesFromPolygon = (polygon) => {
     const path = polygon.getPath()
@@ -634,13 +608,13 @@ export default function AddZone() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!formData.restaurantId) {
-      alert("Please select a restaurant")
+    if (!formData.zoneName) {
+      alert("Please enter a zone name")
       return
     }
 
-    if (!formData.serviceLocation) {
-      alert("Please enter a service location")
+    if (!formData.country) {
+      alert("Please select a country")
       return
     }
 
@@ -671,9 +645,9 @@ export default function AddZone() {
       })
 
       const zoneData = {
-        name: formData.serviceLocation || "Unnamed Zone",
-        serviceLocation: formData.serviceLocation,
-        restaurantId: formData.restaurantId,
+        name: formData.zoneName,
+        zoneName: formData.zoneName,
+        country: formData.country,
         unit: formData.unit || "kilometer",
         coordinates: validCoordinates,
         isActive: true
@@ -742,7 +716,7 @@ export default function AddZone() {
                 {isEditMode ? "Edit Zone" : "Add New Zone"}
               </h1>
               <p className="text-sm text-slate-600">
-                {isEditMode ? "Update delivery zone for restaurant" : "Create a delivery zone for restaurant"}
+                {isEditMode ? "Update delivery zone for customer" : "Create a delivery zone for customer"}
               </p>
             </div>
           </div>
@@ -756,40 +730,34 @@ export default function AddZone() {
                 <h2 className="text-lg font-semibold text-slate-900 mb-4">Zone Details</h2>
                 
                 <div className="space-y-4">
-                  {/* Service Location */}
+                  {/* Country Selection */}
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Service Location <span className="text-red-500">*</span>
+                      Country <span className="text-red-500">*</span>
                     </label>
                     <select
-                      value={formData.serviceLocation}
-                      onChange={(e) => handleInputChange("serviceLocation", e.target.value)}
+                      value={formData.country}
+                      onChange={(e) => handleInputChange("country", e.target.value)}
                       className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     >
-                      <option value="">Select location</option>
                       <option value="India">India</option>
                     </select>
                   </div>
 
-                  {/* Restaurant Selection */}
+                  {/* Zone Name */}
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Select Restaurant <span className="text-red-500">*</span>
+                      Create Zone name <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={formData.restaurantId}
-                      onChange={(e) => handleInputChange("restaurantId", e.target.value)}
+                    <input
+                      type="text"
+                      value={formData.zoneName}
+                      onChange={(e) => handleInputChange("zoneName", e.target.value)}
+                      placeholder="Enter zone name"
                       className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
-                    >
-                      <option value="">Choose a restaurant</option>
-                      {restaurants.map((restaurant) => (
-                        <option key={restaurant._id} value={restaurant._id}>
-                          {restaurant.name}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
 
                   {/* Select Unit */}
@@ -898,7 +866,7 @@ export default function AddZone() {
             </button>
             <button
               type="submit"
-              disabled={loading || coordinates.length < 3 || !formData.restaurantId}
+              disabled={loading || coordinates.length < 3 || !formData.zoneName || !formData.country}
               className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (

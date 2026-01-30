@@ -18,12 +18,16 @@ import mongoose from 'mongoose';
 export const getHeroBanners = async (req, res) => {
   try {
     const banners = await HeroBanner.find({ isActive: true })
+      .populate('linkedRestaurants', 'name slug restaurantId profileImage')
       .sort({ order: 1, createdAt: -1 })
-      .select('imageUrl order')
+      .select('imageUrl order linkedRestaurants')
       .lean();
 
     return successResponse(res, 200, 'Hero banners retrieved successfully', {
-      banners: banners.map(b => b.imageUrl)
+      banners: banners.map(b => ({
+        imageUrl: b.imageUrl,
+        linkedRestaurants: b.linkedRestaurants || []
+      }))
     });
   } catch (error) {
     console.error('Error fetching hero banners:', error);
@@ -37,6 +41,7 @@ export const getHeroBanners = async (req, res) => {
 export const getAllHeroBanners = async (req, res) => {
   try {
     const banners = await HeroBanner.find()
+      .populate('linkedRestaurants', 'name slug restaurantId profileImage')
       .sort({ order: 1, createdAt: -1 })
       .lean();
 
@@ -262,6 +267,50 @@ export const toggleBannerStatus = async (req, res) => {
   } catch (error) {
     console.error('Error toggling banner status:', error);
     return errorResponse(res, 500, 'Failed to update banner status');
+  }
+};
+
+/**
+ * Link restaurants to a hero banner
+ */
+export const linkRestaurantsToBanner = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { restaurantIds } = req.body;
+
+    if (!Array.isArray(restaurantIds)) {
+      return errorResponse(res, 400, 'restaurantIds must be an array');
+    }
+
+    const banner = await HeroBanner.findById(id);
+    if (!banner) {
+      return errorResponse(res, 404, 'Hero banner not found');
+    }
+
+    // Validate all restaurant IDs exist
+    const validRestaurantIds = [];
+    for (const restaurantId of restaurantIds) {
+      if (mongoose.Types.ObjectId.isValid(restaurantId)) {
+        const restaurant = await Restaurant.findById(restaurantId);
+        if (restaurant) {
+          validRestaurantIds.push(new mongoose.Types.ObjectId(restaurantId));
+        }
+      }
+    }
+
+    banner.linkedRestaurants = validRestaurantIds;
+    banner.updatedAt = new Date();
+    await banner.save();
+
+    // Populate linked restaurants for response
+    await banner.populate('linkedRestaurants', 'name slug restaurantId profileImage');
+
+    return successResponse(res, 200, 'Restaurants linked to banner successfully', {
+      banner
+    });
+  } catch (error) {
+    console.error('Error linking restaurants to banner:', error);
+    return errorResponse(res, 500, 'Failed to link restaurants to banner');
   }
 };
 

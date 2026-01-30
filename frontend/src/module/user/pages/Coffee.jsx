@@ -6,7 +6,8 @@ import AnimatedPage from "../components/AnimatedPage"
 import { useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { FaLocationDot } from "react-icons/fa6"
-import coffeeBanner from "@/assets/diningpage/coffeebanner.png"
+// Using placeholder for coffee banner
+const coffeeBanner = "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=1200&h=400&fit=crop"
 // Using placeholder for starbucks logo
 const starbucksLogo = "https://images.unsplash.com/photo-1511920170033-f8396924c348?w=200&h=200&fit=crop"
 

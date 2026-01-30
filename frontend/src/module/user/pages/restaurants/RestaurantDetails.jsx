@@ -6,6 +6,8 @@ import { restaurantAPI, diningAPI } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
+import { useLocation } from "../../hooks/useLocation"
+import { useZone } from "../../hooks/useZone"
 import {
   ArrowLeft,
   Search,
@@ -50,6 +52,8 @@ export default function RestaurantDetails() {
   const showOnlyUnder250 = searchParams.get('under250') === 'true'
   const { addToCart, updateQuantity, removeFromCart, getCartItem, cart } = useCart()
   const { vegMode, addDishFavorite, removeDishFavorite, isDishFavorite, getDishFavorites, getFavorites, addFavorite, removeFavorite, isFavorite } = useProfile()
+  const { location: userLocation } = useLocation() // Get user's current location
+  const { zoneId, zone, loading: loadingZone, isOutOfService } = useZone(userLocation) // Get user's zone for zone-based filtering
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState(0)
   const [quantities, setQuantities] = useState({})
@@ -105,39 +109,52 @@ export default function RestaurantDetails() {
           if (diningError.response?.status === 404) {
             console.log('⚠️ Restaurant not found in dining API, trying restaurant API...')
             try {
-              // Try to get restaurant by ID if slug looks like an ID
-              if (slug.match(/^[0-9a-fA-F]{24}$/)) {
-                // Looks like MongoDB ObjectId
+              // First, try to get restaurant directly by slug (getRestaurantById supports both ID and slug)
+              // This doesn't require zoneId, so it works even if zone is not detected
+              try {
                 response = await restaurantAPI.getRestaurantById(slug)
                 if (response.data && response.data.success && response.data.data) {
                   apiRestaurant = response.data.data
-                  console.log('✅ Found restaurant in restaurant API by ID:', apiRestaurant)
+                  console.log('✅ Found restaurant in restaurant API by slug/ID:', apiRestaurant)
                 }
-              } else {
-                // Search restaurants by name (slug is usually name-based)
-                const searchResponse = await restaurantAPI.getRestaurants({ limit: 100 })
-                const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
+              } catch (directLookupError) {
+                // If direct lookup fails, try searching by name (requires zoneId)
+                console.log('⚠️ Direct lookup failed, trying search by name...')
                 
-                // Try to find by slug match or name match
-                const restaurantName = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-                const matchingRestaurant = restaurants.find(r => 
-                  r.slug === slug || 
-                  r.name?.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase() ||
-                  r.name?.toLowerCase() === restaurantName.toLowerCase()
-                )
-                
-                if (matchingRestaurant) {
-                  // Get full restaurant details by ID
-                  const fullResponse = await restaurantAPI.getRestaurantById(matchingRestaurant._id || matchingRestaurant.restaurantId)
-                  if (fullResponse.data && fullResponse.data.success && fullResponse.data.data) {
-                    apiRestaurant = fullResponse.data.data
-                    console.log('✅ Found restaurant in restaurant API by name search:', apiRestaurant)
+                // Only search if zoneId is available (zoneId is required by backend for search)
+                if (!zoneId) {
+                  console.warn('⚠️ User zone not available, cannot search restaurants. Restaurant may not be found.')
+                  // Don't throw error - let it fall through to show "Restaurant not found" message
+                } else {
+                  // Include zoneId for zone-based filtering
+                  const searchParams = { limit: 100, zoneId: zoneId }
+                  const searchResponse = await restaurantAPI.getRestaurants(searchParams)
+                  const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
+                  
+                  // Try to find by slug match or name match
+                  const restaurantName = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                  const matchingRestaurant = restaurants.find(r => 
+                    r.slug === slug || 
+                    r.name?.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase() ||
+                    r.name?.toLowerCase() === restaurantName.toLowerCase()
+                  )
+                  
+                  if (matchingRestaurant) {
+                    // Get full restaurant details by ID
+                    const fullResponse = await restaurantAPI.getRestaurantById(matchingRestaurant._id || matchingRestaurant.restaurantId)
+                    if (fullResponse.data && fullResponse.data.success && fullResponse.data.data) {
+                      apiRestaurant = fullResponse.data.data
+                      console.log('✅ Found restaurant in restaurant API by name search:', apiRestaurant)
+                    }
                   }
                 }
               }
             } catch (restaurantError) {
               console.error('❌ Restaurant not found in restaurant API either:', restaurantError)
-              throw diningError // Throw original error to show "Restaurant not found"
+              // Only throw if we haven't found the restaurant yet
+              if (!apiRestaurant) {
+                throw diningError // Throw original error to show "Restaurant not found"
+              }
             }
           } else {
             throw diningError // Re-throw if it's not a 404
@@ -155,6 +172,157 @@ export default function RestaurantDetails() {
           // Check if this is a dining restaurant with nested restaurant data
           const actualRestaurant = apiRestaurant?.restaurant || apiRestaurant
           
+          // Helper function to format address with zone and pin code
+          const formatRestaurantAddress = (locationObj) => {
+            if (!locationObj) return "Location"
+            
+            // If location is a string, return it as is
+            if (typeof locationObj === 'string') {
+              return locationObj
+            }
+            
+            // PRIORITY 1: Use formattedAddress if it's complete and has pin code
+            // formattedAddress usually has the most complete information from Google Maps
+            if (locationObj.formattedAddress && locationObj.formattedAddress.trim() !== "" && locationObj.formattedAddress !== "Select location") {
+              const isCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(locationObj.formattedAddress.trim())
+              if (!isCoordinates) {
+                const formattedAddr = locationObj.formattedAddress.trim()
+                // Check if it contains a pin code (6 digit number)
+                const hasPinCode = /\b\d{6}\b/.test(formattedAddr)
+                // If it has pin code, it's complete - use it directly
+                if (hasPinCode) {
+                  // Clean up the address - remove Google Plus Code if present (e.g., "PV6X+JXX, ")
+                  const cleanedAddr = formattedAddr.replace(/^[A-Z0-9]+\+[A-Z0-9]+,\s*/i, '')
+                  return cleanedAddr
+                }
+                // If it has multiple parts (3+), it's likely complete
+                if (formattedAddr.split(',').length >= 3) {
+                  const cleanedAddr = formattedAddr.replace(/^[A-Z0-9]+\+[A-Z0-9]+,\s*/i, '')
+                  return cleanedAddr
+                }
+              }
+            }
+            
+            // PRIORITY 2: Build address from location object components (with zone and pin code)
+            // This ensures we always show zone and pin code if available
+            const addressParts = []
+            
+            // Add addressLine1 if available
+            if (locationObj.addressLine1 && locationObj.addressLine1.trim() !== "") {
+              addressParts.push(locationObj.addressLine1.trim())
+            }
+            
+            // Add addressLine2 if available
+            if (locationObj.addressLine2 && locationObj.addressLine2.trim() !== "") {
+              addressParts.push(locationObj.addressLine2.trim())
+            }
+            
+            // Add area (zone) if available
+            if (locationObj.area && locationObj.area.trim() !== "") {
+              addressParts.push(locationObj.area.trim())
+            }
+            
+            // Add city if available
+            if (locationObj.city && locationObj.city.trim() !== "") {
+              addressParts.push(locationObj.city.trim())
+            }
+            
+            // Add state if available
+            if (locationObj.state && locationObj.state.trim() !== "") {
+              addressParts.push(locationObj.state.trim())
+            }
+            
+            // Add pin code (priority: pincode > zipCode > postalCode)
+            const pinCode = locationObj.pincode || locationObj.zipCode || locationObj.postalCode
+            if (pinCode && pinCode.toString().trim() !== "") {
+              addressParts.push(pinCode.toString().trim())
+            }
+            
+            // If we have at least 3 parts (complete address), use it
+            if (addressParts.length >= 3) {
+              return addressParts.join(', ')
+            }
+            
+            // If we have at least 2 parts, use it
+            if (addressParts.length >= 2) {
+              return addressParts.join(', ')
+            }
+            
+            // PRIORITY 3: Fallback to formattedAddress (even if incomplete)
+            if (locationObj.formattedAddress && locationObj.formattedAddress.trim() !== "" && locationObj.formattedAddress !== "Select location") {
+              const isCoordinates = /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(locationObj.formattedAddress.trim())
+              if (!isCoordinates) {
+                const cleanedAddr = locationObj.formattedAddress.trim().replace(/^[A-Z0-9]+\+[A-Z0-9]+,\s*/i, '')
+                return cleanedAddr
+              }
+            }
+            
+            // PRIORITY 4: Fallback to address field
+            if (locationObj.address && locationObj.address.trim() !== "") {
+              return locationObj.address.trim()
+            }
+            
+            // PRIORITY 5: Last fallback - use area or city
+            return locationObj.area || locationObj.city || "Location"
+          }
+          
+          // Get location object for address formatting
+          const locationObj = actualRestaurant?.location || apiRestaurant?.location
+          console.log('📍 Location Object for formatting:', locationObj)
+          console.log('📍 formattedAddress field:', locationObj?.formattedAddress)
+          const formattedAddress = formatRestaurantAddress(locationObj)
+          console.log('📍 Final Formatted Address:', formattedAddress)
+          
+          // Calculate distance from user to restaurant
+          const calculateDistance = (lat1, lng1, lat2, lng2) => {
+            const R = 6371 // Earth's radius in kilometers
+            const dLat = (lat2 - lat1) * Math.PI / 180
+            const dLng = (lng2 - lng1) * Math.PI / 180
+            const a = 
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            return R * c // Distance in kilometers
+          }
+          
+          // Get restaurant coordinates
+          // Priority: latitude/longitude fields > coordinates array (GeoJSON format: [lng, lat])
+          const restaurantLat = locationObj?.latitude || (locationObj?.coordinates && Array.isArray(locationObj.coordinates) ? locationObj.coordinates[1] : null)
+          const restaurantLng = locationObj?.longitude || (locationObj?.coordinates && Array.isArray(locationObj.coordinates) ? locationObj.coordinates[0] : null)
+          
+          console.log('📍 Restaurant coordinates:', { restaurantLat, restaurantLng, locationObj })
+          
+          // Get user coordinates
+          const userLat = userLocation?.latitude
+          const userLng = userLocation?.longitude
+          
+          console.log('📍 User location:', { userLat, userLng, userLocation })
+          
+          // Calculate distance if both coordinates are available
+          let calculatedDistance = null
+          if (userLat && userLng && restaurantLat && restaurantLng && 
+              !isNaN(userLat) && !isNaN(userLng) && !isNaN(restaurantLat) && !isNaN(restaurantLng)) {
+            const distanceInKm = calculateDistance(userLat, userLng, restaurantLat, restaurantLng)
+            // Format distance: show 1 decimal place if >= 1km, otherwise show in meters
+            if (distanceInKm >= 1) {
+              calculatedDistance = `${distanceInKm.toFixed(1)} km`
+            } else {
+              const distanceInMeters = Math.round(distanceInKm * 1000)
+              calculatedDistance = `${distanceInMeters} m`
+            }
+            console.log('✅ Calculated distance from user to restaurant:', calculatedDistance, 'km:', distanceInKm)
+          } else {
+            console.warn('⚠️ Cannot calculate distance - missing coordinates:', {
+              hasUserLocation: !!(userLat && userLng),
+              hasRestaurantLocation: !!(restaurantLat && restaurantLng),
+              userLat,
+              userLng,
+              restaurantLat,
+              restaurantLng
+            })
+          }
+          
           // Transform API data to match expected format with comprehensive fallbacks
           // Handle both dining restaurant and regular restaurant data structures
           const transformedRestaurant = {
@@ -168,24 +336,9 @@ export default function RestaurantDetails() {
             rating: actualRestaurant?.rating ?? apiRestaurant?.rating ?? actualRestaurant?.averageRating ?? apiRestaurant?.averageRating ?? 4.5,
             reviews: actualRestaurant?.totalRatings ?? apiRestaurant?.totalRatings ?? actualRestaurant?.reviewCount ?? apiRestaurant?.reviewCount ?? actualRestaurant?.reviews?.length ?? apiRestaurant?.reviews?.length ?? 0,
             deliveryTime: actualRestaurant?.estimatedDeliveryTime || apiRestaurant?.estimatedDeliveryTime || actualRestaurant?.deliveryTime || apiRestaurant?.deliveryTime || actualRestaurant?.avgDeliveryTime || apiRestaurant?.avgDeliveryTime || "25-30 mins",
-            distance: actualRestaurant?.distance || apiRestaurant?.distance || actualRestaurant?.distanceFromUser || apiRestaurant?.distanceFromUser || "1.2 km",
-            location: (typeof actualRestaurant?.location === 'string' ? actualRestaurant.location : null)
-              || (typeof apiRestaurant?.location === 'string' ? apiRestaurant.location : null)
-              || actualRestaurant?.location?.area 
-              || apiRestaurant?.location?.area
-              || actualRestaurant?.location?.city 
-              || apiRestaurant?.location?.city
-              || actualRestaurant?.location?.addressLine1 
-              || apiRestaurant?.location?.addressLine1
-              || actualRestaurant?.address?.area
-              || apiRestaurant?.address?.area
-              || actualRestaurant?.address?.city
-              || apiRestaurant?.address?.city
-              || actualRestaurant?.address
-              || apiRestaurant?.address
-              || (typeof actualRestaurant?.location === 'object' ? JSON.stringify(actualRestaurant.location) : null)
-              || (typeof apiRestaurant?.location === 'object' ? JSON.stringify(apiRestaurant.location) : null)
-              || "Location",
+            distance: calculatedDistance || actualRestaurant?.distance || apiRestaurant?.distance || actualRestaurant?.distanceFromUser || apiRestaurant?.distanceFromUser || "1.2 km",
+            location: formattedAddress,
+            locationObject: locationObj, // Store full location object for reference
             image: actualRestaurant?.profileImage?.url 
               || apiRestaurant?.profileImage?.url
               || actualRestaurant?.profileImage 
@@ -233,6 +386,9 @@ export default function RestaurantDetails() {
             menuImages: Array.isArray(apiRestaurant?.menuImages) ? apiRestaurant.menuImages : [],
             // Menu sections for display (will be populated from menu API)
             menuSections: [],
+            // Availability fields for grayscale styling
+            isActive: actualRestaurant?.isActive !== false, // Default to true if not specified
+            isAcceptingOrders: actualRestaurant?.isAcceptingOrders !== false, // Default to true if not specified
           }
 
           console.log('✅ Transformed restaurant:', transformedRestaurant)
@@ -251,7 +407,16 @@ export default function RestaurantDetails() {
           if (!restaurantIdForMenu) {
             console.warn('⚠️ No restaurant ID available, searching for restaurant by name...')
             try {
-              const searchResponse = await restaurantAPI.getRestaurants({ limit: 100 })
+              // CRITICAL: Only search if zoneId is available (zoneId is required by backend)
+              if (!zoneId) {
+                console.warn('⚠️ User zone not available, cannot search restaurants. Menu may not load.')
+                // Continue without menu - restaurant details are still available
+                return
+              }
+              
+              // Include zoneId for zone-based filtering
+              const searchParams = { limit: 100, zoneId: zoneId }
+              const searchResponse = await restaurantAPI.getRestaurants(searchParams)
               const restaurants = searchResponse?.data?.data?.restaurants || searchResponse?.data?.data || []
               
               // Try to find by exact name match
@@ -430,8 +595,67 @@ export default function RestaurantDetails() {
       }
     }
 
+    // Wait for zone to load before fetching (if zone-based search might be needed)
+    // But don't block if we're fetching by direct ID
+    if (loadingZone) {
+      console.log('⏳ Waiting for zone detection before fetching restaurant...')
+      return
+    }
+    
     fetchRestaurant()
-  }, [slug])
+  }, [slug, zoneId, loadingZone])
+
+  // Recalculate distance when user location updates
+  useEffect(() => {
+    if (!restaurant || !userLocation?.latitude || !userLocation?.longitude) return
+
+    const locationObj = restaurant.locationObject
+    if (!locationObj) return
+
+    // Get restaurant coordinates
+    const restaurantLat = locationObj?.latitude || (locationObj?.coordinates && Array.isArray(locationObj.coordinates) ? locationObj.coordinates[1] : null)
+    const restaurantLng = locationObj?.longitude || (locationObj?.coordinates && Array.isArray(locationObj.coordinates) ? locationObj.coordinates[0] : null)
+
+    if (!restaurantLat || !restaurantLng) return
+
+    // Calculate distance
+    const calculateDistance = (lat1, lng1, lat2, lng2) => {
+      const R = 6371 // Earth's radius in kilometers
+      const dLat = (lat2 - lat1) * Math.PI / 180
+      const dLng = (lng2 - lng1) * Math.PI / 180
+      const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2)
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+      return R * c // Distance in kilometers
+    }
+
+    const userLat = userLocation.latitude
+    const userLng = userLocation.longitude
+
+    if (userLat && userLng && restaurantLat && restaurantLng && 
+        !isNaN(userLat) && !isNaN(userLng) && !isNaN(restaurantLat) && !isNaN(restaurantLng)) {
+      const distanceInKm = calculateDistance(userLat, userLng, restaurantLat, restaurantLng)
+      let calculatedDistance = null
+      
+      // Format distance: show 1 decimal place if >= 1km, otherwise show in meters
+      if (distanceInKm >= 1) {
+        calculatedDistance = `${distanceInKm.toFixed(1)} km`
+      } else {
+        const distanceInMeters = Math.round(distanceInKm * 1000)
+        calculatedDistance = `${distanceInMeters} m`
+      }
+      
+      console.log('🔄 Recalculated distance from user to restaurant:', calculatedDistance, 'km:', distanceInKm)
+      
+      // Update restaurant distance
+      setRestaurant(prev => ({
+        ...prev,
+        distance: calculatedDistance
+      }))
+    }
+  }, [userLocation?.latitude, userLocation?.longitude, restaurant?.locationObject])
 
   // Sync quantities from cart on mount and when restaurant changes
   useEffect(() => {
@@ -449,6 +673,15 @@ export default function RestaurantDetails() {
 
   // Helper function to update item quantity in both local state and cart
   const updateItemQuantity = (item, newQuantity, event = null) => {
+    // CRITICAL: Check if user is in service zone or restaurant is available
+    if (isOutOfService) {
+      toast.error('You are outside the service zone. Please select a location within the service area.');
+      return;
+    }
+
+    // Note: We don't block cart operations based on restaurant availability
+    // Only block if user is out of service zone
+
     // Update local state
     setQuantities((prev) => ({
       ...prev,
@@ -1000,8 +1233,16 @@ export default function RestaurantDetails() {
     )
   }
 
+  // Only show grayscale when user is out of service (not based on restaurant availability)
+  const shouldShowGrayscale = isOutOfService
+
   return (
-    <AnimatedPage id="scrollingelement" className="min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col">
+    <AnimatedPage 
+      id="scrollingelement" 
+      className={`min-h-screen bg-white dark:bg-[#0a0a0a] flex flex-col transition-all duration-300 ${
+        shouldShowGrayscale ? 'grayscale opacity-75' : ''
+      }`}
+    >
       {/* Header - Back, Search, Menu (like reference image) */}
       <div className="px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 pt-3 md:pt-4 lg:pt-5 pb-2 md:pb-3 bg-white dark:bg-[#1a1a1a]">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -1389,24 +1630,34 @@ export default function RestaurantDetails() {
                                 <motion.div
                                   initial={{ opacity: 0, scale: 0.8 }}
                                   animate={{ opacity: 1, scale: 1 }}
-                                  className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border border-green-600 text-green-600 font-bold px-4 py-1.5 rounded-lg shadow-md hover:bg-green-50 flex items-center gap-1"
+                                  className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${
+                                    shouldShowGrayscale 
+                                      ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50' 
+                                      : 'border-green-600 text-green-600 hover:bg-green-50'
+                                  }`}
                                 >
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      updateItemQuantity(item, Math.max(0, quantity - 1), e)
+                                      if (!shouldShowGrayscale) {
+                                        updateItemQuantity(item, Math.max(0, quantity - 1), e)
+                                      }
                                     }}
-                                    className="text-green-600 hover:text-green-700"
+                                    disabled={shouldShowGrayscale}
+                                    className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-700'}
                                   >
                                     <Minus size={14} />
                                   </button>
-                                  <span className="mx-2 text-sm">{quantity}</span>
+                                  <span className={`mx-2 text-sm ${shouldShowGrayscale ? 'text-gray-400' : ''}`}>{quantity}</span>
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      updateItemQuantity(item, quantity + 1, e)
+                                      if (!shouldShowGrayscale) {
+                                        updateItemQuantity(item, quantity + 1, e)
+                                      }
                                     }}
-                                    className="text-green-600 hover:text-green-700"
+                                    disabled={shouldShowGrayscale}
+                                    className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-700'}
                                   >
                                     <Plus size={14} className="stroke-[3px]" />
                                   </button>
@@ -1419,9 +1670,16 @@ export default function RestaurantDetails() {
                                   transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    updateItemQuantity(item, 1, e)
+                                    if (!shouldShowGrayscale) {
+                                      updateItemQuantity(item, 1, e)
+                                    }
                                   }}
-                                  className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border border-green-600 text-green-600 font-bold px-6 py-1.5 rounded-lg shadow-md hover:bg-green-50 flex items-center gap-1 transition-colors"
+                                  disabled={shouldShowGrayscale}
+                                  className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${
+                                    shouldShowGrayscale 
+                                      ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50' 
+                                      : 'border-green-600 text-green-600 hover:bg-green-50'
+                                  }`}
                                 >
                                   ADD <Plus size={14} className="stroke-[3px]" />
                                 </motion.button>
@@ -1586,24 +1844,34 @@ export default function RestaurantDetails() {
                                           <motion.div
                                             initial={{ opacity: 0, scale: 0.8 }}
                                             animate={{ opacity: 1, scale: 1 }}
-                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border border-green-600 text-green-600 font-bold px-4 py-1.5 rounded-lg shadow-md hover:bg-green-50 flex items-center gap-1"
+                                            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-4 py-1.5 rounded-lg shadow-md flex items-center gap-1 ${
+                                              shouldShowGrayscale 
+                                                ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50' 
+                                                : 'border-green-600 text-green-600 hover:bg-green-50'
+                                            }`}
                                           >
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation()
-                                                updateItemQuantity(item, Math.max(0, quantity - 1), e)
+                                                if (!shouldShowGrayscale) {
+                                                  updateItemQuantity(item, Math.max(0, quantity - 1), e)
+                                                }
                                               }}
-                                              className="text-green-600 hover:text-green-700"
+                                              disabled={shouldShowGrayscale}
+                                              className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-700'}
                                             >
                                               <Minus size={14} />
                                             </button>
-                                            <span className="mx-2 text-sm">{quantity}</span>
+                                            <span className={`mx-2 text-sm ${shouldShowGrayscale ? 'text-gray-400' : ''}`}>{quantity}</span>
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation()
-                                                updateItemQuantity(item, quantity + 1, e)
+                                                if (!shouldShowGrayscale) {
+                                                  updateItemQuantity(item, quantity + 1, e)
+                                                }
                                               }}
-                                              className="text-green-600 hover:text-green-700"
+                                              disabled={shouldShowGrayscale}
+                                              className={shouldShowGrayscale ? 'text-gray-400 cursor-not-allowed' : 'text-green-600 hover:text-green-700'}
                                             >
                                               <Plus size={14} className="stroke-[3px]" />
                                             </button>
@@ -1616,9 +1884,16 @@ export default function RestaurantDetails() {
                                             transition={{ duration: 0.3, type: "spring", damping: 20, stiffness: 300 }}
                                             onClick={(e) => {
                                               e.stopPropagation()
-                                              updateItemQuantity(item, 1, e)
+                                              if (!shouldShowGrayscale) {
+                                                updateItemQuantity(item, 1, e)
+                                              }
                                             }}
-                                            className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border border-green-600 text-green-600 font-bold px-6 py-1.5 rounded-lg shadow-md hover:bg-green-50 flex items-center gap-1 transition-colors"
+                                            disabled={shouldShowGrayscale}
+                                            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 bg-white border font-bold px-6 py-1.5 rounded-lg shadow-md flex items-center gap-1 transition-colors ${
+                                              shouldShowGrayscale 
+                                                ? 'border-gray-300 text-gray-400 cursor-not-allowed opacity-50' 
+                                                : 'border-green-600 text-green-600 hover:bg-green-50'
+                                            }`}
                                           >
                                             ADD <Plus size={14} className="stroke-[3px]" />
                                           </motion.button>
@@ -2292,24 +2567,44 @@ export default function RestaurantDetails() {
                   <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-4 bg-white dark:bg-[#1a1a1a]">
                     <div className="flex items-center gap-4">
                       {/* Quantity Selector */}
-                      <div className="flex items-center gap-3 border-2 border-gray-300 dark:border-gray-700 rounded-lg px-3 h-[44px] bg-white dark:bg-[#2a2a2a]">
+                      <div className={`flex items-center gap-3 border-2 rounded-lg px-3 h-[44px] bg-white dark:bg-[#2a2a2a] ${
+                        shouldShowGrayscale 
+                          ? 'border-gray-300 dark:border-gray-700 opacity-50' 
+                          : 'border-gray-300 dark:border-gray-700'
+                      }`}>
                         <button
-                          onClick={(e) =>
-                            updateItemQuantity(selectedItem, Math.max(0, (quantities[selectedItem.id] || 0) - 1), e)
-                          }
-                          disabled={(quantities[selectedItem.id] || 0) === 0}
-                          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
+                          onClick={(e) => {
+                            if (!shouldShowGrayscale) {
+                              updateItemQuantity(selectedItem, Math.max(0, (quantities[selectedItem.id] || 0) - 1), e)
+                            }
+                          }}
+                          disabled={(quantities[selectedItem.id] || 0) === 0 || shouldShowGrayscale}
+                          className={`${
+                            shouldShowGrayscale 
+                              ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' 
+                              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:text-gray-300 dark:disabled:text-gray-600 disabled:cursor-not-allowed'
+                          }`}
                         >
                           <Minus className="h-5 w-5" />
                         </button>
-                        <span className="text-lg font-semibold text-gray-900 dark:text-white min-w-[2rem] text-center">
+                        <span className={`text-lg font-semibold min-w-[2rem] text-center ${
+                          shouldShowGrayscale 
+                            ? 'text-gray-400 dark:text-gray-600' 
+                            : 'text-gray-900 dark:text-white'
+                        }`}>
                           {quantities[selectedItem.id] || 0}
                         </span>
                         <button
-                          onClick={(e) =>
-                            updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
+                          onClick={(e) => {
+                            if (!shouldShowGrayscale) {
+                              updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
+                            }
+                          }}
+                          disabled={shouldShowGrayscale}
+                          className={shouldShowGrayscale 
+                            ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' 
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                           }
-                          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                         >
                           <Plus className="h-5 w-5" />
                         </button>
@@ -2317,11 +2612,18 @@ export default function RestaurantDetails() {
 
                       {/* Add Item Button */}
                       <Button
-                        className="flex-1 bg-red-500 hover:bg-red-600 text-white h-[44px] rounded-lg font-semibold flex items-center justify-center gap-2"
+                        className={`flex-1 h-[44px] rounded-lg font-semibold flex items-center justify-center gap-2 ${
+                          shouldShowGrayscale 
+                            ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-600 cursor-not-allowed opacity-50' 
+                            : 'bg-red-500 hover:bg-red-600 text-white'
+                        }`}
                         onClick={(e) => {
-                          updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
-                          setShowItemDetail(false)
+                          if (!shouldShowGrayscale) {
+                            updateItemQuantity(selectedItem, (quantities[selectedItem.id] || 0) + 1, e)
+                            setShowItemDetail(false)
+                          }
                         }}
+                        disabled={shouldShowGrayscale}
                       >
                         <span>Add item</span>
                         <div className="flex items-center gap-1">

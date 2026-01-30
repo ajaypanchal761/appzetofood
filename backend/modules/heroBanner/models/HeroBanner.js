@@ -19,6 +19,13 @@ const heroBannerSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  linkedRestaurants: {
+    type: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Restaurant'
+    }],
+    default: []
+  },
   createdAt: {
     type: Date,
     default: Date.now

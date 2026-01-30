@@ -14,6 +14,7 @@ import {
   getUserById,
   updateUserStatus,
   getRestaurants,
+  createRestaurant,
   updateRestaurantStatus,
   getRestaurantJoinRequests,
   approveRestaurant,
@@ -274,6 +275,7 @@ router.get('/customer-wallet-report', getCustomerWalletReport);
 
 // Restaurant Management
 router.get('/restaurants', getRestaurants);
+router.post('/restaurants', createRestaurant);
 router.get('/restaurants/requests', getRestaurantJoinRequests);
 router.get('/restaurant-analytics/:restaurantId', getRestaurantAnalytics);
 router.post('/restaurants/:id/approve', approveRestaurant);

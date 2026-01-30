@@ -1,38 +1,93 @@
 import { useState } from "react"
-import { Building2, Info, Tag, Upload, Calendar, Eye, EyeOff, FileText, MapPin, CheckCircle2, X } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { Building2, Info, Tag, Upload, Calendar, FileText, MapPin, CheckCircle2, X, Image as ImageIcon, Clock, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { addRestaurant } from "../../utils/restaurantStorage"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { adminAPI, uploadAPI } from "@/lib/api"
+import { toast } from "sonner"
+
+const cuisinesOptions = [
+  "North Indian",
+  "South Indian",
+  "Chinese",
+  "Pizza",
+  "Burgers",
+  "Bakery",
+  "Cafe",
+]
+
+const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export default function AddRestaurant() {
-  const [activeLanguage, setActiveLanguage] = useState("default")
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const navigate = useNavigate()
+  const [step, setStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [formErrors, setFormErrors] = useState({})
-  const [formData, setFormData] = useState({
+  
+  // Step 1: Basic Info
+  const [step1, setStep1] = useState({
     restaurantName: "",
-    restaurantAddress: "",
-    cuisine: "",
-    zone: "",
-    logo: null,
-    cover: null,
-    estimatedDeliveryTimeMin: "",
-    estimatedDeliveryTimeMax: "",
-    firstName: "",
-    lastName: "",
-    phone: "",
-    phoneCode: "+1",
-    tinNumber: "",
-    date: "",
-    licenseDocument: null,
-    tags: "",
-    businessTIN: "",
-    tinExpireDate: "",
-    tinCertificate: null,
+    ownerName: "",
+    ownerEmail: "",
+    ownerPhone: "",
+    primaryContactNumber: "",
+    location: {
+      addressLine1: "",
+      addressLine2: "",
+      area: "",
+      city: "",
+      state: "",
+      pincode: "",
+      landmark: "",
+    },
+  })
+
+  // Step 2: Images & Operational
+  const [step2, setStep2] = useState({
+    menuImages: [],
+    profileImage: null,
+    cuisines: [],
+    openingTime: "09:00",
+    closingTime: "22:00",
+    openDays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  })
+
+  // Step 3: Documents
+  const [step3, setStep3] = useState({
+    panNumber: "",
+    nameOnPan: "",
+    panImage: null,
+    gstRegistered: false,
+    gstNumber: "",
+    gstLegalName: "",
+    gstAddress: "",
+    gstImage: null,
+    fssaiNumber: "",
+    fssaiExpiry: "",
+    fssaiImage: null,
+    accountNumber: "",
+    confirmAccountNumber: "",
+    ifscCode: "",
+    accountHolderName: "",
+    accountType: "",
+  })
+
+  // Step 4: Display Info
+  const [step4, setStep4] = useState({
+    estimatedDeliveryTime: "25-30 mins",
+    featuredDish: "",
+    featuredPrice: "249",
+    offer: "",
+  })
+
+  // Authentication
+  const [auth, setAuth] = useState({
     email: "",
-    password: "",
-    confirmPassword: "",
+    phone: "",
+    signupMethod: "email",
   })
 
   const languageTabs = [
@@ -43,800 +98,709 @@ export default function AddRestaurant() {
     { key: "es", label: "Spanish - español(ES)" },
   ]
 
-  const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleFileUpload = (field, file) => {
-    if (file) {
-      // Validate file size (2MB max)
-      const maxSize = 2 * 1024 * 1024 // 2MB in bytes
-      if (file.size > maxSize) {
-        setFormErrors(prev => ({
-          ...prev,
-          [field]: "File size must be less than 2MB"
-        }))
-        return
-      }
-      
-      // Validate image dimensions for logo (should be square)
-      if ((field === "logo" || field === "cover") && file.type.startsWith("image/")) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          const img = new Image()
-          img.onload = () => {
-            if (field === "logo") {
-              // Logo should be square (1:1)
-              const aspectRatio = img.width / img.height
-              if (Math.abs(aspectRatio - 1) > 0.1) {
-                setFormErrors(prev => ({
-                  ...prev,
-                  [field]: "Logo image should be square (1:1 aspect ratio)"
-                }))
-                return
-              }
-            } else if (field === "cover") {
-              // Cover should be 3:1
-              const aspectRatio = img.width / img.height
-              if (Math.abs(aspectRatio - 3) > 0.3) {
-                setFormErrors(prev => ({
-                  ...prev,
-                  [field]: "Cover image should have 3:1 aspect ratio"
-                }))
-                return
-              }
-            }
-            setFormData(prev => ({ ...prev, [field]: file }))
-            setFormErrors(prev => {
-              const newErrors = { ...prev }
-              delete newErrors[field]
-              return newErrors
-            })
-          }
-          img.src = e.target.result
-        }
-        reader.readAsDataURL(file)
-      } else {
-      setFormData(prev => ({ ...prev, [field]: file }))
-        setFormErrors(prev => {
-          const newErrors = { ...prev }
-          delete newErrors[field]
-          return newErrors
-        })
-      }
+  // Upload handler for images
+  const handleUpload = async (file, folder) => {
+    try {
+      const res = await uploadAPI.uploadMedia(file, { folder })
+      const d = res?.data?.data || res?.data
+      return { url: d.url, publicId: d.publicId }
+    } catch (err) {
+      const errorMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to upload image"
+      console.error("Upload error:", errorMsg, err)
+      throw new Error(`Image upload failed: ${errorMsg}`)
     }
   }
 
-  const validateForm = () => {
-    const errors = {}
-    
-    // Password validation
-    if (formData.password.length < 8) {
-      errors.password = "Password must be at least 8 characters"
-    }
-    
-    // Password match validation
-    if (formData.password !== formData.confirmPassword) {
-      errors.confirmPassword = "Passwords do not match"
-    }
-    
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.email)) {
-      errors.email = "Please enter a valid email address"
-    }
-    
-    // Phone validation
-    if (formData.phone && formData.phone.length < 10) {
-      errors.phone = "Please enter a valid phone number"
-    }
-    
-    // Delivery time validation
-    if (parseInt(formData.estimatedDeliveryTimeMin) >= parseInt(formData.estimatedDeliveryTimeMax)) {
-      errors.estimatedDeliveryTime = "Minimum time must be less than maximum time"
-    }
-    
-    setFormErrors(errors)
-    return Object.keys(errors).length === 0
+  // Validation functions
+  const validateStep1 = () => {
+    const errors = []
+    if (!step1.restaurantName?.trim()) errors.push("Restaurant name is required")
+    if (!step1.ownerName?.trim()) errors.push("Owner name is required")
+    if (!step1.ownerEmail?.trim()) errors.push("Owner email is required")
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(step1.ownerEmail)) errors.push("Please enter a valid email address")
+    if (!step1.ownerPhone?.trim()) errors.push("Owner phone number is required")
+    if (!step1.primaryContactNumber?.trim()) errors.push("Primary contact number is required")
+    if (!step1.location?.area?.trim()) errors.push("Area/Sector/Locality is required")
+    if (!step1.location?.city?.trim()) errors.push("City is required")
+    return errors
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    
-    // Clear previous errors
+  const validateStep2 = () => {
+    const errors = []
+    if (!step2.menuImages || step2.menuImages.length === 0) errors.push("At least one menu image is required")
+    if (!step2.profileImage) errors.push("Restaurant profile image is required")
+    if (!step2.cuisines || step2.cuisines.length === 0) errors.push("Please select at least one cuisine")
+    if (!step2.openingTime?.trim()) errors.push("Opening time is required")
+    if (!step2.closingTime?.trim()) errors.push("Closing time is required")
+    if (!step2.openDays || step2.openDays.length === 0) errors.push("Please select at least one open day")
+    return errors
+  }
+
+  const validateStep3 = () => {
+    const errors = []
+    if (!step3.panNumber?.trim()) errors.push("PAN number is required")
+    if (!step3.nameOnPan?.trim()) errors.push("Name on PAN is required")
+    if (!step3.panImage) errors.push("PAN image is required")
+    if (!step3.fssaiNumber?.trim()) errors.push("FSSAI number is required")
+    if (!step3.fssaiExpiry?.trim()) errors.push("FSSAI expiry date is required")
+    if (!step3.fssaiImage) errors.push("FSSAI image is required")
+    if (step3.gstRegistered) {
+      if (!step3.gstNumber?.trim()) errors.push("GST number is required when GST registered")
+      if (!step3.gstLegalName?.trim()) errors.push("GST legal name is required when GST registered")
+      if (!step3.gstAddress?.trim()) errors.push("GST registered address is required when GST registered")
+      if (!step3.gstImage) errors.push("GST image is required when GST registered")
+    }
+    if (!step3.accountNumber?.trim()) errors.push("Account number is required")
+    if (step3.accountNumber !== step3.confirmAccountNumber) errors.push("Account number and confirmation do not match")
+    if (!step3.ifscCode?.trim()) errors.push("IFSC code is required")
+    if (!step3.accountHolderName?.trim()) errors.push("Account holder name is required")
+    if (!step3.accountType?.trim()) errors.push("Account type is required")
+    return errors
+  }
+
+  const validateStep4 = () => {
+    const errors = []
+    if (!step4.estimatedDeliveryTime?.trim()) errors.push("Estimated delivery time is required")
+    if (!step4.featuredDish?.trim()) errors.push("Featured dish name is required")
+    if (!step4.featuredPrice || isNaN(parseFloat(step4.featuredPrice)) || parseFloat(step4.featuredPrice) <= 0) {
+      errors.push("Featured dish price is required and must be greater than 0")
+    }
+    if (!step4.offer?.trim()) errors.push("Special offer/promotion is required")
+    return errors
+  }
+
+  const validateAuth = () => {
+    const errors = []
+    if (!auth.email && !auth.phone) errors.push("Either email or phone is required")
+    if (auth.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(auth.email)) errors.push("Please enter a valid email address")
+    return errors
+  }
+
+  const handleNext = () => {
     setFormErrors({})
+    let validationErrors = []
     
-    // Validate form
-    if (!validateForm()) {
+    if (step === 1) {
+      validationErrors = validateStep1()
+    } else if (step === 2) {
+      validationErrors = validateStep2()
+    } else if (step === 3) {
+      validationErrors = validateStep3()
+    } else if (step === 4) {
+      validationErrors = validateStep4()
+    } else if (step === 5) {
+      validationErrors = validateAuth()
+    }
+    
+    if (validationErrors.length > 0) {
+      validationErrors.forEach((error) => {
+        toast.error(error)
+      })
       return
     }
     
+    if (step < 5) {
+      setStep(step + 1)
+    } else {
+      handleSubmit()
+    }
+  }
+
+  const handleSubmit = async () => {
     setIsSubmitting(true)
+    setFormErrors({})
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Upload all images first
+      let profileImageData = null
+      if (step2.profileImage instanceof File) {
+        profileImageData = await handleUpload(step2.profileImage, "appzeto/restaurant/profile")
+      } else if (step2.profileImage?.url) {
+        profileImageData = step2.profileImage
+      }
+
+      let menuImagesData = []
+      for (const file of step2.menuImages.filter(f => f instanceof File)) {
+        const uploaded = await handleUpload(file, "appzeto/restaurant/menu")
+        menuImagesData.push(uploaded)
+      }
+      const existingMenuUrls = step2.menuImages.filter(img => !(img instanceof File) && (img?.url || (typeof img === 'string' && img.startsWith('http'))))
+      menuImagesData = [...existingMenuUrls, ...menuImagesData]
+
+      let panImageData = null
+      if (step3.panImage instanceof File) {
+        panImageData = await handleUpload(step3.panImage, "appzeto/restaurant/pan")
+      } else if (step3.panImage?.url) {
+        panImageData = step3.panImage
+      }
+
+      let gstImageData = null
+      if (step3.gstRegistered && step3.gstImage) {
+        if (step3.gstImage instanceof File) {
+          gstImageData = await handleUpload(step3.gstImage, "appzeto/restaurant/gst")
+        } else if (step3.gstImage?.url) {
+          gstImageData = step3.gstImage
+        }
+      }
+
+      let fssaiImageData = null
+      if (step3.fssaiImage instanceof File) {
+        fssaiImageData = await handleUpload(step3.fssaiImage, "appzeto/restaurant/fssai")
+      } else if (step3.fssaiImage?.url) {
+        fssaiImageData = step3.fssaiImage
+      }
+
+      // Prepare payload
+      const payload = {
+        // Step 1
+        restaurantName: step1.restaurantName,
+        ownerName: step1.ownerName,
+        ownerEmail: step1.ownerEmail,
+        ownerPhone: step1.ownerPhone,
+        primaryContactNumber: step1.primaryContactNumber,
+        location: step1.location,
+        // Step 2
+        menuImages: menuImagesData,
+        profileImage: profileImageData,
+        cuisines: step2.cuisines,
+        openingTime: step2.openingTime,
+        closingTime: step2.closingTime,
+        openDays: step2.openDays,
+        // Step 3
+        panNumber: step3.panNumber,
+        nameOnPan: step3.nameOnPan,
+        panImage: panImageData,
+        gstRegistered: step3.gstRegistered,
+        gstNumber: step3.gstNumber,
+        gstLegalName: step3.gstLegalName,
+        gstAddress: step3.gstAddress,
+        gstImage: gstImageData,
+        fssaiNumber: step3.fssaiNumber,
+        fssaiExpiry: step3.fssaiExpiry,
+        fssaiImage: fssaiImageData,
+        accountNumber: step3.accountNumber,
+        ifscCode: step3.ifscCode,
+        accountHolderName: step3.accountHolderName,
+        accountType: step3.accountType,
+        // Step 4
+        estimatedDeliveryTime: step4.estimatedDeliveryTime,
+        featuredDish: step4.featuredDish,
+        featuredPrice: parseFloat(step4.featuredPrice) || 249,
+        offer: step4.offer,
+        // Auth
+        email: auth.email || null,
+        phone: auth.phone || null,
+        signupMethod: auth.email ? 'email' : 'phone',
+      }
+
+      // Call backend API
+      const response = await adminAPI.createRestaurant(payload)
       
-      // Save restaurant to storage
-      const newRestaurant = addRestaurant(formData)
-      console.log("Restaurant added:", newRestaurant)
-      
-      // Show success dialog
-      setShowSuccessDialog(true)
-      
-      // Reset form after showing success
-      setTimeout(() => {
-        handleReset()
-        setShowSuccessDialog(false)
-      }, 3000)
+      if (response.data.success) {
+        toast.success("Restaurant created successfully!")
+        setShowSuccessDialog(true)
+        setTimeout(() => {
+          navigate("/admin/restaurants")
+        }, 2000)
+      } else {
+        throw new Error(response.data.message || "Failed to create restaurant")
+      }
     } catch (error) {
-      console.error("Error submitting form:", error)
-      setFormErrors({ submit: "Failed to add restaurant. Please try again." })
+      console.error("Error creating restaurant:", error)
+      const errorMsg = error?.response?.data?.message || error?.message || "Failed to create restaurant. Please try again."
+      toast.error(errorMsg)
+      setFormErrors({ submit: errorMsg })
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const handleReset = () => {
-    setFormData({
-      restaurantName: "",
-      restaurantAddress: "",
-      cuisine: "",
-      zone: "",
-      logo: null,
-      cover: null,
-      estimatedDeliveryTimeMin: "",
-      estimatedDeliveryTimeMax: "",
-      firstName: "",
-      lastName: "",
-      phone: "",
-      phoneCode: "+1",
-      tinNumber: "",
-      date: "",
-      licenseDocument: null,
-      tags: "",
-      businessTIN: "",
-      tinExpireDate: "",
-      tinCertificate: null,
-      email: "",
-      password: "",
-      confirmPassword: "",
-    })
-    setFormErrors({})
-    setActiveLanguage("default")
-    
-    // Reset file inputs
-    const fileInputs = document.querySelectorAll('input[type="file"]')
-    fileInputs.forEach(input => {
-      input.value = ""
-    })
-  }
-
-  const getFilePreview = (file) => {
-    if (!file) return null
-    if (file.type.startsWith("image/")) {
-      return URL.createObjectURL(file)
-    }
-    return null
-  }
-
-  return (
-    <div className="p-4 lg:p-6 bg-slate-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900">Add New Restaurant</h1>
+  // Render functions for each step
+  const renderStep1 = () => (
+    <div className="space-y-6">
+      <section className="bg-white p-4 sm:p-6 rounded-md">
+        <h2 className="text-lg font-semibold text-black mb-4">Restaurant information</h2>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs text-gray-700">Restaurant name*</Label>
+            <Input
+              value={step1.restaurantName || ""}
+              onChange={(e) => setStep1({ ...step1, restaurantName: e.target.value })}
+              className="mt-1 bg-white text-sm text-black placeholder-black"
+              placeholder="Customers will see this name"
+            />
           </div>
+        </div>
+      </section>
 
-          {/* Language Tabs */}
-          <div className="flex items-center gap-2 border-b border-slate-200">
-            {languageTabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveLanguage(tab.key)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeLanguage === tab.key
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+      <section className="bg-white p-4 sm:p-6 rounded-md">
+        <h2 className="text-lg font-semibold text-black mb-4">Owner details</h2>
+        <div className="space-y-4">
+          <div>
+            <Label className="text-xs text-gray-700">Full name*</Label>
+            <Input
+              value={step1.ownerName || ""}
+              onChange={(e) => setStep1({ ...step1, ownerName: e.target.value })}
+              className="mt-1 bg-white text-sm text-black placeholder-black"
+              placeholder="Owner full name"
+            />
+          </div>
+          <div>
+            <Label className="text-xs text-gray-700">Email address*</Label>
+            <Input
+              type="email"
+              value={step1.ownerEmail || ""}
+              onChange={(e) => setStep1({ ...step1, ownerEmail: e.target.value })}
+              className="mt-1 bg-white text-sm text-black placeholder-black"
+              placeholder="owner@example.com"
+            />
+          </div>
+          <div>
+            <Label className="text-xs text-gray-700">Phone number*</Label>
+            <Input
+              value={step1.ownerPhone || ""}
+              onChange={(e) => setStep1({ ...step1, ownerPhone: e.target.value })}
+              className="mt-1 bg-white text-sm text-black placeholder-black"
+              placeholder="+91 98XXXXXX"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
+        <h2 className="text-lg font-semibold text-black">Restaurant contact & location</h2>
+        <div>
+          <Label className="text-xs text-gray-700">Primary contact number*</Label>
+          <Input
+            value={step1.primaryContactNumber || ""}
+            onChange={(e) => setStep1({ ...step1, primaryContactNumber: e.target.value })}
+            className="mt-1 bg-white text-sm text-black placeholder-black"
+            placeholder="Restaurant's primary contact number"
+          />
+        </div>
+        <div className="space-y-3">
+          <Input
+            value={step1.location?.area || ""}
+            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, area: e.target.value } })}
+            className="bg-white text-sm"
+            placeholder="Area / Sector / Locality*"
+          />
+          <Input
+            value={step1.location?.city || ""}
+            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, city: e.target.value } })}
+            className="bg-white text-sm"
+            placeholder="City*"
+          />
+          <Input
+            value={step1.location?.addressLine1 || ""}
+            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, addressLine1: e.target.value } })}
+            className="bg-white text-sm"
+            placeholder="Shop no. / building no. (optional)"
+          />
+          <Input
+            value={step1.location?.addressLine2 || ""}
+            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, addressLine2: e.target.value } })}
+            className="bg-white text-sm"
+            placeholder="Floor / tower (optional)"
+          />
+          <Input
+            value={step1.location?.state || ""}
+            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, state: e.target.value } })}
+            className="bg-white text-sm"
+            placeholder="State (optional)"
+          />
+          <Input
+            value={step1.location?.pincode || ""}
+            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, pincode: e.target.value } })}
+            className="bg-white text-sm"
+            placeholder="Pin code (optional)"
+          />
+          <Input
+            value={step1.location?.landmark || ""}
+            onChange={(e) => setStep1({ ...step1, location: { ...step1.location, landmark: e.target.value } })}
+            className="bg-white text-sm"
+            placeholder="Nearby landmark (optional)"
+          />
+        </div>
+      </section>
+    </div>
+  )
+
+  const renderStep2 = () => (
+    <div className="space-y-6">
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-5">
+        <h2 className="text-lg font-semibold text-black">Menu & photos</h2>
+        <div className="space-y-2">
+          <Label className="text-xs font-medium text-gray-700">Menu images*</Label>
+          <div className="mt-1 border border-dashed border-gray-300 rounded-md bg-gray-50/70 px-4 py-3">
+            <label htmlFor="menuImagesInput" className="inline-flex justify-center items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white text-black border-black text-xs font-medium cursor-pointer w-full items-center">
+              <Upload className="w-4.5 h-4.5" />
+              <span>Choose files</span>
+            </label>
+            <input
+              id="menuImagesInput"
+              type="file"
+              multiple
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files || [])
+                if (files.length) {
+                  setStep2((prev) => ({ ...prev, menuImages: [...(prev.menuImages || []), ...files] }))
+                  e.target.value = ''
+                }
+              }}
+            />
+          </div>
+          {step2.menuImages.length > 0 && (
+            <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {step2.menuImages.map((file, idx) => {
+                const imageUrl = file instanceof File ? URL.createObjectURL(file) : (file?.url || file)
+                return (
+                  <div key={idx} className="relative aspect-[4/5] rounded-md overflow-hidden bg-gray-100">
+                    {imageUrl && <img src={imageUrl} alt={`Menu ${idx + 1}`} className="w-full h-full object-cover" />}
+                    <button
+                      type="button"
+                      onClick={() => setStep2((prev) => ({ ...prev, menuImages: prev.menuImages.filter((_, i) => i !== idx) }))}
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs font-medium text-gray-700">Restaurant profile image*</Label>
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+              {step2.profileImage ? (
+                (() => {
+                  const imageSrc = step2.profileImage instanceof File ? URL.createObjectURL(step2.profileImage) : (step2.profileImage?.url || step2.profileImage)
+                  return imageSrc ? <img src={imageSrc} alt="Profile" className="w-full h-full object-cover" /> : <ImageIcon className="w-6 h-6 text-gray-500" />
+                })()
+              ) : (
+                <ImageIcon className="w-6 h-6 text-gray-500" />
+              )}
+            </div>
+            <label htmlFor="profileImageInput" className="inline-flex justify-center items-center gap-1.5 px-3 py-1.5 rounded-sm bg-white text-black border-black text-xs font-medium cursor-pointer">
+              <Upload className="w-4.5 h-4.5" />
+              <span>Upload</span>
+            </label>
+            <input
+              id="profileImageInput"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null
+                if (file) setStep2((prev) => ({ ...prev, profileImage: file }))
+                e.target.value = ''
+              }}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-5">
+        <div>
+          <Label className="text-xs text-gray-700">Select cuisines (up to 3)*</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {cuisinesOptions.map((cuisine) => {
+              const active = step2.cuisines.includes(cuisine)
+              return (
+                <button
+                  key={cuisine}
+                  type="button"
+                  onClick={() => {
+                    setStep2((prev) => {
+                      const exists = prev.cuisines.includes(cuisine)
+                      if (exists) return { ...prev, cuisines: prev.cuisines.filter((c) => c !== cuisine) }
+                      if (prev.cuisines.length >= 3) return prev
+                      return { ...prev, cuisines: [...prev.cuisines, cuisine] }
+                    })
+                  }}
+                  className={`px-3 py-1.5 text-xs rounded-full ${active ? "bg-black text-white" : "bg-gray-100 text-gray-800"}`}
+                >
+                  {cuisine}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          {/* Basic Information */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-            <div className="mb-4">
-              <p className="text-sm text-slate-600">Here you setup your all business information.</p>
+        <div className="space-y-3">
+          <Label className="text-xs text-gray-700">Delivery timings*</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs text-gray-700 mb-1 block">Opening time</Label>
+              <Input
+                type="time"
+                value={step2.openingTime || ""}
+                onChange={(e) => setStep2({ ...step2, openingTime: e.target.value })}
+                className="bg-white text-sm"
+              />
             </div>
-
-            <div className="space-y-6">
-              {/* Restaurant Name */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Restaurant Name ({activeLanguage === "default" ? "Default" : languageTabs.find(t => t.key === activeLanguage)?.label}) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.restaurantName}
-                  onChange={(e) => handleInputChange("restaurantName", e.target.value)}
-                  placeholder="Ex: ABC Company"
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  required
-                />
-              </div>
-
-              {/* Restaurant Address */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Restaurant Address ({activeLanguage === "default" ? "Default" : languageTabs.find(t => t.key === activeLanguage)?.label}) <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <textarea
-                    value={formData.restaurantAddress}
-                    onChange={(e) => handleInputChange("restaurantAddress", e.target.value)}
-                    placeholder="Ex: House#94 Road#8 Abc City"
-                    rows={3}
-                    maxLength={100}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
-                    required
-                  />
-                  <div className="absolute bottom-2 right-2 text-xs text-slate-500">
-                    {formData.restaurantAddress.length}/100
-                  </div>
-                </div>
-              </div>
-
-              {/* Cuisine and Zone */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Cuisine <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.cuisine}
-                    onChange={(e) => handleInputChange("cuisine", e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    required
-                  >
-                    <option value="">Select Cuisine</option>
-                    <option value="italian">Italian</option>
-                    <option value="chinese">Chinese</option>
-                    <option value="indian">Indian</option>
-                    <option value="mexican">Mexican</option>
-                    <option value="american">American</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Zone <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.zone}
-                    onChange={(e) => handleInputChange("zone", e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    required
-                  >
-                    <option value="">Select Zone</option>
-                    <option value="zone1">Zone 1</option>
-                    <option value="zone2">Zone 2</option>
-                    <option value="zone3">Zone 3</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Logo and Cover Image */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Logo */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Logo <span className="text-red-500">*</span>
-                  </label>
-                  {formData.logo && getFilePreview(formData.logo) ? (
-                    <div className="relative border-2 border-slate-300 rounded-lg overflow-hidden">
-                      <img
-                        src={getFilePreview(formData.logo)}
-                        alt="Logo preview"
-                        className="w-full h-48 object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleFileUpload("logo", null)}
-                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                      <p className="p-2 text-xs text-slate-600 text-center">{formData.logo.name}</p>
-                    </div>
-                  ) : (
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/gif"
-                      onChange={(e) => handleFileUpload("logo", e.target.files[0])}
-                      className="hidden"
-                      id="logo-upload"
-                      required
-                    />
-                    <label htmlFor="logo-upload" className="cursor-pointer">
-                      <Upload className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                      <p className="text-sm font-medium text-slate-700 mb-1">Click to upload Or drag and drop</p>
-                      <div className="text-xs text-slate-500 space-y-1 mt-2">
-                        <p>JPG, JPEG, PNG, Gif</p>
-                        <p>Image size: Max 2 MB (1:1)</p>
-                      </div>
-                    </label>
-                  </div>
-                  )}
-                  {formErrors.logo && (
-                    <p className="text-xs text-red-500 mt-1">{formErrors.logo}</p>
-                  )}
-                </div>
-
-                {/* Restaurant Cover */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Restaurant Cover <span className="text-red-500">*</span>
-                  </label>
-                  {formData.cover && getFilePreview(formData.cover) ? (
-                    <div className="relative border-2 border-slate-300 rounded-lg overflow-hidden">
-                      <img
-                        src={getFilePreview(formData.cover)}
-                        alt="Cover preview"
-                        className="w-full h-48 object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleFileUpload("cover", null)}
-                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                      <p className="p-2 text-xs text-slate-600 text-center">{formData.cover.name}</p>
-                    </div>
-                  ) : (
-                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/gif"
-                      onChange={(e) => handleFileUpload("cover", e.target.files[0])}
-                      className="hidden"
-                      id="cover-upload"
-                      required
-                    />
-                    <label htmlFor="cover-upload" className="cursor-pointer">
-                      <Upload className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                      <p className="text-sm font-medium text-slate-700 mb-1">Click to upload Or drag and drop</p>
-                      <div className="text-xs text-slate-500 space-y-1 mt-2">
-                        <p>JPG, JPEG, PNG, Gif</p>
-                        <p>Image size: Max 2 MB (3:1)</p>
-                      </div>
-                    </label>
-                  </div>
-                  )}
-                  {formErrors.cover && (
-                    <p className="text-xs text-red-500 mt-1">{formErrors.cover}</p>
-                  )}
-                </div>
-              </div>
+            <div>
+              <Label className="text-xs text-gray-700 mb-1 block">Closing time</Label>
+              <Input
+                type="time"
+                value={step2.closingTime || ""}
+                onChange={(e) => setStep2({ ...step2, closingTime: e.target.value })}
+                className="bg-white text-sm"
+              />
             </div>
           </div>
+        </div>
 
-          {/* General Settings */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-            <div className="mb-4">
-              <p className="text-sm text-slate-600">Here you setup your all business general settings.</p>
-            </div>
-
-            <div className="space-y-6">
-              {/* Restaurant Info */}
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 mb-4">Restaurant Info</h3>
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Estimated Delivery Time (Min & Maximum Time) <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={formData.estimatedDeliveryTimeMin}
-                        onChange={(e) => handleInputChange("estimatedDeliveryTimeMin", e.target.value)}
-                        placeholder="Ex: 30"
-                        className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
-                          formErrors.estimatedDeliveryTime ? "border-red-500" : "border-slate-300"
-                        }`}
-                        required
-                        min="1"
-                      />
-                      <input
-                        type="number"
-                        value={formData.estimatedDeliveryTimeMax}
-                        onChange={(e) => handleInputChange("estimatedDeliveryTimeMax", e.target.value)}
-                        placeholder="Ex: 60"
-                        className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
-                          formErrors.estimatedDeliveryTime ? "border-red-500" : "border-slate-300"
-                        }`}
-                        required
-                        min="1"
-                      />
-                      <select className="px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
-                        <option>Minutes</option>
-                      </select>
-                    </div>
-                    {formErrors.estimatedDeliveryTime && (
-                      <p className="text-xs text-red-500 mt-1">{formErrors.estimatedDeliveryTime}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Owner Info */}
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 mb-4">Owner Info</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      First Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.firstName}
-                      onChange={(e) => handleInputChange("firstName", e.target.value)}
-                      placeholder="Ex: Jhone"
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Last Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.lastName}
-                      onChange={(e) => handleInputChange("lastName", e.target.value)}
-                      placeholder="Ex: Doe"
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Phone <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={formData.phoneCode}
-                        onChange={(e) => handleInputChange("phoneCode", e.target.value)}
-                        className="px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      >
-                        <option value="+1">🇺🇸 +1</option>
-                        <option value="+91">🇮🇳 +91</option>
-                        <option value="+44">🇬🇧 +44</option>
-                      </select>
-                      <input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => handleInputChange("phone", e.target.value)}
-                        placeholder="Phone number"
-                        className={`flex-1 px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
-                          formErrors.phone ? "border-red-500" : "border-slate-300"
-                        }`}
-                        required
-                      />
-                    </div>
-                    {formErrors.phone && (
-                      <p className="text-xs text-red-500 mt-1">{formErrors.phone}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Additional Data */}
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 mb-4">Additional Data</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Enter your tin number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.tinNumber}
-                      onChange={(e) => handleInputChange("tinNumber", e.target.value)}
-                      placeholder="Enter TIN"
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      Date <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="date"
-                        value={formData.date}
-                        onChange={(e) => handleInputChange("date", e.target.value)}
-                        className="w-full px-4 py-2.5 pr-10 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                        required
-                      />
-                      <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      License document <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                        onChange={(e) => handleFileUpload("licenseDocument", e.target.files[0])}
-                        className="hidden"
-                        id="license-upload"
-                        required
-                      />
-                      <label
-                        htmlFor="license-upload"
-                        className="px-4 py-2 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 cursor-pointer text-sm font-medium text-slate-700 transition-colors"
-                      >
-                        Choose File
-                      </label>
-                      <span className="text-sm text-slate-600">
-                        {formData.licenseDocument ? formData.licenseDocument.name : "No file chosen"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tags */}
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <Tag className="w-5 h-5 text-slate-600" />
-                  <h3 className="text-base font-semibold text-slate-900">Tags</h3>
-                </div>
-                <input
-                  type="text"
-                  value={formData.tags}
-                  onChange={(e) => handleInputChange("tags", e.target.value)}
-                  placeholder="Enter tags"
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                />
-              </div>
-            </div>
+        <div className="space-y-2">
+          <Label className="text-xs text-gray-700 flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-gray-800" />
+            <span>Open days*</span>
+          </Label>
+          <div className="mt-1 grid grid-cols-7 gap-1.5 sm:gap-2">
+            {daysOfWeek.map((day) => {
+              const active = step2.openDays.includes(day)
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => {
+                    setStep2((prev) => {
+                      const exists = prev.openDays.includes(day)
+                      if (exists) return { ...prev, openDays: prev.openDays.filter((d) => d !== day) }
+                      return { ...prev, openDays: [...prev.openDays, day] }
+                    })
+                  }}
+                  className={`aspect-square flex items-center justify-center rounded-md text-[11px] font-medium ${active ? "bg-black text-white" : "bg-gray-100 text-gray-800"}`}
+                >
+                  {day.charAt(0)}
+                </button>
+              )
+            })}
           </div>
+        </div>
+      </section>
+    </div>
+  )
 
-          {/* Business TIN */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-            <div className="mb-4">
-              <p className="text-sm text-slate-600">Setup your Business TIN.</p>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1">
-                  Taxpayer Identification Number(TIN)
-                  <Info className="w-4 h-4 text-slate-400" />
-                </label>
-                <input
-                  type="text"
-                  value={formData.businessTIN}
-                  onChange={(e) => handleInputChange("businessTIN", e.target.value)}
-                  placeholder="Type your TIN Number"
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Expire Date
-                </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={formData.tinExpireDate}
-                    onChange={(e) => handleInputChange("tinExpireDate", e.target.value)}
-                    className="w-full px-4 py-2.5 pr-10 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  />
-                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  TIN Certificate
-                </label>
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer relative">
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                    onChange={(e) => handleFileUpload("tinCertificate", e.target.files[0])}
-                    className="hidden"
-                    id="tin-certificate-upload"
-                  />
-                  <label htmlFor="tin-certificate-upload" className="cursor-pointer">
-                    <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-slate-700 mb-1">Select a file or Drag & Drop Here</p>
-                    <div className="text-xs text-slate-500 space-y-1 mt-2">
-                      <p>Pdf, doc, jpg. File size: max 2 MB</p>
-                    </div>
-                  </label>
-                  <button
-                    type="button"
-                    className="absolute top-2 right-2 p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                  >
-                    <FileText className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
+  const renderStep3 = () => (
+    <div className="space-y-6">
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
+        <h2 className="text-lg font-semibold text-black">PAN details</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Label className="text-xs text-gray-700">PAN number*</Label>
+            <Input
+              value={step3.panNumber || ""}
+              onChange={(e) => setStep3({ ...step3, panNumber: e.target.value })}
+              className="mt-1 bg-white text-sm text-black placeholder-black"
+            />
           </div>
+          <div>
+            <Label className="text-xs text-gray-700">Name on PAN*</Label>
+            <Input
+              value={step3.nameOnPan || ""}
+              onChange={(e) => setStep3({ ...step3, nameOnPan: e.target.value })}
+              className="mt-1 bg-white text-sm text-black placeholder-black"
+            />
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs text-gray-700">PAN image*</Label>
+          <Input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setStep3({ ...step3, panImage: e.target.files?.[0] || null })}
+            className="mt-1 bg-white text-sm text-black placeholder-black"
+          />
+        </div>
+      </section>
 
-          {/* Account info */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-            <h3 className="text-base font-semibold text-slate-900 mb-6">Account info</h3>
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
+        <h2 className="text-lg font-semibold text-black">GST details</h2>
+        <div className="flex gap-4 items-center text-sm">
+          <span className="text-gray-700">GST registered?</span>
+          <button
+            type="button"
+            onClick={() => setStep3({ ...step3, gstRegistered: true })}
+            className={`px-3 py-1.5 text-xs rounded-full ${step3.gstRegistered ? "bg-black text-white" : "bg-gray-100 text-gray-800"}`}
+          >
+            Yes
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep3({ ...step3, gstRegistered: false })}
+            className={`px-3 py-1.5 text-xs rounded-full ${!step3.gstRegistered ? "bg-black text-white" : "bg-gray-100 text-gray-800"}`}
+          >
+            No
+          </button>
+        </div>
+        {step3.gstRegistered && (
+          <div className="space-y-3">
+            <Input value={step3.gstNumber || ""} onChange={(e) => setStep3({ ...step3, gstNumber: e.target.value })} className="bg-white text-sm" placeholder="GST number*" />
+            <Input value={step3.gstLegalName || ""} onChange={(e) => setStep3({ ...step3, gstLegalName: e.target.value })} className="bg-white text-sm" placeholder="Legal name*" />
+            <Input value={step3.gstAddress || ""} onChange={(e) => setStep3({ ...step3, gstAddress: e.target.value })} className="bg-white text-sm" placeholder="Registered address*" />
+            <Input type="file" accept="image/*" onChange={(e) => setStep3({ ...step3, gstImage: e.target.files?.[0] || null })} className="bg-white text-sm" />
+          </div>
+        )}
+      </section>
 
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange("email", e.target.value)}
-                  placeholder="Ex: Jhone@company.com"
-                  className={`w-full px-4 py-2.5 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
-                    formErrors.email ? "border-red-500" : "border-slate-300"
-                  }`}
-                  required
-                />
-                {formErrors.email && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.email}</p>
-                )}
-              </div>
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
+        <h2 className="text-lg font-semibold text-black">FSSAI details</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input value={step3.fssaiNumber || ""} onChange={(e) => setStep3({ ...step3, fssaiNumber: e.target.value })} className="bg-white text-sm" placeholder="FSSAI number*" />
+          <div>
+            <Label className="text-xs text-gray-700 mb-1 block">FSSAI expiry date*</Label>
+            <Input
+              type="date"
+              value={step3.fssaiExpiry || ""}
+              onChange={(e) => setStep3({ ...step3, fssaiExpiry: e.target.value })}
+              className="bg-white text-sm"
+            />
+          </div>
+        </div>
+        <Input type="file" accept="image/*" onChange={(e) => setStep3({ ...step3, fssaiImage: e.target.files?.[0] || null })} className="bg-white text-sm" />
+      </section>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Password <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={formData.password}
-                    onChange={(e) => handleInputChange("password", e.target.value)}
-                    placeholder="Ex: 8+ Character"
-                    className={`w-full px-4 py-2.5 pr-10 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
-                      formErrors.password ? "border-red-500" : "border-slate-300"
-                    }`}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
+        <h2 className="text-lg font-semibold text-black">Bank account details</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input value={step3.accountNumber || ""} onChange={(e) => setStep3({ ...step3, accountNumber: e.target.value.trim() })} className="bg-white text-sm" placeholder="Account number*" />
+          <Input value={step3.confirmAccountNumber || ""} onChange={(e) => setStep3({ ...step3, confirmAccountNumber: e.target.value.trim() })} className="bg-white text-sm" placeholder="Re-enter account number*" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input value={step3.ifscCode || ""} onChange={(e) => setStep3({ ...step3, ifscCode: e.target.value })} className="bg-white text-sm" placeholder="IFSC code*" />
+          <Input value={step3.accountType || ""} onChange={(e) => setStep3({ ...step3, accountType: e.target.value })} className="bg-white text-sm" placeholder="Account type (savings / current)*" />
+        </div>
+        <Input value={step3.accountHolderName || ""} onChange={(e) => setStep3({ ...step3, accountHolderName: e.target.value })} className="bg-white text-sm" placeholder="Account holder name*" />
+      </section>
+    </div>
+  )
+
+  const renderStep4 = () => (
+    <div className="space-y-6">
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
+        <h2 className="text-lg font-semibold text-black">Restaurant Display Information</h2>
+        <div>
+          <Label className="text-xs text-gray-700">Estimated Delivery Time*</Label>
+          <Input value={step4.estimatedDeliveryTime || ""} onChange={(e) => setStep4({ ...step4, estimatedDeliveryTime: e.target.value })} className="mt-1 bg-white text-sm" placeholder="e.g., 25-30 mins" />
+        </div>
+        <div>
+          <Label className="text-xs text-gray-700">Featured Dish Name*</Label>
+          <Input value={step4.featuredDish || ""} onChange={(e) => setStep4({ ...step4, featuredDish: e.target.value })} className="mt-1 bg-white text-sm" placeholder="e.g., Butter Chicken Special" />
+        </div>
+        <div>
+          <Label className="text-xs text-gray-700">Featured Dish Price (₹)*</Label>
+          <Input type="number" value={step4.featuredPrice || ""} onChange={(e) => setStep4({ ...step4, featuredPrice: e.target.value })} className="mt-1 bg-white text-sm" placeholder="e.g., 249" min="0" />
+        </div>
+        <div>
+          <Label className="text-xs text-gray-700">Special Offer/Promotion*</Label>
+          <Input value={step4.offer || ""} onChange={(e) => setStep4({ ...step4, offer: e.target.value })} className="mt-1 bg-white text-sm" placeholder="e.g., Flat ₹50 OFF above ₹199" />
+        </div>
+      </section>
+    </div>
+  )
+
+  const renderStep5 = () => (
+    <div className="space-y-6">
+      <section className="bg-white p-4 sm:p-6 rounded-md space-y-4">
+        <h2 className="text-lg font-semibold text-black">Authentication Details</h2>
+        <p className="text-sm text-gray-600">Set up login credentials for the restaurant</p>
+        <div>
+          <Label className="text-xs text-gray-700">Email*</Label>
+          <Input
+            type="email"
+            value={String(auth.email || "")}
+            onChange={(e) => setAuth({ ...auth, email: e.target.value || "", signupMethod: e.target.value ? 'email' : 'phone' })}
+            className="mt-1 bg-white text-sm"
+            placeholder="restaurant@example.com"
+          />
+        </div>
+        <div>
+          <Label className="text-xs text-gray-700">Phone (if no email)</Label>
+          <Input
+            type="tel"
+            value={String(auth.phone || "")}
+            onChange={(e) => setAuth({ ...auth, phone: e.target.value || "", signupMethod: !auth.email ? 'phone' : 'email' })}
+            className="mt-1 bg-white text-sm"
+            placeholder="+91 9876543210"
+          />
+        </div>
+      </section>
+    </div>
+  )
+
+  const renderStep = () => {
+    if (step === 1) return renderStep1()
+    if (step === 2) return renderStep2()
+    if (step === 3) return renderStep3()
+    if (step === 4) return renderStep4()
+    return renderStep5()
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      <header className="px-4 py-4 sm:px-6 sm:py-5 bg-white flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Building2 className="w-5 h-5 text-blue-600" />
+          <div className="text-sm font-semibold text-black">Add New Restaurant</div>
+        </div>
+        <div className="text-xs text-gray-600">Step {step} of 5</div>
+      </header>
+
+      <main className="flex-1 px-4 sm:px-6 py-4 space-y-4">
+        {renderStep()}
+      </main>
+
+      {formErrors.submit && (
+        <div className="px-4 sm:px-6 pb-2 text-xs text-red-600">{formErrors.submit}</div>
+      )}
+
+      <footer className="px-4 sm:px-6 py-3 bg-white">
+        <div className="flex justify-between items-center">
+          <Button
+            variant="ghost"
+            disabled={step === 1 || isSubmitting}
+            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            className="text-sm text-gray-700 bg-transparent"
+          >
+            Back
+          </Button>
+          <Button
+            onClick={handleNext}
+            disabled={isSubmitting}
+            className="text-sm bg-black text-white px-6"
+          >
+            {step === 5 ? (isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating... </> : "Create Restaurant") : isSubmitting ? "Saving..." : "Continue"}
+          </Button>
+        </div>
+      </footer>
+
+      {/* Success Dialog */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="max-w-md bg-white p-0">
+          <div className="p-8 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-emerald-100 rounded-full animate-ping opacity-75"></div>
+                <div className="relative bg-emerald-500 rounded-full p-4">
+                  <CheckCircle2 className="w-12 h-12 text-white" />
                 </div>
-                {formErrors.password && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.password}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Confirm Password <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={formData.confirmPassword}
-                    onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-                    placeholder="Ex: 8+ Character"
-                    className={`w-full px-4 py-2.5 pr-10 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm ${
-                      formErrors.confirmPassword ? "border-red-500" : "border-slate-300"
-                    }`}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                {formErrors.confirmPassword && (
-                  <p className="text-xs text-red-500 mt-1">{formErrors.confirmPassword}</p>
-                )}
               </div>
             </div>
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold text-slate-900 mb-2">Restaurant Created Successfully!</DialogTitle>
+              <DialogDescription className="text-sm text-slate-600">
+                The restaurant has been created and can now login with the provided credentials.
+              </DialogDescription>
+            </DialogHeader>
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-4 mb-6">
-            {formErrors.submit && (
-              <p className="text-sm text-red-500 mr-auto">{formErrors.submit}</p>
-            )}
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={isSubmitting}
-              className="px-6 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Reset
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Submitting...
-                </>
-              ) : (
-                "Save Information"
-              )}
-            </button>
-          </div>
-        </form>
-
-        {/* Success Dialog */}
-        <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-          <DialogContent className="max-w-md bg-white p-0 opacity-0 data-[state=open]:opacity-100 data-[state=closed]:opacity-0 transition-opacity duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:scale-100 data-[state=closed]:scale-100">
-            <div className="p-8 text-center">
-              {/* Success Icon with Animation */}
-              <div className="flex justify-center mb-4">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-emerald-100 rounded-full animate-ping opacity-75"></div>
-                  <div className="relative bg-emerald-500 rounded-full p-4">
-                    <CheckCircle2 className="w-12 h-12 text-white" />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Success Message */}
-              <DialogHeader>
-                <DialogTitle className="text-2xl font-bold text-slate-900 mb-2">
-                  Restaurant Added Successfully!
-                </DialogTitle>
-                <DialogDescription className="text-sm text-slate-600">
-                  The restaurant has been successfully added to the system. You can now manage it from the restaurant list.
-                </DialogDescription>
-              </DialogHeader>
-
-              {/* Auto-close message */}
-              <div className="mt-6 pt-4 border-t border-slate-200">
-                <p className="text-xs text-slate-500">
-                  This dialog will close automatically in a few seconds...
-                </p>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
