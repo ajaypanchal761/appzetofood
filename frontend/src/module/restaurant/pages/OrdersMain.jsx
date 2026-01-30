@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
+import { checkOnboardingStatus } from "../utils/onboardingUtils"
 import { motion, AnimatePresence } from "framer-motion"
 import Lenis from "lenis"
 import { Printer, Volume2, VolumeX, ChevronDown, ChevronUp, Minus, Plus, X, AlertCircle, Loader2 } from "lucide-react"
@@ -285,6 +286,17 @@ export default function OrdersMain() {
             onboarding: restaurant.onboarding || null,
             isLoading: false
           })
+          
+          // Check if onboarding is incomplete and redirect if needed
+          const completedSteps = restaurant.onboarding?.completedSteps || 0
+          if (completedSteps < 4) {
+            // Onboarding is incomplete, redirect to onboarding page
+            const incompleteStep = await checkOnboardingStatus()
+            if (incompleteStep) {
+              navigate(`/restaurant/onboarding?step=${incompleteStep}`, { replace: true })
+              return
+            }
+          }
         }
       } catch (error) {
         // Only log error if it's not a network/timeout error (backend might be down/slow)
@@ -308,7 +320,7 @@ export default function OrdersMain() {
     return () => {
       window.removeEventListener('restaurantProfileRefresh', handleProfileRefresh)
     }
-  }, [])
+  }, [navigate])
 
   // Handle reverify (resubmit for approval)
   const handleReverify = async () => {

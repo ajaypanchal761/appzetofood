@@ -444,11 +444,31 @@ export default function RestaurantOnboarding() {
     const hasMenuImages = step2.menuImages && step2.menuImages.length > 0
     if (!hasMenuImages) {
       errors.push("At least one menu image is required")
+    } else {
+      // Verify that menu images are either File objects or have valid URLs
+      const validMenuImages = step2.menuImages.filter(img => {
+        if (img instanceof File) return true
+        if (img?.url && typeof img.url === 'string') return true
+        if (typeof img === 'string' && img.startsWith('http')) return true
+        return false
+      })
+      if (validMenuImages.length === 0) {
+        errors.push("Please upload at least one valid menu image")
+      }
     }
     
     // Check profile image - must be a File or existing URL
     if (!step2.profileImage) {
       errors.push("Restaurant profile image is required")
+    } else {
+      // Verify profile image is either a File or has a valid URL
+      const isValidProfileImage = 
+        step2.profileImage instanceof File ||
+        (step2.profileImage?.url && typeof step2.profileImage.url === 'string') ||
+        (typeof step2.profileImage === 'string' && step2.profileImage.startsWith('http'))
+      if (!isValidProfileImage) {
+        errors.push("Please upload a valid restaurant profile image")
+      }
     }
     
     if (!step2.cuisines || step2.cuisines.length === 0) {
@@ -493,9 +513,63 @@ export default function RestaurantOnboarding() {
     if (!step3.nameOnPan?.trim()) {
       errors.push("Name on PAN is required")
     }
+    // Validate PAN image - must be a File or existing URL
+    if (!step3.panImage) {
+      errors.push("PAN image is required")
+    } else {
+      const isValidPanImage = 
+        step3.panImage instanceof File ||
+        (step3.panImage?.url && typeof step3.panImage.url === 'string') ||
+        (typeof step3.panImage === 'string' && step3.panImage.startsWith('http'))
+      if (!isValidPanImage) {
+        errors.push("Please upload a valid PAN image")
+      }
+    }
+    
     if (!step3.fssaiNumber?.trim()) {
       errors.push("FSSAI number is required")
     }
+    if (!step3.fssaiExpiry?.trim()) {
+      errors.push("FSSAI expiry date is required")
+    }
+    // Validate FSSAI image - must be a File or existing URL
+    if (!step3.fssaiImage) {
+      errors.push("FSSAI image is required")
+    } else {
+      const isValidFssaiImage = 
+        step3.fssaiImage instanceof File ||
+        (step3.fssaiImage?.url && typeof step3.fssaiImage.url === 'string') ||
+        (typeof step3.fssaiImage === 'string' && step3.fssaiImage.startsWith('http'))
+      if (!isValidFssaiImage) {
+        errors.push("Please upload a valid FSSAI image")
+      }
+    }
+    
+    // Validate GST details if GST registered
+    if (step3.gstRegistered) {
+      if (!step3.gstNumber?.trim()) {
+        errors.push("GST number is required when GST registered")
+      }
+      if (!step3.gstLegalName?.trim()) {
+        errors.push("GST legal name is required when GST registered")
+      }
+      if (!step3.gstAddress?.trim()) {
+        errors.push("GST registered address is required when GST registered")
+      }
+      // Validate GST image if GST registered
+      if (!step3.gstImage) {
+        errors.push("GST image is required when GST registered")
+      } else {
+        const isValidGstImage = 
+          step3.gstImage instanceof File ||
+          (step3.gstImage?.url && typeof step3.gstImage.url === 'string') ||
+          (typeof step3.gstImage === 'string' && step3.gstImage.startsWith('http'))
+        if (!isValidGstImage) {
+          errors.push("Please upload a valid GST image")
+        }
+      }
+    }
+    
     if (!step3.accountNumber?.trim()) {
       errors.push("Account number is required")
     }
@@ -514,8 +588,6 @@ export default function RestaurantOnboarding() {
     if (!step3.accountType?.trim()) {
       errors.push("Account type is required")
     }
-    
-    // GST is optional, so we don't validate it even if gstRegistered is true
     
     return errors
   }
@@ -633,20 +705,51 @@ export default function RestaurantOnboarding() {
         const menuUploads = []
         // Upload menu images if they are File objects
         for (const file of step2.menuImages.filter((f) => f instanceof File)) {
-          const uploaded = await handleUpload(file, "appzeto/restaurant/menu")
-          menuUploads.push(uploaded)
+          try {
+            const uploaded = await handleUpload(file, "appzeto/restaurant/menu")
+            // Verify upload was successful and has valid URL
+            if (!uploaded || !uploaded.url) {
+              throw new Error(`Failed to upload menu image: ${file.name}`)
+            }
+            menuUploads.push(uploaded)
+          } catch (uploadError) {
+            console.error('Menu image upload error:', uploadError)
+            throw new Error(`Failed to upload menu image: ${uploadError.message}`)
+          }
         }
         // If menuImages already have URLs (from previous save), include them
-        const existingMenuUrls = step2.menuImages.filter((img) => !(img instanceof File) && img?.url)
+        const existingMenuUrls = step2.menuImages.filter((img) => !(img instanceof File) && (img?.url || (typeof img === 'string' && img.startsWith('http'))))
         const allMenuUrls = [...existingMenuUrls, ...menuUploads]
+        
+        // Verify we have at least one menu image
+        if (allMenuUrls.length === 0) {
+          throw new Error('At least one menu image must be uploaded')
+        }
         
         // Upload profile image if it's a File object
         let profileUpload = null
         if (step2.profileImage instanceof File) {
-          profileUpload = await handleUpload(step2.profileImage, "appzeto/restaurant/profile")
+          try {
+            profileUpload = await handleUpload(step2.profileImage, "appzeto/restaurant/profile")
+            // Verify upload was successful and has valid URL
+            if (!profileUpload || !profileUpload.url) {
+              throw new Error('Failed to upload profile image')
+            }
+          } catch (uploadError) {
+            console.error('Profile image upload error:', uploadError)
+            throw new Error(`Failed to upload profile image: ${uploadError.message}`)
+          }
         } else if (step2.profileImage?.url) {
           // If profileImage already has a URL (from previous save), use it
           profileUpload = step2.profileImage
+        } else if (typeof step2.profileImage === 'string' && step2.profileImage.startsWith('http')) {
+          // If it's a direct URL string
+          profileUpload = { url: step2.profileImage }
+        }
+        
+        // Verify profile image is present
+        if (!profileUpload || !profileUpload.url) {
+          throw new Error('Profile image must be uploaded')
         }
 
         const payload = {
@@ -695,28 +798,81 @@ export default function RestaurantOnboarding() {
         // Upload PAN image if it's a File object
         let panImageUpload = null
         if (step3.panImage instanceof File) {
-          panImageUpload = await handleUpload(step3.panImage, "appzeto/restaurant/pan")
+          try {
+            panImageUpload = await handleUpload(step3.panImage, "appzeto/restaurant/pan")
+            // Verify upload was successful and has valid URL
+            if (!panImageUpload || !panImageUpload.url) {
+              throw new Error('Failed to upload PAN image')
+            }
+          } catch (uploadError) {
+            console.error('PAN image upload error:', uploadError)
+            throw new Error(`Failed to upload PAN image: ${uploadError.message}`)
+          }
         } else if (step3.panImage?.url) {
           // If panImage already has a URL (from previous save), use it
           panImageUpload = step3.panImage
+        } else if (typeof step3.panImage === 'string' && step3.panImage.startsWith('http')) {
+          // If it's a direct URL string
+          panImageUpload = { url: step3.panImage }
         }
         
-        // Upload GST image if it's a File object
+        // Verify PAN image is present
+        if (!panImageUpload || !panImageUpload.url) {
+          throw new Error('PAN image must be uploaded')
+        }
+        
+        // Upload GST image if it's a File object (only if GST registered)
         let gstImageUpload = null
-        if (step3.gstImage instanceof File) {
-          gstImageUpload = await handleUpload(step3.gstImage, "appzeto/restaurant/gst")
-        } else if (step3.gstImage?.url) {
-          // If gstImage already has a URL (from previous save), use it
-          gstImageUpload = step3.gstImage
+        if (step3.gstRegistered) {
+          if (step3.gstImage instanceof File) {
+            try {
+              gstImageUpload = await handleUpload(step3.gstImage, "appzeto/restaurant/gst")
+              // Verify upload was successful and has valid URL
+              if (!gstImageUpload || !gstImageUpload.url) {
+                throw new Error('Failed to upload GST image')
+              }
+            } catch (uploadError) {
+              console.error('GST image upload error:', uploadError)
+              throw new Error(`Failed to upload GST image: ${uploadError.message}`)
+            }
+          } else if (step3.gstImage?.url) {
+            // If gstImage already has a URL (from previous save), use it
+            gstImageUpload = step3.gstImage
+          } else if (typeof step3.gstImage === 'string' && step3.gstImage.startsWith('http')) {
+            // If it's a direct URL string
+            gstImageUpload = { url: step3.gstImage }
+          }
+          
+          // Verify GST image is present if GST registered
+          if (!gstImageUpload || !gstImageUpload.url) {
+            throw new Error('GST image must be uploaded when GST registered')
+          }
         }
         
         // Upload FSSAI image if it's a File object
         let fssaiImageUpload = null
         if (step3.fssaiImage instanceof File) {
-          fssaiImageUpload = await handleUpload(step3.fssaiImage, "appzeto/restaurant/fssai")
+          try {
+            fssaiImageUpload = await handleUpload(step3.fssaiImage, "appzeto/restaurant/fssai")
+            // Verify upload was successful and has valid URL
+            if (!fssaiImageUpload || !fssaiImageUpload.url) {
+              throw new Error('Failed to upload FSSAI image')
+            }
+          } catch (uploadError) {
+            console.error('FSSAI image upload error:', uploadError)
+            throw new Error(`Failed to upload FSSAI image: ${uploadError.message}`)
+          }
         } else if (step3.fssaiImage?.url) {
           // If fssaiImage already has a URL (from previous save), use it
           fssaiImageUpload = step3.fssaiImage
+        } else if (typeof step3.fssaiImage === 'string' && step3.fssaiImage.startsWith('http')) {
+          // If it's a direct URL string
+          fssaiImageUpload = { url: step3.fssaiImage }
+        }
+        
+        // Verify FSSAI image is present
+        if (!fssaiImageUpload || !fssaiImageUpload.url) {
+          throw new Error('FSSAI image must be uploaded')
         }
 
         const payload = {

@@ -25,15 +25,32 @@ const isStepComplete = (stepData, stepNumber) => {
       stepData.deliveryTimings?.openingTime &&
       stepData.deliveryTimings?.closingTime &&
       Array.isArray(stepData.openDays) &&
-      stepData.openDays.length > 0
+      stepData.openDays.length > 0 &&
+      // Check for menu images (must have at least one)
+      Array.isArray(stepData.menuImageUrls) &&
+      stepData.menuImageUrls.length > 0 &&
+      // Check for profile image
+      stepData.profileImageUrl &&
+      (stepData.profileImageUrl.url || typeof stepData.profileImageUrl === 'string')
     )
   }
 
   if (stepNumber === 3) {
+    const hasPanImage = stepData.pan?.image && 
+      (stepData.pan.image.url || typeof stepData.pan.image === 'string')
+    const hasFssaiImage = stepData.fssai?.image && 
+      (stepData.fssai.image.url || typeof stepData.fssai.image === 'string')
+    // GST image is required only if GST is registered
+    const hasGstImage = !stepData.gst?.isRegistered || 
+      (stepData.gst?.image && (stepData.gst.image.url || typeof stepData.gst.image === 'string'))
+    
     return (
       stepData.pan?.panNumber &&
       stepData.pan?.nameOnPan &&
+      hasPanImage &&
       stepData.fssai?.registrationNumber &&
+      hasFssaiImage &&
+      hasGstImage &&
       stepData.bank?.accountNumber &&
       stepData.bank?.ifscCode &&
       stepData.bank?.accountHolderName &&
