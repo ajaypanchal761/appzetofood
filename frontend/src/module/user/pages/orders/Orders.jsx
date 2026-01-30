@@ -14,6 +14,43 @@ export default function Orders() {
   const [selectedRating, setSelectedRating] = useState(null)
   const [feedbackText, setFeedbackText] = useState("")
   const [submittingRating, setSubmittingRating] = useState(false)
+  const [countdowns, setCountdowns] = useState({})
+
+  // Calculate countdown for an order
+  const calculateCountdown = (order) => {
+    if (!order || order.status === 'delivered' || order.status === 'cancelled' || order.status === 'restaurant_cancelled') {
+      return null
+    }
+
+    const createdAt = new Date(order.createdAt)
+    const now = new Date()
+    const elapsedMinutes = Math.floor((now - createdAt) / (1000 * 60))
+    
+    // Get max ETA (use eta.max if available, otherwise estimatedDeliveryTime)
+    const maxETA = order.eta?.max || order.estimatedDeliveryTime || 30
+    const remainingMinutes = Math.max(0, maxETA - elapsedMinutes)
+    
+    return remainingMinutes > 0 ? remainingMinutes : null
+  }
+
+  // Update countdowns for all active orders
+  useEffect(() => {
+    const updateCountdowns = () => {
+      const newCountdowns = {}
+      orders.forEach(order => {
+        const remaining = calculateCountdown(order)
+        if (remaining !== null) {
+          newCountdowns[order.id] = remaining
+        }
+      })
+      setCountdowns(newCountdowns)
+    }
+
+    updateCountdowns()
+    const interval = setInterval(updateCountdowns, 10000) // Update every 10 seconds for better UX
+
+    return () => clearInterval(interval)
+  }, [orders])
 
   // Get order status text
   const getOrderStatus = (order) => {
@@ -56,12 +93,15 @@ export default function Orders() {
           const transformedOrders = ordersData.map(order => {
             const createdAt = order.createdAt ? new Date(order.createdAt) : new Date()
             
-            // Check if cancelled by restaurant
+            // Check if cancelled by restaurant or user
             const isCancelled = order.status === 'cancelled'
             const cancellationReason = order.cancellationReason || ''
+            // Check cancelledBy field first, then fallback to cancellation reason pattern
             const isRestaurantCancelled = isCancelled && (
-              /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue/i.test(cancellationReason)
+              order.cancelledBy === 'restaurant' ||
+              /rejected by restaurant|restaurant rejected|restaurant cancelled|restaurant is too busy|item not available|outside delivery area|kitchen closing|technical issue|order not accepted within time limit|restaurant did not respond/i.test(cancellationReason)
             )
+            const isUserCancelled = isCancelled && order.cancelledBy === 'user'
 
             return {
               id: order.orderId || order._id?.toString() || `ORD-${order._id}`,
@@ -82,7 +122,12 @@ export default function Orders() {
               rating: order.rating || null,
               tracking: order.tracking || {},
               cancellationReason: cancellationReason,
-              isRestaurantCancelled: isRestaurantCancelled
+              isRestaurantCancelled: isRestaurantCancelled,
+              isUserCancelled: isUserCancelled,
+              cancelledBy: order.cancelledBy,
+              eta: order.eta || { min: order.estimatedDeliveryTime || 30, max: order.estimatedDeliveryTime || 30 },
+              estimatedDeliveryTime: order.estimatedDeliveryTime || 30,
+              preparationTime: order.preparationTime || 0
             }
           })
           
@@ -312,10 +357,24 @@ Order again from this restaurant in the Appzeto app.`
           </div>
         ) : (
           filteredOrders.map((order) => {
-            const paymentFailed = order.payment?.status === 'failed' || order.payment?.status === 'pending'
+            // Check payment method - COD/wallet orders have 'pending' status which is normal
+            const isCodOrWallet = order.payment?.method === 'cash' || 
+                                 order.payment?.method === 'cod' || 
+                                 order.payment?.method === 'wallet' ||
+                                 order.paymentMethod === 'cash' ||
+                                 order.paymentMethod === 'cod' ||
+                                 order.paymentMethod === 'wallet'
+            
+            // Payment failed only for online payments (razorpay) that actually failed
+            // Don't show payment failed for COD/wallet or cancelled orders
+            const isCancelled = order.status === 'cancelled' || order.status === 'restaurant_cancelled'
+            const paymentFailed = !isCodOrWallet && 
+                                 !isCancelled && 
+                                 (order.payment?.status === 'failed')
+            
             const isDelivered = order.status === 'delivered'
             const isRestaurantCancelled = order.isRestaurantCancelled || order.status === 'restaurant_cancelled'
-            const isCancelled = order.status === 'cancelled' || order.status === 'restaurant_cancelled'
+            const isUserCancelled = order.isUserCancelled || (isCancelled && order.cancelledBy === 'user')
             // Prefer food image from first item; fallback to restaurant image, then generic food photo
             const firstItemImage = order.items?.[0]?.image
             const restaurantImage = firstItemImage 
@@ -413,7 +472,10 @@ Order again from this restaurant in the Appzeto app.`
                     {isRestaurantCancelled && (
                       <p className="text-xs font-medium text-red-500 mt-1">Restaurant Cancelled</p>
                     )}
-                    {isCancelled && !isRestaurantCancelled && (
+                    {isUserCancelled && (
+                      <p className="text-xs font-medium text-gray-500 mt-1">Cancelled by you</p>
+                    )}
+                    {isCancelled && !isRestaurantCancelled && !isUserCancelled && (
                       <p className="text-xs font-medium text-gray-500 mt-1">Cancelled</p>
                     )}
                   </div>
@@ -470,7 +532,14 @@ Order again from this restaurant in the Appzeto app.`
                     </div>
                   ) : (
                     <div>
-                      <p className="text-xs text-gray-500">{order.status === 'preparing' ? 'Preparing' : order.status === 'outForDelivery' ? 'Out for delivery' : 'Order confirmed'}</p>
+                      <p className="text-xs text-gray-500">{order.status === 'preparing' ? 'Preparing' : order.status === 'outForDelivery' ? 'Out for delivery' : order.status === 'confirmed' ? 'Order confirmed' : ''}</p>
+                      {/* Countdown Timer */}
+                      {countdowns[order.id] && countdowns[order.id] > 0 && (
+                        <div className="flex items-center gap-1 mt-1 text-xs text-orange-600 font-medium">
+                          <Clock size={12} />
+                          <span>{countdowns[order.id]} min{countdowns[order.id] !== 1 ? 's' : ''} remaining</span>
+                        </div>
+                      )}
                     </div>
                   )}
 

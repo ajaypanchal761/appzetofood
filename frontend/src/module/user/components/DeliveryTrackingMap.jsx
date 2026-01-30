@@ -47,6 +47,8 @@ const DeliveryTrackingMap = ({
   const userHasInteractedRef = useRef(false);
   const isProgrammaticChangeRef = useRef(false);
   const mapInitializedRef = useRef(false);
+  const directionsCacheRef = useRef(new Map()); // Cache for Directions API calls
+  const lastRouteRequestRef = useRef({ start: null, end: null, timestamp: 0 });
 
   const backendUrl = API_BASE_URL.replace('/api', '');
   const [GOOGLE_MAPS_API_KEY, setGOOGLE_MAPS_API_KEY] = useState("");
@@ -61,6 +63,7 @@ const DeliveryTrackingMap = ({
   }, [])
 
   // Draw route using Google Maps Directions API with live updates
+  // OPTIMIZED: Added caching to reduce API calls
   const drawRoute = useCallback((start, end) => {
     if (!mapInstance.current || !directionsServiceRef.current || !directionsRendererRef.current) return;
 
@@ -94,6 +97,80 @@ const DeliveryTrackingMap = ({
       return;
     }
 
+    // Round coordinates to 4 decimal places (~11 meters) for cache key
+    const roundCoord = (coord) => Math.round(coord * 10000) / 10000;
+    const cacheKey = `${roundCoord(startLat)},${roundCoord(startLng)}|${roundCoord(endLat)},${roundCoord(endLng)}`;
+    
+    // Check cache first (cache valid for 5 minutes)
+    const cached = directionsCacheRef.current.get(cacheKey);
+    const now = Date.now();
+    if (cached && (now - cached.timestamp) < 300000) { // 5 minutes cache
+      console.log('✅ Using cached route');
+      // Use cached result
+      if (cached.result && cached.result.routes && cached.result.routes[0]) {
+        directionsRendererRef.current.setOptions({ preserveViewport: true });
+        directionsRendererRef.current.setDirections(cached.result);
+        
+        const polylinePoints = extractPolylineFromDirections(cached.result);
+        if (polylinePoints && polylinePoints.length > 0) {
+          routePolylinePointsRef.current = polylinePoints;
+          
+          if (bikeMarkerRef.current && !animationControllerRef.current) {
+            animationControllerRef.current = new RouteBasedAnimationController(
+              bikeMarkerRef.current,
+              polylinePoints
+            );
+          }
+        }
+        
+        if (cached.result.routes && cached.result.routes[0] && cached.result.routes[0].overview_path) {
+          if (routePolylineRef.current) {
+            routePolylineRef.current.setMap(null);
+          }
+          
+          routePolylineRef.current = new window.google.maps.Polyline({
+            path: cached.result.routes[0].overview_path,
+            geodesic: true,
+            strokeColor: '#10b981',
+            strokeOpacity: 0.8,
+            strokeWeight: 4,
+            icons: [{
+              icon: {
+                path: 'M 0,-1 0,1',
+                strokeOpacity: 1,
+                strokeWeight: 2,
+                strokeColor: '#10b981',
+                scale: 4
+              },
+              offset: '0%',
+              repeat: '15px'
+            }],
+            map: mapInstance.current,
+            zIndex: 1
+          });
+        }
+      }
+      return;
+    }
+
+    // Throttle: Don't make API call if same route was requested within last 2 seconds
+    const lastRequest = lastRouteRequestRef.current;
+    if (lastRequest.start && lastRequest.end && 
+        Math.abs(lastRequest.start.lat - startLat) < 0.0001 &&
+        Math.abs(lastRequest.start.lng - startLng) < 0.0001 &&
+        Math.abs(lastRequest.end.lat - endLat) < 0.0001 &&
+        Math.abs(lastRequest.end.lng - endLng) < 0.0001 &&
+        (now - lastRequest.timestamp) < 2000) {
+      console.log('⏭️ Skipping duplicate route request (throttled)');
+      return;
+    }
+
+    lastRouteRequestRef.current = {
+      start: { lat: startLat, lng: startLng },
+      end: { lat: endLat, lng: endLng },
+      timestamp: now
+    };
+
     try {
       directionsServiceRef.current.route({
         origin: { lat: startLat, lng: startLng },
@@ -101,6 +178,20 @@ const DeliveryTrackingMap = ({
         travelMode: window.google.maps.TravelMode.DRIVING
       }, (result, status) => {
         if (status === 'OK' && result) {
+          // Cache the result
+          directionsCacheRef.current.set(cacheKey, {
+            result: result,
+            timestamp: now
+          });
+          
+          // Clean old cache entries (older than 10 minutes)
+          const tenMinutesAgo = now - 600000;
+          for (const [key, value] of directionsCacheRef.current.entries()) {
+            if (value.timestamp < tenMinutesAgo) {
+              directionsCacheRef.current.delete(key);
+            }
+          }
+          
           // Ensure viewport doesn't change when route is set
           directionsRendererRef.current.setOptions({ preserveViewport: true });
           directionsRendererRef.current.setDirections(result);
@@ -672,7 +763,21 @@ const DeliveryTrackingMap = ({
 
       // Initialize map once Google Maps is loaded
       if (window.google && window.google.maps) {
-        initializeMap();
+        // Wait for MapTypeId to be available (sometimes it loads slightly after maps)
+        let mapTypeIdAttempts = 0;
+        const checkMapTypeId = () => {
+          if (window.google?.maps?.MapTypeId) {
+            initializeMap();
+          } else if (mapTypeIdAttempts < 20) {
+            mapTypeIdAttempts++;
+            setTimeout(checkMapTypeId, 100);
+          } else {
+            console.warn('⚠️ Google Maps MapTypeId not available, using string fallback');
+            // Use fallback - initialize with string instead of enum
+            initializeMap();
+          }
+        };
+        checkMapTypeId();
       } else {
         console.error('❌ Google Maps API still not available');
       }
@@ -682,15 +787,24 @@ const DeliveryTrackingMap = ({
 
     function initializeMap() {
       try {
+        // Verify Google Maps is fully loaded
+        if (!window.google || !window.google.maps || !window.google.maps.Map) {
+          console.error('❌ Google Maps API not fully loaded');
+          return;
+        }
+
         // Calculate center point
         const centerLng = (restaurantCoords.lng + customerCoords.lng) / 2;
         const centerLat = (restaurantCoords.lat + customerCoords.lat) / 2;
+
+        // Get MapTypeId safely
+        const mapTypeId = window.google.maps.MapTypeId?.ROADMAP || 'roadmap';
 
         // Initialize map - center between user and restaurant, stable view
         mapInstance.current = new window.google.maps.Map(mapRef.current, {
           center: { lat: centerLat, lng: centerLng },
           zoom: 15,
-          mapTypeId: window.google.maps.MapTypeId.ROADMAP,
+          mapTypeId: mapTypeId,
           tilt: 0, // Flat 2D view for stability
           heading: 0,
           mapTypeControl: false, // Hide Map/Satellite selector

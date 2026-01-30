@@ -72,25 +72,8 @@ window.__googleMapsLoaded = window.__googleMapsLoaded || false;
   } catch (error) {
     console.warn('Failed to load Google Maps API key:', error.message)
     window.__googleMapsLoading = false;
-    // Fallback to env variable
-    const fallbackKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-    if (fallbackKey && !document.querySelector('script[src*="maps.googleapis.com"]')) {
-      window.__googleMapsLoading = true;
-      const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${fallbackKey}&libraries=places,geometry,drawing`
-      script.async = true
-      script.defer = true
-      script.onload = () => {
-        console.log('✅ Google Maps API loaded via script tag (fallback)');
-        window.__googleMapsLoaded = true;
-        window.__googleMapsLoading = false;
-      }
-      script.onerror = () => {
-        console.error('❌ Failed to load Google Maps API script (fallback)');
-        window.__googleMapsLoading = false;
-      }
-      document.head.appendChild(script)
-    }
+    // No fallback - Google Maps will not load if key is not in database
+    console.warn('⚠️ Google Maps API key not available. Please set it in Admin → System → Environment Variables');
   }
 })()
 

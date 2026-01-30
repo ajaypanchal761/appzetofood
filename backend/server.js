@@ -410,9 +410,30 @@ app.use((req, res, next) => {
     return next();
   }
 
+  // Log 404 errors for debugging (especially for admin routes)
+  if (req.path.includes('/admin') || req.path.includes('refund')) {
+    console.error('❌ [404 HANDLER] Route not found:', {
+      method: req.method,
+      path: req.path,
+      url: req.url,
+      originalUrl: req.originalUrl,
+      baseUrl: req.baseUrl,
+      route: req.route?.path,
+      registeredRoutes: 'Check server startup logs for route registration'
+    });
+    console.error('💡 [404 HANDLER] Expected route: POST /api/admin/refund-requests/:orderId/process');
+    console.error('💡 [404 HANDLER] Make sure:');
+    console.error('   1. Backend server has been restarted');
+    console.error('   2. Route is registered (check startup logs)');
+    console.error('   3. Authentication token is valid');
+  }
+
   res.status(404).json({
     success: false,
-    message: 'Route not found'
+    message: 'Route not found',
+    path: req.path,
+    method: req.method,
+    expectedRoute: req.path.includes('refund') ? 'POST /api/admin/refund-requests/:orderId/process' : undefined
   });
 });
 
@@ -600,6 +621,25 @@ function initializeScheduledTasks() {
     console.log('✅ Auto-ready order scheduler initialized (runs every 30 seconds)');
   }).catch((error) => {
     console.error('❌ Failed to initialize auto-ready service:', error);
+  });
+
+  // Import auto-reject service
+  import('./modules/order/services/autoRejectService.js').then(({ processAutoRejectOrders }) => {
+    // Run every 30 seconds to check for orders that should be auto-rejected
+    cron.schedule('*/30 * * * * *', async () => {
+      try {
+        const result = await processAutoRejectOrders();
+        if (result.processed > 0) {
+          console.log(`[Auto Reject Cron] ${result.message}`);
+        }
+      } catch (error) {
+        console.error('[Auto Reject Cron] Error:', error);
+      }
+    });
+
+    console.log('✅ Auto-reject order scheduler initialized (runs every 30 seconds)');
+  }).catch((error) => {
+    console.error('❌ Failed to initialize auto-reject service:', error);
   });
 }
 

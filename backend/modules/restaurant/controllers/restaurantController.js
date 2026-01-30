@@ -9,20 +9,151 @@ import mongoose from 'mongoose';
 // Get all restaurants (for user module)
 export const getRestaurants = async (req, res) => {
   try {
-    const { limit = 50, offset = 0 } = req.query;
+    const { 
+      limit = 50, 
+      offset = 0,
+      sortBy,
+      cuisine,
+      minRating,
+      maxDeliveryTime,
+      maxDistance,
+      maxPrice,
+      hasOffers
+    } = req.query;
     
-    const restaurants = await Restaurant.find({ isActive: true })
-      .select('-owner -createdAt -updatedAt')
-      .sort({ createdAt: -1 }) // Latest first
+    // Build query
+    const query = { isActive: true };
+    
+    // Cuisine filter
+    if (cuisine) {
+      query.cuisines = { $in: [new RegExp(cuisine, 'i')] };
+    }
+    
+      // Rating filter
+      if (minRating) {
+        query.rating = { $gte: parseFloat(minRating) };
+      }
+      
+      // Trust filters (top-rated = 4.5+, trusted = 4.0+ with high totalRatings)
+      if (req.query.topRated === 'true') {
+        query.rating = { $gte: 4.5 };
+      } else if (req.query.trusted === 'true') {
+        query.rating = { $gte: 4.0 };
+        query.totalRatings = { $gte: 100 }; // At least 100 ratings to be "trusted"
+      }
+    
+    // Delivery time filter (estimatedDeliveryTime contains time in format "25-30 mins")
+    if (maxDeliveryTime) {
+      const maxTime = parseInt(maxDeliveryTime);
+      query.$or = [
+        { estimatedDeliveryTime: { $regex: new RegExp(`(\\d+)-?\\d*\\s*mins?`, 'i') } }
+      ];
+      // We'll filter this in application logic since it's a string field
+    }
+    
+    // Distance filter (distance is stored as string like "1.2 km")
+    if (maxDistance) {
+      const maxDist = parseFloat(maxDistance);
+      query.$or = [
+        { distance: { $regex: new RegExp(`\\d+\\.?\\d*\\s*km`, 'i') } }
+      ];
+      // We'll filter this in application logic since it's a string field
+    }
+    
+    // Price range filter
+    if (maxPrice) {
+      const priceMap = { 200: ['$'], 500: ['$', '$$'] };
+      if (priceMap[maxPrice]) {
+        query.priceRange = { $in: priceMap[maxPrice] };
+      }
+    }
+    
+    // Offers filter
+    if (hasOffers === 'true') {
+      query.$or = [
+        { offer: { $exists: true, $ne: null, $ne: '' } },
+        { featuredPrice: { $exists: true } }
+      ];
+    }
+    
+    // Build sort object
+    let sortObj = { createdAt: -1 }; // Default: Latest first
+    
+    if (sortBy) {
+      switch (sortBy) {
+        case 'price-low':
+          sortObj = { priceRange: 1, rating: -1 }; // $ < $$ < $$$, then by rating
+          break;
+        case 'price-high':
+          sortObj = { priceRange: -1, rating: -1 }; // $$$$ > $$$ > $$ > $, then by rating
+          break;
+        case 'rating-high':
+          sortObj = { rating: -1, totalRatings: -1 }; // Highest rating first
+          break;
+        case 'rating-low':
+          sortObj = { rating: 1, totalRatings: -1 }; // Lowest rating first
+          break;
+        case 'relevance':
+        default:
+          sortObj = { rating: -1, totalRatings: -1, createdAt: -1 }; // Relevance: high rating + recent
+          break;
+      }
+    }
+    
+    // Fetch restaurants
+    let restaurants = await Restaurant.find(query)
+      .select('-owner -createdAt -updatedAt -password')
+      .sort(sortObj)
       .limit(parseInt(limit))
       .skip(parseInt(offset))
       .lean();
-
-    console.log(`Fetched ${restaurants.length} restaurants from database`);
+    
+    // Apply string-based filters that can't be done in MongoDB query
+    if (maxDeliveryTime) {
+      const maxTime = parseInt(maxDeliveryTime);
+      restaurants = restaurants.filter(r => {
+        if (!r.estimatedDeliveryTime) return false;
+        const timeMatch = r.estimatedDeliveryTime.match(/(\d+)/);
+        return timeMatch && parseInt(timeMatch[1]) <= maxTime;
+      });
+    }
+    
+    if (maxDistance) {
+      const maxDist = parseFloat(maxDistance);
+      restaurants = restaurants.filter(r => {
+        if (!r.distance) return false;
+        const distMatch = r.distance.match(/(\d+\.?\d*)/);
+        return distMatch && parseFloat(distMatch[1]) <= maxDist;
+      });
+    }
+    
+    // Get total count (before filtering by string fields)
+    const totalQuery = { ...query };
+    delete totalQuery.$or; // Remove $or for count
+    const total = await Restaurant.countDocuments(totalQuery);
+    
+    console.log(`Fetched ${restaurants.length} restaurants from database with filters:`, {
+      sortBy,
+      cuisine,
+      minRating,
+      maxDeliveryTime,
+      maxDistance,
+      maxPrice,
+      hasOffers
+    });
 
     return successResponse(res, 200, 'Restaurants retrieved successfully', {
       restaurants,
       total: restaurants.length,
+      filters: {
+        sortBy,
+        cuisine,
+        minRating,
+        maxDeliveryTime,
+        maxDistance,
+        maxPrice,
+        hasOffers
+      }
     });
   } catch (error) {
     console.error('Error fetching restaurants:', error);

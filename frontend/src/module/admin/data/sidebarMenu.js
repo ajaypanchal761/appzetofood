@@ -131,14 +131,6 @@ export const sidebarMenuData = [
         path: "/admin/customers",
         icon: "Users",
       },
-      {
-        type: "expandable",
-        label: "Wallet",
-        icon: "Wallet",
-        subItems: [
-          { label: "Add Fund", path: "/admin/wallet/add-fund" },
-        ],
-      },
     ],
   },
   {

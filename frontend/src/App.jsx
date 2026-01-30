@@ -2,7 +2,6 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import AuthRedirect from "@/components/AuthRedirect"
 
-import Home from "@/pages/Home"
 import UserRouter from "@/module/user/components/UserRouter"
 import HomePage from "@/module/usermain/pages/HomePage"
 import CategoriesPage from "@/module/usermain/pages/CategoriesPage"

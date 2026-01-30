@@ -330,7 +330,16 @@ export const getOrders = asyncHandler(async (req, res) => {
         totalAmount: orderAmount,
         // Original fields
         paymentStatus: paymentStatusDisplay,
-        paymentType: (order.payment?.method === 'cash' || order.payment?.method === 'cod') ? 'Cash on Delivery' : 'Online',
+        paymentType: (() => {
+          const paymentMethod = order.payment?.method;
+          if (paymentMethod === 'cash' || paymentMethod === 'cod') {
+            return 'Cash on Delivery';
+          } else if (paymentMethod === 'wallet') {
+            return 'Wallet';
+          } else {
+            return 'Online';
+          }
+        })(),
         paymentCollectionStatus: (order.payment?.method === 'cash' || order.payment?.method === 'cod')
           ? (order.status === 'delivered' ? 'Collected' : 'Not Collected')
           : 'Collected',
@@ -1502,8 +1511,20 @@ export const getRefundRequests = asyncHandler(async (req, res) => {
  */
 export const processRefund = asyncHandler(async (req, res) => {
   try {
+    console.log('🔍 [processRefund] ========== ROUTE HIT ==========');
+    console.log('🔍 [processRefund] Method:', req.method);
+    console.log('🔍 [processRefund] URL:', req.url);
+    console.log('🔍 [processRefund] Original URL:', req.originalUrl);
+    console.log('🔍 [processRefund] Path:', req.path);
+    console.log('🔍 [processRefund] Base URL:', req.baseUrl);
+    console.log('🔍 [processRefund] Params:', req.params);
+    console.log('🔍 [processRefund] Headers:', {
+      authorization: req.headers.authorization ? 'Present' : 'Missing',
+      'content-type': req.headers['content-type']
+    });
+
     const { orderId } = req.params;
-    const { notes } = req.body;
+    const { notes, refundAmount } = req.body;
     const adminId = req.user?.id || req.admin?.id || null;
 
     console.log('🔍 [processRefund] Processing refund request:', {
@@ -1511,31 +1532,98 @@ export const processRefund = asyncHandler(async (req, res) => {
       orderIdType: typeof orderId,
       orderIdLength: orderId?.length,
       isObjectId: mongoose.Types.ObjectId.isValid(orderId),
-      adminId
+      adminId,
+      url: req.url,
+      method: req.method,
+      params: req.params,
+      body: req.body,
+      refundAmount: refundAmount,
+      refundAmountType: typeof refundAmount,
+      notes: notes
     });
 
-    // Find order
+    // Find order in database - try both MongoDB _id and orderId string
     let order = null;
+    
+    console.log('🔍 [processRefund] Searching order in database...', {
+      searchId: orderId,
+      isObjectId: mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24
+    });
+    
+    // First try MongoDB _id if it's a valid ObjectId
     if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
       console.log('🔍 [processRefund] Searching by MongoDB _id:', orderId);
-      order = await Order.findById(orderId);
+      order = await Order.findById(orderId)
+        .populate('userId', 'name email phone _id')
+        .lean();
       console.log('🔍 [processRefund] Order found by _id:', order ? 'Yes' : 'No');
     }
+    
+    // If not found by _id, try orderId string
     if (!order) {
       console.log('🔍 [processRefund] Searching by orderId string:', orderId);
-      order = await Order.findOne({ orderId: orderId });
+      order = await Order.findOne({ orderId: orderId })
+        .populate('userId', 'name email phone _id')
+        .lean();
       console.log('🔍 [processRefund] Order found by orderId:', order ? 'Yes' : 'No');
     }
 
     if (!order) {
-      console.error('❌ [processRefund] Order not found for orderId:', orderId);
-      return errorResponse(res, 404, 'Order not found');
+      console.error('❌ [processRefund] Order NOT FOUND in database');
+      console.error('❌ [processRefund] Searched by:', {
+        mongoId: mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24 ? orderId : 'N/A',
+        orderIdString: orderId,
+        orderIdType: typeof orderId,
+        orderIdLength: orderId?.length
+      });
+      
+      // Try to find any order with similar orderId (for debugging)
+      try {
+        const similarOrders = await Order.find({
+          $or: [
+            { orderId: { $regex: orderId, $options: 'i' } },
+            { orderId: { $regex: orderId.substring(0, 10), $options: 'i' } }
+          ]
+        })
+        .select('_id orderId status')
+        .limit(5)
+        .lean();
+        
+        if (similarOrders.length > 0) {
+          console.log('💡 [processRefund] Found similar orders:', similarOrders.map(o => ({
+            mongoId: o._id.toString(),
+            orderId: o.orderId,
+            status: o.status
+          })));
+        }
+      } catch (debugError) {
+        console.error('Error searching for similar orders:', debugError.message);
+      }
+      
+      // Check total orders count
+      try {
+        const totalOrders = await Order.countDocuments();
+        console.log(`📊 [processRefund] Total orders in database: ${totalOrders}`);
+      } catch (countError) {
+        console.error('Error counting orders:', countError.message);
+      }
+      
+      return errorResponse(res, 404, `Order not found (ID: ${orderId}). Please check if the order exists.`);
     }
-
-    console.log('✅ [processRefund] Order found:', {
-      _id: order._id.toString(),
+    
+    // Verify order exists and log complete details
+    console.log('✅✅✅ [processRefund] ORDER FOUND IN DATABASE ✅✅✅');
+    console.log('📋 [processRefund] Complete Order Details:', {
+      mongoId: order._id.toString(),
       orderId: order.orderId,
-      status: order.status
+      status: order.status,
+      paymentMethod: order.payment?.method || 'unknown',
+      paymentType: order.paymentType || 'unknown',
+      total: order.pricing?.total || 0,
+      cancelledBy: order.cancelledBy || 'unknown',
+      userId: order.userId?._id?.toString() || order.userId?.toString() || 'unknown',
+      userName: order.userId?.name || 'unknown',
+      userPhone: order.userId?.phone || 'unknown'
     });
 
     if (order.status !== 'cancelled') {
@@ -1553,16 +1641,98 @@ export const processRefund = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, 'This order was not cancelled by restaurant or user');
     }
 
-    // Check if order is Home Delivery
-    if (order.deliveryType !== 'home_delivery' && order.deliveryType !== 'Home Delivery') {
-      return errorResponse(res, 400, 'Refund can only be processed for Home Delivery orders');
+    // Check payment method - wallet payments don't use Razorpay
+    const paymentMethod = order.payment?.method;
+    
+    if (!paymentMethod) {
+      return errorResponse(res, 400, 'Payment method not found for this order');
+    }
+    
+    // For wallet payments, allow refund regardless of delivery type (no Razorpay involved)
+    // For other payments (Razorpay), only allow refund for Home Delivery orders
+    // Note: Order model uses deliveryFleet, not deliveryType
+    if (paymentMethod !== 'wallet') {
+      // Check deliveryFleet - 'standard' and 'fast' are home delivery types
+      const isHomeDelivery = order.deliveryFleet === 'standard' || order.deliveryFleet === 'fast';
+      if (!isHomeDelivery) {
+        return errorResponse(res, 400, 'Refund can only be processed for Home Delivery orders');
+      }
     }
 
-    // Get settlement
+    // Get settlement (for wallet payments, settlement might not exist - create one if needed)
     const OrderSettlement = (await import('../../order/models/OrderSettlement.js')).default;
-    const settlement = await OrderSettlement.findOne({ orderId: order._id });
+    let settlement = await OrderSettlement.findOne({ orderId: order._id });
 
-    if (!settlement) {
+    // For wallet payments, if settlement doesn't exist, create a proper one with all required fields
+    if (!settlement && paymentMethod === 'wallet') {
+      console.log('📝 [processRefund] Settlement not found for wallet order, creating settlement with order data...');
+      
+      const pricing = order.pricing || {};
+      const subtotal = pricing.subtotal || 0;
+      const deliveryFee = pricing.deliveryFee || 0;
+      const platformFee = pricing.platformFee || 0;
+      const tax = pricing.tax || 0;
+      const total = pricing.total || 0;
+      
+      // Calculate earnings (simplified for wallet refunds - we just need the structure)
+      const foodPrice = subtotal;
+      const commission = 0; // For wallet refunds, we don't need actual commission
+      const netEarning = foodPrice; // Simplified
+      
+      settlement = new OrderSettlement({
+        orderId: order._id,
+        orderNumber: order.orderId,
+        userId: order.userId?._id || order.userId,
+        restaurantId: order.restaurantId,
+        restaurantName: order.restaurantName || 'Unknown Restaurant',
+        userPayment: {
+          subtotal: subtotal,
+          discount: pricing.discount || 0,
+          deliveryFee: deliveryFee,
+          platformFee: platformFee,
+          gst: tax,
+          packagingFee: 0,
+          total: total
+        },
+        restaurantEarning: {
+          foodPrice: foodPrice,
+          commission: commission,
+          commissionPercentage: 0,
+          netEarning: netEarning,
+          status: 'cancelled'
+        },
+        deliveryPartnerEarning: {
+          basePayout: 0,
+          distance: 0,
+          commissionPerKm: 0,
+          distanceCommission: 0,
+          surgeMultiplier: 1,
+          surgeAmount: 0,
+          totalEarning: 0,
+          status: 'cancelled'
+        },
+        adminEarning: {
+          commission: commission,
+          platformFee: platformFee,
+          deliveryFee: deliveryFee,
+          gst: tax,
+          deliveryMargin: 0,
+          totalEarning: platformFee + deliveryFee + tax,
+          status: 'cancelled'
+        },
+        escrowStatus: 'refunded',
+        escrowAmount: total,
+        settlementStatus: 'cancelled',
+        cancellationDetails: {
+          cancelled: true,
+          cancelledAt: order.updatedAt || new Date(),
+          refundStatus: 'pending'
+        }
+      });
+      await settlement.save();
+      console.log('✅ [processRefund] Settlement created for wallet refund');
+    } else if (!settlement) {
+      // For non-wallet payments, settlement is required
       return errorResponse(res, 404, 'Settlement not found for this order');
     }
 
@@ -1572,15 +1742,73 @@ export const processRefund = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, 'Refund already processed or initiated for this order');
     }
 
-    // Check if refund amount is calculated
-    const refundAmount = settlement.cancellationDetails?.refundAmount || 0;
-    if (refundAmount <= 0) {
-      return errorResponse(res, 400, 'No refund amount calculated for this order');
+    // Handle wallet refunds differently (paymentMethod already declared above)
+    // Wallet payments don't use Razorpay - refund is direct wallet credit
+    let refundResult;
+    if (paymentMethod === 'wallet') {
+      // For wallet payments, use provided refundAmount or calculate from order
+      const orderTotal = order.pricing?.total || settlement.userPayment?.total || 0;
+      let finalRefundAmount = 0;
+      
+      // If refundAmount is provided in request body, use it (validate it)
+      if (refundAmount !== undefined && refundAmount !== null && refundAmount !== '') {
+        const requestedAmount = parseFloat(refundAmount);
+        console.log('💰 [processRefund] Validating refund amount:', {
+          original: refundAmount,
+          parsed: requestedAmount,
+          isNaN: isNaN(requestedAmount),
+          orderTotal: orderTotal
+        });
+        
+        if (isNaN(requestedAmount) || requestedAmount <= 0) {
+          console.error('❌ [processRefund] Invalid refund amount:', requestedAmount);
+          return errorResponse(res, 400, `Invalid refund amount provided: ${refundAmount}. Please provide a valid positive number.`);
+        }
+        if (requestedAmount > orderTotal) {
+          console.error('❌ [processRefund] Refund amount exceeds order total:', {
+            requestedAmount,
+            orderTotal
+          });
+          return errorResponse(res, 400, `Refund amount (₹${requestedAmount}) cannot exceed order total (₹${orderTotal})`);
+        }
+        finalRefundAmount = requestedAmount;
+        console.log('✅ [processRefund] Wallet payment - using provided refund amount:', finalRefundAmount);
+      } else {
+        // If no amount provided, use calculated refund or order total
+        const calculatedRefund = settlement.cancellationDetails?.refundAmount || 0;
+        
+        // For wallet, always use order total if calculated refund is 0
+        if (calculatedRefund <= 0 && orderTotal > 0) {
+          console.log('💰 [processRefund] Wallet payment - using full order total for refund:', orderTotal);
+          finalRefundAmount = orderTotal;
+        } else if (calculatedRefund > 0) {
+          finalRefundAmount = calculatedRefund;
+        } else {
+          return errorResponse(res, 400, 'No refund amount found for this order');
+        }
+      }
+      
+      // Update settlement with refund amount
+      if (!settlement.cancellationDetails) {
+        settlement.cancellationDetails = {};
+      }
+      settlement.cancellationDetails.refundAmount = finalRefundAmount;
+      await settlement.save();
+      
+      // Process wallet refund (add to user wallet) with the specified amount
+      const { processWalletRefund } = await import('../../order/services/cancellationRefundService.js');
+      refundResult = await processWalletRefund(order._id, adminId, finalRefundAmount);
+    } else {
+      // For Razorpay, check if refund amount is calculated
+      const refundAmount = settlement.cancellationDetails?.refundAmount || 0;
+      if (refundAmount <= 0) {
+        return errorResponse(res, 400, 'No refund amount calculated for this order');
+      }
+      
+      // Process Razorpay refund
+      const { processRazorpayRefund } = await import('../../order/services/cancellationRefundService.js');
+      refundResult = await processRazorpayRefund(order._id, adminId);
     }
-
-    // Process Razorpay refund
-    const { processRazorpayRefund } = await import('../../order/services/cancellationRefundService.js');
-    const refundResult = await processRazorpayRefund(order._id, adminId);
 
     // Update settlement with admin notes if provided
     if (notes) {

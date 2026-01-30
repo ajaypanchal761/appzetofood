@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useLocation } from "../hooks/useLocation"
-import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
+import appzetoFoodLogo from "@/assets/appzetologo.png"
 import offerImage from "@/assets/offerimage.png"
 import api, { restaurantAPI } from "@/lib/api"
 import { API_BASE_URL } from "@/lib/api/config"
@@ -532,8 +532,13 @@ export default function Home() {
   const [sortBy, setSortBy] = useState(null) // null, 'price-low', 'price-high', 'rating-high', 'rating-low'
   const [selectedCuisine, setSelectedCuisine] = useState(null)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [activeFilterTab, setActiveFilterTab] = useState('sort')
+  const [appliedFilters, setAppliedFilters] = useState({
+    activeFilters: new Set(),
+    sortBy: null,
+    selectedCuisine: null
+  })
   const [isLoadingFilterResults, setIsLoadingFilterResults] = useState(false)
+  const [activeFilterTab, setActiveFilterTab] = useState('sort')
   const categoryScrollRef = useRef(null)
   const gsapAnimationsRef = useRef([])
   // Safely get profile context - handle case when ProfileProvider is not available
@@ -620,100 +625,155 @@ export default function Home() {
     return () => observer.disconnect()
   }, [isFilterOpen])
 
-  // Fetch restaurants from API
-  useEffect(() => {
-    const fetchRestaurants = async () => {
+  // Fetch restaurants from API with filters
+  const fetchRestaurants = useCallback(async (filters = {}) => {
+    try {
+      setLoadingRestaurants(true)
+      
+      // First, test backend connection
       try {
-        setLoadingRestaurants(true)
+        // Use API_BASE_URL from config (supports both dev and production)
+        const backendUrl = API_BASE_URL.replace('/api', '')
+        const healthCheck = await fetch(`${backendUrl}/health`)
+        if (!healthCheck.ok) {
+          throw new Error(`Backend health check failed: ${healthCheck.status}`)
+        }
+        console.log('✅ Backend connection successful')
+      } catch (healthError) {
+        // Backend connection error - handled silently, toast notifications shown via axios interceptor
+        setRestaurantsData([])
+        setLoadingRestaurants(false)
+        return
+      }
+      
+      // Build query parameters from filters
+      const params = {}
+      
+      // Sort by
+      if (filters.sortBy) {
+        params.sortBy = filters.sortBy
+      }
+      
+      // Cuisine
+      if (filters.selectedCuisine) {
+        params.cuisine = filters.selectedCuisine
+      }
+      
+      // Rating filters
+      if (filters.activeFilters?.has('rating-45-plus')) {
+        params.minRating = 4.5
+      } else if (filters.activeFilters?.has('rating-4-plus')) {
+        params.minRating = 4.0
+      } else if (filters.activeFilters?.has('rating-35-plus')) {
+        params.minRating = 3.5
+      }
+      
+      // Delivery time filters
+      if (filters.activeFilters?.has('delivery-under-30')) {
+        params.maxDeliveryTime = 30
+      } else if (filters.activeFilters?.has('delivery-under-45')) {
+        params.maxDeliveryTime = 45
+      }
+      
+      // Distance filters
+      if (filters.activeFilters?.has('distance-under-1km')) {
+        params.maxDistance = 1.0
+      } else if (filters.activeFilters?.has('distance-under-2km')) {
+        params.maxDistance = 2.0
+      }
+      
+      // Price filters
+      if (filters.activeFilters?.has('price-under-200')) {
+        params.maxPrice = 200
+      } else if (filters.activeFilters?.has('price-under-500')) {
+        params.maxPrice = 500
+      }
+      
+      // Offers filter
+      if (filters.activeFilters?.has('has-offers')) {
+        params.hasOffers = 'true'
+      }
+      
+      // Trust filters
+      if (filters.activeFilters?.has('top-rated')) {
+        params.topRated = 'true'
+      } else if (filters.activeFilters?.has('trusted')) {
+        params.trusted = 'true'
+      }
+      
+      console.log('Fetching restaurants with params:', params)
+      const response = await restaurantAPI.getRestaurants(params)
+      console.log('Restaurants API response:', response.data)
+      
+      if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
+        const restaurantsArray = response.data.data.restaurants
+        console.log(`Fetched ${restaurantsArray.length} restaurants from API`)
         
-        // First, test backend connection
-        try {
-          // Use API_BASE_URL from config (supports both dev and production)
-          const backendUrl = API_BASE_URL.replace('/api', '')
-          const healthCheck = await fetch(`${backendUrl}/health`)
-          if (!healthCheck.ok) {
-            throw new Error(`Backend health check failed: ${healthCheck.status}`)
-          }
-          console.log('✅ Backend connection successful')
-        } catch (healthError) {
-          // Backend connection error - handled silently, toast notifications shown via axios interceptor
+        if (restaurantsArray.length === 0) {
+          console.warn('No restaurants found in API response')
           setRestaurantsData([])
           setLoadingRestaurants(false)
           return
         }
         
-        const response = await restaurantAPI.getRestaurants()
-        console.log('Restaurants API response:', response.data)
-        
-        if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
-          const restaurantsArray = response.data.data.restaurants
-          console.log(`Fetched ${restaurantsArray.length} restaurants from API`)
+        // Transform API data to match expected format
+        const transformedRestaurants = restaurantsArray.map((restaurant, index) => {
+          // Use restaurant data if available, otherwise use defaults
+          const deliveryTime = restaurant.estimatedDeliveryTime || "25-30 mins"
+          const distance = restaurant.distance || "1.2 km"
           
-          if (restaurantsArray.length === 0) {
-            console.warn('No restaurants found in API response')
-            setRestaurantsData([])
-            setLoadingRestaurants(false)
-            return
+          // Get first cuisine or default
+          const cuisine = restaurant.cuisines && restaurant.cuisines.length > 0 
+            ? restaurant.cuisines[0] 
+            : "Multi-cuisine"
+          
+          // Get cover images (separate from menu images) for carousel
+          const coverImages = restaurant.coverImages && restaurant.coverImages.length > 0
+            ? restaurant.coverImages.map(img => img.url || img)
+            : []
+          
+          // Fallback to menuImages only if coverImages don't exist (for backward compatibility)
+          const fallbackImages = restaurant.menuImages && restaurant.menuImages.length > 0
+            ? restaurant.menuImages.map(img => img.url)
+            : []
+          
+          // Use cover images first, then fallback to menu images, then profile image
+          const allImages = coverImages.length > 0 
+            ? coverImages 
+            : (fallbackImages.length > 0
+                ? fallbackImages
+                : (restaurant.profileImage?.url 
+                    ? [restaurant.profileImage.url]
+                    : ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"]))
+          
+          // Keep single image for backward compatibility
+          const image = allImages[0]
+          
+          return {
+            id: restaurant.restaurantId || restaurant._id,
+            name: restaurant.name,
+            cuisine: cuisine,
+            rating: restaurant.rating || 4.5,
+            deliveryTime: deliveryTime,
+            distance: distance,
+            image: image,
+            images: allImages, // Array of cover images for carousel (separate from menu images)
+            priceRange: restaurant.priceRange || "$$", // Use from API or default
+            featuredDish: restaurant.featuredDish || (restaurant.cuisines && restaurant.cuisines.length > 0 
+              ? `${restaurant.cuisines[0]} Special` 
+              : "Special Dish"),
+            featuredPrice: restaurant.featuredPrice || 249, // Use from API or default
+            offer: restaurant.offer || "Flat ₹50 OFF above ₹199", // Use from API or default
+            slug: restaurant.slug,
+            restaurantId: restaurant.restaurantId,
           }
-          
-          // Transform API data to match expected format
-          const transformedRestaurants = restaurantsArray.map((restaurant, index) => {
-            // Use restaurant data if available, otherwise use defaults
-            const deliveryTime = restaurant.estimatedDeliveryTime || "25-30 mins"
-            const distance = restaurant.distance || "1.2 km"
-            
-            // Get first cuisine or default
-            const cuisine = restaurant.cuisines && restaurant.cuisines.length > 0 
-              ? restaurant.cuisines[0] 
-              : "Multi-cuisine"
-            
-            // Get cover images (separate from menu images) for carousel
-            const coverImages = restaurant.coverImages && restaurant.coverImages.length > 0
-              ? restaurant.coverImages.map(img => img.url || img)
-              : []
-            
-            // Fallback to menuImages only if coverImages don't exist (for backward compatibility)
-            const fallbackImages = restaurant.menuImages && restaurant.menuImages.length > 0
-              ? restaurant.menuImages.map(img => img.url)
-              : []
-            
-            // Use cover images first, then fallback to menu images, then profile image
-            const allImages = coverImages.length > 0 
-              ? coverImages 
-              : (fallbackImages.length > 0
-                  ? fallbackImages
-                  : (restaurant.profileImage?.url 
-                      ? [restaurant.profileImage.url]
-                      : ["https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop"]))
-            
-            // Keep single image for backward compatibility
-            const image = allImages[0]
-            
-            return {
-              id: restaurant.restaurantId || restaurant._id,
-              name: restaurant.name,
-              cuisine: cuisine,
-              rating: restaurant.rating || 4.5,
-              deliveryTime: deliveryTime,
-              distance: distance,
-              image: image,
-              images: allImages, // Array of cover images for carousel (separate from menu images)
-              priceRange: restaurant.priceRange || "$$", // Use from API or default
-              featuredDish: restaurant.featuredDish || (restaurant.cuisines && restaurant.cuisines.length > 0 
-                ? `${restaurant.cuisines[0]} Special` 
-                : "Special Dish"),
-              featuredPrice: restaurant.featuredPrice || 249, // Use from API or default
-              offer: restaurant.offer || "Flat ₹50 OFF above ₹199", // Use from API or default
-              slug: restaurant.slug,
-              restaurantId: restaurant.restaurantId,
-            }
-          })
-          console.log('Transformed restaurants:', transformedRestaurants)
-          setRestaurantsData(transformedRestaurants)
-        } else {
-          console.warn('Invalid API response structure:', response.data)
-          setRestaurantsData([])
-        }
+        })
+        console.log('Transformed restaurants:', transformedRestaurants)
+        setRestaurantsData(transformedRestaurants)
+      } else {
+        console.warn('Invalid API response structure:', response.data)
+        setRestaurantsData([])
+      }
       } catch (error) {
         console.error('Error fetching restaurants:', error)
         console.error('Error details:', error.response?.data || error.message)
@@ -724,10 +784,12 @@ export default function Home() {
         setLoadingRestaurants(false)
         console.log('Restaurant loading completed. restaurantsData length:', restaurantsData.length)
       }
-    }
-    
-    fetchRestaurants()
   }, [])
+  
+  // Fetch restaurants when appliedFilters change
+  useEffect(() => {
+    fetchRestaurants(appliedFilters)
+  }, [appliedFilters, fetchRestaurants])
 
   // Filter restaurants and foods based on active filters
   const filteredRestaurants = useMemo(() => {
@@ -1777,7 +1839,7 @@ export default function Home() {
                                 }}
                                 transition={{ duration: 0.3 }}
                               >
-                                <BadgePercent className="h-4 w-4 lg:h-5 lg:w-5 text-blue-600" strokeWidth={2} />
+                                <BadgePercent className="h-4 w-4 lg:h-5 lg:w-5 text-black" strokeWidth={2} />
                                 <span className="text-gray-700 dark:text-gray-300 font-medium">{restaurant.offer}</span>
                               </motion.div>
                             )}
@@ -2090,14 +2152,52 @@ export default function Home() {
 
                 {/* Trust Markers Tab */}
                 {activeFilterTab === 'trust' && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Trust Markers</h3>
+                  <div
+                    ref={el => filterSectionRefs.current['trust'] = el}
+                    data-section-id="trust"
+                    className="space-y-4 mb-8"
+                  >
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Trust Markers</h3>
                     <div className="flex flex-col gap-3">
-                      <button className="px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-green-600 text-left transition-colors">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Top Rated</span>
+                      <button
+                        onClick={() => toggleFilter('top-rated')}
+                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('top-rated')
+                            ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
+                          }`}
+                      >
+                        <span className={`text-sm font-medium ${activeFilters.has('top-rated') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Top Rated</span>
                       </button>
-                      <button className="px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-800 hover:border-green-600 text-left transition-colors">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Trusted by 1000+ users</span>
+                      <button
+                        onClick={() => toggleFilter('trusted')}
+                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('trusted')
+                            ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
+                          }`}
+                      >
+                        <span className={`text-sm font-medium ${activeFilters.has('trusted') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Trusted by 1000+ users</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Offers Tab */}
+                {activeFilterTab === 'offers' && (
+                  <div
+                    ref={el => filterSectionRefs.current['offers'] = el}
+                    data-section-id="offers"
+                    className="space-y-4 mb-8"
+                  >
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Offers</h3>
+                    <div className="flex flex-col gap-3">
+                      <button
+                        onClick={() => toggleFilter('has-offers')}
+                        className={`px-4 py-3 rounded-xl border text-left transition-colors ${activeFilters.has('has-offers')
+                            ? 'border-green-600 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-800 hover:border-green-600'
+                          }`}
+                      >
+                        <span className={`text-sm font-medium ${activeFilters.has('has-offers') ? 'text-green-600' : 'text-gray-700 dark:text-gray-300'}`}>Restaurants with offers</span>
                       </button>
                     </div>
                   </div>
@@ -2114,22 +2214,42 @@ export default function Home() {
                 Close
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
+                  // Apply filters
+                  setAppliedFilters({
+                    activeFilters: new Set(activeFilters),
+                    sortBy,
+                    selectedCuisine
+                  })
                   setIsLoadingFilterResults(true)
                   setIsFilterOpen(false)
-                  // Simulate loading for 1 second
-                  setTimeout(() => {
+                  
+                  // Refetch restaurants with new filters
+                  try {
+                    await fetchRestaurants({
+                      activeFilters: new Set(activeFilters),
+                      sortBy,
+                      selectedCuisine
+                    })
+                  } catch (error) {
+                    console.error('Error applying filters:', error)
+                  } finally {
                     setIsLoadingFilterResults(false)
-                  }, 1000)
+                  }
                 }}
                 className={`flex-1 py-3 font-semibold rounded-xl transition-colors ${activeFilters.size > 0 || sortBy || selectedCuisine
                     ? 'bg-green-600 text-white hover:bg-green-700'
                     : 'bg-gray-200 text-gray-500'
                   }`}
+                disabled={isLoadingFilterResults}
               >
-                {activeFilters.size > 0 || sortBy || selectedCuisine
-                  ? `Show ${filteredRestaurants.length} results`
-                  : 'Show results'}
+                {isLoadingFilterResults ? (
+                  'Loading...'
+                ) : activeFilters.size > 0 || sortBy || selectedCuisine ? (
+                  `Show results`
+                ) : (
+                  'Show results'
+                )}
               </button>
             </div>
           </motion.div>

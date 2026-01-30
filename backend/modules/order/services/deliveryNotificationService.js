@@ -57,6 +57,11 @@ async function checkDeliveryPartnerConnection(deliveryPartnerId) {
  * @param {string} deliveryPartnerId - Delivery partner ID
  */
 export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
+  // CRITICAL: Don't notify if order is cancelled
+  if (order.status === 'cancelled') {
+    console.log(`⚠️ Order ${order.orderId} is cancelled. Cannot notify delivery partner.`);
+    return { success: false, reason: 'Order is cancelled' };
+  }
   try {
     const io = await getIOInstance();
     

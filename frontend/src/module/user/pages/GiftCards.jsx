@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
 // Import banner
-import giftCardBanner from "@/assets/giftcardpagebanner.png"
+// Using placeholder for gift card banner
+const giftCardBanner = "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=1200&h=400&fit=crop"
 
 // Gift card categories with their card designs
 const giftCardCategories = [

@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react"
 import { Search, Download, ChevronDown, Plus, Edit, Trash2, Upload, Image as ImageIcon, Info } from "lucide-react"
 import { bannersDummy } from "../data/bannersDummy"
-import bannerImage1 from "@/assets/download.jpg"
-import bannerImage2 from "@/assets/download (1).jpg"
-import bannerImage3 from "@/assets/download (3).jpg"
-import bannerImage4 from "@/assets/download (4).jpg"
-import bannerImage5 from "@/assets/download (5).jpg"
-import bannerImage6 from "@/assets/images.jpg"
+// Using placeholders for banner images
+const bannerImage1 = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=400&fit=crop"
+const bannerImage2 = "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&h=400&fit=crop"
+const bannerImage3 = "https://images.unsplash.com/photo-1556910096-6f5e72db6803?w=800&h=400&fit=crop"
+const bannerImage4 = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=400&fit=crop"
+const bannerImage5 = "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&h=400&fit=crop"
+const bannerImage6 = "https://images.unsplash.com/photo-1556910096-6f5e72db6803?w=800&h=400&fit=crop"
 
 const bannerImages = {
   1: bannerImage1,

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom"
 import { Facebook, Twitter, Instagram, Mail, Phone, MapPin, Heart } from "lucide-react"
 import { useState, useEffect } from "react"
 import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
-import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
+import appzetoFoodLogo from "@/assets/appzetologo.png"
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()

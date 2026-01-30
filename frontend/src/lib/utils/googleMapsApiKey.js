@@ -33,12 +33,13 @@ export async function getGoogleMapsApiKey() {
         return cachedApiKey;
       }
       
-      // Fallback to env variable if backend doesn't have it
-      return import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+      // No fallback - return empty if not in database
+      console.warn('⚠️ Google Maps API key not found in database. Please set it in Admin → System → Environment Variables');
+      return '';
     } catch (error) {
-      console.warn('Failed to fetch Google Maps API key from backend, using env fallback:', error.message);
-      // Fallback to env variable on error
-      return import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+      console.warn('Failed to fetch Google Maps API key from backend:', error.message);
+      // No fallback - return empty on error
+      return '';
     } finally {
       apiKeyPromise = null;
     }

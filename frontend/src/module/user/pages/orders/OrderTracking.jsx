@@ -11,11 +11,9 @@ import {
   MapPin, 
   Home as HomeIcon,
   MessageSquare,
-  HelpCircle,
   X,
   Check,
   Shield,
-  ChefHat,
   Receipt,
   CircleSlash,
   Loader2
@@ -26,7 +24,6 @@ import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -121,8 +118,7 @@ const DeliveryMap = ({ orderId, order, isVisible }) => {
       return result;
     }
     
-    console.error('❌ Restaurant coordinates not found! Order structure:', order);
-    console.warn('⚠️ Using default Indore coordinates');
+    console.warn('⚠️ Restaurant coordinates not found, using default Indore coordinates');
     // Default Indore coordinates
     return { lat: 22.7196, lng: 75.8577 };
   };
@@ -256,11 +252,19 @@ export default function OrderTracking() {
           // Check if delivery state changed (e.g., status became 'accepted')
           const newDeliveryStatus = apiOrder.deliveryState?.status;
           const newPhase = apiOrder.deliveryState?.currentPhase;
+          const newOrderStatus = apiOrder.status;
+          const currentOrderStatus = order?.status;
+          
+          // Check if order was cancelled
+          if (newOrderStatus === 'cancelled' && currentOrderStatus !== 'cancelled') {
+            setOrderStatus('cancelled');
+          }
           
           // Only update if status actually changed
           if (newDeliveryStatus === 'accepted' || 
               (newDeliveryStatus !== currentDeliveryStatus) ||
-              (newPhase !== currentPhase)) {
+              (newPhase !== currentPhase) ||
+              (newOrderStatus !== currentOrderStatus)) {
             console.log('🔄 Order status updated:', {
               oldStatus: currentDeliveryStatus,
               newStatus: newDeliveryStatus,
@@ -434,6 +438,19 @@ export default function OrderTracking() {
           }
           
           setOrder(transformedOrder)
+          
+          // Update orderStatus based on API order status
+          if (apiOrder.status === 'cancelled') {
+            setOrderStatus('cancelled');
+          } else if (apiOrder.status === 'preparing') {
+            setOrderStatus('preparing');
+          } else if (apiOrder.status === 'ready') {
+            setOrderStatus('pickup');
+          } else if (apiOrder.status === 'out_for_delivery') {
+            setOrderStatus('pickup');
+          } else if (apiOrder.status === 'delivered') {
+            setOrderStatus('delivered');
+          }
         } else {
           throw new Error('Order not found')
         }
@@ -521,12 +538,8 @@ export default function OrderTracking() {
       return;
     }
     
-    // Check if payment method is Razorpay (online payment)
-    const paymentMethod = order.payment?.paymentMethod || order.paymentMethod;
-    if (paymentMethod !== 'razorpay' && paymentMethod !== 'online') {
-      toast.error('Order cancellation is only available for online payment orders');
-      return;
-    }
+    // Allow cancellation for all payment methods (Razorpay, COD, Wallet)
+    // Only restrict if order is already cancelled or delivered (checked above)
     
     setShowCancelDialog(true);
   };
@@ -541,13 +554,23 @@ export default function OrderTracking() {
     try {
       const response = await orderAPI.cancelOrder(orderId, cancellationReason.trim());
       if (response.data?.success) {
-        toast.success('Order cancelled successfully. Refund will be processed after admin approval.');
+        const paymentMethod = order?.payment?.method || order?.paymentMethod;
+        const successMessage = response.data?.message || 
+          (paymentMethod === 'cash' || paymentMethod === 'cod' 
+            ? 'Order cancelled successfully. No refund required as payment was not made.'
+            : 'Order cancelled successfully. Refund will be processed after admin approval.');
+        toast.success(successMessage);
         setShowCancelDialog(false);
         setCancellationReason("");
         // Refresh order data
         const orderResponse = await orderAPI.getOrderDetails(orderId);
         if (orderResponse.data?.success && orderResponse.data.data?.order) {
-          setOrder(orderResponse.data.data.order);
+          const apiOrder = orderResponse.data.data.order;
+          setOrder(apiOrder);
+          // Update orderStatus to cancelled
+          if (apiOrder.status === 'cancelled') {
+            setOrderStatus('cancelled');
+          }
         }
       } else {
         toast.error(response.data?.message || 'Failed to cancel order');
@@ -639,7 +662,9 @@ export default function OrderTracking() {
         setOrder(transformedOrder)
         
         // Update order status for UI
-        if (apiOrder.status === 'preparing') {
+        if (apiOrder.status === 'cancelled') {
+          setOrderStatus('cancelled');
+        } else if (apiOrder.status === 'preparing') {
           setOrderStatus('preparing')
         } else if (apiOrder.status === 'ready') {
           setOrderStatus('pickup')
@@ -703,10 +728,15 @@ export default function OrderTracking() {
       title: "Order delivered",
       subtitle: "Enjoy your meal!",
       color: "bg-green-600"
+    },
+    cancelled: {
+      title: "Order cancelled",
+      subtitle: "This order has been cancelled",
+      color: "bg-red-600"
     }
   }
 
-  const currentStatus = statusConfig[orderStatus]
+  const currentStatus = statusConfig[orderStatus] || statusConfig.placed
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a]">
@@ -1014,12 +1044,6 @@ export default function OrderTracking() {
               <ChevronRight className="w-5 h-5 text-gray-400" />
             </div>
           </div>
-
-          <SectionItem 
-            icon={ChefHat}
-            title="Add cooking requests"
-            subtitle=""
-          />
         </motion.div>
 
         {/* Help Section */}
@@ -1029,17 +1053,6 @@ export default function OrderTracking() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8 }}
         >
-          <div className="flex items-center gap-3 p-4 border-b border-dashed border-gray-200">
-            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-              <HelpCircle className="w-5 h-5 text-red-600" />
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-gray-900">Need help with your order?</p>
-              <p className="text-sm text-gray-500">Get help & support</p>
-            </div>
-            <ChevronRight className="w-5 h-5 text-gray-400" />
-          </div>
-
           <SectionItem 
             icon={CircleSlash}
             title="Cancel order"
@@ -1048,47 +1061,23 @@ export default function OrderTracking() {
           />
         </motion.div>
 
-        {/* Quick Actions */}
-        <motion.div 
-          className="flex gap-3"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85 }}
-        >
-          <Link to={`/user/orders/${orderId}/invoice`} className="flex-1">
-            <Button className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white">
-              View Invoice
-            </Button>
-          </Link>
-          <Link to="/user/orders" className="flex-1">
-            <Button variant="outline" className="w-full border-gray-300">
-              All Orders
-            </Button>
-          </Link>
-        </motion.div>
       </div>
 
       {/* Cancel Order Dialog */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl w-[95%] max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-gray-900">
               Cancel Order
             </DialogTitle>
-            <DialogDescription className="text-sm text-gray-600">
-              Please provide a reason for cancelling this order. Refund will be processed after admin approval.
-            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">
-                Cancellation Reason <span className="text-red-500">*</span>
-              </label>
+          <div className="space-y-5 py-6 px-2">
+            <div className="space-y-2 w-full">
               <Textarea
                 value={cancellationReason}
                 onChange={(e) => setCancellationReason(e.target.value)}
                 placeholder="e.g., Changed my mind, Wrong address, etc."
-                className="min-h-[100px] resize-none"
+                className="w-full min-h-[100px] resize-none border-2 border-gray-300 rounded-lg px-4 py-3 text-sm focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed disabled:border-gray-200"
                 disabled={isCancelling}
               />
             </div>

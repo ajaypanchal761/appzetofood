@@ -1031,12 +1031,14 @@ export const adminAPI = {
 
   // Process refund (supports both old and new endpoints)
   processRefund: (orderId, data = {}) => {
-    // Use the orders endpoint: /api/admin/orders/:orderId/refund
     // Backend accepts either MongoDB ObjectId (24 chars) or orderId string
+    // Note: Don't include /api prefix - apiClient baseURL already includes it
     if (!orderId) {
       return Promise.reject(new Error('Order ID is required'));
     }
-    return apiClient.post(`/api/admin/orders/${encodeURIComponent(orderId)}/refund`, data);
+    // Use the working endpoint: /admin/refund-requests/:orderId/process
+    // apiClient baseURL is already /api, so this becomes /api/admin/refund-requests/:orderId/process
+    return apiClient.post(`/admin/refund-requests/${encodeURIComponent(orderId)}/process`, data);
   },
 
   // Withdrawal Request Management

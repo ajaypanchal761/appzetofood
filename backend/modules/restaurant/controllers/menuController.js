@@ -126,6 +126,7 @@ export const updateMenu = asyncHandler(async (req, res) => {
       itemSizeQuantity: item.itemSizeQuantity || "",
       itemSizeUnit: item.itemSizeUnit || "piece",
       gst: item.gst ?? 0,
+      preparationTime: existingItem?.preparationTime || item.preparationTime || "",
       images: (() => {
         // Ensure images array is properly handled - CRITICAL: Preserve all images
         console.log(`[NORMALIZE] Item "${item.name || 'unnamed'}": Processing images...`);
@@ -214,6 +215,7 @@ export const updateMenu = asyncHandler(async (req, res) => {
         itemSizeQuantity: item.itemSizeQuantity || "",
         itemSizeUnit: item.itemSizeUnit || "piece",
         gst: item.gst ?? 0,
+        preparationTime: existingItem?.preparationTime || item.preparationTime || "",
         images: (() => {
           // Ensure images array is properly handled
           if (Array.isArray(item.images) && item.images.length > 0) {
@@ -427,6 +429,7 @@ export const addItemToSection = asyncHandler(async (req, res) => {
     images: Array.isArray(item.images) && item.images.length > 0 
       ? item.images.filter(img => img && typeof img === 'string' && img.trim() !== '')
       : (item.image && item.image.trim() !== '' ? [item.image] : []),
+    preparationTime: item.preparationTime || "",
     approvalStatus: 'pending', // New items require admin approval
     requestedAt: new Date(),
   };
@@ -564,6 +567,7 @@ export const addItemToSubsection = asyncHandler(async (req, res) => {
     images: Array.isArray(item.images) && item.images.length > 0 
       ? item.images.filter(img => img && typeof img === 'string' && img.trim() !== '')
       : (item.image && item.image.trim() !== '' ? [item.image] : []),
+    preparationTime: item.preparationTime || "",
     approvalStatus: 'pending', // New items require admin approval
     requestedAt: new Date(),
   };
@@ -645,6 +649,11 @@ export const getMenuByRestaurantId = async (req, res) => {
             console.log(`[USER MENU] Filtering out item "${item.name}": isAvailable=${item.isAvailable}, approvalStatus=${item.approvalStatus}`);
           }
           
+          // Debug logging for preparationTime - log ALL items to see what's in the data
+          if (shouldShow) {
+            console.log(`[USER MENU] Item "${item.name}": preparationTime="${item.preparationTime}" (type: ${typeof item.preparationTime}, exists: ${item.hasOwnProperty('preparationTime')})`);
+          }
+          
           return shouldShow;
         });
         
@@ -659,6 +668,11 @@ export const getMenuByRestaurantId = async (req, res) => {
               // Debug logging for filtered items
               if (!shouldShow) {
                 console.log(`[USER MENU] Filtering out subsection item "${item.name}": isAvailable=${item.isAvailable}, approvalStatus=${item.approvalStatus}`);
+              }
+              
+              // Debug logging for preparationTime - log ALL items to see what's in the data
+              if (shouldShow) {
+                console.log(`[USER MENU] Subsection item "${item.name}": preparationTime="${item.preparationTime}" (type: ${typeof item.preparationTime}, exists: ${item.hasOwnProperty('preparationTime')})`);
               }
               
               return shouldShow;

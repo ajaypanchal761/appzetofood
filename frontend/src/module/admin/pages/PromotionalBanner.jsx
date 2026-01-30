@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Edit, Upload, Info } from "lucide-react"
-import bannerPreview from "@/assets/download.jpg"
+// Using placeholder for promotional banner
+const bannerPreview = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=400&fit=crop"
 
 export default function PromotionalBanner() {
   const [activeLanguage, setActiveLanguage] = useState("default")

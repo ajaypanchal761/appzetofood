@@ -84,8 +84,8 @@ export default function DesktopNavbar() {
         isVisible ? "translate-y-0" : "-translate-y-full"
       }`}
     >
-      {/* Background with blur effect */}
-      <div className="absolute inset-0 bg-white/98 dark:bg-[#1a1a1a]/98 backdrop-blur-md border-b border-gray-200/50 dark:border-gray-800/50 shadow-sm" />
+      {/* Background */}
+      <div className="absolute inset-0 bg-white/98 dark:bg-[#1a1a1a]/98 border-b border-gray-200/50 dark:border-gray-800/50 shadow-sm" />
       
       {/* Content */}
       <div className="relative">
@@ -97,27 +97,27 @@ export default function DesktopNavbar() {
               variant="ghost"
               onClick={handleLocationClick}
               disabled={locationLoading}
-              className="h-auto px-3 py-2 lg:px-4 lg:py-2.5 bg-[#87CEEB] hover:bg-[#6BB6D6] transition-colors rounded-lg flex-shrink-0 shadow-sm"
+              className="h-auto px-0 py-0 hover:bg-transparent transition-colors flex-shrink-0"
             >
               {locationLoading ? (
-                <span className="text-sm font-bold text-white">
+                <span className="text-sm font-bold text-black">
                   Loading...
                 </span>
               ) : (
                 <div className="flex flex-col items-start min-w-0">
                   <div className="flex items-center gap-1.5 lg:gap-2">
                     <FaLocationDot 
-                      className="h-5 w-5 lg:h-6 lg:w-6 text-white flex-shrink-0" 
-                      fill="white" 
+                      className="h-5 w-5 lg:h-6 lg:w-6 text-black flex-shrink-0" 
+                      fill="black" 
                       strokeWidth={2} 
                     />
-                    <span className="text-sm lg:text-base font-bold text-white whitespace-nowrap">
+                    <span className="text-sm lg:text-base font-bold text-black whitespace-nowrap">
                       {mainLocationName}
                     </span>
-                    <ChevronDown className="h-4 w-4 lg:h-5 lg:w-5 text-white flex-shrink-0" strokeWidth={2.5} />
+                    <ChevronDown className="h-4 w-4 lg:h-5 lg:w-5 text-black flex-shrink-0" strokeWidth={2.5} />
                   </div>
                   {secondaryLocation && (
-                    <span className="text-xs lg:text-sm font-bold text-white mt-0.5 whitespace-nowrap">
+                    <span className="text-xs lg:text-sm font-bold text-black mt-0.5 whitespace-nowrap">
                       {secondaryLocation}
                     </span>
                   )}

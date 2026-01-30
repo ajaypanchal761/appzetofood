@@ -22,6 +22,7 @@ const filterTabs = [
   { id: "out-for-delivery", label: "Out for delivery" },
   { id: "scheduled", label: "Scheduled" },
   { id: "completed", label: "Completed" },
+  { id: "cancelled", label: "Cancelled" },
 ]
 
 // Completed Orders List Component
@@ -226,6 +227,228 @@ function CompletedOrders({ onSelectOrder }) {
   )
 }
 
+// Cancelled Orders List Component
+function CancelledOrders({ onSelectOrder }) {
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true
+    let intervalId = null
+
+    const fetchOrders = async () => {
+      try {
+        const response = await restaurantAPI.getOrders()
+        
+        if (!isMounted) return
+        
+        if (response.data?.success && response.data.data?.orders) {
+          // Filter cancelled orders (both restaurant and user cancelled)
+          const cancelledOrders = response.data.data.orders.filter(
+            order => order.status === 'cancelled'
+          )
+          
+          const transformedOrders = cancelledOrders.map(order => ({
+            orderId: order.orderId || order._id,
+            mongoId: order._id,
+            status: order.status || 'cancelled',
+            customerName: order.userId?.name || 'Customer',
+            type: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
+            tableOrToken: null,
+            timePlaced: new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            cancelledAt: order.cancelledAt || order.updatedAt || order.createdAt,
+            cancelledBy: order.cancelledBy || 'unknown',
+            cancellationReason: order.cancellationReason || 'No reason provided',
+            itemsSummary: order.items?.map(item => `${item.quantity}x ${item.name}`).join(', ') || 'No items',
+            photoUrl: order.items?.[0]?.image || null,
+            photoAlt: order.items?.[0]?.name || 'Order',
+            amount: order.pricing?.total || order.total || 0
+          }))
+          
+          transformedOrders.sort((a, b) => {
+            const dateA = new Date(a.cancelledAt)
+            const dateB = new Date(b.cancelledAt)
+            return dateB - dateA
+          })
+          
+          if (isMounted) {
+            setOrders(transformedOrders)
+            setLoading(false)
+          }
+        } else {
+          if (isMounted) {
+            setOrders([])
+            setLoading(false)
+          }
+        }
+      } catch (error) {
+        if (!isMounted) return
+        
+        if (error.code !== 'ERR_NETWORK' && error.response?.status !== 404) {
+          console.error('Error fetching cancelled orders:', error)
+        }
+        
+        if (isMounted) {
+          setOrders([])
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchOrders()
+    intervalId = setInterval(() => {
+      if (isMounted) {
+        fetchOrders()
+      }
+    }, 10000)
+    
+    return () => {
+      isMounted = false
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="pt-4 pb-6">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-base font-semibold text-black">Cancelled orders</h2>
+          <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+        </div>
+        <div className="text-center py-8 text-gray-500 text-sm">Loading...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="pt-4 pb-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-base font-semibold text-black">
+          Cancelled orders
+        </h2>
+        <span className="text-xs text-gray-500">{orders.length} total</span>
+      </div>
+      {orders.length === 0 ? (
+        <div className="text-center py-8 text-gray-500 text-sm">
+          No cancelled orders yet
+        </div>
+      ) : (
+        <div>
+          {orders.map((order) => {
+            const cancelledDate = order.cancelledAt 
+              ? new Date(order.cancelledAt).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                })
+              : 'N/A'
+            
+            const cancelledByText = order.cancelledBy === 'user' 
+              ? 'Cancelled by User' 
+              : order.cancelledBy === 'restaurant'
+              ? 'Cancelled by Restaurant'
+              : 'Cancelled'
+            
+            return (
+              <div key={order.orderId || order.mongoId} className="w-full bg-white rounded-2xl p-4 mb-3 border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSelectOrder?.({
+                      orderId: order.orderId,
+                      status: 'Cancelled',
+                      customerName: order.customerName,
+                      type: order.type,
+                      tableOrToken: order.tableOrToken,
+                      timePlaced: cancelledDate,
+                      itemsSummary: order.itemsSummary,
+                    })
+                  }
+                  className="w-full text-left flex gap-3 items-stretch"
+                >
+                  <div className="h-20 w-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 my-auto">
+                    {order.photoUrl ? (
+                      <img
+                        src={order.photoUrl}
+                        alt={order.photoAlt}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center px-2">
+                        <span className="text-[11px] font-medium text-gray-500 text-center leading-tight">
+                          {order.photoAlt}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 flex flex-col justify-between min-h-[80px]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-black leading-tight">
+                          Order #{order.orderId}
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          {order.customerName}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
+                          order.cancelledBy === 'user'
+                            ? 'border-orange-500 text-orange-600'
+                            : 'border-red-500 text-red-600'
+                        }`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${
+                            order.cancelledBy === 'user' ? 'bg-orange-500' : 'bg-red-500'
+                          }`} />
+                          {cancelledByText}
+                        </span>
+                        <span className="text-[11px] text-gray-500 text-right">
+                          {cancelledDate}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-600 line-clamp-1">
+                        {order.itemsSummary}
+                      </p>
+                      {order.cancellationReason && (
+                        <p className="text-[10px] text-red-600 mt-1 line-clamp-1">
+                          Reason: {order.cancellationReason}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mt-2 flex items-end justify-between gap-2">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[11px] text-gray-500">
+                          {order.type}
+                        </p>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[11px] text-gray-500">Amount</span>
+                        <span className="text-xs font-medium text-black">
+                          ₹{order.amount.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function OrdersMain() {
   const navigate = useNavigate()
   const [activeFilter, setActiveFilter] = useState("preparing")
@@ -251,6 +474,9 @@ export default function OrdersMain() {
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(true)
   const [showRejectPopup, setShowRejectPopup] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
+  const [showCancelPopup, setShowCancelPopup] = useState(false)
+  const [cancelReason, setCancelReason] = useState("")
+  const [orderToCancel, setOrderToCancel] = useState(null)
   const audioRef = useRef(null)
   const shownOrdersRef = useRef(new Set()) // Track orders already shown in popup
   const [restaurantStatus, setRestaurantStatus] = useState({
@@ -525,11 +751,23 @@ export default function OrdersMain() {
     if (orderToAccept?.orderMongoId || orderToAccept?.orderId) {
       try {
         const orderId = orderToAccept.orderMongoId || orderToAccept.orderId
-        await restaurantAPI.acceptOrder(orderId, prepTime)
+        const response = await restaurantAPI.acceptOrder(orderId, prepTime)
         console.log('✅ Order accepted:', orderId)
+        toast.success('Order accepted successfully')
       } catch (error) {
         console.error('❌ Error accepting order:', error)
-        alert('Failed to accept order. Please try again.')
+        const errorMessage = error.response?.data?.message || 
+                           error.message || 
+                           'Failed to accept order. Please try again.'
+        
+        // Show specific error message
+        if (error.response?.status === 400) {
+          toast.error(errorMessage)
+        } else if (error.response?.status === 404) {
+          toast.error('Order not found. It may have been cancelled or already processed.')
+        } else {
+          toast.error(errorMessage)
+        }
         return
       }
     }
@@ -588,6 +826,34 @@ export default function OrdersMain() {
     clearNewOrder()
     setRejectReason("")
     setCountdown(240)
+  }
+
+  // Handle cancel order (for preparing orders)
+  const handleCancelClick = (order) => {
+    setOrderToCancel(order)
+    setShowCancelPopup(true)
+  }
+
+  const handleCancelConfirm = async () => {
+    if (!cancelReason.trim() || !orderToCancel) return
+    
+    try {
+      const orderId = orderToCancel.mongoId || orderToCancel.orderId
+      await restaurantAPI.rejectOrder(orderId, cancelReason.trim())
+      toast.success('Order cancelled successfully')
+      setShowCancelPopup(false)
+      setOrderToCancel(null)
+      setCancelReason("")
+    } catch (error) {
+      console.error('❌ Error cancelling order:', error)
+      toast.error(error.response?.data?.message || 'Failed to cancel order')
+    }
+  }
+
+  const handleCancelPopupClose = () => {
+    setShowCancelPopup(false)
+    setOrderToCancel(null)
+    setCancelReason("")
   }
 
   // Toggle mute
@@ -856,7 +1122,7 @@ export default function OrdersMain() {
   const renderContent = () => {
     switch (activeFilter) {
       case "preparing":
-        return <PreparingOrders onSelectOrder={handleSelectOrder} />
+        return <PreparingOrders onSelectOrder={handleSelectOrder} onCancel={handleCancelClick} />
       case "ready":
         return <ReadyOrders onSelectOrder={handleSelectOrder} />
       case "out-for-delivery":
@@ -865,6 +1131,8 @@ export default function OrdersMain() {
         return <EmptyState message="Scheduled orders will appear here" />
       case "completed":
         return <CompletedOrders onSelectOrder={handleSelectOrder} />
+      case "cancelled":
+        return <CancelledOrders onSelectOrder={handleSelectOrder} />
       default:
         return <EmptyState />
     }
@@ -1403,6 +1671,98 @@ export default function OrdersMain() {
         )}
       </AnimatePresence>
 
+      {/* Cancel Order Popup */}
+      <AnimatePresence>
+        {showCancelPopup && orderToCancel && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCancelPopupClose}
+            >
+              <motion.div
+                className="w-[95%] max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="px-4 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Cancel Order {orderToCancel.orderId || '#Order'}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">Please provide a reason for cancelling this order</p>
+                </div>
+
+                {/* Content */}
+                <div className="px-4 py-4">
+                  <div className="space-y-3">
+                    {rejectReasons.map((reason) => (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => setCancelReason(reason)}
+                        className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-colors ${
+                          cancelReason === reason
+                            ? "border-red-500 bg-red-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                              cancelReason === reason
+                                ? "border-red-500 bg-red-500"
+                                : "border-gray-300"
+                            }`}
+                          >
+                            {cancelReason === reason && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                          <span className={`text-sm font-medium ${
+                            cancelReason === reason ? "text-red-700" : "text-gray-700"
+                          }`}>
+                            {reason}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-4 py-4 bg-gray-50 border-t border-gray-200 flex gap-3">
+                  <button
+                    onClick={handleCancelPopupClose}
+                    className="flex-1 bg-white border-2 border-gray-300 text-gray-700 py-3 rounded-lg font-semibold text-sm hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCancelConfirm}
+                    disabled={!cancelReason}
+                    className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-colors ${
+                      cancelReason
+                        ? "!bg-red-600 !text-white hover:bg-red-700"
+                        : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    }`}
+                  >
+                    Confirm Cancellation
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Bottom Sheet for Order Details */}
       <AnimatePresence>
         {isSheetOpen && selectedOrder && (
@@ -1515,30 +1875,26 @@ function OrderCard({
   photoAlt,
   deliveryPartnerId,
   onSelect,
-  onResendRequest,
+  onCancel,
 }) {
   const isReady = status === "Ready"
-  const [isResending, setIsResending] = useState(false)
-  // Show resend button for all preparing orders (assigned or not)
-  // If assigned, it will resend to existing partner; if not, it will find nearest partner
-  const showResendButton = status === 'preparing'
-
-  const handleResendRequest = async (e) => {
-    e.stopPropagation() // Prevent triggering order selection
-    if (!mongoId || isResending) return
-
-    try {
-      setIsResending(true)
-      await onResendRequest?.(mongoId, orderId)
-    } catch (error) {
-      console.error('Error resending delivery request:', error)
-    } finally {
-      setIsResending(false)
-    }
-  }
 
   return (
     <div className="w-full bg-white rounded-2xl p-4 mb-3 border border-gray-200 hover:border-gray-400 transition-colors relative">
+      {/* Cancel button - only show for preparing orders */}
+      {status === 'preparing' && onCancel && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCancel({ orderId, mongoId, customerName });
+          }}
+          className="absolute top-2 right-2 p-1.5 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors z-10"
+          title="Cancel Order"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() =>
@@ -1649,110 +2005,15 @@ function OrderCard({
       </div>
 
       </button>
-
-      {/* Resend Request Button - Show for all preparing orders */}
-      {showResendButton && (
-        <button
-          type="button"
-          onClick={handleResendRequest}
-          disabled={isResending}
-          className="absolute top-2 right-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-[10px] font-medium px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 z-10"
-          title={deliveryPartnerId 
-            ? "Resend delivery request to assigned delivery partner" 
-            : "Send delivery request to nearest delivery partner"}
-        >
-          {isResending ? (
-            <>
-              <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Sending...
-            </>
-          ) : (
-            <>
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {deliveryPartnerId ? 'Resend Request' : 'Send Request'}
-            </>
-          )}
-        </button>
-      )}
     </div>
   )
 }
 
 // Preparing Orders List
-function PreparingOrders({ onSelectOrder }) {
+function PreparingOrders({ onSelectOrder, onCancel }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentTime, setCurrentTime] = useState(new Date())
-  
-  const handleResendRequest = async (mongoId, orderId) => {
-    try {
-      // Call the markOrderPreparing API with resend flag to resend delivery assignment
-      // Pass resend=true as query parameter to indicate this is a resend request
-      const response = await restaurantAPI.markOrderPreparing(mongoId, { resend: true })
-      
-      if (response.data?.success) {
-        // Show success message
-        toast.success('Delivery request sent successfully!', {
-          duration: 3000,
-        })
-        
-        // Refresh orders immediately to get updated delivery partner status
-        setTimeout(() => {
-          // Trigger a manual refetch
-          const fetchOrders = async () => {
-            try {
-              const response = await restaurantAPI.getOrders()
-              if (response.data?.success && response.data.data?.orders) {
-                const preparingOrders = response.data.data.orders.filter(
-                  order => order.status === 'preparing'
-                )
-                const transformedOrders = preparingOrders.map(order => {
-                  const initialETA = order.estimatedDeliveryTime || 30
-                  const preparingTimestamp = order.tracking?.preparing?.timestamp 
-                    ? new Date(order.tracking.preparing.timestamp)
-                    : new Date(order.createdAt)
-                  
-                  return {
-                    orderId: order.orderId || order._id,
-                    mongoId: order._id,
-                    status: order.status || 'preparing',
-                    customerName: order.userId?.name || 'Customer',
-                    type: order.deliveryFleet === 'standard' ? 'Home Delivery' : 'Express Delivery',
-                    tableOrToken: null,
-                    timePlaced: new Date(order.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                    initialETA,
-                    preparingTimestamp,
-                    itemsSummary: order.items?.map(item => `${item.quantity}x ${item.name}`).join(', ') || 'No items',
-                    photoUrl: order.items?.[0]?.image || null,
-                    photoAlt: order.items?.[0]?.name || 'Order',
-                    deliveryPartnerId: order.deliveryPartnerId || null
-                  }
-                })
-                setOrders(transformedOrders)
-              }
-            } catch (error) {
-              console.error('Error refreshing orders:', error)
-            }
-          }
-          fetchOrders()
-        }, 500)
-      } else {
-        throw new Error(response.data?.message || 'Failed to resend request')
-      }
-    } catch (error) {
-      console.error('Error resending delivery request:', error)
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to resend delivery request'
-      toast.error(errorMessage, {
-        duration: 4000,
-      })
-      throw error
-    }
-  }
 
   useEffect(() => {
     let isMounted = true
@@ -1984,7 +2245,7 @@ function PreparingOrders({ onSelectOrder }) {
                 photoAlt={order.photoAlt}
                 deliveryPartnerId={order.deliveryPartnerId}
                 onSelect={onSelectOrder}
-                onResendRequest={handleResendRequest}
+                onCancel={onCancel}
               />
             )
           })}

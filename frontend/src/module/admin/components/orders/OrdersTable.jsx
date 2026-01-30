@@ -227,9 +227,40 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                 )}
                 {(visibleColumns.paymentType !== false) && (
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm font-medium ${(order.paymentType || order.paymentMethod) === 'Cash on Delivery' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                      {order.paymentType || (order.payment?.method === 'cash' || order.payment?.method === 'cod' ? 'Cash on Delivery' : 'Online')}
-                    </span>
+                    {(() => {
+                      // Determine payment type display
+                      let paymentTypeDisplay = order.paymentType;
+                      
+                      if (!paymentTypeDisplay) {
+                        const paymentMethod = order.payment?.method || order.paymentMethod;
+                        if (paymentMethod === 'cash' || paymentMethod === 'cod') {
+                          paymentTypeDisplay = 'Cash on Delivery';
+                        } else if (paymentMethod === 'wallet') {
+                          paymentTypeDisplay = 'Wallet';
+                        } else {
+                          paymentTypeDisplay = 'Online';
+                        }
+                      }
+                      
+                      // Override if payment method is wallet but paymentType is not set correctly
+                      const paymentMethod = order.payment?.method || order.paymentMethod;
+                      if (paymentMethod === 'wallet' && paymentTypeDisplay !== 'Wallet') {
+                        paymentTypeDisplay = 'Wallet';
+                      }
+                      
+                      const isCod = paymentTypeDisplay === 'Cash on Delivery';
+                      const isWallet = paymentTypeDisplay === 'Wallet';
+                      
+                      return (
+                        <span className={`text-sm font-medium ${
+                          isCod ? 'text-amber-600' : 
+                          isWallet ? 'text-purple-600' : 
+                          'text-emerald-600'
+                        }`}>
+                          {paymentTypeDisplay}
+                        </span>
+                      );
+                    })()}
                   </td>
                 )}
                 {(visibleColumns.paymentCollectionStatus !== false) && (
@@ -256,7 +287,12 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                       </div>
                       {order.cancellationReason && (
                         <div className="text-xs text-red-600 mt-1">
-                          <span className="font-medium">Reason:</span> {order.cancellationReason}
+                          <span className="font-medium">
+                            {order.cancelledBy === 'user' ? 'Cancelled by User - ' : 
+                             order.cancelledBy === 'restaurant' ? 'Cancelled by Restaurant - ' : 
+                             'Reason: '}
+                          </span>
+                          {order.cancellationReason}
                         </div>
                       )}
                     </div>
@@ -279,25 +315,52 @@ export default function OrdersTable({ orders, visibleColumns, onViewOrder, onPri
                       >
                         <Printer className="w-4 h-4" />
                       </button>
-                      {/* Show Refund button or Refunded status for cancelled Home Delivery orders (restaurant or user cancelled) */}
-                      {(order.orderStatus === "Cancelled by Restaurant" || 
-                        order.orderStatus === "Cancelled" || 
-                        order.orderStatus === "Cancelled by User" ||
-                        (order.status === "cancelled" && (order.cancelledBy === "user" || order.cancelledBy === "restaurant"))) && 
-                       (order.deliveryType === "Home Delivery" || 
-                        order.deliveryType === "home_delivery" ||
-                        order.deliveryFleet === "standard") &&
-                       (order.paymentMethod === "razorpay" || order.paymentMethod === "online" || order.payment?.paymentMethod === "razorpay" || order.payment?.method === "razorpay") && (
+                      {/* Show Refund button or Refunded status for cancelled orders with Online/Wallet payment (restaurant or user cancelled) */}
+                      {(() => {
+                        // Check if order is cancelled by restaurant or user
+                        const isCancelled = order.orderStatus === "Cancelled by Restaurant" || 
+                                          order.orderStatus === "Cancelled" || 
+                                          order.orderStatus === "Cancelled by User" ||
+                                          (order.status === "cancelled" && (order.cancelledBy === "user" || order.cancelledBy === "restaurant"));
+                        
+                        // Check if payment type is Online or Wallet (not Cash on Delivery)
+                        const paymentMethod = order.payment?.method || order.paymentMethod;
+                        const isOnlinePayment = order.paymentType === "Online" ||
+                                              (order.paymentType !== "Cash on Delivery" && 
+                                               order.payment?.method !== "cash" && 
+                                               order.payment?.method !== "cod" &&
+                                               (order.paymentMethod === "razorpay" || 
+                                                order.paymentMethod === "online" || 
+                                                order.payment?.paymentMethod === "razorpay" || 
+                                                order.payment?.method === "razorpay" ||
+                                                order.payment?.method === "online"));
+                        
+                        const isWalletPayment = order.paymentType === "Wallet" || paymentMethod === "wallet";
+                        
+                        return isCancelled && (isOnlinePayment || isWalletPayment);
+                      })() && (
                         <>
                           {order.refundStatus === 'processed' || order.refundStatus === 'initiated' ? (
-                            <span className="px-3 py-1.5 rounded-md bg-emerald-100 text-emerald-700 text-xs font-medium">
-                              Refunded
+                            <span className={`px-3 py-1.5 rounded-md text-xs font-medium ${
+                              order.paymentType === "Wallet" || order.payment?.method === "wallet"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {order.paymentType === "Wallet" || order.payment?.method === "wallet" 
+                                ? "Wallet Refunded" 
+                                : "Refunded"}
                             </span>
                           ) : onRefund ? (
                             <button 
                               onClick={() => onRefund(order)}
-                              className="px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-1.5"
-                              title="Process Refund via Razorpay"
+                              className={`px-3 py-1.5 rounded-md text-white text-xs font-medium hover:opacity-90 transition-colors shadow-sm flex items-center gap-1.5 ${
+                                order.paymentType === "Wallet" || order.payment?.method === "wallet"
+                                  ? "bg-purple-600 hover:bg-purple-700"
+                                  : "bg-blue-600 hover:bg-blue-700"
+                              }`}
+                              title={order.paymentType === "Wallet" || order.payment?.method === "wallet"
+                                ? "Process Wallet Refund (Add to user wallet)"
+                                : "Process Refund via Razorpay"}
                             >
                               <span className="text-sm">₹</span>
                               <span>Refund</span>

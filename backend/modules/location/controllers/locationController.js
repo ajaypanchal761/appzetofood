@@ -191,9 +191,9 @@ export const reverseGeocode = async (req, res) => {
           try {
               // Try Google Maps Geocoding API first (better sublocality data)
               let fallbackResponse = null;
-              // Get Google Maps API key from database
+              // Get Google Maps API key from database (NO FALLBACK)
               const { getGoogleMapsApiKey } = await import('../../../shared/utils/envService.js');
-              const googleApiKey = await getGoogleMapsApiKey() || process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
+              const googleApiKey = await getGoogleMapsApiKey();
               
               if (googleApiKey) {
                 try {
@@ -684,9 +684,9 @@ export const getNearbyLocations = async (req, res) => {
     }
 
     const apiKey = process.env.OLA_MAPS_API_KEY;
-    // Get Google Maps API key from database
+    // Get Google Maps API key from database (NO FALLBACK)
     const { getGoogleMapsApiKey } = await import('../../../shared/utils/envService.js');
-    const googleApiKey = await getGoogleMapsApiKey() || process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
+    const googleApiKey = await getGoogleMapsApiKey();
 
     let nearbyPlaces = [];
 

@@ -9,7 +9,7 @@ import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
 import { FaLocationDot } from "react-icons/fa6"
-import upto50off from "@/assets/top50pagebanner.png"
+import upto50off from "@/assets/diningpage/upto50off.png"
 
 const popularRestaurants = [
   {

@@ -258,8 +258,44 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     order.status = 'preparing';
     order.tracking.preparing = { status: true, timestamp: new Date() };
 
+    // Handle preparation time update from restaurant
     if (preparationTime) {
-      order.estimatedDeliveryTime = preparationTime;
+      const restaurantPrepTime = parseInt(preparationTime, 10);
+      const initialPrepTime = order.preparationTime || 0;
+      
+      // Calculate additional time restaurant is adding
+      const additionalTime = Math.max(0, restaurantPrepTime - initialPrepTime);
+      
+      // Update ETA with additional time (add to both min and max)
+      if (order.eta) {
+        const currentMin = order.eta.min || 0;
+        const currentMax = order.eta.max || 0;
+        
+        order.eta.min = currentMin + additionalTime;
+        order.eta.max = currentMax + additionalTime;
+        order.eta.additionalTime = (order.eta.additionalTime || 0) + additionalTime;
+        order.eta.lastUpdated = new Date();
+        
+        // Update estimated delivery time to average of new min and max
+        order.estimatedDeliveryTime = Math.ceil((order.eta.min + order.eta.max) / 2);
+      } else {
+        // If ETA doesn't exist, create it
+        order.eta = {
+          min: (order.estimatedDeliveryTime || 30) + additionalTime,
+          max: (order.estimatedDeliveryTime || 30) + additionalTime,
+          additionalTime: additionalTime,
+          lastUpdated: new Date()
+        };
+        order.estimatedDeliveryTime = Math.ceil((order.eta.min + order.eta.max) / 2);
+      }
+      
+      console.log(`📋 Restaurant updated preparation time:`, {
+        initialPrepTime,
+        restaurantPrepTime,
+        additionalTime,
+        newETA: order.eta,
+        newEstimatedDeliveryTime: order.estimatedDeliveryTime
+      });
     }
 
     await order.save();
@@ -451,13 +487,13 @@ export const rejectOrder = asyncHandler(async (req, res) => {
       orderStatus: order.status
     });
 
-    // Allow rejecting orders with status 'pending' or 'confirmed'
-    if (!['pending', 'confirmed'].includes(order.status)) {
-      return errorResponse(res, 400, `Order cannot be rejected. Current status: ${order.status}`);
+    // Allow rejecting/cancelling orders with status 'pending', 'confirmed', or 'preparing'
+    if (!['pending', 'confirmed', 'preparing'].includes(order.status)) {
+      return errorResponse(res, 400, `Order cannot be cancelled. Current status: ${order.status}`);
     }
 
     order.status = 'cancelled';
-    order.cancellationReason = reason || 'Rejected by restaurant';
+    order.cancellationReason = reason || 'Cancelled by restaurant';
     order.cancelledBy = 'restaurant';
     order.cancelledAt = new Date();
     await order.save();
@@ -551,6 +587,14 @@ export const markOrderPreparing = asyncHandler(async (req, res) => {
       }
     }
 
+    // CRITICAL: Don't assign delivery partner if order is cancelled
+    if (freshOrder.status === 'cancelled') {
+      console.log(`⚠️ Order ${freshOrder.orderId} is cancelled. Cannot assign delivery partner.`);
+      return successResponse(res, 200, 'Order is cancelled. Cannot assign delivery partner.', {
+        order: freshOrder
+      });
+    }
+
     // Assign order to nearest delivery boy and notify them (if not already assigned)
     // This is critical - even if order is already preparing, we need to assign delivery partner
     // Reload order first to get the latest state (in case it was updated elsewhere)
@@ -558,6 +602,14 @@ export const markOrderPreparing = asyncHandler(async (req, res) => {
     if (!freshOrder) {
       console.error(`❌ Order ${order.orderId} not found after save`);
       return errorResponse(res, 404, 'Order not found after update');
+    }
+
+    // CRITICAL: Don't assign delivery partner if order is cancelled
+    if (freshOrder.status === 'cancelled') {
+      console.log(`⚠️ Order ${freshOrder.orderId} is cancelled. Cannot assign delivery partner.`);
+      return successResponse(res, 200, 'Order is cancelled. Cannot assign delivery partner.', {
+        order: freshOrder
+      });
     }
 
     // Check if delivery partner is already assigned (after reload)

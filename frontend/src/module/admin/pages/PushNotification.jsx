@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react"
 import { Search, Download, ChevronDown, Bell, Edit, Trash2, Upload, Settings, Image as ImageIcon } from "lucide-react"
 import { pushNotificationsDummy } from "../data/pushNotificationsDummy"
-import notificationImage1 from "@/assets/download.jpg"
-import notificationImage2 from "@/assets/download (1).jpg"
-import notificationImage3 from "@/assets/download (3).jpg"
+// Using placeholders for notification images
+const notificationImage1 = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=400&fit=crop"
+const notificationImage2 = "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&h=400&fit=crop"
+const notificationImage3 = "https://images.unsplash.com/photo-1556910096-6f5e72db6803?w=800&h=400&fit=crop"
 
 const notificationImages = {
   15: notificationImage1,

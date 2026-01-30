@@ -17,14 +17,92 @@ const locationHistory = new Map(); // riderId -> [locations]
 // Route polylines cache
 const routePolylines = new Map(); // orderId -> {points, totalDistance}
 
+// Cache for snapToRoads API calls (to avoid repeated expensive calls)
+const snapToRoadCache = new Map(); // "lat,lng" -> {snapped: {lat, lng}, timestamp}
+const lastSnapToRoadCall = new Map(); // riderId -> timestamp (for throttling)
+
+// Cache for Directions API calls
+const directionsCache = new Map(); // "origin|destination|waypoints" -> {route, timestamp}
+
+// Configuration
+const SNAP_TO_ROAD_THROTTLE_MS = 10000; // Only call snapToRoads every 10 seconds per rider
+const SNAP_TO_ROAD_CACHE_DISTANCE_M = 50; // Cache snap results within 50 meters
+const DIRECTIONS_CACHE_TTL_MS = 300000; // Cache directions for 5 minutes
+const SNAP_TO_ROAD_ENABLED = false; // DISABLE by default - very expensive! Use only when needed
+
+/**
+ * Calculate distance between two points (Haversine formula) - helper for cache
+ * @param {Object} point1 - {lat, lng}
+ * @param {Object} point2 - {lat, lng}
+ * @returns {number} Distance in meters
+ */
+function calculateDistanceQuick(point1, point2) {
+  const R = 6371000; // Earth radius in meters
+  const dLat = (point2.lat - point1.lat) * Math.PI / 180;
+  const dLng = (point2.lng - point1.lng) * Math.PI / 180;
+  
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 /**
  * Snap GPS coordinates to nearest road using Google Roads API
+ * OPTIMIZED: Added throttling and caching to reduce API costs
  * @param {Array} points - Array of {lat, lng} points
+ * @param {string} riderId - Rider ID for throttling
  * @returns {Promise<Array>} Snapped points
  */
-export async function snapToRoad(points) {
+export async function snapToRoad(points, riderId = null) {
   try {
+    // DISABLE snapToRoads by default - it's very expensive!
+    // Only enable if really needed for production
+    if (!SNAP_TO_ROAD_ENABLED) {
+      return points; // Return original points without API call
+    }
+
     if (!points || points.length === 0) return points;
+    
+    // Throttle: Only allow one call per rider every SNAP_TO_ROAD_THROTTLE_MS
+    if (riderId) {
+      const lastCall = lastSnapToRoadCall.get(riderId);
+      const now = Date.now();
+      if (lastCall && (now - lastCall) < SNAP_TO_ROAD_THROTTLE_MS) {
+        // Return original points if throttled
+        return points;
+      }
+      lastSnapToRoadCall.set(riderId, now);
+    }
+    
+    // Check cache for nearby points (within 50 meters)
+    const cachedResults = [];
+    const uncachedPoints = [];
+    
+    for (const point of points) {
+      let foundInCache = false;
+      for (const [cachedKey, cached] of snapToRoadCache.entries()) {
+        const [cachedLat, cachedLng] = cachedKey.split(',').map(Number);
+        const distance = calculateDistanceQuick(point, { lat: cachedLat, lng: cachedLng });
+        
+        if (distance < SNAP_TO_ROAD_CACHE_DISTANCE_M) {
+          cachedResults.push(cached.snapped);
+          foundInCache = true;
+          break;
+        }
+      }
+      
+      if (!foundInCache) {
+        uncachedPoints.push(point);
+      }
+    }
+    
+    // If all points found in cache, return cached results
+    if (uncachedPoints.length === 0) {
+      return cachedResults.length > 0 ? cachedResults : points;
+    }
     
     const apiKey = await getGoogleMapsApiKey();
     if (!apiKey) {
@@ -36,35 +114,64 @@ export async function snapToRoad(points) {
     const batchSize = 100;
     const snappedPoints = [];
     
-    for (let i = 0; i < points.length; i += batchSize) {
-      const batch = points.slice(i, i + batchSize);
+    for (let i = 0; i < uncachedPoints.length; i += batchSize) {
+      const batch = uncachedPoints.slice(i, i + batchSize);
       
       // Format for Roads API: "lat,lng|lat,lng|..."
       const path = batch.map(p => `${p.lat},${p.lng}`).join('|');
       
-      const response = await axios.get(
-        `https://roads.googleapis.com/v1/snapToRoads`,
-        {
-          params: {
-            path,
-            interpolate: true, // Interpolate points between snapped points
-            key: apiKey
+      try {
+        const response = await axios.get(
+          `https://roads.googleapis.com/v1/snapToRoads`,
+          {
+            params: {
+              path,
+              interpolate: true, // Interpolate points between snapped points
+              key: apiKey
+            },
+            timeout: 5000 // 5 second timeout
           }
+        );
+        
+        if (response.data?.snappedPoints) {
+          const snapped = response.data.snappedPoints.map((sp, idx) => {
+            const originalPoint = batch[sp.originalIndex || idx];
+            const snappedPoint = {
+              lat: sp.location.latitude,
+              lng: sp.location.longitude,
+              originalIndex: sp.originalIndex,
+              placeId: sp.placeId
+            };
+            
+            // Cache the result
+            const cacheKey = `${originalPoint.lat},${originalPoint.lng}`;
+            snapToRoadCache.set(cacheKey, {
+              snapped: snappedPoint,
+              timestamp: Date.now()
+            });
+            
+            return snappedPoint;
+          });
+          snappedPoints.push(...snapped);
         }
-      );
-      
-      if (response.data?.snappedPoints) {
-        const snapped = response.data.snappedPoints.map(sp => ({
-          lat: sp.location.latitude,
-          lng: sp.location.longitude,
-          originalIndex: sp.originalIndex,
-          placeId: sp.placeId
-        }));
-        snappedPoints.push(...snapped);
+      } catch (error) {
+        // Don't fail completely - return original points for this batch
+        console.warn('⚠️ Error in snapToRoads batch:', error.message);
+        snappedPoints.push(...batch);
       }
     }
     
-    return snappedPoints.length > 0 ? snappedPoints : points;
+    // Clean old cache entries (older than 1 hour)
+    const oneHourAgo = Date.now() - 3600000;
+    for (const [key, value] of snapToRoadCache.entries()) {
+      if (value.timestamp < oneHourAgo) {
+        snapToRoadCache.delete(key);
+      }
+    }
+    
+    // Combine cached and newly snapped points
+    const allSnapped = [...cachedResults, ...snappedPoints];
+    return allSnapped.length > 0 ? allSnapped : points;
   } catch (error) {
     console.error('❌ Error snapping to road:', error.message);
     // Return original points if API fails
@@ -74,6 +181,7 @@ export async function snapToRoad(points) {
 
 /**
  * Generate route polyline using Google Directions API
+ * OPTIMIZED: Added caching to avoid repeated API calls for same routes
  * @param {Object} start - {lat, lng}
  * @param {Object} waypoint - {lat, lng} (restaurant)
  * @param {Object} end - {lat, lng} (customer)
@@ -87,9 +195,22 @@ export async function generateRoutePolyline(start, waypoint, end) {
       return null;
     }
     
-    const origin = `${start.lat},${start.lng}`;
-    const destination = `${end.lat},${end.lng}`;
-    const waypoints = waypoint ? `via:${waypoint.lat},${waypoint.lng}` : '';
+    // Round coordinates to 4 decimal places (~11 meters precision) for cache key
+    // This allows caching similar routes
+    const roundCoord = (coord) => Math.round(coord * 10000) / 10000;
+    const origin = `${roundCoord(start.lat)},${roundCoord(start.lng)}`;
+    const destination = `${roundCoord(end.lat)},${roundCoord(end.lng)}`;
+    const waypoints = waypoint ? `via:${roundCoord(waypoint.lat)},${roundCoord(waypoint.lng)}` : '';
+    
+    // Create cache key
+    const cacheKey = `${origin}|${destination}|${waypoints}`;
+    
+    // Check cache first
+    const cached = directionsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < DIRECTIONS_CACHE_TTL_MS) {
+      console.log('✅ Using cached route polyline');
+      return cached.route;
+    }
     
     const response = await axios.get(
       `https://maps.googleapis.com/maps/api/directions/json`,
@@ -101,7 +222,8 @@ export async function generateRoutePolyline(start, waypoint, end) {
           key: apiKey,
           alternatives: false,
           optimize: false
-        }
+        },
+        timeout: 10000 // 10 second timeout
       }
     );
     
@@ -118,12 +240,28 @@ export async function generateRoutePolyline(start, waypoint, end) {
         totalDistance += calculateDistance(points[i-1], points[i]);
       }
       
-      return {
+      const routeData = {
         points,
         totalDistance,
         polyline,
         duration: route.legs.reduce((sum, leg) => sum + leg.duration.value, 0)
       };
+      
+      // Cache the result
+      directionsCache.set(cacheKey, {
+        route: routeData,
+        timestamp: Date.now()
+      });
+      
+      // Clean old cache entries (older than cache TTL)
+      const now = Date.now();
+      for (const [key, value] of directionsCache.entries()) {
+        if ((now - value.timestamp) > DIRECTIONS_CACHE_TTL_MS) {
+          directionsCache.delete(key);
+        }
+      }
+      
+      return routeData;
     }
     
     return null;
@@ -347,8 +485,9 @@ export async function calculateRouteProgress(orderId, currentLocation) {
  */
 export async function processLocationUpdate(riderId, orderId, rawLocation, routeInfo) {
   try {
-    // Step 1: Snap to road
-    const snappedPoints = await snapToRoad([{ lat: rawLocation.lat, lng: rawLocation.lng }]);
+    // Step 1: Snap to road (OPTIMIZED: Pass riderId for throttling, disabled by default)
+    // NOTE: snapToRoads is VERY expensive - only enable if absolutely necessary
+    const snappedPoints = await snapToRoad([{ lat: rawLocation.lat, lng: rawLocation.lng }], riderId);
     const snappedLocation = snappedPoints[0] || rawLocation;
     
     // Step 2: Smooth location

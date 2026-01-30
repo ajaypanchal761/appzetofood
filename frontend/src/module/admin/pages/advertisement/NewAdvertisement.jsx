@@ -1,8 +1,9 @@
 import { useState, useRef } from "react"
 import { Upload, Heart, Star, Calendar, CheckCircle2, X } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import profilePlaceholder from "@/assets/download.jpg"
-import coverPlaceholder from "@/assets/download (1).jpg"
+// Using placeholders for advertisement images
+const profilePlaceholder = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400&h=400&fit=crop"
+const coverPlaceholder = "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=1200&h=400&fit=crop"
 
 export default function NewAdvertisement() {
   const [activeLanguage, setActiveLanguage] = useState("default")

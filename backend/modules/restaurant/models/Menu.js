@@ -40,6 +40,7 @@ const menuItemSchema = new mongoose.Schema({
   itemSizeUnit: { type: String, default: 'piece' },
   gst: { type: Number, default: 0 },
   images: { type: [String], default: [] }, // Multiple images support
+  preparationTime: { type: String, default: '' }, // Preparation time in minutes (e.g., "15-20 min")
   approvalStatus: { 
     type: String, 
     enum: ['pending', 'approved', 'rejected'], 

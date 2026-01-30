@@ -87,7 +87,6 @@ const iconMap = {
   Database,
   Zap,
   Phone,
-  MessageSquare,
   IndianRupee,
   PiggyBank,
 }

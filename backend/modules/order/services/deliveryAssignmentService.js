@@ -203,6 +203,12 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
  */
 export async function assignOrderToDeliveryBoy(order, restaurantLat, restaurantLng, restaurantId = null) {
   try {
+    // CRITICAL: Don't assign if order is cancelled
+    if (order.status === 'cancelled') {
+      console.log(`⚠️ Order ${order.orderId} is cancelled. Cannot assign to delivery partner.`);
+      return null;
+    }
+    
     // CRITICAL: Don't assign if order is already delivered/completed
     if (order.status === 'delivered' || 
         order.deliveryState?.currentPhase === 'completed' ||

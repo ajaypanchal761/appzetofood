@@ -7,6 +7,7 @@ import { useCart } from "../context/CartContext"
 import { useLocationSelector } from "./UserLayout"
 import { FaLocationDot } from "react-icons/fa6"
 import { getCachedSettings, loadBusinessSettings } from "@/lib/utils/businessSettings"
+import appzetoFoodLogo from "@/assets/appzetologo.png"
 
 export default function PageNavbar({ 
   textColor = "white", 
@@ -917,7 +918,7 @@ export default function PageNavbar({
 
   return (
     <nav 
-      className={`relative ${zIndexClass} w-full px-1 pr-2 sm:px-2 sm:pr-3 md:px-3 lg:px-6 xl:px-8 py-1.5 sm:py-3 lg:py-4 backdrop-blur-sm`}
+      className={`relative ${zIndexClass} w-full px-1 pr-2 sm:px-2 sm:pr-3 md:px-3 lg:px-6 xl:px-8 py-1.5 sm:py-3 lg:py-4`}
       onClick={onNavClick}
     >
       <div className="flex items-center justify-between gap-2 sm:gap-3 md:gap-4 lg:gap-6 max-w-7xl mx-auto">
@@ -928,7 +929,7 @@ export default function PageNavbar({
             variant="ghost"
             onClick={handleLocationClick}
             disabled={loading}
-            className="h-auto px-3 py-2 sm:px-4 sm:py-2.5 hover:bg-white/20 transition-colors rounded-lg flex-shrink-0"
+            className="h-auto px-0 py-0 hover:bg-transparent transition-colors flex-shrink-0"
           >
             {loading ? (
               <span className={`text-sm font-bold ${textColorClass} ${textColor === "white" ? "drop-shadow-lg" : ""}`}>
@@ -966,15 +967,17 @@ export default function PageNavbar({
               alt="Company Logo"
               className="h-12 w-20 mr-3 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain"
               onError={(e) => {
-                // Hide image if it fails to load
-                e.target.style.display = 'none'
+                // Fallback to default logo if API logo fails
+                e.target.src = appzetoFoodLogo
               }}
             />
-          ) : companyName ? (
-            <span className={`text-lg sm:text-xl font-bold ${textColor === "white" ? "text-white" : "text-gray-900"} drop-shadow-lg`}>
-              {companyName}
-            </span>
-          ) : null}
+          ) : (
+            <img
+              src={appzetoFoodLogo}
+              alt="Appzeto Food Logo"
+              className="h-12 w-20 mr-3 sm:h-10 sm:w-10 md:h-12 md:w-12 object-contain"
+            />
+          )}
         </Link>
 
         {/* Right: Actions - Hidden on desktop, shown on mobile */}
@@ -987,7 +990,7 @@ export default function PageNavbar({
               className="h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 hover:opacity-80 transition-opacity"
               title="Wallet"
             >
-              <div className={`h-full w-full rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center ring-2 ${ringColor}`}>
+              <div className={`h-full w-full rounded-full bg-white/20 flex items-center justify-center ring-2 ${ringColor}`}>
                 <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-gray-800" strokeWidth={2} />
               </div>
             </Button>
@@ -1001,7 +1004,7 @@ export default function PageNavbar({
               className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 hover:opacity-80 transition-opacity"
               title="Cart"
             >
-              <div className={`h-full w-full rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center ring-2 ${ringColor}`}>
+              <div className={`h-full w-full rounded-full bg-white/20 flex items-center justify-center ring-2 ${ringColor}`}>
                 <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5 text-gray-800" strokeWidth={2} />
               </div>
               {cartCount > 0 && (
@@ -1021,8 +1024,8 @@ export default function PageNavbar({
                 className="h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 hover:opacity-80 transition-opacity"
                 title="Profile"
               >
-                <div className={`h-full w-full rounded-full bg-blue-100 flex items-center justify-center shadow-lg ring-2 ${ringColor}`}>
-                  <span className="text-green-600 text-xs sm:text-sm font-extrabold">
+                <div className={`h-full w-full rounded-full bg-white flex items-center justify-center shadow-lg ring-2 ${ringColor}`}>
+                  <span className="text-black text-xs sm:text-sm font-extrabold">
                     A
                   </span>
                 </div>

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getGoogleMapsApiKey } from '../../../shared/utils/envService.js';
 
 /**
  * Google Maps Distance Matrix API Service
@@ -6,12 +7,21 @@ import axios from 'axios';
  */
 class GoogleMapsService {
   constructor() {
-    this.apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    this.apiKey = null; // Will be loaded from database when needed
     this.baseUrl = 'https://maps.googleapis.com/maps/api/distancematrix/json';
-    
+  }
+
+  /**
+   * Get API key from database (lazy loading)
+   */
+  async getApiKey() {
     if (!this.apiKey) {
-      console.warn('⚠️ GOOGLE_MAPS_API_KEY not found in environment variables');
+      this.apiKey = await getGoogleMapsApiKey();
+      if (!this.apiKey) {
+        console.warn('⚠️ Google Maps API key not found in database. Please set it in Admin → System → Environment Variables');
+      }
     }
+    return this.apiKey;
   }
 
   /**
@@ -23,7 +33,8 @@ class GoogleMapsService {
    * @returns {Promise<Object>} - { distance (km), duration (minutes), trafficLevel }
    */
   async getTravelTime(origin, destination, mode = 'driving', trafficModel = 'best_guess') {
-    if (!this.apiKey) {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) {
       // Fallback to haversine distance calculation if API key not available
       console.warn('⚠️ Google Maps API key not available, using fallback calculation');
       return this.calculateHaversineDistance(origin, destination);
@@ -37,7 +48,7 @@ class GoogleMapsService {
         origins: originStr,
         destinations: destStr,
         mode: mode,
-        key: this.apiKey,
+        key: apiKey,
         units: 'metric',
         departure_time: 'now' // For traffic-aware routing
       };

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import OrderSettlement from '../models/OrderSettlement.js';
 import UserWallet from '../../user/models/UserWallet.js';
@@ -588,3 +589,367 @@ export const processRazorpayRefund = async (orderId, adminId = null) => {
   }
 };
 
+/**
+ * Process wallet refund for cancelled order
+ * Adds refund amount directly to user wallet
+ * 
+ * IMPORTANT: Wallet payments do NOT use Razorpay. This function:
+ * - Directly credits the refund amount to user's wallet
+ * - Does NOT require Razorpay payment ID or keys
+ * - Does NOT call Razorpay API
+ * - Is instant (no external payment gateway involved)
+ * 
+ * @param {String} orderId - Order ID
+ * @param {String} adminId - Admin user ID who initiated the refund
+ * @param {Number} refundAmount - Optional refund amount (if not provided, uses order total)
+ * @returns {Promise<Object>} Refund result
+ */
+export const processWalletRefund = async (orderId, adminId = null, refundAmount = null) => {
+  try {
+    console.log('🔍 [processWalletRefund] Starting wallet refund process...', {
+      orderId: orderId?.toString(),
+      orderIdType: typeof orderId,
+      isObjectId: mongoose.Types.ObjectId.isValid(orderId)
+    });
+    
+    // Try to find order by MongoDB _id first
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(orderId)) {
+      order = await Order.findById(orderId)
+        .populate('userId', 'name email phone _id')
+        .lean();
+    }
+    
+    // If not found, try by orderId string
+    if (!order) {
+      order = await Order.findOne({ orderId: orderId })
+        .populate('userId', 'name email phone _id')
+        .lean();
+    }
+    
+    if (!order) {
+      console.error('❌ [processWalletRefund] Order not found:', orderId);
+      throw new Error('Order not found');
+    }
+
+    console.log('✅ [processWalletRefund] Order found:', {
+      orderId: order.orderId,
+      mongoId: order._id.toString(),
+      status: order.status,
+      paymentMethod: order.payment?.method,
+      userId: order.userId?._id?.toString() || order.userId?.toString()
+    });
+
+    if (order.status !== 'cancelled') {
+      console.error('❌ [processWalletRefund] Order is not cancelled:', order.status);
+      throw new Error('Order is not cancelled');
+    }
+
+    // Check if payment method is wallet (wallet payments don't use Razorpay)
+    if (order.payment?.method !== 'wallet') {
+      console.error('❌ [processWalletRefund] Payment method is not wallet:', order.payment?.method);
+      throw new Error('This function can only process wallet refunds. Wallet payments do not use Razorpay.');
+    }
+    
+    // Ensure no Razorpay payment ID exists (wallet payments are direct, no Razorpay involved)
+    if (order.payment?.razorpayPaymentId) {
+      console.warn('⚠️ [processWalletRefund] Warning: Wallet payment has Razorpay payment ID. This should not happen for wallet payments.');
+      // Don't throw error, just log warning - proceed with wallet refund
+    }
+
+    // Get settlement (for wallet payments, settlement might not exist - create proper one if needed)
+    let settlement = await OrderSettlement.findOne({ orderId });
+    
+    if (!settlement) {
+      console.log('📝 [processWalletRefund] Settlement not found, creating settlement with order data for wallet refund...');
+      
+      const pricing = order.pricing || {};
+      const subtotal = pricing.subtotal || 0;
+      const deliveryFee = pricing.deliveryFee || 0;
+      const platformFee = pricing.platformFee || 0;
+      const tax = pricing.tax || 0;
+      const total = pricing.total || 0;
+      
+      // Calculate earnings (simplified for wallet refunds - we just need the structure)
+      const foodPrice = subtotal;
+      const commission = 0; // For wallet refunds, we don't need actual commission
+      const netEarning = foodPrice; // Simplified
+      
+      settlement = new OrderSettlement({
+        orderId: order._id,
+        orderNumber: order.orderId,
+        userId: order.userId?._id || order.userId,
+        restaurantId: order.restaurantId,
+        restaurantName: order.restaurantName || 'Unknown Restaurant',
+        userPayment: {
+          subtotal: subtotal,
+          discount: pricing.discount || 0,
+          deliveryFee: deliveryFee,
+          platformFee: platformFee,
+          gst: tax,
+          packagingFee: 0,
+          total: total
+        },
+        restaurantEarning: {
+          foodPrice: foodPrice,
+          commission: commission,
+          commissionPercentage: 0,
+          netEarning: netEarning,
+          status: 'cancelled'
+        },
+        deliveryPartnerEarning: {
+          basePayout: 0,
+          distance: 0,
+          commissionPerKm: 0,
+          distanceCommission: 0,
+          surgeMultiplier: 1,
+          surgeAmount: 0,
+          totalEarning: 0,
+          status: 'cancelled'
+        },
+        adminEarning: {
+          commission: commission,
+          platformFee: platformFee,
+          deliveryFee: deliveryFee,
+          gst: tax,
+          deliveryMargin: 0,
+          totalEarning: platformFee + deliveryFee + tax,
+          status: 'cancelled'
+        },
+        escrowStatus: 'refunded',
+        escrowAmount: total,
+        settlementStatus: 'cancelled',
+        cancellationDetails: {
+          cancelled: true,
+          cancelledAt: order.updatedAt || new Date(),
+          refundStatus: 'pending'
+        }
+      });
+      await settlement.save();
+      console.log('✅ [processWalletRefund] Settlement created for wallet refund');
+    }
+
+    // Check if refund already processed
+    if (settlement.cancellationDetails?.refundStatus === 'processed' || 
+        settlement.cancellationDetails?.refundStatus === 'initiated') {
+      throw new Error('Refund already processed or initiated for this order');
+    }
+
+    // Determine refund amount: use provided amount, or calculate from order/settlement
+    let finalRefundAmount = 0;
+    
+    if (refundAmount !== null && refundAmount !== undefined && refundAmount > 0) {
+      // Use provided refund amount
+      finalRefundAmount = parseFloat(refundAmount);
+      console.log('💰 [processWalletRefund] Using provided refund amount:', finalRefundAmount);
+    } else {
+      // Calculate refund amount from order or settlement
+      const orderTotal = order.pricing?.total || settlement.userPayment?.total || 0;
+      const calculatedRefund = settlement.cancellationDetails?.refundAmount || 0;
+      
+      // For wallet, use order total if calculated refund is 0
+      if (calculatedRefund > 0) {
+        finalRefundAmount = calculatedRefund;
+      } else if (orderTotal > 0) {
+        finalRefundAmount = orderTotal;
+      } else {
+        throw new Error('No refund amount found for this order');
+      }
+      
+      console.log('💰 [processWalletRefund] Calculated refund amount:', {
+        orderTotal: order.pricing?.total,
+        settlementTotal: settlement.userPayment?.total,
+        calculatedRefund: settlement.cancellationDetails?.refundAmount,
+        finalRefundAmount
+      });
+    }
+    
+    if (finalRefundAmount <= 0) {
+      throw new Error('Invalid refund amount. Refund amount must be greater than 0');
+    }
+    
+    // Update the variable name for consistency
+    const refundAmountToProcess = finalRefundAmount;
+
+    // Update refund status to 'initiated'
+    settlement.cancellationDetails.refundStatus = 'initiated';
+    settlement.cancellationDetails.refundInitiatedAt = new Date();
+    if (adminId) {
+      settlement.cancellationDetails.refundInitiatedBy = adminId;
+    }
+    await settlement.save();
+
+    // Refund to user wallet - verify user exists first
+    try {
+      console.log('💰 [processWalletRefund] Processing refund to user wallet...', {
+        userId: order.userId?.toString() || order.userId,
+        orderId: order.orderId,
+        refundAmount: refundAmountToProcess
+      });
+      
+      // Get user ID (handle both populated and non-populated)
+      const userId = order.userId?._id || order.userId;
+      if (!userId) {
+        throw new Error('User ID not found in order');
+      }
+      
+      console.log('👤 [processWalletRefund] User ID for refund:', userId.toString());
+      
+      const wallet = await UserWallet.findOrCreateByUserId(userId);
+      console.log('💳 [processWalletRefund] User wallet found/created:', {
+        walletId: wallet._id.toString(),
+        currentBalance: wallet.balance,
+        userId: wallet.userId.toString()
+      });
+      
+      // Check if refund already exists for this order (prevent duplicate)
+      const existingRefund = wallet.transactions.find(
+        t => t.orderId && t.orderId.toString() === order._id.toString() && t.type === 'refund'
+      );
+
+      if (existingRefund) {
+        console.log('⚠️ [processWalletRefund] Refund already processed for this order, skipping duplicate');
+        console.log('⚠️ [processWalletRefund] Existing refund transaction:', {
+          transactionId: existingRefund._id.toString(),
+          amount: existingRefund.amount,
+          createdAt: existingRefund.createdAt
+        });
+      } else {
+        console.log('➕ [processWalletRefund] Adding refund transaction to wallet...');
+        const transaction = wallet.addTransaction({
+          amount: refundAmountToProcess,
+          type: 'refund',
+          status: 'Completed',
+          description: `Refund for cancelled order ${settlement.orderNumber || order.orderId}. Reason: ${order.cancellationReason || 'Order cancelled'}`,
+          orderId: order._id
+        });
+        
+        // Get balance before save to verify it's being updated
+        const balanceBeforeSave = wallet.balance;
+        await wallet.save();
+        
+        // Reload wallet to verify balance was saved correctly
+        const savedWallet = await UserWallet.findById(wallet._id);
+        console.log('✅ [processWalletRefund] Wallet transaction added and saved:', {
+          transactionId: transaction._id?.toString(),
+          amount: transaction.amount,
+          type: transaction.type,
+          balanceBeforeSave,
+          balanceAfterSave: wallet.balance,
+          savedWalletBalance: savedWallet?.balance,
+          walletId: wallet._id.toString()
+        });
+        
+        // Verify balance was actually updated
+        if (savedWallet && savedWallet.balance !== balanceBeforeSave) {
+          console.log('✅ [processWalletRefund] Balance update verified in database');
+        } else {
+          console.error('⚠️ [processWalletRefund] WARNING: Balance may not have been updated correctly!', {
+            balanceBeforeSave,
+            balanceAfterSave: wallet.balance,
+            savedWalletBalance: savedWallet?.balance
+          });
+        }
+
+        // Update user's wallet balance in User model (for backward compatibility)
+        const User = (await import('../../auth/models/User.js')).default;
+        const userUpdateResult = await User.findByIdAndUpdate(
+          userId, 
+          {
+            'wallet.balance': savedWallet?.balance || wallet.balance,
+            'wallet.currency': wallet.currency || 'INR'
+          },
+          { new: true }
+        );
+        console.log('✅ [processWalletRefund] User model wallet balance updated:', {
+          userId: userId.toString(),
+          newBalance: userUpdateResult?.wallet?.balance,
+          walletBalance: savedWallet?.balance || wallet.balance
+        });
+
+        console.log('✅✅✅ [processWalletRefund] WALLET REFUND SUCCESSFUL ✅✅✅', {
+          userId: userId.toString(),
+          orderId: order.orderId,
+          refundAmount: refundAmountToProcess,
+          previousBalance: wallet.balance - refundAmountToProcess,
+          newBalance: wallet.balance,
+          transactionId: transaction._id?.toString()
+        });
+      }
+
+      // Create audit log
+      try {
+        await AuditLog.createLog({
+          entityType: 'user',
+          entityId: order.userId?._id || order.userId,
+          action: 'refund_credit',
+          actionType: 'refund',
+          performedBy: {
+            type: adminId ? 'admin' : 'system',
+            userId: adminId || null,
+            name: adminId ? 'Admin' : 'System'
+          },
+          transactionDetails: {
+            amount: refundAmountToProcess,
+            currency: 'INR',
+            type: 'refund',
+            status: 'success',
+            orderId: order._id,
+            walletType: 'user'
+          },
+          description: `User refunded for cancelled order ${settlement.orderNumber || order.orderId}`
+        });
+      } catch (auditError) {
+        console.error('⚠️ [processWalletRefund] Error creating audit log (non-critical):', auditError.message);
+        // Don't throw - audit log failure shouldn't block refund
+      }
+    } catch (walletError) {
+      console.error('❌ Error refunding to user wallet:', walletError);
+      throw new Error(`Failed to refund to user wallet: ${walletError.message}`);
+    }
+
+    // Update refund status to 'processed' (wallet refunds are instant)
+    settlement.cancellationDetails.refundStatus = 'processed';
+    settlement.cancellationDetails.refundProcessedAt = new Date();
+    if (adminId) {
+      settlement.cancellationDetails.refundProcessedBy = adminId;
+    }
+    await settlement.save();
+
+    // Create audit log for order
+    try {
+      await AuditLog.createLog({
+        entityType: 'order',
+        entityId: order._id,
+        action: 'wallet_refund_processed',
+        actionType: 'refund',
+        performedBy: {
+          type: adminId ? 'admin' : 'system',
+          userId: adminId || null,
+          name: adminId ? 'Admin' : 'System'
+        },
+        transactionDetails: {
+          amount: refundAmountToProcess,
+          currency: 'INR',
+          type: 'wallet_refund',
+          status: 'success',
+          orderId: order._id
+        },
+        description: `Wallet refund of ₹${refundAmountToProcess} processed for cancelled order ${settlement.orderNumber || order.orderId}`
+      });
+    } catch (auditError) {
+      console.error('⚠️ [processWalletRefund] Error creating order audit log (non-critical):', auditError.message);
+      // Don't throw - audit log failure shouldn't block refund
+    }
+
+    return {
+      refundId: `wallet-${order._id}-${Date.now()}`,
+      refundAmount: refundAmountToProcess,
+      walletRefund: true,
+      message: `Wallet refund of ₹${refundAmountToProcess} processed successfully. Amount has been credited to customer's wallet.`
+    };
+  } catch (error) {
+    console.error('Error processing wallet refund:', error);
+    throw error;
+  }
+};

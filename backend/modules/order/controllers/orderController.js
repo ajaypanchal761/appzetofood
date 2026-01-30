@@ -13,6 +13,7 @@ import { processCancellationRefund } from '../services/cancellationRefundService
 import etaCalculationService from '../services/etaCalculationService.js';
 import etaWebSocketService from '../services/etaWebSocketService.js';
 import OrderEvent from '../models/OrderEvent.js';
+import UserWallet from '../../user/models/UserWallet.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -44,10 +45,11 @@ export const createOrder = async (req, res) => {
     // Support both camelCase and snake_case from client
     const paymentMethod = bodyPaymentMethod ?? req.body.payment_method;
 
-    // Normalize payment method: 'cod' / 'COD' / 'Cash on Delivery' → 'cash'
+    // Normalize payment method: 'cod' / 'COD' / 'Cash on Delivery' → 'cash', 'wallet' → 'wallet'
     const normalizedPaymentMethod = (() => {
       const m = (paymentMethod && String(paymentMethod).toLowerCase().trim()) || '';
       if (m === 'cash' || m === 'cod' || m === 'cash on delivery') return 'cash';
+      if (m === 'wallet') return 'wallet';
       return paymentMethod || 'razorpay';
     })();
     logger.info('Order create paymentMethod:', { raw: paymentMethod, normalized: normalizedPaymentMethod, bodyKeys: Object.keys(req.body || {}).filter(k => k.toLowerCase().includes('payment')) });
@@ -142,16 +144,18 @@ export const createOrder = async (req, res) => {
       // Still proceed but log the mismatch
     }
 
-    if (!restaurant.isAcceptingOrders) {
-      logger.warn('⚠️ Restaurant not accepting orders:', {
-        restaurantId: restaurant._id?.toString() || restaurant.restaurantId,
-        restaurantName: restaurant.name
-      });
-      return res.status(403).json({
-        success: false,
-        message: 'Restaurant is currently not accepting orders'
-      });
-    }
+    // Note: Removed isAcceptingOrders check - orders can come even when restaurant is offline
+    // Restaurant can accept/reject orders manually, or orders will auto-reject after accept time expires
+    // if (!restaurant.isAcceptingOrders) {
+    //   logger.warn('⚠️ Restaurant not accepting orders:', {
+    //     restaurantId: restaurant._id?.toString() || restaurant.restaurantId,
+    //     restaurantName: restaurant.name
+    //   });
+    //   return res.status(403).json({
+    //     success: false,
+    //     message: 'Restaurant is currently not accepting orders'
+    //   });
+    // }
 
     if (!restaurant.isActive) {
       logger.warn('⚠️ Restaurant is inactive:', {
@@ -209,6 +213,29 @@ export const createOrder = async (req, res) => {
       }
     });
 
+    // Parse preparation time from order items
+    // Extract maximum preparation time from items (e.g., "20-25 mins" -> 25)
+    let maxPreparationTime = 0;
+    if (items && Array.isArray(items)) {
+      items.forEach(item => {
+        if (item.preparationTime) {
+          const prepTimeStr = String(item.preparationTime).trim();
+          // Parse formats like "20-25 mins", "20-25", "25 mins", "25"
+          const match = prepTimeStr.match(/(\d+)(?:\s*-\s*(\d+))?/);
+          if (match) {
+            const minTime = parseInt(match[1], 10);
+            const maxTime = match[2] ? parseInt(match[2], 10) : minTime;
+            maxPreparationTime = Math.max(maxPreparationTime, maxTime);
+          }
+        }
+      });
+    }
+    order.preparationTime = maxPreparationTime;
+    logger.info('📋 Preparation time extracted from items:', {
+      maxPreparationTime,
+      itemsCount: items?.length || 0
+    });
+
     // Calculate initial ETA
     try {
       const restaurantLocation = restaurant.location 
@@ -232,13 +259,18 @@ export const createOrder = async (req, res) => {
           userLocation
         });
 
-        // Update order with ETA
+        // Add preparation time to ETA (use max preparation time)
+        const finalMinETA = etaResult.minETA + maxPreparationTime;
+        const finalMaxETA = etaResult.maxETA + maxPreparationTime;
+
+        // Update order with ETA (including preparation time)
         order.eta = {
-          min: etaResult.minETA,
-          max: etaResult.maxETA,
-          lastUpdated: new Date()
+          min: finalMinETA,
+          max: finalMaxETA,
+          lastUpdated: new Date(),
+          additionalTime: 0 // Will be updated when restaurant adds time
         };
-        order.estimatedDeliveryTime = Math.ceil((etaResult.minETA + etaResult.maxETA) / 2);
+        order.estimatedDeliveryTime = Math.ceil((finalMinETA + finalMaxETA) / 2);
 
         // Create order created event
         await OrderEvent.create({
@@ -246,16 +278,19 @@ export const createOrder = async (req, res) => {
           eventType: 'ORDER_CREATED',
           data: {
             initialETA: {
-              min: etaResult.minETA,
-              max: etaResult.maxETA
-            }
+              min: finalMinETA,
+              max: finalMaxETA
+            },
+            preparationTime: maxPreparationTime
           },
           timestamp: new Date()
         });
 
         logger.info('✅ ETA calculated for order:', {
           orderId: order.orderId,
-          eta: `${etaResult.minETA}-${etaResult.maxETA} mins`
+          eta: `${finalMinETA}-${finalMaxETA} mins`,
+          preparationTime: maxPreparationTime,
+          baseETA: `${etaResult.minETA}-${etaResult.maxETA} mins`
         });
       } else {
         logger.warn('⚠️ Could not calculate ETA - missing location data');
@@ -278,6 +313,137 @@ export const createOrder = async (req, res) => {
       eta: order.eta ? `${order.eta.min}-${order.eta.max} mins` : 'N/A',
       paymentMethod: normalizedPaymentMethod
     });
+
+    // For wallet payments, check balance and deduct before creating order
+    if (normalizedPaymentMethod === 'wallet') {
+      try {
+        // Find or create wallet
+        const wallet = await UserWallet.findOrCreateByUserId(userId);
+        
+        // Check if sufficient balance
+        if (pricing.total > wallet.balance) {
+          return res.status(400).json({
+            success: false,
+            message: 'Insufficient wallet balance',
+            data: {
+              required: pricing.total,
+              available: wallet.balance,
+              shortfall: pricing.total - wallet.balance
+            }
+          });
+        }
+
+        // Check if transaction already exists for this order (prevent duplicate)
+        const existingTransaction = wallet.transactions.find(
+          t => t.orderId && t.orderId.toString() === order._id.toString() && t.type === 'deduction'
+        );
+
+        if (existingTransaction) {
+          logger.warn('⚠️ Wallet payment already processed for this order', {
+            orderId: order.orderId,
+            transactionId: existingTransaction._id
+          });
+        } else {
+          // Deduct money from wallet
+          const transaction = wallet.addTransaction({
+            amount: pricing.total,
+            type: 'deduction',
+            status: 'Completed',
+            description: `Order payment - Order #${order.orderId}`,
+            orderId: order._id
+          });
+
+          await wallet.save();
+
+          // Update user's wallet balance in User model (for backward compatibility)
+          const User = (await import('../../auth/models/User.js')).default;
+          await User.findByIdAndUpdate(userId, {
+            'wallet.balance': wallet.balance,
+            'wallet.currency': wallet.currency
+          });
+
+          logger.info('✅ Wallet payment deducted for order:', {
+            orderId: order.orderId,
+            userId: userId,
+            amount: pricing.total,
+            transactionId: transaction._id,
+            newBalance: wallet.balance
+          });
+        }
+
+        // Create payment record
+        try {
+          const payment = new Payment({
+            paymentId: `PAY-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            orderId: order._id,
+            userId,
+            amount: pricing.total,
+            currency: 'INR',
+            method: 'wallet',
+            status: 'completed',
+            logs: [{
+              action: 'completed',
+              timestamp: new Date(),
+              details: {
+                previousStatus: 'new',
+                newStatus: 'completed',
+                note: 'Wallet payment completed'
+              }
+            }]
+          });
+          await payment.save();
+        } catch (paymentError) {
+          logger.error('❌ Error creating wallet payment record:', paymentError);
+        }
+
+        // Mark order as confirmed and payment as completed
+        order.payment.method = 'wallet';
+        order.payment.status = 'completed';
+        order.status = 'confirmed';
+        order.tracking.confirmed = {
+          status: true,
+          timestamp: new Date()
+        };
+        await order.save();
+
+        // Notify restaurant about new wallet payment order
+        try {
+          const notifyRestaurantResult = await notifyRestaurantNewOrder(order, assignedRestaurantId, 'wallet');
+          logger.info('✅ Wallet payment order notification sent to restaurant', {
+            orderId: order.orderId,
+            restaurantId: assignedRestaurantId,
+            notifyRestaurantResult
+          });
+        } catch (notifyError) {
+          logger.error('❌ Error notifying restaurant about wallet payment order:', notifyError);
+        }
+
+        // Respond to client
+        return res.status(201).json({
+          success: true,
+          data: {
+            order: {
+              id: order._id.toString(),
+              orderId: order.orderId,
+              status: order.status,
+              total: pricing.total
+            },
+            razorpay: null,
+            wallet: {
+              balance: wallet.balance,
+              deducted: pricing.total
+            }
+          }
+        });
+      } catch (walletError) {
+        logger.error('❌ Error processing wallet payment:', walletError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to process wallet payment',
+          error: walletError.message
+        });
+      }
+    }
 
     // For cash-on-delivery orders, confirm immediately and notify restaurant.
     // Online (Razorpay) orders follow the existing verifyOrderPayment flow.
@@ -841,14 +1007,16 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
-    // Only allow cancellation for online payment orders (Razorpay)
+    // Get payment method from order or payment record
+    const paymentMethod = order.payment?.method;
     const payment = await Payment.findOne({ orderId: order._id });
-    if (!payment || payment.paymentMethod !== 'razorpay' || payment.status !== 'completed') {
-      return res.status(400).json({
-        success: false,
-        message: 'Order cancellation is only available for online payment orders'
-      });
-    }
+    const paymentMethodFromPayment = payment?.method || payment?.paymentMethod;
+
+    // Determine the actual payment method
+    const actualPaymentMethod = paymentMethod || paymentMethodFromPayment;
+
+    // Allow cancellation for all payment methods (Razorpay, COD, Wallet)
+    // Only restrict if order is already cancelled or delivered (checked above)
 
     // Update order status
     order.status = 'cancelled';
@@ -857,19 +1025,26 @@ export const cancelOrder = async (req, res) => {
     order.cancelledAt = new Date();
     await order.save();
 
-    // Calculate refund amount (but don't process - admin needs to approve)
-    try {
-      const { calculateCancellationRefund } = await import('../services/cancellationRefundService.js');
-      await calculateCancellationRefund(order._id, reason);
-      logger.info(`Cancellation refund calculated for order ${order.orderId} - awaiting admin approval`);
-    } catch (refundError) {
-      logger.error(`Error calculating cancellation refund for order ${order.orderId}:`, refundError);
-      // Don't fail the cancellation if refund calculation fails
+    // Calculate refund amount only for online payments (Razorpay) and wallet
+    // COD orders don't need refund since payment hasn't been made
+    let refundMessage = '';
+    if (actualPaymentMethod === 'razorpay' || actualPaymentMethod === 'wallet') {
+      try {
+        const { calculateCancellationRefund } = await import('../services/cancellationRefundService.js');
+        await calculateCancellationRefund(order._id, reason);
+        logger.info(`Cancellation refund calculated for order ${order.orderId} - awaiting admin approval`);
+        refundMessage = ' Refund will be processed after admin approval.';
+      } catch (refundError) {
+        logger.error(`Error calculating cancellation refund for order ${order.orderId}:`, refundError);
+        // Don't fail the cancellation if refund calculation fails
+      }
+    } else if (actualPaymentMethod === 'cash') {
+      refundMessage = ' No refund required as payment was not made.';
     }
 
     res.json({
       success: true,
-      message: 'Order cancelled successfully. Refund will be processed after admin approval.',
+      message: `Order cancelled successfully.${refundMessage}`,
       data: {
         order: {
           orderId: order.orderId,

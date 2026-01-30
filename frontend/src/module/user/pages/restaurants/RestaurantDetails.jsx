@@ -318,7 +318,17 @@ export default function RestaurantDetails() {
                 console.log('Recommended items collected:', recommendedItems.map(item => ({
                   name: item.name,
                   isRecommended: item.isRecommended,
-                  isRecommendedType: typeof item.isRecommended
+                  isRecommendedType: typeof item.isRecommended,
+                  preparationTime: item.preparationTime
+                })))
+                
+                // Debug log to check preparationTime in menu sections
+                console.log('Menu sections with preparationTime:', menuSections.map(section => ({
+                  sectionName: section.name,
+                  items: section.items?.map(item => ({
+                    name: item.name,
+                    preparationTime: item.preparationTime
+                  })) || []
                 })))
 
                 // Always create recommended section (even if empty) - will show "No dish Yet" if empty
@@ -1274,6 +1284,11 @@ export default function RestaurantDetails() {
                         const quantity = quantities[item.id] || 0
                         // Determine veg/non-veg based on foodType
                         const isVeg = item.foodType === "Veg"
+                        
+                        // Debug: Log preparationTime for troubleshooting
+                        if (item.preparationTime) {
+                          console.log(`[FRONTEND] Item "${item.name}" preparationTime:`, item.preparationTime, 'Type:', typeof item.preparationTime)
+                        }
 
                         return (
                           <div
@@ -1309,7 +1324,16 @@ export default function RestaurantDetails() {
                                 </div>
                               )}
 
-                              <p className="font-semibold text-gray-900 dark:text-white mt-1">₹{Math.round(item.price)}</p>
+                              <div className="flex items-center gap-3 mt-1">
+                                <p className="font-semibold text-gray-900 dark:text-white">₹{Math.round(item.price)}</p>
+                                {/* Preparation Time - Show if available */}
+                                {item.preparationTime && String(item.preparationTime).trim() && (
+                                  <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                                    <Clock size={12} className="text-gray-500" />
+                                    <span>{String(item.preparationTime).trim()}</span>
+                                  </div>
+                                )}
+                              </div>
 
                               {/* Description - Show if available */}
                               {item.description && (
@@ -1461,6 +1485,11 @@ export default function RestaurantDetails() {
                                   const quantity = quantities[item.id] || 0
                                   // Determine veg/non-veg based on foodType
                                   const isVeg = item.foodType === "Veg"
+                                  
+                                  // Debug: Log preparationTime for troubleshooting
+                                  if (item.preparationTime) {
+                                    console.log(`[FRONTEND] Subsection item "${item.name}" preparationTime:`, item.preparationTime)
+                                  }
 
                                   return (
                                     <div
@@ -1496,7 +1525,16 @@ export default function RestaurantDetails() {
                                           </div>
                                         )}
 
-                                        <p className="font-semibold text-gray-900 dark:text-white mt-1">₹{Math.round(item.price)}</p>
+                                        <div className="flex items-center gap-3 mt-1">
+                                          <p className="font-semibold text-gray-900 dark:text-white">₹{Math.round(item.price)}</p>
+                                          {/* Preparation Time - Show if available */}
+                                          {item.preparationTime && String(item.preparationTime).trim() && (
+                                            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                                              <Clock size={12} className="text-gray-500" />
+                                              <span>{String(item.preparationTime).trim()}</span>
+                                            </div>
+                                          )}
+                                        </div>
 
                                         {/* Description - Show if available */}
                                         {item.description && (

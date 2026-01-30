@@ -10,8 +10,9 @@ import { useSearchOverlay, useLocationSelector } from "../components/UserLayout"
 import { useLocation as useLocationHook } from "../hooks/useLocation"
 import { useProfile } from "../context/ProfileContext"
 import { FaLocationDot } from "react-icons/fa6"
-import appzetoFoodLogo from "@/assets/appzetofoodlogo.jpeg"
-import diningBanner from "@/assets/diningrestaurantbanner.png"
+import appzetoFoodLogo from "@/assets/appzetologo.png"
+// Using placeholder for dining restaurant banner
+const diningBanner = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200&h=400&fit=crop"
 
 const popularRestaurants = [
   {

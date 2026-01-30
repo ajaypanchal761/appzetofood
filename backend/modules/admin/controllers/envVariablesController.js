@@ -47,16 +47,17 @@ export const getPublicEnvVariables = asyncHandler(async (req, res) => {
     const envData = envVars.toEnvObject();
     
     // Return only public variables that frontend needs
+    // NO FALLBACK - Only use database value
     const publicEnvData = {
-      VITE_GOOGLE_MAPS_API_KEY: envData.VITE_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || ''
+      VITE_GOOGLE_MAPS_API_KEY: envData.VITE_GOOGLE_MAPS_API_KEY || ''
     };
     
     return successResponse(res, 200, 'Public environment variables retrieved successfully', publicEnvData);
   } catch (error) {
     logger.error(`Error fetching public environment variables: ${error.message}`, { stack: error.stack });
-    // Fallback to process.env if database fails
+    // No fallback - return empty if database fails
     return successResponse(res, 200, 'Public environment variables retrieved successfully', {
-      VITE_GOOGLE_MAPS_API_KEY: process.env.VITE_GOOGLE_MAPS_API_KEY || ''
+      VITE_GOOGLE_MAPS_API_KEY: ''
     });
   }
 });

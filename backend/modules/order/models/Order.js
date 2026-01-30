@@ -204,7 +204,16 @@ const orderSchema = new mongoose.Schema({
     lastUpdated: {
       type: Date,
       default: Date.now
+    },
+    additionalTime: {
+      type: Number, // Additional time added by restaurant (in minutes)
+      default: 0
     }
+  },
+  // Preparation time from menu items
+  preparationTime: {
+    type: Number, // Maximum preparation time from order items (in minutes)
+    default: 0
   },
   deliveredAt: {
     type: Date

@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import loginBg from "@/assets/login page img.jpg"
+import loginBg from "@/assets/deliveryloginbanner.png"
 
 // Common country codes
 const countryCodes = [
