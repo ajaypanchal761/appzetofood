@@ -695,37 +695,89 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
       // Clear any cached location first to ensure fresh coordinates
       console.log("🔄 Requesting fresh location (clearing cache and forcing fresh GPS)...")
       
-      // Use Promise.race to get location within 2 seconds
+      // Increase timeout to 15 seconds to allow GPS to get accurate fix
+      // The getLocation function already has a 15-second timeout, so we match it
       const locationPromise = requestLocation()
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Location timeout")), 2000)
+        setTimeout(() => reject(new Error("Location request is taking longer than expected. Please check your GPS settings.")), 15000)
       )
       
       let locationData
       try {
         locationData = await Promise.race([locationPromise, timeoutPromise])
+        
+        // Check if we got valid location data
+        if (!locationData || (!locationData.latitude || !locationData.longitude)) {
+          throw new Error("Invalid location data received")
+        }
       } catch (raceError) {
-        // If timeout, try to use cached location immediately
+        console.warn("⚠️ Location request failed or timed out:", raceError.message)
+        
+        // If timeout or error, try to use cached location as fallback
         const stored = localStorage.getItem("userLocation")
         if (stored) {
           try {
             const cachedLocation = JSON.parse(stored)
             if (cachedLocation?.latitude && cachedLocation?.longitude) {
-              console.log("📍 Using cached location (2s timeout):", cachedLocation)
+              console.log("📍 Using cached location as fallback:", cachedLocation)
               locationData = cachedLocation
+              
+              // Show info toast that we're using cached location
+              toast.info("Using your last known location", {
+                id: "location-request",
+                duration: 2000,
+              })
             } else {
               throw new Error("Invalid cached location")
             }
           } catch (cacheErr) {
-            toast.error("Could not get location. Please try again.", { id: "location-request" })
+            console.error("❌ Failed to parse cached location:", cacheErr)
+            // Determine specific error message
+            let errorMessage = "Could not get location. Please try again."
+            if (raceError.message.includes("permission") || raceError.message.includes("denied")) {
+              errorMessage = "Location permission denied. Please enable location access in your browser settings."
+            } else if (raceError.message.includes("timeout") || raceError.message.includes("longer")) {
+              errorMessage = "Location request timed out. Please check your GPS settings and try again."
+            } else if (raceError.message.includes("unavailable")) {
+              errorMessage = "Location information is unavailable. Please check your device settings."
+            }
+            
+            toast.error(errorMessage, { 
+              id: "location-request",
+              duration: 5000,
+            })
             return
           }
         } else {
-          toast.error("Could not get location. Please try again.", { id: "location-request" })
+          // No cached location available
+          let errorMessage = "Could not get location. Please try again."
+          if (raceError.message.includes("permission") || raceError.message.includes("denied")) {
+            errorMessage = "Location permission denied. Please enable location access in your browser settings."
+          } else if (raceError.message.includes("timeout") || raceError.message.includes("longer")) {
+            errorMessage = "Location request timed out. Please check your GPS settings and try again."
+          } else if (raceError.message.includes("unavailable")) {
+            errorMessage = "Location information is unavailable. Please check your device settings."
+          }
+          
+          toast.error(errorMessage, { 
+            id: "location-request",
+            duration: 5000,
+          })
           return
         }
       }
       
+      // Validate location data
+      if (!locationData) {
+        toast.error("Could not get location. Please try again.", { id: "location-request" })
+        return
+      }
+
+      if (!locationData.latitude || !locationData.longitude) {
+        toast.error("Invalid location data received. Please try again.", { id: "location-request" })
+        return
+      }
+
       console.log("✅ Fresh location received:", {
         formattedAddress: locationData?.formattedAddress,
         address: locationData?.address,
@@ -738,22 +790,13 @@ export default function LocationSelectorOverlay({ isOpen, onClose }) {
           locationData.formattedAddress.split(',').length >= 4
       })
       
-      // Verify we got complete address
+      // Verify we got complete address (but don't fail if incomplete - still use the location)
       if (!locationData?.formattedAddress || 
           locationData.formattedAddress === "Select location" ||
           locationData.formattedAddress.split(',').length < 4) {
-        console.warn("⚠️ Location received but address is incomplete. Retrying with force refresh...")
-        // Retry once more with explicit force refresh
-        const retryLocation = await requestLocation()
-        if (retryLocation?.formattedAddress && retryLocation.formattedAddress.split(',').length >= 4) {
-          Object.assign(locationData, retryLocation)
-          console.log("✅ Retry successful - got complete address:", retryLocation.formattedAddress)
-        } else {
-          console.warn("⚠️ Retry also returned incomplete address. This might be due to:")
-          console.warn("   1. GPS coordinates not accurate (network-based location)");
-          console.warn("   2. Location is on a road/street without specific building");
-          console.warn("   3. Try on mobile device for better GPS accuracy");
-        }
+        console.warn("⚠️ Location received but address is incomplete. Will try to get better address from map...")
+        // Don't retry immediately - let the map handle address fetching
+        // The address will be fetched when map moves to the location
       }
       
       // CRITICAL: Ensure location state is updated in the hook
