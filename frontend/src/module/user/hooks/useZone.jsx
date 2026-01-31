@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { zoneAPI } from '@/lib/api'
 
 /**
@@ -11,6 +11,7 @@ export function useZone(location) {
   const [zone, setZone] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const prevCoordsRef = useRef({ latitude: null, longitude: null })
 
   // Detect zone when location is available
   const detectZone = useCallback(async (lat, lng) => {
@@ -74,8 +75,20 @@ export function useZone(location) {
     const lat = location?.latitude
     const lng = location?.longitude
 
+    // Check if coordinates have changed significantly (threshold: ~10 meters)
+    const coordThreshold = 0.0001 // approximately 10 meters
+    const coordsChanged = 
+      !prevCoordsRef.current.latitude ||
+      !prevCoordsRef.current.longitude ||
+      Math.abs(prevCoordsRef.current.latitude - (lat || 0)) > coordThreshold ||
+      Math.abs(prevCoordsRef.current.longitude - (lng || 0)) > coordThreshold
+
     if (lat && lng) {
-      detectZone(lat, lng)
+      // Only detect zone if coordinates changed significantly
+      if (coordsChanged) {
+        prevCoordsRef.current = { latitude: lat, longitude: lng }
+        detectZone(lat, lng)
+      }
     } else {
       // Try to use cached zone if location not available
       const cachedZoneId = localStorage.getItem('userZoneId')

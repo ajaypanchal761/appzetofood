@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { useParams, useNavigate, useSearchParams } from "react-router-dom"
@@ -83,11 +83,22 @@ export default function RestaurantDetails() {
   const [restaurant, setRestaurant] = useState(null)
   const [loadingRestaurant, setLoadingRestaurant] = useState(true)
   const [restaurantError, setRestaurantError] = useState(null)
+  const fetchedRestaurantRef = useRef(false) // Track if restaurant has been fetched for current slug
 
   // Fetch restaurant data from API
   useEffect(() => {
     const fetchRestaurant = async () => {
       if (!slug) return
+
+      // Prevent re-fetching if we've already fetched for this slug and zoneId hasn't changed meaningfully
+      // Only re-fetch if slug changed or if we're waiting for zoneId and it just became available
+      if (fetchedRestaurantRef.current && restaurant && restaurant.slug === slug) {
+        // Only re-fetch if zoneId changed from null to a value (zone just detected)
+        if (zoneId && !loadingZone) {
+          // Zone is available, but we already have restaurant data - don't re-fetch
+          return
+        }
+      }
 
       try {
         setLoadingRestaurant(true)
@@ -399,6 +410,7 @@ export default function RestaurantDetails() {
           }
           
           setRestaurant(transformedRestaurant)
+          fetchedRestaurantRef.current = true // Mark as fetched
 
           // Fetch menu and inventory for this restaurant
           // If no restaurant ID, try to find matching restaurant by name
@@ -595,6 +607,11 @@ export default function RestaurantDetails() {
       }
     }
 
+    // Reset fetched flag when slug changes
+    if (fetchedRestaurantRef.current && restaurant?.slug !== slug) {
+      fetchedRestaurantRef.current = false
+    }
+
     // Wait for zone to load before fetching (if zone-based search might be needed)
     // But don't block if we're fetching by direct ID
     if (loadingZone) {
@@ -603,39 +620,61 @@ export default function RestaurantDetails() {
     }
     
     fetchRestaurant()
-  }, [slug, zoneId, loadingZone])
+  }, [slug, zoneId, loadingZone, restaurant?.slug])
+
+  // Track previous values to prevent unnecessary recalculations
+  const prevCoordsRef = useRef({ userLat: null, userLng: null, restaurantLat: null, restaurantLng: null })
+  const prevDistanceRef = useRef(null)
+
+  // Extract restaurant coordinates as stable values (not array references)
+  const restaurantLat = restaurant?.locationObject?.latitude || 
+    (restaurant?.locationObject?.coordinates && Array.isArray(restaurant.locationObject.coordinates) 
+      ? restaurant.locationObject.coordinates[1] 
+      : null)
+  const restaurantLng = restaurant?.locationObject?.longitude || 
+    (restaurant?.locationObject?.coordinates && Array.isArray(restaurant.locationObject.coordinates) 
+      ? restaurant.locationObject.coordinates[0] 
+      : null)
 
   // Recalculate distance when user location updates
   useEffect(() => {
     if (!restaurant || !userLocation?.latitude || !userLocation?.longitude) return
-
-    const locationObj = restaurant.locationObject
-    if (!locationObj) return
-
-    // Get restaurant coordinates
-    const restaurantLat = locationObj?.latitude || (locationObj?.coordinates && Array.isArray(locationObj.coordinates) ? locationObj.coordinates[1] : null)
-    const restaurantLng = locationObj?.longitude || (locationObj?.coordinates && Array.isArray(locationObj.coordinates) ? locationObj.coordinates[0] : null)
-
     if (!restaurantLat || !restaurantLng) return
-
-    // Calculate distance
-    const calculateDistance = (lat1, lng1, lat2, lng2) => {
-      const R = 6371 // Earth's radius in kilometers
-      const dLat = (lat2 - lat1) * Math.PI / 180
-      const dLng = (lng2 - lng1) * Math.PI / 180
-      const a = 
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLng / 2) * Math.sin(dLng / 2)
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-      return R * c // Distance in kilometers
-    }
 
     const userLat = userLocation.latitude
     const userLng = userLocation.longitude
 
+    // Check if coordinates have actually changed (with small threshold to avoid floating point issues)
+    const coordsChanged = 
+      Math.abs(prevCoordsRef.current.userLat - userLat) > 0.0001 ||
+      Math.abs(prevCoordsRef.current.userLng - userLng) > 0.0001 ||
+      Math.abs(prevCoordsRef.current.restaurantLat - restaurantLat) > 0.0001 ||
+      Math.abs(prevCoordsRef.current.restaurantLng - restaurantLng) > 0.0001
+
+    // Skip recalculation if coordinates haven't changed
+    if (!coordsChanged && prevDistanceRef.current !== null) {
+      return
+    }
+
+    // Update refs with current coordinates
+    prevCoordsRef.current = { userLat, userLng, restaurantLat, restaurantLng }
+
     if (userLat && userLng && restaurantLat && restaurantLng && 
         !isNaN(userLat) && !isNaN(userLng) && !isNaN(restaurantLat) && !isNaN(restaurantLng)) {
+      
+      // Calculate distance
+      const calculateDistance = (lat1, lng1, lat2, lng2) => {
+        const R = 6371 // Earth's radius in kilometers
+        const dLat = (lat2 - lat1) * Math.PI / 180
+        const dLng = (lng2 - lng1) * Math.PI / 180
+        const a = 
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLng / 2) * Math.sin(dLng / 2)
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return R * c // Distance in kilometers
+      }
+
       const distanceInKm = calculateDistance(userLat, userLng, restaurantLat, restaurantLng)
       let calculatedDistance = null
       
@@ -647,15 +686,25 @@ export default function RestaurantDetails() {
         calculatedDistance = `${distanceInMeters} m`
       }
       
-      console.log('🔄 Recalculated distance from user to restaurant:', calculatedDistance, 'km:', distanceInKm)
-      
-      // Update restaurant distance
-      setRestaurant(prev => ({
-        ...prev,
-        distance: calculatedDistance
-      }))
+      // Only update if distance actually changed
+      if (calculatedDistance !== prevDistanceRef.current) {
+        console.log('🔄 Recalculated distance from user to restaurant:', calculatedDistance, 'km:', distanceInKm)
+        prevDistanceRef.current = calculatedDistance
+        
+        // Update restaurant distance
+        setRestaurant(prev => {
+          // Only update if distance actually changed to prevent infinite loop
+          if (prev?.distance === calculatedDistance) {
+            return prev
+          }
+          return {
+            ...prev,
+            distance: calculatedDistance
+          }
+        })
+      }
     }
-  }, [userLocation?.latitude, userLocation?.longitude, restaurant?.locationObject])
+  }, [userLocation?.latitude, userLocation?.longitude, restaurantLat, restaurantLng])
 
   // Sync quantities from cart on mount and when restaurant changes
   useEffect(() => {

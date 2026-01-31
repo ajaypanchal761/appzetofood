@@ -9,6 +9,7 @@ export function useLocation() {
 
   const watchIdRef = useRef(null)
   const updateTimerRef = useRef(null)
+  const prevLocationCoordsRef = useRef({ latitude: null, longitude: null })
 
   /* ===================== DB UPDATE (LIVE LOCATION TRACKING) ===================== */
   const updateLocationInDB = async (locationData) => {
@@ -1880,11 +1881,27 @@ export function useLocation() {
               return // Don't update location or save to DB
             }
 
-            console.log("💾 Updating live location:", loc)
-            localStorage.setItem("userLocation", JSON.stringify(loc))
-            setLocation(loc)
-            setPermissionGranted(true)
-            setError(null)
+            // Check if coordinates have changed significantly (threshold: ~10 meters)
+            const coordThreshold = 0.0001 // approximately 10 meters
+            const coordsChanged = 
+              !prevLocationCoordsRef.current.latitude ||
+              !prevLocationCoordsRef.current.longitude ||
+              Math.abs(prevLocationCoordsRef.current.latitude - loc.latitude) > coordThreshold ||
+              Math.abs(prevLocationCoordsRef.current.longitude - loc.longitude) > coordThreshold
+
+            // Only update location state if coordinates changed significantly
+            if (coordsChanged) {
+              prevLocationCoordsRef.current = { latitude: loc.latitude, longitude: loc.longitude }
+              console.log("💾 Updating live location:", loc)
+              localStorage.setItem("userLocation", JSON.stringify(loc))
+              setLocation(loc)
+              setPermissionGranted(true)
+              setError(null)
+            } else {
+              // Coordinates haven't changed significantly, skip state update to prevent re-renders
+              // Still update localStorage silently for persistence
+              localStorage.setItem("userLocation", JSON.stringify(loc))
+            }
 
             // Debounce DB updates - only update every 5 seconds
             clearTimeout(updateTimerRef.current)
