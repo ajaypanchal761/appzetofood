@@ -4,6 +4,7 @@ import Delivery from '../models/Delivery.js';
 import Order from '../../order/models/Order.js';
 import DeliveryWallet from '../models/DeliveryWallet.js';
 import EarningAddon from '../../admin/models/EarningAddon.js';
+import EarningAddonHistory from '../../admin/models/EarningAddonHistory.js';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -209,37 +210,71 @@ export const getActiveEarningAddons = asyncHandler(async (req, res) => {
     // Check validity for each addon and add delivery partner's progress
     const addonsWithProgress = await Promise.all(
       activeAddons.map(async (addon) => {
-        const startDate = new Date(addon.startDate);
-        const endDate = new Date(addon.endDate);
-        
-        // Calculate delivery partner's order count for the offer period
-        // Count orders from start date to now (or end date if offer hasn't started)
-        const countStartDate = now > startDate ? startDate : now;
-        const orderCount = await Order.countDocuments({
-          deliveryPartnerId: delivery._id,
-          status: 'delivered',
-          deliveredAt: {
-            $gte: countStartDate,
-            $lte: now > endDate ? endDate : now
-          }
-        });
+        try {
+          // Use the later of: offer creation date or offer start date
+          const offerStartDate = new Date(addon.startDate);
+          const offerCreatedAt = addon.createdAt ? new Date(addon.createdAt) : offerStartDate;
+          // Count orders from when offer was created (or start date, whichever is later)
+          const countFromDate = offerCreatedAt > offerStartDate ? offerCreatedAt : offerStartDate;
+          const endDate = new Date(addon.endDate);
+          
+          // Calculate delivery partner's order count AFTER offer creation
+          // Count orders from offer creation/start date to now (or end date if offer hasn't started)
+          const countStartDate = now > countFromDate ? countFromDate : now;
+          const orderCount = await Order.countDocuments({
+            deliveryPartnerId: delivery._id,
+            status: 'delivered',
+            deliveredAt: {
+              $gte: countStartDate,
+              $lte: now > endDate ? endDate : now
+            }
+          }).catch(err => {
+            logger.error(`Error counting orders for addon ${addon._id}:`, err);
+            return 0;
+          });
 
-        // Check if offer is currently valid (started and not ended)
-        const isValid = addon.status === 'active' &&
-          now >= startDate &&
-          now <= endDate &&
-          (addon.maxRedemptions === null || addon.currentRedemptions < addon.maxRedemptions);
+          // Check if delivery boy already redeemed this offer
+          const redeemed = await EarningAddonHistory.findOne({
+            earningAddonId: addon._id,
+            deliveryPartnerId: delivery._id,
+            status: 'credited'
+          }).catch(err => {
+            logger.error(`Error checking redemption for addon ${addon._id}:`, err);
+            return null;
+          });
 
-        // Check if offer is upcoming (not started yet)
-        const isUpcoming = addon.status === 'active' && now < startDate;
+          // Check if offer is currently valid (started and not ended)
+          const isValid = addon.status === 'active' &&
+            now >= offerStartDate &&
+            now <= endDate &&
+            (addon.maxRedemptions === null || addon.currentRedemptions < addon.maxRedemptions);
 
-        return {
-          ...addon,
-          isValid,
-          isUpcoming,
-          currentOrders: orderCount,
-          progress: addon.requiredOrders > 0 ? Math.min(orderCount / addon.requiredOrders, 1) : 0
-        };
+          // Check if offer is upcoming (not started yet)
+          const isUpcoming = addon.status === 'active' && now < offerStartDate;
+
+          return {
+            ...addon,
+            isValid,
+            isUpcoming,
+            currentOrders: orderCount || 0,
+            progress: addon.requiredOrders > 0 ? Math.min((orderCount || 0) / addon.requiredOrders, 1) : 0,
+            redeemed: !!redeemed,
+            canRedeem: !redeemed && (orderCount || 0) >= addon.requiredOrders && isValid
+          };
+        } catch (addonError) {
+          logger.error(`Error processing addon ${addon._id}:`, addonError);
+          // Return addon with default values if processing fails
+          return {
+            ...addon,
+            isValid: false,
+            isUpcoming: false,
+            currentOrders: 0,
+            progress: 0,
+            redeemed: false,
+            canRedeem: false,
+            error: 'Failed to process addon'
+          };
+        }
       })
     );
 

@@ -435,6 +435,11 @@ export const restaurantAPI = {
     return apiClient.patch(API_ENDPOINTS.RESTAURANT.ORDER_READY.replace(':id', id));
   },
 
+  // Resend delivery notification for unassigned order
+  resendDeliveryNotification: (id) => {
+    return apiClient.post(API_ENDPOINTS.RESTAURANT.ORDER_RESEND_DELIVERY_NOTIFICATION.replace(':id', id));
+  },
+
   // Get wallet
   getWallet: () => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.WALLET);
@@ -1217,8 +1222,8 @@ export const adminAPI = {
     return apiClient.patch(API_ENDPOINTS.ADMIN.EARNING_ADDON_STATUS.replace(':id', id), { status });
   },
 
-  checkEarningAddonCompletions: (deliveryPartnerId) => {
-    return apiClient.post(API_ENDPOINTS.ADMIN.EARNING_ADDON_CHECK_COMPLETIONS, { deliveryPartnerId });
+  checkEarningAddonCompletions: (deliveryPartnerId, debug = false) => {
+    return apiClient.post(API_ENDPOINTS.ADMIN.EARNING_ADDON_CHECK_COMPLETIONS, { deliveryPartnerId, debug });
   },
 
   // Earning Addon History Management

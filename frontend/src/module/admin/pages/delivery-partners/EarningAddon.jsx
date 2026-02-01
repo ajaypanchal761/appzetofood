@@ -43,7 +43,17 @@ export default function EarningAddon() {
       setIsLoading(true)
       const response = await adminAPI.getEarningAddons()
       if (response.data.success) {
-        setEarningAddons(response.data.data.earningAddons || [])
+        const addons = response.data.data.earningAddons || []
+        console.log('📦 Fetched earning addons:', addons)
+        // Log redemption counts for debugging
+        addons.forEach(addon => {
+          console.log(`📊 Addon "${addon.title}":`, {
+            currentRedemptions: addon.currentRedemptions,
+            maxRedemptions: addon.maxRedemptions,
+            display: `${addon.currentRedemptions || 0} / ${addon.maxRedemptions || '∞'}`
+          })
+        })
+        setEarningAddons(addons)
       } else {
         toast.error(response.data.message || "Failed to fetch earning addons")
       }
@@ -118,6 +128,35 @@ export default function EarningAddon() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
+    // Validation
+    if (!formData.title || !formData.title.trim()) {
+      toast.error("Title is required")
+      return
+    }
+
+    if (!formData.requiredOrders || parseInt(formData.requiredOrders) < 1) {
+      toast.error("Required orders must be at least 1")
+      return
+    }
+
+    if (!formData.earningAmount || parseFloat(formData.earningAmount) <= 0) {
+      toast.error("Earning amount must be greater than 0")
+      return
+    }
+
+    if (!formData.startDate || !formData.endDate) {
+      toast.error("Start date and end date are required")
+      return
+    }
+
+    const startDate = new Date(formData.startDate)
+    const endDate = new Date(formData.endDate)
+    
+    if (endDate <= startDate) {
+      toast.error("End date must be after start date")
+      return
+    }
+
     try {
       const payload = {
         title: formData.title.trim(),
@@ -125,14 +164,18 @@ export default function EarningAddon() {
         earningAmount: parseFloat(formData.earningAmount),
         startDate: formData.startDate,
         endDate: formData.endDate,
-        maxRedemptions: formData.maxRedemptions ? parseInt(formData.maxRedemptions) : null,
+        maxRedemptions: formData.maxRedemptions && formData.maxRedemptions.trim() ? parseInt(formData.maxRedemptions) : null,
       }
 
+      console.log('Submitting earning addon:', { isEditMode, payload })
+
       if (isEditMode && selectedAddon) {
-        await adminAPI.updateEarningAddon(selectedAddon._id, payload)
+        const response = await adminAPI.updateEarningAddon(selectedAddon._id, payload)
+        console.log('Update response:', response.data)
         toast.success("Earning addon updated successfully")
       } else {
-        await adminAPI.createEarningAddon(payload)
+        const response = await adminAPI.createEarningAddon(payload)
+        console.log('Create response:', response.data)
         toast.success("Earning addon created successfully")
       }
 
@@ -140,7 +183,31 @@ export default function EarningAddon() {
       fetchEarningAddons()
     } catch (error) {
       console.error("Error saving earning addon:", error)
-      toast.error(error.response?.data?.message || "Failed to save earning addon")
+      console.error("Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        url: error.config?.url,
+        method: error.config?.method,
+        data: error.config?.data
+      })
+      
+      // Show detailed error message
+      const errorMessage = error.response?.data?.message 
+        || error.response?.data?.error 
+        || error.message 
+        || "Failed to save earning addon"
+      
+      toast.error(errorMessage)
+      
+      // If it's a validation error, show field-specific errors
+      if (error.response?.data?.errors) {
+        const errors = error.response.data.errors
+        Object.keys(errors).forEach(field => {
+          toast.error(`${field}: ${errors[field]}`)
+        })
+      }
     }
   }
 

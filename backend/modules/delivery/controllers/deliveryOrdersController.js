@@ -1712,6 +1712,30 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       // But log it for investigation
     }
 
+    // Check and award earning addon bonuses if delivery boy qualifies
+    let earningAddonBonus = null;
+    try {
+      const { checkAndAwardEarningAddon } = await import('../services/earningAddonService.js');
+      earningAddonBonus = await checkAndAwardEarningAddon(
+        delivery._id,
+        orderMongoId || order._id,
+        updatedOrder.deliveredAt || new Date()
+      );
+      
+      if (earningAddonBonus) {
+        console.log(`🎉 Earning addon bonus awarded: ₹${earningAddonBonus.amount} for offer "${earningAddonBonus.offerTitle}"`);
+        logger.info(`Earning addon bonus awarded to delivery ${delivery._id}`, {
+          offerId: earningAddonBonus.offerId,
+          amount: earningAddonBonus.amount,
+          ordersCompleted: earningAddonBonus.ordersCompleted
+        });
+      }
+    } catch (earningAddonError) {
+      logger.error('❌ Error checking earning addon bonuses:', earningAddonError);
+      console.error('❌ Error processing earning addon bonus:', earningAddonError);
+      // Don't fail the delivery completion if bonus check fails
+    }
+
     // Calculate restaurant commission and update restaurant wallet
     let restaurantWalletTransaction = null;
     let adminCommissionRecord = null;
@@ -1842,6 +1866,13 @@ export const completeDelivery = asyncHandler(async (req, res) => {
       wallet: walletTransaction ? {
         transactionId: walletTransaction._id,
         balance: walletTransaction.amount
+      } : null,
+      earningAddonBonus: earningAddonBonus ? {
+        offerId: earningAddonBonus.offerId,
+        offerTitle: earningAddonBonus.offerTitle,
+        amount: earningAddonBonus.amount,
+        ordersCompleted: earningAddonBonus.ordersCompleted,
+        ordersRequired: earningAddonBonus.ordersRequired
       } : null,
       message: 'Delivery completed successfully'
     };

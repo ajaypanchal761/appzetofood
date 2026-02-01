@@ -1860,6 +1860,62 @@ export default function OrdersMain() {
   )
 }
 
+// Resend Notification Button Component
+function ResendNotificationButton({ orderId, mongoId, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleResend = async (e) => {
+    e.stopPropagation(); // Prevent card click
+    if (loading) return;
+
+    try {
+      setLoading(true);
+      const id = mongoId || orderId;
+      const response = await restaurantAPI.resendDeliveryNotification(id);
+      
+      if (response.data?.success) {
+        toast.success(`Notification sent to ${response.data.data?.notifiedCount || 0} delivery partners`);
+        // Refresh orders if onSuccess callback is provided
+        if (onSuccess) {
+          // Trigger a refresh by calling onSuccess with a special flag
+          setTimeout(() => {
+            window.location.reload(); // Simple refresh for now
+          }, 1000);
+        }
+      } else {
+        toast.error(response.data?.message || 'Failed to send notification');
+      }
+    } catch (error) {
+      console.error('Error resending notification:', error);
+      toast.error(error.response?.data?.message || 'Failed to send notification. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleResend}
+      disabled={loading}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      title="Resend notification to delivery partners"
+    >
+      {loading ? (
+        <>
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Sending...</span>
+        </>
+      ) : (
+        <>
+          <Volume2 className="w-3 h-3" />
+          <span>Resend</span>
+        </>
+      )}
+    </button>
+  );
+}
+
 // Order Card Component
 function OrderCard({
   orderId,
@@ -1895,8 +1951,7 @@ function OrderCard({
           <X className="w-4 h-4" />
         </button>
       )}
-      <button
-        type="button"
+      <div
         onClick={() =>
           onSelect?.({
             orderId,
@@ -1909,7 +1964,7 @@ function OrderCard({
             itemsSummary,
           })
         }
-        className="w-full text-left flex gap-3 items-stretch"
+        className="w-full text-left flex gap-3 items-stretch cursor-pointer"
       >
       {/* Photo */}
       <div className="h-20 w-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0 my-auto">
@@ -1978,7 +2033,7 @@ function OrderCard({
             </p>
             {/* Delivery Assignment Status - Only show for preparing orders */}
             {status === 'preparing' && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
                   deliveryPartnerId 
                     ? 'bg-green-100 text-green-700 border border-green-300' 
@@ -1989,6 +2044,9 @@ function OrderCard({
                   }`} />
                   {deliveryPartnerId ? 'Assigned' : 'Not Assigned'}
                 </span>
+                {!deliveryPartnerId && (
+                  <ResendNotificationButton orderId={orderId} mongoId={mongoId} onSuccess={onSelect} />
+                )}
               </div>
             )}
           </div>
@@ -2003,9 +2061,8 @@ function OrderCard({
           )}
         </div>
       </div>
-
-      </button>
     </div>
+  </div>
   )
 }
 

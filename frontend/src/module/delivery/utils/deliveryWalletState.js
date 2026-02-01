@@ -210,8 +210,8 @@ export const calculatePeriodEarnings = (state, period) => {
   
   return state.transactions
     .filter(t => {
-      // Only count payment transactions, exclude bonus
-      if (t.type !== 'payment') return false
+      // Include both payment and earning_addon transactions in earnings
+      if (t.type !== 'payment' && t.type !== 'earning_addon') return false
       if (t.status !== 'Completed') return false
       
       const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)

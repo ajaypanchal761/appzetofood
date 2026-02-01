@@ -65,9 +65,13 @@ export const createEarningAddon = asyncHandler(async (req, res) => {
       return errorResponse(res, 400, 'Invalid date format');
     }
 
-    // Start date should be today or future
-    const today = new Date(now.setHours(0, 0, 0, 0));
-    if (start < today) {
+    // Start date should be today or future (allow today)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDateOnly = new Date(start);
+    startDateOnly.setHours(0, 0, 0, 0);
+    
+    if (startDateOnly < today) {
       return errorResponse(res, 400, 'Start date must be today or in the future');
     }
 
@@ -177,19 +181,119 @@ export const getEarningAddons = asyncHandler(async (req, res) => {
       }
     }
 
-    // Check validity for each addon
+    // Check validity for each addon and get actual redemption count from history
     const now = new Date();
-    const addonsWithValidity = earningAddons.map(addon => {
-      const isValid = addon.status === 'active' &&
-        now >= new Date(addon.startDate) &&
-        now <= new Date(addon.endDate) &&
-        (addon.maxRedemptions === null || addon.currentRedemptions < addon.maxRedemptions);
-      
-      return {
-        ...addon,
-        isValid
-      };
-    });
+    const addonsWithValidity = await Promise.all(
+      earningAddons.map(async (addon) => {
+        try {
+          // Convert addon._id to ObjectId (lean() returns plain objects)
+          const addonId = mongoose.Types.ObjectId.isValid(addon._id) 
+            ? new mongoose.Types.ObjectId(addon._id.toString())
+            : addon._id;
+
+          // Get actual redemption count from EarningAddonHistory (credited status)
+          // Use $or to match both ObjectId and string formats
+          let actualRedemptions = 0;
+          try {
+            const stringId = addon._id.toString();
+            
+            // Use $or to match both ObjectId and string formats
+            actualRedemptions = await EarningAddonHistory.countDocuments({
+              $or: [
+                { earningAddonId: addonId },
+                { earningAddonId: stringId },
+                { earningAddonId: addon._id } // Also try original format
+              ],
+              status: 'credited'
+            });
+            
+            logger.info(`🔍 Redemption query for addon ${addon.title}:`, {
+              addonId: addonId.toString(),
+              stringId: stringId,
+              count: actualRedemptions,
+              storedCount: addon.currentRedemptions || 0
+            });
+            
+            // Debug: Get all history records for this addon to verify
+            const allHistory = await EarningAddonHistory.find({
+              $or: [
+                { earningAddonId: addonId },
+                { earningAddonId: stringId },
+                { earningAddonId: addon._id }
+              ]
+            }).select('earningAddonId status deliveryPartnerId completedAt').lean();
+            
+            const creditedCount = allHistory.filter(h => h.status === 'credited').length;
+            
+            logger.info(`📋 History records for addon ${addon.title}:`, {
+              total: allHistory.length,
+              credited: creditedCount,
+              pending: allHistory.filter(h => h.status === 'pending').length,
+              records: allHistory.map(h => ({
+                earningAddonId: h.earningAddonId?.toString(),
+                status: h.status,
+                deliveryPartnerId: h.deliveryPartnerId?.toString(),
+                completedAt: h.completedAt
+              }))
+            });
+            
+            // Use the credited count from the filtered results as final value
+            if (creditedCount !== actualRedemptions) {
+              logger.warn(`⚠️ Count mismatch: query=${actualRedemptions}, filtered=${creditedCount}`);
+              actualRedemptions = creditedCount; // Use filtered count
+            }
+            
+          } catch (err) {
+            logger.error(`❌ Error counting redemptions for addon ${addonId}:`, err);
+            logger.error(`❌ Error details:`, {
+              message: err.message,
+              stack: err.stack,
+              addonId: addonId?.toString(),
+              addonIdType: typeof addonId
+            });
+            actualRedemptions = addon.currentRedemptions || 0; // Fallback to stored value
+          }
+
+          logger.info(`📊 Redemption count for addon ${addonId} (${addon.title}): stored=${addon.currentRedemptions || 0}, actual=${actualRedemptions}`);
+
+          // Update currentRedemptions if there's a discrepancy (sync with actual count)
+          if (actualRedemptions !== (addon.currentRedemptions || 0)) {
+            try {
+              await EarningAddon.updateOne(
+                { _id: addonId },
+                { $set: { currentRedemptions: actualRedemptions } }
+              );
+              logger.info(`✅ Updated redemption count for addon ${addonId}: ${addon.currentRedemptions || 0} -> ${actualRedemptions}`);
+            } catch (updateError) {
+              logger.error(`❌ Error updating redemption count for addon ${addonId}:`, updateError);
+            }
+          }
+
+          const isValid = addon.status === 'active' &&
+            now >= new Date(addon.startDate) &&
+            now <= new Date(addon.endDate) &&
+            (addon.maxRedemptions === null || actualRedemptions < addon.maxRedemptions);
+        
+          // Ensure currentRedemptions is always a number
+          const finalRedemptions = typeof actualRedemptions === 'number' ? actualRedemptions : (addon.currentRedemptions || 0);
+          
+          logger.info(`✅ Final redemption count for addon ${addon.title}: ${finalRedemptions}`);
+          
+          return {
+            ...addon,
+            currentRedemptions: finalRedemptions, // Use actual count from history
+            isValid
+          };
+        } catch (error) {
+          logger.error(`Error processing addon ${addon._id}:`, error);
+          // Return addon with stored redemption count if error occurs
+          return {
+            ...addon,
+            isValid: false
+          };
+        }
+      })
+    );
 
     return successResponse(res, 200, 'Earning addons retrieved successfully', {
       earningAddons: addonsWithValidity,
@@ -402,7 +506,7 @@ export const toggleEarningAddonStatus = asyncHandler(async (req, res) => {
  */
 export const checkEarningAddonCompletions = asyncHandler(async (req, res) => {
   try {
-    const { deliveryPartnerId } = req.body;
+    const { deliveryPartnerId, debug = false } = req.body;
 
     if (!deliveryPartnerId) {
       return errorResponse(res, 400, 'Delivery partner ID is required');
@@ -421,7 +525,14 @@ export const checkEarningAddonCompletions = asyncHandler(async (req, res) => {
     const now = new Date();
     const activeAddons = await EarningAddon.getActiveOffers(now);
 
+    logger.info(`Checking completions for delivery ${deliveryPartnerId}`, {
+      activeAddonsCount: activeAddons.length,
+      deliveryName: deliveryPartner.name,
+      deliveryId: deliveryPartner.deliveryId
+    });
+
     const completions = [];
+    const debugInfo = [];
 
     for (const addon of activeAddons) {
       // Check if already completed for this addon
@@ -432,6 +543,14 @@ export const checkEarningAddonCompletions = asyncHandler(async (req, res) => {
       });
 
       if (existingCompletion) {
+        if (debug) {
+          debugInfo.push({
+            addonId: addon._id,
+            addonTitle: addon.title,
+            status: 'already_completed',
+            existingHistoryId: existingCompletion._id
+          });
+        }
         continue; // Already completed
       }
 
@@ -448,6 +567,20 @@ export const checkEarningAddonCompletions = asyncHandler(async (req, res) => {
           $lte: endDate
         }
       });
+
+      // Debug info
+      if (debug) {
+        debugInfo.push({
+          addonId: addon._id,
+          addonTitle: addon.title,
+          requiredOrders: addon.requiredOrders,
+          completedOrders: completedOrders,
+          startDate: startDate,
+          endDate: endDate,
+          qualifies: completedOrders >= addon.requiredOrders,
+          status: completedOrders >= addon.requiredOrders ? 'qualifies' : 'not_enough_orders'
+        });
+      }
 
       // Check if requirement is met
       if (completedOrders >= addon.requiredOrders) {
@@ -494,13 +627,20 @@ export const checkEarningAddonCompletions = asyncHandler(async (req, res) => {
         addon.currentRedemptions += 1;
         await addon.save();
 
+        logger.info(`Created completion record for delivery ${deliveryPartnerId}`, {
+          completionId: completion._id,
+          addonTitle: addon.title,
+          ordersCompleted: completedOrders
+        });
+
         completions.push(completion);
       }
     }
 
     return successResponse(res, 200, 'Completions checked successfully', {
       completionsFound: completions.length,
-      completions
+      completions,
+      ...(debug && { debugInfo })
     });
   } catch (error) {
     logger.error(`Error checking earning addon completions: ${error.message}`, { error: error.stack });

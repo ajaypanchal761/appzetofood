@@ -33,8 +33,28 @@ export const getEarningAddonHistory = asyncHandler(async (req, res) => {
       startDate,
       endDate,
       sortBy = 'completedAt',
-      sortOrder = 'desc'
+      sortOrder = 'desc',
+      debug = false
     } = req.query;
+
+    // Debug: Check total records in database
+    if (debug === 'true' || debug === '1') {
+      const totalRecords = await EarningAddonHistory.countDocuments({});
+      const recordsByStatus = await EarningAddonHistory.aggregate([
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      
+      logger.info('🔍 DEBUG: Earning Addon History Statistics', {
+        totalRecords,
+        recordsByStatus,
+        sampleRecords: await EarningAddonHistory.find({}).limit(3).lean()
+      });
+    }
 
     const query = {};
 
@@ -82,6 +102,17 @@ export const getEarningAddonHistory = asyncHandler(async (req, res) => {
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    // Get total count first (before population for accurate count)
+    const total = await EarningAddonHistory.countDocuments(query);
+    
+    logger.info(`Fetching earning addon history:`, {
+      query,
+      total,
+      page,
+      limit,
+      skip
+    });
+
     // Get history with population
     let history = await EarningAddonHistory.find(searchQuery)
       .populate('earningAddonId', 'title requiredOrders earningAmount startDate endDate')
@@ -91,6 +122,20 @@ export const getEarningAddonHistory = asyncHandler(async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
+
+    logger.info(`Found ${history.length} history records after query`);
+
+    // Log if any records have null populated fields
+    history.forEach((item, idx) => {
+      if (!item.earningAddonId || !item.deliveryPartnerId) {
+        logger.warn(`History record ${idx} has null populated fields:`, {
+          _id: item._id,
+          earningAddonId: item.earningAddonId,
+          deliveryPartnerId: item.deliveryPartnerId,
+          offerSnapshot: item.offerSnapshot
+        });
+      }
+    });
 
     // Apply search filter if provided
     if (search) {
@@ -109,31 +154,47 @@ export const getEarningAddonHistory = asyncHandler(async (req, res) => {
       });
     }
 
-    // Format response
-    const formattedHistory = history.map((item, index) => ({
-      sl: skip + index + 1,
-      _id: item._id,
-      deliveryman: item.deliveryPartnerId?.name || 'Unknown',
-      deliveryPartnerId: item.deliveryPartnerId?._id?.toString() || '',
-      deliveryId: item.deliveryPartnerId?.deliveryId || 'N/A',
-      zone: item.metadata?.zone || 'N/A',
-      totalEarning: item.earningAmount,
-      incentive: item.earningAmount, // For compatibility with frontend
-      ordersCompleted: item.ordersCompleted,
-      ordersRequired: item.ordersRequired,
-      offerTitle: item.earningAddonId?.title || 'N/A',
-      earningAddonId: item.earningAddonId?._id?.toString() || '',
-      date: new Date(item.completedAt).toISOString().split('T')[0],
-      completedAt: item.completedAt,
-      status: item.status,
-      transactionId: item.transactionId?.toString() || null,
-      contributingOrders: item.contributingOrders || [],
-      processedBy: item.processedBy?.name || null,
-      processedAt: item.processedAt || null
-    }));
+    // Format response - handle cases where populate might fail
+    const formattedHistory = history.map((item, index) => {
+      // Use offerSnapshot if earningAddonId is not populated
+      const offerTitle = item.earningAddonId?.title || item.offerSnapshot?.title || 'Unknown Offer';
+      const earningAddonId = item.earningAddonId?._id?.toString() || item.earningAddonId?.toString() || '';
+      
+      // Use delivery partner data or fallback
+      const deliveryName = item.deliveryPartnerId?.name || 'Unknown Delivery Partner';
+      const deliveryId = item.deliveryPartnerId?.deliveryId || 'N/A';
+      const deliveryPhone = item.deliveryPartnerId?.phone || 'N/A';
+      const deliveryPartnerId = item.deliveryPartnerId?._id?.toString() || item.deliveryPartnerId?.toString() || '';
 
-    // Get total count (for pagination)
-    const total = await EarningAddonHistory.countDocuments(query);
+      return {
+        sl: skip + index + 1,
+        _id: item._id,
+        deliveryman: deliveryName,
+        deliveryPartnerId: deliveryPartnerId,
+        deliveryId: deliveryId,
+        deliveryPhone: deliveryPhone,
+        zone: item.metadata?.zone || 'N/A',
+        totalEarning: item.earningAmount || 0,
+        earningAmount: item.earningAmount || 0,
+        incentive: item.earningAmount || 0, // For compatibility with frontend
+        ordersCompleted: item.ordersCompleted || 0,
+        ordersRequired: item.ordersRequired || 0,
+        offerTitle: offerTitle,
+        earningAddonId: earningAddonId,
+        date: item.completedAt ? new Date(item.completedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        completedAt: item.completedAt,
+        status: item.status || 'pending',
+        transactionId: item.transactionId?.toString() || null,
+        contributingOrders: item.contributingOrders || [],
+        processedBy: item.processedBy?.name || null,
+        processedAt: item.processedAt || null,
+        notes: item.notes || null
+      };
+    });
+
+    logger.info(`Formatted ${formattedHistory.length} history records for response`);
+
+    logger.info(`Returning ${formattedHistory.length} history records (total: ${total})`);
 
     return successResponse(res, 200, 'Earning addon history retrieved successfully', {
       history: formattedHistory,

@@ -172,6 +172,7 @@ export const API_ENDPOINTS = {
     ORDER_REJECT: '/restaurant/orders/:id/reject',
     ORDER_PREPARING: '/restaurant/orders/:id/preparing',
     ORDER_READY: '/restaurant/orders/:id/ready',
+    ORDER_RESEND_DELIVERY_NOTIFICATION: '/restaurant/orders/:id/resend-delivery-notification',
     FINANCE: '/restaurant/finance',
     WALLET: '/restaurant/wallet',
     WALLET_TRANSACTIONS: '/restaurant/wallet/transactions',

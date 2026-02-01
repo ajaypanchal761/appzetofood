@@ -825,11 +825,12 @@ export default function DeliveryHome() {
   // Calculate today's gigs count
   const todayGigsCount = bookedGigs.filter(gig => gig.date === todayDateKey).length
 
-  // Calculate weekly earnings from wallet transactions (only payment, not bonus for guarantee display)
-  // Bonus is included in totalBalance and pocket balance, but not in earnings guarantee
+  // Calculate weekly earnings from wallet transactions (payment + earning_addon bonus)
+  // Include both payment and earning_addon transactions in weekly earnings
   const weeklyEarnings = walletState?.transactions
     ?.filter(t => {
-      if (t.type !== 'payment' || t.status !== 'Completed') return false
+      // Include both payment and earning_addon transactions
+      if ((t.type !== 'payment' && t.type !== 'earning_addon') || t.status !== 'Completed') return false
       const now = new Date()
       const startOfWeek = new Date(now)
       startOfWeek.setDate(now.getDate() - now.getDay())
