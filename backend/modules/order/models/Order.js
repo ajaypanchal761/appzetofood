@@ -260,7 +260,7 @@ const orderSchema = new mongoose.Schema({
     distance: Number, // Distance in km
     assignedBy: {
       type: String,
-      enum: ['zone_match', 'nearest_distance', 'manual', 'nearest_available']
+      enum: ['zone_match', 'nearest_distance', 'manual', 'nearest_available', 'delivery_accept']
     },
     zoneId: String,
     zoneName: String,
@@ -285,7 +285,8 @@ const orderSchema = new mongoose.Schema({
       coordinates: [[Number]], // [[lat, lng], ...]
       distance: Number, // in km
       duration: Number, // in minutes
-      calculatedAt: Date
+      calculatedAt: Date,
+      method: String // 'osrm', 'dijkstra', 'haversine_fallback'
     },
     routeToDelivery: {
       coordinates: [[Number]], // [[lat, lng], ...]

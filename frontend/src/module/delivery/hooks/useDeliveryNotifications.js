@@ -318,6 +318,15 @@ export const useDeliveryNotifications = () => {
       playNotificationSound();
     });
 
+    // Listen for priority-based order notifications (new_order_available)
+    socketRef.current.on('new_order_available', (orderData) => {
+      console.log('📦 New order available (priority notification):', orderData);
+      console.log('📦 Notification phase:', orderData.phase || 'unknown');
+      // Treat it the same as new_order for now - delivery boy can accept it
+      setNewOrder(orderData);
+      playNotificationSound();
+    });
+
     socketRef.current.on('play_notification_sound', (data) => {
       console.log('🔔 Sound notification:', data);
       playNotificationSound();

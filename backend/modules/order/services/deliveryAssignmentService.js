@@ -2,6 +2,7 @@ import Delivery from '../../delivery/models/Delivery.js';
 import Order from '../models/Order.js';
 import Zone from '../../admin/models/Zone.js';
 import Restaurant from '../../restaurant/models/Restaurant.js';
+import mongoose from 'mongoose';
 
 /**
  * Calculate distance between two coordinates using Haversine formula
@@ -24,14 +25,128 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
 }
 
 /**
+ * Find all nearest available delivery boys within priority distance (for priority notification)
+ * @param {number} restaurantLat - Restaurant latitude
+ * @param {number} restaurantLng - Restaurant longitude
+ * @param {string} restaurantId - Restaurant ID (for zone lookup)
+ * @param {number} priorityDistance - Priority distance in km (default: 5km)
+ * @returns {Promise<Array>} Array of delivery boys within priority distance
+ */
+export async function findNearestDeliveryBoys(restaurantLat, restaurantLng, restaurantId = null, priorityDistance = 5) {
+  try {
+    console.log(`🔍 Searching for priority delivery partners within ${priorityDistance}km of restaurant: ${restaurantLat}, ${restaurantLng}`);
+    
+    // Use the same logic as findNearestDeliveryBoy but return all within priority distance
+    let zone = null;
+    let deliveryQuery = {
+      'availability.isOnline': true,
+      status: { $in: ['approved', 'active'] },
+      isActive: true,
+      'availability.currentLocation.coordinates': {
+        $exists: true,
+        $ne: [0, 0]
+      }
+    };
+
+    if (restaurantId) {
+      try {
+        const restaurantIdObj = restaurantId.toString ? restaurantId.toString() : restaurantId;
+        zone = await Zone.findOne({
+          restaurantId: restaurantIdObj,
+          isActive: true
+        }).lean();
+
+        if (zone) {
+          console.log(`✅ Found zone: ${zone.name} for restaurant ${restaurantId}`);
+        }
+      } catch (zoneError) {
+        console.warn(`⚠️ Error finding zone:`, zoneError.message);
+      }
+    }
+
+    const deliveryPartners = await Delivery.find(deliveryQuery)
+      .select('_id name phone availability.currentLocation availability.lastLocationUpdate status isActive zoneId')
+      .lean();
+
+    console.log(`📊 Found ${deliveryPartners?.length || 0} online delivery partners`);
+
+    if (!deliveryPartners || deliveryPartners.length === 0) {
+      return [];
+    }
+
+    // Calculate distance and filter
+    const deliveryPartnersWithDistance = deliveryPartners
+      .map(partner => {
+        const location = partner.availability?.currentLocation;
+        if (!location || !location.coordinates || location.coordinates.length < 2) {
+          return null;
+        }
+
+        const [lng, lat] = location.coordinates;
+        if (lat === 0 && lng === 0) {
+          return null;
+        }
+
+        // Zone filtering (same as findNearestDeliveryBoy)
+        if (zone) {
+          if (partner.zoneId && partner.zoneId.toString() !== zone._id.toString()) {
+            return null;
+          }
+          if (!partner.zoneId && zone.coordinates && zone.coordinates.length >= 3) {
+            const zoneCoords = zone.coordinates;
+            let inside = false;
+            for (let i = 0, j = zoneCoords.length - 1; i < zoneCoords.length; j = i++) {
+              const xi = zoneCoords[i].longitude;
+              const yi = zoneCoords[i].latitude;
+              const xj = zoneCoords[j].longitude;
+              const yj = zoneCoords[j].latitude;
+              const intersect = ((yi > lat) !== (yj > lat)) &&
+                (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+              if (intersect) inside = !inside;
+            }
+            if (!inside) return null;
+          }
+        }
+
+        const distance = calculateDistance(restaurantLat, restaurantLng, lat, lng);
+        return {
+          ...partner,
+          distance,
+          latitude: lat,
+          longitude: lng,
+          zoneId: partner.zoneId || null
+        };
+      })
+      .filter(partner => partner !== null && partner.distance <= priorityDistance)
+      .sort((a, b) => a.distance - b.distance);
+
+    console.log(`✅ Found ${deliveryPartnersWithDistance.length} priority delivery partners within ${priorityDistance}km`);
+    return deliveryPartnersWithDistance.map(partner => ({
+      deliveryPartnerId: partner._id.toString(),
+      name: partner.name,
+      phone: partner.phone,
+      distance: partner.distance,
+      location: {
+        latitude: partner.latitude,
+        longitude: partner.longitude
+      }
+    }));
+  } catch (error) {
+    console.error('❌ Error finding nearest delivery boys:', error);
+    return [];
+  }
+}
+
+/**
  * Find the nearest available delivery boy to a restaurant location (with zone-based filtering)
  * @param {number} restaurantLat - Restaurant latitude
  * @param {number} restaurantLng - Restaurant longitude
  * @param {string} restaurantId - Restaurant ID (for zone lookup)
  * @param {number} maxDistance - Maximum distance in km (default: 50km)
+ * @param {Array} excludeIds - Array of delivery partner IDs to exclude (already notified)
  * @returns {Promise<Object|null>} Nearest delivery boy or null
  */
-export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, restaurantId = null, maxDistance = 50) {
+export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, restaurantId = null, maxDistance = 50, excludeIds = []) {
   try {
     console.log(`🔍 Searching for nearest delivery partner near restaurant: ${restaurantLat}, ${restaurantLng} (Restaurant ID: ${restaurantId})`);
     
@@ -76,6 +191,17 @@ export async function findNearestDeliveryBoy(restaurantLat, restaurantLng, resta
       } catch (zoneError) {
         console.warn(`⚠️ Error finding zone for restaurant ${restaurantId}:`, zoneError.message);
         // Continue with distance-based assignment
+      }
+    }
+
+    // Exclude already notified delivery partners
+    if (excludeIds && excludeIds.length > 0) {
+      const excludeObjectIds = excludeIds
+        .filter(id => mongoose.Types.ObjectId.isValid(id))
+        .map(id => new mongoose.Types.ObjectId(id));
+      if (excludeObjectIds.length > 0) {
+        deliveryQuery._id = { $nin: excludeObjectIds };
+        console.log(`🚫 Excluding ${excludeObjectIds.length} already notified delivery partners`);
       }
     }
 

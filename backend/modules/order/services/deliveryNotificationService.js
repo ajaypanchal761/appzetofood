@@ -326,6 +326,248 @@ export async function notifyDeliveryBoyNewOrder(order, deliveryPartnerId) {
 }
 
 /**
+ * Notify multiple delivery boys about new order (without assigning)
+ * Used for priority-based notification where nearest delivery boys get first chance
+ * @param {Object} order - Order document
+ * @param {Array} deliveryPartnerIds - Array of delivery partner IDs to notify
+ * @param {string} phase - Notification phase: 'priority' or 'expanded'
+ * @returns {Promise<{success: boolean, notified: number}>}
+ */
+export async function notifyMultipleDeliveryBoys(order, deliveryPartnerIds, phase = 'priority') {
+  try {
+    if (!deliveryPartnerIds || deliveryPartnerIds.length === 0) {
+      return { success: false, notified: 0 };
+    }
+
+    const io = await getIOInstance();
+    if (!io) {
+      console.warn('Socket.IO not initialized, skipping delivery boy notifications');
+      return { success: false, notified: 0 };
+    }
+
+    const deliveryNamespace = io.of('/delivery');
+    let notifiedCount = 0;
+
+    // Populate userId if needed
+    let orderWithUser = order;
+    if (order.userId && typeof order.userId === 'object' && order.userId._id) {
+      orderWithUser = order;
+    } else if (order.userId) {
+      const OrderModel = await import('../models/Order.js');
+      orderWithUser = await OrderModel.default.findById(order._id)
+        .populate('userId', 'name phone')
+        .lean();
+    }
+
+    // Get restaurant details for complete address
+    let restaurantAddress = 'Restaurant address';
+    let restaurantLocation = null;
+    
+    if (orderWithUser.restaurantId) {
+      // If restaurantId is populated, use it directly
+      if (typeof orderWithUser.restaurantId === 'object') {
+        restaurantAddress = orderWithUser.restaurantId.address || 
+                          orderWithUser.restaurantId.location?.formattedAddress ||
+                          orderWithUser.restaurantId.location?.address ||
+                          'Restaurant address';
+        restaurantLocation = orderWithUser.restaurantId.location;
+      } else {
+        // If restaurantId is just an ID, fetch restaurant details
+        try {
+          const RestaurantModel = await import('../../restaurant/models/Restaurant.js');
+          const restaurant = await RestaurantModel.default.findById(orderWithUser.restaurantId)
+            .select('name address location')
+            .lean();
+          if (restaurant) {
+            restaurantAddress = restaurant.address || 
+                              restaurant.location?.formattedAddress ||
+                              restaurant.location?.address ||
+                              'Restaurant address';
+            restaurantLocation = restaurant.location;
+          }
+        } catch (e) {
+          console.warn('⚠️ Could not fetch restaurant details for notification:', e.message);
+        }
+      }
+    }
+
+    // Calculate delivery distance (restaurant to customer) for earnings calculation
+    let deliveryDistance = 0;
+    
+    console.log(`🔍 Calculating earnings for order ${orderWithUser.orderId}:`, {
+      hasRestaurantLocation: !!restaurantLocation,
+      restaurantCoords: restaurantLocation?.coordinates,
+      hasAddressLocation: !!orderWithUser.address?.location,
+      addressCoords: orderWithUser.address?.location?.coordinates
+    });
+    
+    if (restaurantLocation?.coordinates && orderWithUser.address?.location?.coordinates) {
+      const [restaurantLng, restaurantLat] = restaurantLocation.coordinates;
+      const [customerLng, customerLat] = orderWithUser.address.location.coordinates;
+      
+      // Validate coordinates
+      if (restaurantLat && restaurantLng && customerLat && customerLng &&
+          !isNaN(restaurantLat) && !isNaN(restaurantLng) && 
+          !isNaN(customerLat) && !isNaN(customerLng)) {
+        // Calculate distance using Haversine formula
+        const R = 6371; // Earth radius in km
+        const dLat = (customerLat - restaurantLat) * Math.PI / 180;
+        const dLng = (customerLng - restaurantLng) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(restaurantLat * Math.PI / 180) * Math.cos(customerLat * Math.PI / 180) *
+                  Math.sin(dLng/2) * Math.sin(dLng/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        deliveryDistance = R * c;
+        console.log(`✅ Calculated delivery distance: ${deliveryDistance.toFixed(2)} km`);
+      } else {
+        console.warn('⚠️ Invalid coordinates for distance calculation');
+      }
+    } else {
+      console.warn('⚠️ Missing coordinates for distance calculation');
+    }
+
+    // Calculate estimated earnings based on delivery distance
+    let estimatedEarnings = null;
+    const deliveryFeeFromOrder = orderWithUser.pricing?.deliveryFee ?? 0;
+    
+    try {
+      estimatedEarnings = await calculateEstimatedEarnings(deliveryDistance);
+      const earnedValue = typeof estimatedEarnings === 'object' ? (estimatedEarnings.totalEarning ?? 0) : (Number(estimatedEarnings) || 0);
+      
+      console.log(`💰 Earnings calculation result:`, {
+        estimatedEarnings,
+        earnedValue,
+        deliveryFeeFromOrder,
+        deliveryDistance
+      });
+      
+      // Use deliveryFee as fallback if earnings is 0 or invalid
+      if (earnedValue <= 0 && deliveryFeeFromOrder > 0) {
+        console.log(`⚠️ Earnings is 0, using deliveryFee as fallback: ₹${deliveryFeeFromOrder}`);
+        estimatedEarnings = typeof estimatedEarnings === 'object'
+          ? { ...estimatedEarnings, totalEarning: deliveryFeeFromOrder }
+          : deliveryFeeFromOrder;
+      }
+      
+      console.log(`✅ Final estimated earnings for order ${orderWithUser.orderId}: ₹${typeof estimatedEarnings === 'object' ? estimatedEarnings.totalEarning : estimatedEarnings} (distance: ${deliveryDistance.toFixed(2)} km)`);
+    } catch (earningsError) {
+      console.error('❌ Error calculating estimated earnings in notification:', earningsError);
+      console.error('❌ Error stack:', earningsError.stack);
+      // Fallback to deliveryFee or default
+      estimatedEarnings = deliveryFeeFromOrder > 0 ? deliveryFeeFromOrder : {
+        basePayout: 10,
+        distance: deliveryDistance,
+        commissionPerKm: 5,
+        distanceCommission: 0,
+        totalEarning: 10,
+        breakdown: 'Default calculation'
+      };
+      console.log(`⚠️ Using fallback earnings: ₹${typeof estimatedEarnings === 'object' ? estimatedEarnings.totalEarning : estimatedEarnings}`);
+    }
+
+    // Prepare notification payload
+    const orderNotification = {
+      orderId: orderWithUser.orderId || orderWithUser._id,
+      mongoId: orderWithUser._id?.toString(),
+      orderMongoId: orderWithUser._id?.toString(), // Also include orderMongoId for compatibility
+      status: orderWithUser.status || 'preparing',
+      restaurantName: orderWithUser.restaurantName || orderWithUser.restaurantId?.name,
+      restaurantAddress: restaurantAddress,
+      restaurantLocation: restaurantLocation ? {
+        latitude: restaurantLocation.coordinates?.[1],
+        longitude: restaurantLocation.coordinates?.[0],
+        address: restaurantLocation.formattedAddress || restaurantLocation.address || restaurantAddress,
+        formattedAddress: restaurantLocation.formattedAddress || restaurantLocation.address || restaurantAddress
+      } : null,
+      customerName: orderWithUser.userId?.name || 'Customer',
+      customerPhone: orderWithUser.userId?.phone || '',
+      deliveryAddress: orderWithUser.address?.address || orderWithUser.address?.location?.address || orderWithUser.address?.formattedAddress,
+      customerLocation: orderWithUser.address?.location ? {
+        latitude: orderWithUser.address.location.coordinates?.[1],
+        longitude: orderWithUser.address.location.coordinates?.[0],
+        address: orderWithUser.address.formattedAddress || orderWithUser.address.address
+      } : null,
+      totalAmount: orderWithUser.pricing?.total || 0,
+      deliveryFee: deliveryFeeFromOrder,
+      estimatedEarnings: estimatedEarnings, // Include calculated earnings
+      deliveryDistance: deliveryDistance > 0 ? `${deliveryDistance.toFixed(2)} km` : 'Calculating...',
+      paymentMethod: orderWithUser.payment?.method || 'cash',
+      message: `New order available: ${orderWithUser.orderId || orderWithUser._id}`,
+      timestamp: new Date().toISOString(),
+      phase: phase, // 'priority' or 'expanded'
+      // Include restaurant coordinates
+      restaurantLat: restaurantLocation?.coordinates?.[1] || orderWithUser.restaurantId?.location?.coordinates?.[1],
+      restaurantLng: restaurantLocation?.coordinates?.[0] || orderWithUser.restaurantId?.location?.coordinates?.[0],
+      // Include delivery coordinates
+      deliveryLat: orderWithUser.address?.location?.coordinates?.[1] || orderWithUser.address?.location?.latitude,
+      deliveryLng: orderWithUser.address?.location?.coordinates?.[0] || orderWithUser.address?.location?.longitude,
+      // Include full order for frontend use
+      fullOrder: orderWithUser
+    };
+
+    console.log(`📤 Notification payload for order ${orderWithUser.orderId}:`, {
+      orderId: orderNotification.orderId,
+      estimatedEarnings: orderNotification.estimatedEarnings,
+      estimatedEarningsType: typeof orderNotification.estimatedEarnings,
+      estimatedEarningsValue: typeof orderNotification.estimatedEarnings === 'object' ? orderNotification.estimatedEarnings.totalEarning : orderNotification.estimatedEarnings,
+      deliveryDistance: orderNotification.deliveryDistance,
+      deliveryFee: orderNotification.deliveryFee,
+      hasRestaurantLocation: !!orderNotification.restaurantLocation,
+      hasCustomerLocation: !!orderNotification.customerLocation
+    });
+
+    // Notify each delivery partner
+    for (const deliveryPartnerId of deliveryPartnerIds) {
+      try {
+        const normalizedId = deliveryPartnerId?.toString() || deliveryPartnerId;
+        const roomVariations = [
+          `delivery:${normalizedId}`,
+          `delivery:${deliveryPartnerId}`,
+          ...(mongoose.Types.ObjectId.isValid(normalizedId)
+            ? [`delivery:${new mongoose.Types.ObjectId(normalizedId).toString()}`]
+            : [])
+        ];
+
+        let notificationSent = false;
+        for (const room of roomVariations) {
+          const sockets = await deliveryNamespace.in(room).fetchSockets();
+          if (sockets.length > 0) {
+            deliveryNamespace.to(room).emit('new_order_available', orderNotification);
+            deliveryNamespace.to(room).emit('play_notification_sound', {
+              type: 'new_order_available',
+              orderId: order.orderId,
+              message: `New order available: ${order.orderId}`,
+              phase: phase
+            });
+            notificationSent = true;
+            notifiedCount++;
+            console.log(`📤 Notified delivery partner ${normalizedId} in room: ${room} (phase: ${phase})`);
+            break;
+          }
+        }
+
+        if (!notificationSent) {
+          console.warn(`⚠️ Delivery partner ${normalizedId} not connected, but will receive notification when they connect`);
+          // Still emit to room for when they connect
+          roomVariations.forEach(room => {
+            deliveryNamespace.to(room).emit('new_order_available', orderNotification);
+          });
+          notifiedCount++;
+        }
+      } catch (partnerError) {
+        console.error(`❌ Error notifying delivery partner ${deliveryPartnerId}:`, partnerError);
+      }
+    }
+
+    console.log(`✅ Notified ${notifiedCount} delivery partners (phase: ${phase}) for order ${order.orderId}`);
+    return { success: true, notified: notifiedCount };
+  } catch (error) {
+    console.error('❌ Error notifying multiple delivery boys:', error);
+    return { success: false, notified: 0 };
+  }
+}
+
+/**
  * Notify delivery boy that order is ready for pickup
  * @param {Object} order - Order document
  * @param {string} deliveryPartnerId - Delivery partner ID
@@ -423,32 +665,29 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
  */
 async function calculateEstimatedEarnings(deliveryDistance) {
   try {
+    const DeliveryBoyCommission = (await import('../../admin/models/DeliveryBoyCommission.js')).default;
+    
+    // Always use calculateCommission method which handles all cases including distance = 0
+    // It will return base payout even if distance is 0
+    const deliveryDistanceForCalc = deliveryDistance || 0;
+    const commissionResult = await DeliveryBoyCommission.calculateCommission(deliveryDistanceForCalc);
+    
+    // If distance is 0 or not provided, still return base payout
     if (!deliveryDistance || deliveryDistance <= 0) {
-      // If no distance, return base payout only
-      const DeliveryBoyCommission = (await import('../../admin/models/DeliveryBoyCommission.js')).default;
-      const rules = await DeliveryBoyCommission.find({ status: true }).sort({ minDistance: 1 }).limit(1).lean();
-      if (rules.length > 0) {
-        return {
-          basePayout: rules[0].basePayout,
-          distance: 0,
-          commissionPerKm: 0,
-          distanceCommission: 0,
-          totalEarning: rules[0].basePayout,
-          breakdown: `Base payout: ₹${rules[0].basePayout}`
-        };
-      }
+      console.log(`💰 Distance is 0 or missing, returning base payout only: ₹${commissionResult.breakdown.basePayout}`);
       return {
-        basePayout: 10,
+        basePayout: commissionResult.breakdown.basePayout,
         distance: 0,
-        commissionPerKm: 0,
+        commissionPerKm: commissionResult.breakdown.commissionPerKm,
         distanceCommission: 0,
-        totalEarning: 10,
-        breakdown: 'Base payout: ₹10'
+        totalEarning: commissionResult.breakdown.basePayout, // Base payout only when distance is 0
+        breakdown: `Base payout: ₹${commissionResult.breakdown.basePayout}`,
+        minDistance: commissionResult.rule.minDistance,
+        maxDistance: commissionResult.rule.maxDistance
       };
     }
 
-    const DeliveryBoyCommission = (await import('../../admin/models/DeliveryBoyCommission.js')).default;
-    const commissionResult = await DeliveryBoyCommission.calculateCommission(deliveryDistance);
+    // Use the already calculated commissionResult for distance > 0
     
     const basePayout = commissionResult.breakdown.basePayout;
     const distance = deliveryDistance;

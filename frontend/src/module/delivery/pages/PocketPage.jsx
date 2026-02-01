@@ -258,13 +258,48 @@ export default function PocketPage() {
     }
   }, [])
 
+  // Calculate bonus earnings from earning_addon transactions (only for active offer)
+  const calculateBonusEarnings = () => {
+    if (!activeEarningAddon || !walletState?.transactions) return 0
+    
+    const now = new Date()
+    const startDate = activeEarningAddon.startDate ? new Date(activeEarningAddon.startDate) : null
+    const endDate = activeEarningAddon.endDate ? new Date(activeEarningAddon.endDate) : null
+    
+    return walletState.transactions
+      .filter(t => {
+        // Only count earning_addon type transactions
+        if (t.type !== 'earning_addon' || t.status !== 'Completed') return false
+        
+        // Filter by date range if offer has dates
+        if (startDate || endDate) {
+          const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+          if (!transactionDate) return false
+          
+          if (startDate && transactionDate < startDate) return false
+          if (endDate && transactionDate > endDate) return false
+        }
+        
+        // Check if transaction is related to current offer
+        if (t.metadata?.earningAddonId) {
+          return t.metadata.earningAddonId === activeEarningAddon._id?.toString() || 
+                 t.metadata.earningAddonId === activeEarningAddon.id?.toString()
+        }
+        
+        // If no metadata, include all earning_addon transactions in date range
+        return true
+      })
+      .reduce((sum, t) => sum + (t.amount || 0), 0)
+  }
+
   // Earnings Guarantee - Use active earning addon if available, otherwise show 0
   // When no offer is active, show 0 of 0 and ₹0
   const earningsGuaranteeTarget = activeEarningAddon?.earningAmount || 0
   const earningsGuaranteeOrdersTarget = activeEarningAddon?.requiredOrders || 0
   // Only show current orders/earnings if there's an active offer
   const earningsGuaranteeCurrentOrders = activeEarningAddon ? (activeEarningAddon.currentOrders ?? weeklyOrders) : 0
-  const earningsGuaranteeCurrentEarnings = activeEarningAddon ? weeklyEarnings : 0
+  // Show only bonus earnings from the offer, not total weekly earnings
+  const earningsGuaranteeCurrentEarnings = activeEarningAddon ? calculateBonusEarnings() : 0
   const ordersProgress = earningsGuaranteeOrdersTarget > 0 
     ? Math.min(earningsGuaranteeCurrentOrders / earningsGuaranteeOrdersTarget, 1) 
     : 0

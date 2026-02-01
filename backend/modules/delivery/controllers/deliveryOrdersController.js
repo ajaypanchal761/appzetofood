@@ -90,9 +90,8 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
     const { orderId } = req.params;
 
     // Build query to find order by either _id or orderId field
-    const query = {
-      deliveryPartnerId: delivery._id
-    };
+    // Allow access if order is assigned to this delivery partner OR if they were notified about it
+    let query = {};
 
     // Check if orderId is a valid MongoDB ObjectId
     if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
@@ -102,13 +101,76 @@ export const getOrderDetails = asyncHandler(async (req, res) => {
       query.orderId = orderId;
     }
 
-    const order = await Order.findOne(query)
-      .populate('restaurantId', 'name slug profileImage address phone ownerPhone')
+    // First, try to find order (without deliveryPartnerId filter)
+    let order = await Order.findOne(query)
+      .populate('restaurantId', 'name slug profileImage address phone ownerPhone location')
       .populate('userId', 'name phone email')
       .lean();
 
     if (!order) {
       return errorResponse(res, 404, 'Order not found');
+    }
+
+    // Check if order is assigned to this delivery partner OR if they were notified
+    const orderDeliveryPartnerId = order.deliveryPartnerId?.toString();
+    const currentDeliveryId = delivery._id.toString();
+    
+    // Helper function to normalize ID for comparison (handles ObjectId, string, etc.)
+    const normalizeId = (id) => {
+      if (!id) return null;
+      if (typeof id === 'string') return id;
+      if (id.toString) return id.toString();
+      return String(id);
+    };
+    
+    // Valid statuses for order acceptance (unassigned orders in these statuses can be viewed by any delivery boy)
+    const validAcceptanceStatuses = ['preparing', 'ready'];
+    
+    // If order is assigned to this delivery partner, allow access
+    if (orderDeliveryPartnerId === currentDeliveryId) {
+      // Order is assigned, proceed
+      console.log(`✅ Order ${order.orderId} is assigned to current delivery partner ${currentDeliveryId}`);
+    } else if (!orderDeliveryPartnerId) {
+      // Order not assigned yet - allow access if:
+      // 1. Order is in a valid status for acceptance (preparing/ready), OR
+      // 2. This delivery boy was notified about it
+      
+      const isInValidStatus = validAcceptanceStatuses.includes(order.status);
+      
+      // Check if this delivery boy was notified
+      const assignmentInfo = order.assignmentInfo || {};
+      const priorityIds = assignmentInfo.priorityDeliveryPartnerIds || [];
+      const expandedIds = assignmentInfo.expandedDeliveryPartnerIds || [];
+      
+      // Normalize all IDs to strings for comparison
+      const normalizedCurrentId = normalizeId(currentDeliveryId);
+      const normalizedPriorityIds = priorityIds.map(normalizeId).filter(Boolean);
+      const normalizedExpandedIds = expandedIds.map(normalizeId).filter(Boolean);
+      
+      const wasNotified = normalizedPriorityIds.includes(normalizedCurrentId) || 
+                         normalizedExpandedIds.includes(normalizedCurrentId);
+      
+      console.log(`🔍 Checking access for order ${order.orderId}:`, {
+        currentDeliveryId: normalizedCurrentId,
+        orderStatus: order.status,
+        isInValidStatus,
+        wasNotified,
+        priorityIds: normalizedPriorityIds,
+        expandedIds: normalizedExpandedIds
+      });
+      
+      // Allow access if order is in valid status OR delivery boy was notified
+      if (isInValidStatus || wasNotified) {
+        console.log(`✅ Allowing access to order ${order.orderId} - Status: ${order.status}, Notified: ${wasNotified}`);
+        // Allow access to view order details
+      } else {
+        console.warn(`⚠️ Delivery partner ${currentDeliveryId} cannot access order ${order.orderId} - Status: ${order.status}, Notified: ${wasNotified}`);
+        return errorResponse(res, 403, 'Order not found or not available for you');
+      }
+    } else {
+      // Order is assigned to another delivery partner
+      console.warn(`⚠️ Order ${order.orderId} is assigned to ${orderDeliveryPartnerId}, but current delivery partner is ${currentDeliveryId}`);
+      return errorResponse(res, 403, 'Order not found or not available for you');
     }
 
     // Resolve payment method for delivery boy (COD vs Online)
@@ -140,6 +202,12 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     const { orderId } = req.params;
     const { currentLat, currentLng } = req.body; // Delivery boy's current location
 
+    // Validate orderId
+    if (!orderId || (typeof orderId !== 'string' && typeof orderId !== 'object')) {
+      console.error(`❌ Invalid orderId provided: ${orderId}`);
+      return errorResponse(res, 400, 'Invalid order ID');
+    }
+
     console.log(`📦 Delivery partner ${delivery._id} attempting to accept order ${orderId}`);
     console.log(`📍 Location provided: lat=${currentLat}, lng=${currentLng}`);
 
@@ -164,19 +232,165 @@ export const acceptOrder = asyncHandler(async (req, res) => {
     const orderDeliveryPartnerId = order.deliveryPartnerId?.toString();
     const currentDeliveryId = delivery._id.toString();
 
+    // If order is not assigned, check if this delivery boy was notified (priority-based system)
+    // Also allow acceptance if order is in valid status (preparing/ready) - more permissive
     if (!orderDeliveryPartnerId) {
-      console.error(`❌ Order ${order.orderId} is not assigned to any delivery partner`);
-      return errorResponse(res, 400, 'Order is not assigned to any delivery partner yet. Please wait for assignment.');
-    }
-
-    if (orderDeliveryPartnerId !== currentDeliveryId) {
+      console.log(`ℹ️ Order ${order.orderId} is not assigned yet. Checking if this delivery partner was notified...`);
+      
+      // Check if this delivery boy was in the priority or expanded notification list
+      const assignmentInfo = order.assignmentInfo || {};
+      const priorityIds = assignmentInfo.priorityDeliveryPartnerIds || [];
+      const expandedIds = assignmentInfo.expandedDeliveryPartnerIds || [];
+      
+      // Helper function to normalize ID for comparison
+      const normalizeId = (id) => {
+        if (!id) return null;
+        if (typeof id === 'string') return id;
+        if (id.toString) return id.toString();
+        return String(id);
+      };
+      
+      // Normalize all IDs to strings for comparison
+      const normalizedCurrentId = normalizeId(currentDeliveryId);
+      const normalizedPriorityIds = priorityIds.map(normalizeId).filter(Boolean);
+      const normalizedExpandedIds = expandedIds.map(normalizeId).filter(Boolean);
+      
+      console.log(`🔍 Checking notification status for order acceptance:`, {
+        currentDeliveryId: normalizedCurrentId,
+        priorityIds: normalizedPriorityIds,
+        expandedIds: normalizedExpandedIds,
+        orderStatus: order.status,
+        assignmentInfo: JSON.stringify(assignmentInfo)
+      });
+      
+      const wasNotified = normalizedPriorityIds.includes(normalizedCurrentId) || 
+                         normalizedExpandedIds.includes(normalizedCurrentId);
+      
+      // Also allow if order is in valid status (preparing/ready) - more permissive for unassigned orders
+      const isValidStatus = order.status === 'preparing' || order.status === 'ready';
+      
+      if (!wasNotified && !isValidStatus) {
+        console.error(`❌ Order ${order.orderId} is not assigned, delivery partner ${currentDeliveryId} was not notified, and order status is ${order.status}`);
+        console.error(`❌ Full order details:`, {
+          orderId: order.orderId,
+          orderStatus: order.status,
+          deliveryPartnerId: order.deliveryPartnerId,
+          assignmentInfo: JSON.stringify(order.assignmentInfo),
+          priorityIds: normalizedPriorityIds,
+          expandedIds: normalizedExpandedIds,
+          currentDeliveryId: normalizedCurrentId
+        });
+        return errorResponse(res, 403, 'This order is not available for you. It may have been assigned to another delivery partner or you were not notified about it.');
+      }
+      
+      // Allow acceptance if delivery boy was notified OR order is in valid status
+      if (wasNotified) {
+        console.log(`✅ Delivery partner ${currentDeliveryId} was notified about this order. Assigning order to them...`);
+      } else if (isValidStatus) {
+        console.log(`⚠️ Order ${order.orderId} is not assigned and delivery partner ${currentDeliveryId} was not notified, but order is in valid status (${order.status}). Allowing acceptance and assigning order.`);
+      }
+      
+      // Proceed with assignment (first come first serve)
+      
+      // Reload order as document (not lean) to update it
+      let orderDoc;
+      try {
+        orderDoc = await Order.findOne({
+          $or: [
+            { _id: orderId },
+            { orderId: orderId }
+          ]
+        });
+        
+        if (!orderDoc) {
+          console.error(`❌ Order document not found for ID: ${orderId}`);
+          return errorResponse(res, 404, 'Order not found');
+        }
+      } catch (findError) {
+        console.error(`❌ Error finding order document: ${findError.message}`);
+        console.error(`❌ Error stack: ${findError.stack}`);
+        return errorResponse(res, 500, 'Error finding order. Please try again.');
+      }
+      
+      // Check again if order was assigned in the meantime (race condition)
+      if (orderDoc.deliveryPartnerId) {
+        const assignedId = orderDoc.deliveryPartnerId.toString();
+        if (assignedId !== currentDeliveryId) {
+          console.error(`❌ Order ${order.orderId} was just assigned to another delivery partner ${assignedId}`);
+          return errorResponse(res, 403, 'Order was just assigned to another delivery partner. Please try another order.');
+        }
+      }
+      
+      // Assign order to this delivery partner
+      try {
+        orderDoc.deliveryPartnerId = delivery._id;
+        orderDoc.assignmentInfo = {
+          ...(orderDoc.assignmentInfo || {}),
+          deliveryPartnerId: currentDeliveryId,
+          assignedAt: new Date(),
+          assignedBy: 'delivery_accept',
+          acceptedFromNotification: true
+        };
+        await orderDoc.save();
+        console.log(`✅ Order ${order.orderId} assigned to delivery partner ${currentDeliveryId} upon acceptance`);
+      } catch (saveError) {
+        console.error(`❌ Error saving order assignment: ${saveError.message}`);
+        console.error(`❌ Error stack: ${saveError.stack}`);
+        // Log validation errors if present
+        if (saveError.errors) {
+          console.error(`❌ Validation errors:`, JSON.stringify(saveError.errors, null, 2));
+        }
+        if (saveError.name === 'ValidationError') {
+          const validationMessages = Object.values(saveError.errors || {}).map(err => err.message).join(', ');
+          return errorResponse(res, 400, `Validation error: ${validationMessages || saveError.message}`);
+        }
+        return errorResponse(res, 500, 'Failed to assign order. Please try again.');
+      }
+      
+      // Reload order with populated data (use orderDoc._id to ensure we get the updated order)
+      const updatedOrderId = orderDoc._id || orderId;
+      try {
+        order = await Order.findOne({
+          $or: [
+            { _id: updatedOrderId },
+            { orderId: orderId }
+          ]
+        })
+          .populate('restaurantId', 'name location address phone ownerPhone')
+          .populate('userId', 'name phone')
+          .lean();
+        
+        if (!order) {
+          console.error(`❌ Order not found after assignment: ${updatedOrderId}`);
+          return errorResponse(res, 500, 'Order not found after assignment. Please try again.');
+        }
+      } catch (reloadError) {
+        console.error(`❌ Error reloading order after assignment: ${reloadError.message}`);
+        console.error(`❌ Error stack: ${reloadError.stack}`);
+        return errorResponse(res, 500, 'Error reloading order. Please try again.');
+      }
+      
+      // Update orderDeliveryPartnerId after assignment
+      const updatedOrderDeliveryPartnerId = order.deliveryPartnerId?.toString();
+      if (updatedOrderDeliveryPartnerId !== currentDeliveryId) {
+        console.error(`❌ Order assignment failed - order still not assigned to ${currentDeliveryId}, got ${updatedOrderDeliveryPartnerId}`);
+        return errorResponse(res, 500, 'Failed to assign order. Please try again.');
+      }
+    } else if (orderDeliveryPartnerId !== currentDeliveryId) {
       console.error(`❌ Order ${order.orderId} is assigned to ${orderDeliveryPartnerId}, but current delivery partner is ${currentDeliveryId}`);
       return errorResponse(res, 403, 'Order is assigned to another delivery partner');
+    } else {
+      console.log(`✅ Order ${order.orderId} is already assigned to current delivery partner`);
     }
 
-    console.log(`✅ Order ${order.orderId} is assigned to current delivery partner`);
-
     console.log(`✅ Order found: ${order.orderId}, Status: ${order.status}, Delivery Partner: ${order.deliveryPartnerId}`);
+    console.log(`📍 Order details:`, {
+      orderId: order.orderId,
+      status: order.status,
+      restaurantId: order.restaurantId?._id || order.restaurantId,
+      hasRestaurantLocation: !!(order.restaurantId?.location?.coordinates),
+      restaurantLocationType: typeof order.restaurantId?.location
+    });
 
     // Check if order is in valid state to accept
     const validStatuses = ['preparing', 'ready'];
@@ -187,62 +401,310 @@ export const acceptOrder = asyncHandler(async (req, res) => {
 
     // Get restaurant location
     let restaurantLat, restaurantLng;
-    if (order.restaurantId && order.restaurantId.location && order.restaurantId.location.coordinates) {
-      [restaurantLng, restaurantLat] = order.restaurantId.location.coordinates;
-    } else {
-      // Try to fetch restaurant from database
-      const restaurant = await Restaurant.findById(order.restaurantId?._id || order.restaurantId);
-      if (restaurant && restaurant.location && restaurant.location.coordinates) {
-        [restaurantLng, restaurantLat] = restaurant.location.coordinates;
+    try {
+      if (order.restaurantId && order.restaurantId.location && order.restaurantId.location.coordinates) {
+        [restaurantLng, restaurantLat] = order.restaurantId.location.coordinates;
+        console.log(`📍 Restaurant location from populated order: lat=${restaurantLat}, lng=${restaurantLng}`);
       } else {
-        return errorResponse(res, 400, 'Restaurant location not found');
+        // Try to fetch restaurant from database
+        console.log(`⚠️ Restaurant location not in populated order, fetching from database...`);
+        const restaurantId = order.restaurantId?._id || order.restaurantId;
+        console.log(`🔍 Fetching restaurant with ID: ${restaurantId}`);
+        
+        const restaurant = await Restaurant.findById(restaurantId);
+        if (restaurant && restaurant.location && restaurant.location.coordinates) {
+          [restaurantLng, restaurantLat] = restaurant.location.coordinates;
+          console.log(`📍 Restaurant location from database: lat=${restaurantLat}, lng=${restaurantLng}`);
+        } else {
+          console.error(`❌ Restaurant location not found for restaurant ID: ${restaurantId}`);
+          console.error(`❌ Restaurant data:`, {
+            restaurantExists: !!restaurant,
+            hasLocation: !!(restaurant?.location),
+            hasCoordinates: !!(restaurant?.location?.coordinates),
+            locationType: typeof restaurant?.location
+          });
+          return errorResponse(res, 400, 'Restaurant location not found');
+        }
       }
+      
+      // Validate coordinates
+      if (!restaurantLat || !restaurantLng || isNaN(restaurantLat) || isNaN(restaurantLng)) {
+        console.error(`❌ Invalid restaurant coordinates: lat=${restaurantLat}, lng=${restaurantLng}`);
+        return errorResponse(res, 400, 'Invalid restaurant location coordinates');
+      }
+    } catch (locationError) {
+      console.error(`❌ Error getting restaurant location: ${locationError.message}`);
+      console.error(`❌ Location error stack: ${locationError.stack}`);
+      return errorResponse(res, 500, 'Error getting restaurant location. Please try again.');
     }
 
     // Get delivery boy's current location
     let deliveryLat = currentLat;
     let deliveryLng = currentLng;
 
+    console.log(`📍 Initial delivery location: lat=${deliveryLat}, lng=${deliveryLng}`);
+
     if (!deliveryLat || !deliveryLng) {
+      console.log(`⚠️ Location not provided in request, fetching from delivery partner profile...`);
       // Try to get from delivery partner's current location
-      const deliveryPartner = await Delivery.findById(delivery._id)
-        .select('availability.currentLocation')
-        .lean();
-      
-      if (deliveryPartner?.availability?.currentLocation?.coordinates) {
-        [deliveryLng, deliveryLat] = deliveryPartner.availability.currentLocation.coordinates;
-      } else {
-        return errorResponse(res, 400, 'Delivery partner location not found. Please enable location services.');
+      try {
+        const deliveryPartner = await Delivery.findById(delivery._id)
+          .select('availability.currentLocation')
+          .lean();
+        
+        if (deliveryPartner?.availability?.currentLocation?.coordinates) {
+          [deliveryLng, deliveryLat] = deliveryPartner.availability.currentLocation.coordinates;
+          console.log(`📍 Delivery location from profile: lat=${deliveryLat}, lng=${deliveryLng}`);
+        } else {
+          console.error(`❌ Delivery partner location not found in profile`);
+          return errorResponse(res, 400, 'Delivery partner location not found. Please enable location services.');
+        }
+      } catch (deliveryLocationError) {
+        console.error(`❌ Error fetching delivery partner location: ${deliveryLocationError.message}`);
+        return errorResponse(res, 500, 'Error getting delivery partner location. Please try again.');
       }
     }
 
+    // Validate coordinates before calculating route
+    if (!deliveryLat || !deliveryLng || isNaN(deliveryLat) || isNaN(deliveryLng) ||
+        !restaurantLat || !restaurantLng || isNaN(restaurantLat) || isNaN(restaurantLng)) {
+      console.error(`❌ Invalid coordinates for route calculation:`, {
+        deliveryLat,
+        deliveryLng,
+        restaurantLat,
+        restaurantLng,
+        deliveryLatValid: !!(deliveryLat && !isNaN(deliveryLat)),
+        deliveryLngValid: !!(deliveryLng && !isNaN(deliveryLng)),
+        restaurantLatValid: !!(restaurantLat && !isNaN(restaurantLat)),
+        restaurantLngValid: !!(restaurantLng && !isNaN(restaurantLng))
+      });
+      return errorResponse(res, 400, 'Invalid location coordinates. Please ensure location services are enabled.');
+    }
+    
+    console.log(`✅ Valid coordinates confirmed - Delivery: (${deliveryLat}, ${deliveryLng}), Restaurant: (${restaurantLat}, ${restaurantLng})`);
+
     // Calculate route from delivery boy to restaurant
-    const routeData = await calculateRoute(deliveryLat, deliveryLng, restaurantLat, restaurantLng);
+    console.log(`🗺️ Starting route calculation...`);
+    let routeData;
+    const haversineDistance = (lat1, lng1, lat2, lng2) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+               Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    };
+    
+    try {
+      console.log(`🗺️ Calling calculateRoute with:`, {
+        from: `(${deliveryLat}, ${deliveryLng})`,
+        to: `(${restaurantLat}, ${restaurantLng})`
+      });
+      routeData = await calculateRoute(deliveryLat, deliveryLng, restaurantLat, restaurantLng);
+      console.log(`🗺️ Route calculation result:`, {
+        hasData: !!routeData,
+        hasCoordinates: !!(routeData?.coordinates),
+        coordinatesLength: routeData?.coordinates?.length || 0,
+        distance: routeData?.distance,
+        duration: routeData?.duration,
+        method: routeData?.method
+      });
+      
+      // Validate route data - ensure all required fields are present and valid
+      if (!routeData || 
+          !routeData.coordinates || 
+          !Array.isArray(routeData.coordinates) ||
+          routeData.coordinates.length === 0 ||
+          typeof routeData.distance !== 'number' ||
+          isNaN(routeData.distance) ||
+          typeof routeData.duration !== 'number' ||
+          isNaN(routeData.duration)) {
+        console.warn('⚠️ Route calculation returned invalid data, using fallback');
+        // Fallback to straight line
+        const distance = haversineDistance(deliveryLat, deliveryLng, restaurantLat, restaurantLng);
+        routeData = {
+          coordinates: [[deliveryLat, deliveryLng], [restaurantLat, restaurantLng]],
+          distance: distance,
+          duration: (distance / 30) * 60, // Assume 30 km/h average speed
+          method: 'haversine_fallback'
+        };
+        console.log(`✅ Using fallback route: ${distance.toFixed(2)} km`);
+      } else {
+        console.log(`✅ Route calculated successfully: ${routeData.distance.toFixed(2)} km, ${routeData.duration.toFixed(1)} mins`);
+      }
+    } catch (routeError) {
+      console.error('❌ Error calculating route:', routeError);
+      console.error('❌ Route error stack:', routeError.stack);
+      // Fallback to straight line
+      const distance = haversineDistance(deliveryLat, deliveryLng, restaurantLat, restaurantLng);
+      routeData = {
+        coordinates: [[deliveryLat, deliveryLng], [restaurantLat, restaurantLng]],
+        distance: distance,
+        duration: (distance / 30) * 60,
+        method: 'haversine_fallback'
+      };
+      console.log(`✅ Using fallback route after error: ${distance.toFixed(2)} km`);
+    }
+    
+    // Final validation - ensure routeData is valid before using it
+    if (!routeData || 
+        !routeData.coordinates || 
+        !Array.isArray(routeData.coordinates) ||
+        routeData.coordinates.length === 0 ||
+        typeof routeData.distance !== 'number' ||
+        isNaN(routeData.distance) ||
+        typeof routeData.duration !== 'number' ||
+        isNaN(routeData.duration)) {
+      console.error('❌ Route data validation failed after all fallbacks');
+      console.error('❌ Route data:', JSON.stringify(routeData, null, 2));
+      return errorResponse(res, 500, 'Failed to calculate route. Please try again.');
+    }
+    
+    console.log(`✅ Route data validated successfully`);
 
     // Update order status and tracking
-    const updatedOrder = await Order.findByIdAndUpdate(
-      orderId,
-      {
-        $set: {
-          'deliveryState.status': 'accepted',
-          'deliveryState.acceptedAt': new Date(),
-          'deliveryState.currentPhase': 'en_route_to_pickup',
-          'deliveryState.routeToPickup': {
-            coordinates: routeData.coordinates,
-            distance: routeData.distance,
-            duration: routeData.duration,
-            calculatedAt: new Date()
+    console.log(`💾 Starting order update...`);
+    // Use order._id (MongoDB ObjectId) - ensure it exists
+    if (!order._id) {
+      console.error(`❌ Order ${order.orderId} does not have _id field`);
+      return errorResponse(res, 500, 'Order data is invalid');
+    }
+    
+    const orderMongoId = order._id;
+    console.log(`💾 Order MongoDB ID: ${orderMongoId}`);
+    
+    // Prepare route data for storage - ensure coordinates are valid
+    const routeToPickup = {
+      coordinates: routeData.coordinates,
+      distance: Number(routeData.distance),
+      duration: Number(routeData.duration),
+      calculatedAt: new Date(),
+      method: routeData.method || 'unknown'
+    };
+    
+    console.log(`💾 Route data to save:`, {
+      coordinatesCount: routeToPickup.coordinates.length,
+      distance: routeToPickup.distance,
+      duration: routeToPickup.duration,
+      method: routeToPickup.method
+    });
+    
+    // Validate route coordinates before saving
+    if (!Array.isArray(routeToPickup.coordinates) || routeToPickup.coordinates.length === 0) {
+      console.error('❌ Invalid route coordinates');
+      console.error('❌ Route coordinates:', routeToPickup.coordinates);
+      return errorResponse(res, 500, 'Invalid route data. Please try again.');
+    }
+    
+    let updatedOrder;
+    try {
+      console.log(`💾 Updating order in database...`);
+      updatedOrder = await Order.findByIdAndUpdate(
+        orderMongoId,
+        {
+          $set: {
+            'deliveryState.status': 'accepted',
+            'deliveryState.acceptedAt': new Date(),
+            'deliveryState.currentPhase': 'en_route_to_pickup',
+            'deliveryState.routeToPickup': routeToPickup
           }
-        }
-      },
-      { new: true }
-    )
-      .populate('restaurantId', 'name location address phone ownerPhone')
-      .populate('userId', 'name phone')
-      .lean();
+        },
+        { new: true }
+      )
+        .populate('restaurantId', 'name location address phone ownerPhone')
+        .populate('userId', 'name phone')
+        .lean();
+        
+      if (!updatedOrder) {
+        console.error(`❌ Order ${orderMongoId} not found after update attempt`);
+        return errorResponse(res, 404, 'Order not found');
+      }
+      console.log(`✅ Order updated successfully: ${updatedOrder.orderId}`);
+    } catch (updateError) {
+      console.error('❌ Error updating order:', updateError);
+      console.error('❌ Update error message:', updateError.message);
+      console.error('❌ Update error name:', updateError.name);
+      console.error('❌ Update error stack:', updateError.stack);
+      if (updateError.errors) {
+        console.error('❌ Update validation errors:', updateError.errors);
+      }
+      return errorResponse(res, 500, `Failed to update order: ${updateError.message || 'Unknown error'}`);
+    }
 
     console.log(`✅ Order ${order.orderId} accepted by delivery partner ${delivery._id}`);
     console.log(`📍 Route calculated: ${routeData.distance.toFixed(2)} km, ${routeData.duration.toFixed(1)} mins`);
+
+    // Calculate delivery distance (restaurant to customer) for earnings calculation
+    let deliveryDistance = 0;
+    if (updatedOrder.restaurantId?.location?.coordinates && updatedOrder.address?.location?.coordinates) {
+      const [restaurantLng, restaurantLat] = updatedOrder.restaurantId.location.coordinates;
+      const [customerLng, customerLat] = updatedOrder.address.location.coordinates;
+      
+      // Calculate distance using Haversine formula
+      const R = 6371; // Earth radius in km
+      const dLat = (customerLat - restaurantLat) * Math.PI / 180;
+      const dLng = (customerLng - restaurantLng) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(restaurantLat * Math.PI / 180) * Math.cos(customerLat * Math.PI / 180) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      deliveryDistance = R * c;
+    }
+
+    // Calculate estimated earnings based on delivery distance
+    let estimatedEarnings = null;
+    try {
+      const DeliveryBoyCommission = (await import('../../admin/models/DeliveryBoyCommission.js')).default;
+      const commissionResult = await DeliveryBoyCommission.calculateCommission(deliveryDistance);
+      
+      // Validate commission result
+      if (!commissionResult || 
+          !commissionResult.breakdown || 
+          typeof commissionResult.commission !== 'number' ||
+          isNaN(commissionResult.commission)) {
+        throw new Error('Invalid commission result structure');
+      }
+      
+      const breakdown = commissionResult.breakdown || {};
+      const rule = commissionResult.rule || { minDistance: 4 };
+      
+      estimatedEarnings = {
+        basePayout: Math.round((breakdown.basePayout || 10) * 100) / 100,
+        distance: Math.round(deliveryDistance * 100) / 100,
+        commissionPerKm: Math.round((breakdown.commissionPerKm || 5) * 100) / 100,
+        distanceCommission: Math.round((breakdown.distanceCommission || 0) * 100) / 100,
+        totalEarning: Math.round(commissionResult.commission * 100) / 100,
+        breakdown: {
+          basePayout: breakdown.basePayout || 10,
+          distance: deliveryDistance,
+          commissionPerKm: breakdown.commissionPerKm || 5,
+          distanceCommission: breakdown.distanceCommission || 0,
+          minDistance: rule.minDistance || 4
+        }
+      };
+      
+      console.log(`💰 Estimated earnings calculated: ₹${estimatedEarnings.totalEarning} for ${deliveryDistance.toFixed(2)} km`);
+    } catch (earningsError) {
+      console.error('❌ Error calculating estimated earnings:', earningsError);
+      console.error('❌ Earnings error stack:', earningsError.stack);
+      // Fallback to default
+      estimatedEarnings = {
+        basePayout: 10,
+        distance: Math.round(deliveryDistance * 100) / 100,
+        commissionPerKm: 5,
+        distanceCommission: deliveryDistance > 4 ? Math.round(deliveryDistance * 5 * 100) / 100 : 0,
+        totalEarning: 10 + (deliveryDistance > 4 ? Math.round(deliveryDistance * 5 * 100) / 100 : 0),
+        breakdown: {
+          basePayout: 10,
+          distance: deliveryDistance,
+          commissionPerKm: 5,
+          distanceCommission: deliveryDistance > 4 ? deliveryDistance * 5 : 0,
+          minDistance: 4
+        }
+      };
+    }
 
     // Resolve payment method for delivery boy (COD vs Online) - use Payment collection if order.payment is wrong
     let paymentMethod = updatedOrder.payment?.method || 'razorpay';
@@ -261,12 +723,20 @@ export const acceptOrder = asyncHandler(async (req, res) => {
         distance: routeData.distance,
         duration: routeData.duration,
         method: routeData.method
-      }
+      },
+      estimatedEarnings: estimatedEarnings,
+      deliveryDistance: deliveryDistance
     });
   } catch (error) {
     logger.error(`Error accepting order: ${error.message}`);
-    console.error('Error stack:', error.stack);
-    return errorResponse(res, 500, 'Failed to accept order');
+    console.error('❌ Error accepting order - Full error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      orderId: req.params?.orderId,
+      deliveryId: req.delivery?._id
+    });
+    return errorResponse(res, 500, error.message || 'Failed to accept order');
   }
 });
 
@@ -426,29 +896,58 @@ export const confirmOrderId = asyncHandler(async (req, res) => {
     const { confirmedOrderId, billImageUrl } = req.body; // Order ID confirmed by delivery boy, bill image URL
     const { currentLat, currentLng } = req.body; // Current location for route calculation
 
-    // Find order by _id or orderId field
+    // Find order by _id or orderId - try multiple methods for better compatibility
     let order = null;
     const deliveryId = delivery._id;
-
-    // Check if orderId is a valid MongoDB ObjectId
+    
+    // Method 1: Try as MongoDB ObjectId
     if (mongoose.Types.ObjectId.isValid(orderId) && orderId.length === 24) {
       order = await Order.findOne({
-        _id: orderId,
-        deliveryPartnerId: deliveryId
+        $and: [
+          { _id: orderId },
+          { deliveryPartnerId: deliveryId }
+        ]
       })
         .populate('userId', 'name phone')
+        .populate('restaurantId', 'name location address phone ownerPhone')
         .lean();
-    } else {
-      // If not a valid ObjectId, search by orderId field
+    }
+    
+    // Method 2: Try by orderId field
+    if (!order) {
       order = await Order.findOne({
-        orderId: orderId,
-        deliveryPartnerId: deliveryId
+        $and: [
+          { orderId: orderId },
+          { deliveryPartnerId: deliveryId }
+        ]
       })
         .populate('userId', 'name phone')
+        .populate('restaurantId', 'name location address phone ownerPhone')
+        .lean();
+    }
+    
+    // Method 3: Try with string comparison for deliveryPartnerId
+    if (!order) {
+      order = await Order.findOne({
+        $and: [
+          {
+            $or: [
+              { _id: orderId },
+              { orderId: orderId }
+            ]
+          },
+          {
+            deliveryPartnerId: deliveryId.toString()
+          }
+        ]
+      })
+        .populate('userId', 'name phone')
+        .populate('restaurantId', 'name location address phone ownerPhone')
         .lean();
     }
 
     if (!order) {
+      console.error(`❌ Order ${orderId} not found or not assigned to delivery ${deliveryId}`);
       return errorResponse(res, 404, 'Order not found or not assigned to you');
     }
 

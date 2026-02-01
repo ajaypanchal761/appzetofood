@@ -937,13 +937,48 @@ export default function DeliveryHome() {
     }
   }, [])
 
+  // Calculate bonus earnings from earning_addon transactions (only for active offer)
+  const calculateBonusEarnings = () => {
+    if (!activeEarningAddon || !walletState?.transactions) return 0
+    
+    const now = new Date()
+    const startDate = activeEarningAddon.startDate ? new Date(activeEarningAddon.startDate) : null
+    const endDate = activeEarningAddon.endDate ? new Date(activeEarningAddon.endDate) : null
+    
+    return walletState.transactions
+      .filter(t => {
+        // Only count earning_addon type transactions
+        if (t.type !== 'earning_addon' || t.status !== 'Completed') return false
+        
+        // Filter by date range if offer has dates
+        if (startDate || endDate) {
+          const transactionDate = t.date ? new Date(t.date) : (t.createdAt ? new Date(t.createdAt) : null)
+          if (!transactionDate) return false
+          
+          if (startDate && transactionDate < startDate) return false
+          if (endDate && transactionDate > endDate) return false
+        }
+        
+        // Check if transaction is related to current offer
+        if (t.metadata?.earningAddonId) {
+          return t.metadata.earningAddonId === activeEarningAddon._id?.toString() || 
+                 t.metadata.earningAddonId === activeEarningAddon.id?.toString()
+        }
+        
+        // If no metadata, include all earning_addon transactions in date range
+        return true
+      })
+      .reduce((sum, t) => sum + (t.amount || 0), 0)
+  }
+
   // Earnings Guarantee - Use active earning addon if available, otherwise show 0
   // When no offer is active, show 0 of 0 and ₹0
   const earningsGuaranteeTarget = activeEarningAddon?.earningAmount || 0
   const earningsGuaranteeOrdersTarget = activeEarningAddon?.requiredOrders || 0
   // Only show current orders/earnings if there's an active offer
   const earningsGuaranteeCurrentOrders = activeEarningAddon ? (activeEarningAddon.currentOrders ?? weeklyOrders) : 0
-  const earningsGuaranteeCurrentEarnings = activeEarningAddon ? weeklyEarnings : 0
+  // Show only bonus earnings from the offer, not total weekly earnings
+  const earningsGuaranteeCurrentEarnings = activeEarningAddon ? calculateBonusEarnings() : 0
   const ordersProgress = earningsGuaranteeOrdersTarget > 0 
     ? Math.min(earningsGuaranteeCurrentOrders / earningsGuaranteeOrdersTarget, 1) 
     : 0
@@ -2343,6 +2378,19 @@ export default function DeliveryHome() {
               
               console.log('🏪 Final extracted restaurant name:', restaurantName)
               
+              // Extract earnings from backend response
+              const backendEarnings = orderData.estimatedEarnings || response.data.data.estimatedEarnings;
+              const earningsValue = backendEarnings 
+                ? (typeof backendEarnings === 'object' ? backendEarnings.totalEarning : backendEarnings)
+                : (selectedRestaurant?.estimatedEarnings || 0);
+              
+              console.log('💰 Earnings from backend:', {
+                backendEarnings,
+                earningsValue,
+                orderDataEarnings: orderData.estimatedEarnings,
+                responseEarnings: response.data.data.estimatedEarnings
+              });
+
               restaurantInfo = {
                 id: order._id || order.orderId,
                 orderId: order.orderId, // Correct order ID from backend
@@ -2354,7 +2402,8 @@ export default function DeliveryHome() {
                 timeAway: selectedRestaurant?.timeAway || '0 mins',
                 dropDistance: selectedRestaurant?.dropDistance || '0 km',
                 pickupDistance: selectedRestaurant?.pickupDistance || '0 km',
-                estimatedEarnings: selectedRestaurant?.estimatedEarnings || 0,
+                estimatedEarnings: backendEarnings || selectedRestaurant?.estimatedEarnings || 0,
+                amount: earningsValue, // Also set amount for compatibility
                 customerName: order.userId?.name || selectedRestaurant?.customerName,
                 customerAddress: order.address?.formattedAddress || 
                                 (order.address?.street ? `${order.address.street}, ${order.address.city || ''}, ${order.address.state || ''}`.trim() : '') ||
@@ -2734,12 +2783,21 @@ export default function DeliveryHome() {
             currentLocation: currentLocation && currentLocation.length === 2 ? 'available' : 'not available'
           })
           
+          // Log full error response for debugging
+          if (error.response?.data) {
+            console.error('❌ Backend error response:', JSON.stringify(error.response.data, null, 2))
+          }
+          
           // Show user-friendly error message
           let errorMessage = 'Failed to accept order. Please try again.'
           if (error.code === 'ERR_NETWORK') {
             errorMessage = 'Network error. Please check your internet connection and try again.'
           } else if (error.response?.data?.message) {
             errorMessage = error.response.data.message
+            // Also log the full error if available
+            if (error.response.data.error) {
+              console.error('❌ Backend error details:', error.response.data.error)
+            }
           } else if (error.message) {
             errorMessage = error.message
           }
@@ -4094,11 +4152,58 @@ export default function DeliveryHome() {
         restaurantAddress = newOrder.restaurantAddress;
       }
       
-      // Use deliveryFee as fallback when estimatedEarnings is 0 (e.g. drop still calculating)
+      // Extract earnings from notification - backend now calculates and sends estimatedEarnings
       const deliveryFee = newOrder.deliveryFee ?? 0;
       const earned = newOrder.estimatedEarnings;
-      const earnedValue = typeof earned === 'object' ? earned?.totalEarning : earned;
-      const effectiveEarnings = (earnedValue != null && Number(earnedValue) > 0) ? earned : (deliveryFee > 0 ? deliveryFee : 0);
+      let earnedValue = 0;
+      
+      if (earned) {
+        if (typeof earned === 'object' && earned.totalEarning != null) {
+          earnedValue = Number(earned.totalEarning) || 0;
+        } else if (typeof earned === 'number') {
+          earnedValue = earned;
+        }
+      }
+      
+      // Use calculated earnings if available, otherwise fallback to deliveryFee
+      const effectiveEarnings = earnedValue > 0 ? earned : (deliveryFee > 0 ? deliveryFee : 0);
+      
+      console.log('💰 Earnings from notification:', {
+        earned,
+        earnedValue,
+        deliveryFee,
+        effectiveEarnings,
+        type: typeof effectiveEarnings
+      });
+
+      // Calculate pickup distance if not provided
+      let pickupDistance = newOrder.pickupDistance;
+      if (!pickupDistance || pickupDistance === '0 km') {
+        // Try to calculate from driver's current location to restaurant
+        const currentLocation = riderLocation || lastLocationRef.current;
+        const restaurantLat = newOrder.restaurantLocation?.latitude;
+        const restaurantLng = newOrder.restaurantLocation?.longitude;
+        
+        if (currentLocation && currentLocation.length === 2 && 
+            restaurantLat && restaurantLng && 
+            !isNaN(restaurantLat) && !isNaN(restaurantLng)) {
+          // Calculate distance in meters, then convert to km
+          const distanceInMeters = calculateDistance(
+            currentLocation[0], 
+            currentLocation[1], 
+            restaurantLat, 
+            restaurantLng
+          );
+          const distanceInKm = distanceInMeters / 1000;
+          pickupDistance = `${distanceInKm.toFixed(2)} km`;
+          console.log('📍 Calculated pickup distance:', pickupDistance);
+        }
+      }
+      
+      // Default to 'Calculating...' if still no distance
+      if (!pickupDistance || pickupDistance === '0 km') {
+        pickupDistance = 'Calculating...';
+      }
 
       const restaurantData = {
         id: newOrder.orderMongoId || newOrder.orderId,
@@ -4107,13 +4212,13 @@ export default function DeliveryHome() {
         address: restaurantAddress,
         lat: newOrder.restaurantLocation?.latitude,
         lng: newOrder.restaurantLocation?.longitude,
-        distance: newOrder.pickupDistance || '0 km',
-        timeAway: calculateTimeAway(newOrder.pickupDistance),
+        distance: pickupDistance,
+        timeAway: pickupDistance !== 'Calculating...' ? calculateTimeAway(pickupDistance) : 'Calculating...',
         dropDistance: newOrder.deliveryDistance || 'Calculating...',
-        pickupDistance: newOrder.pickupDistance || '0 km',
+        pickupDistance: pickupDistance,
         estimatedEarnings: effectiveEarnings,
         deliveryFee,
-        amount: deliveryFee || (typeof earned === 'object' ? earned?.totalEarning : earned) || 0,
+        amount: earnedValue > 0 ? earnedValue : (deliveryFee > 0 ? deliveryFee : 0),
         customerName: newOrder.customerName,
         customerAddress: newOrder.customerLocation?.address || 'Customer address',
         customerLat: newOrder.customerLocation?.latitude,
@@ -4126,7 +4231,45 @@ export default function DeliveryHome() {
       setShowNewOrderPopup(true)
       setCountdownSeconds(300) // Reset countdown to 5 minutes
     }
-  }, [newOrder, calculateTimeAway])
+  }, [newOrder, calculateTimeAway, riderLocation])
+
+  // Recalculate distance when rider location becomes available
+  useEffect(() => {
+    if (!selectedRestaurant || !showNewOrderPopup) return
+    
+    // Only recalculate if distance is missing or showing '0 km' or 'Calculating...'
+    const currentDistance = selectedRestaurant.distance || selectedRestaurant.pickupDistance
+    if (currentDistance && currentDistance !== '0 km' && currentDistance !== 'Calculating...') {
+      return // Distance already calculated
+    }
+    
+    const currentLocation = riderLocation || lastLocationRef.current
+    const restaurantLat = selectedRestaurant.lat
+    const restaurantLng = selectedRestaurant.lng
+    
+    if (currentLocation && currentLocation.length === 2 && 
+        restaurantLat && restaurantLng && 
+        !isNaN(restaurantLat) && !isNaN(restaurantLng)) {
+      // Calculate distance in meters, then convert to km
+      const distanceInMeters = calculateDistance(
+        currentLocation[0], 
+        currentLocation[1], 
+        restaurantLat, 
+        restaurantLng
+      )
+      const distanceInKm = distanceInMeters / 1000
+      const pickupDistance = `${distanceInKm.toFixed(2)} km`
+      
+      console.log('📍 Recalculated pickup distance:', pickupDistance)
+      
+      setSelectedRestaurant(prev => ({
+        ...prev,
+        distance: pickupDistance,
+        pickupDistance: pickupDistance,
+        timeAway: calculateTimeAway(pickupDistance)
+      }))
+    }
+  }, [riderLocation, selectedRestaurant, showNewOrderPopup, calculateTimeAway])
 
   // Fetch restaurant address if missing when selectedRestaurant is set
   useEffect(() => {
@@ -4422,6 +4565,37 @@ export default function DeliveryHome() {
             hasLocation: !!firstOrder.restaurantId?.location
           });
           
+          // Calculate pickup distance if not provided
+          let pickupDistance = null;
+          if (firstOrder.assignmentInfo?.distance) {
+            pickupDistance = `${firstOrder.assignmentInfo.distance.toFixed(2)} km`;
+          } else {
+            // Try to calculate from driver's current location to restaurant
+            const currentLocation = riderLocation || lastLocationRef.current;
+            const restaurantLat = firstOrder.restaurantId?.location?.coordinates?.[1];
+            const restaurantLng = firstOrder.restaurantId?.location?.coordinates?.[0];
+            
+            if (currentLocation && currentLocation.length === 2 && 
+                restaurantLat && restaurantLng && 
+                !isNaN(restaurantLat) && !isNaN(restaurantLng)) {
+              // Calculate distance in meters, then convert to km
+              const distanceInMeters = calculateDistance(
+                currentLocation[0], 
+                currentLocation[1], 
+                restaurantLat, 
+                restaurantLng
+              );
+              const distanceInKm = distanceInMeters / 1000;
+              pickupDistance = `${distanceInKm.toFixed(2)} km`;
+              console.log('📍 Calculated pickup distance from assigned order:', pickupDistance);
+            }
+          }
+          
+          // Default to 'Calculating...' if still no distance
+          if (!pickupDistance || pickupDistance === '0 km') {
+            pickupDistance = 'Calculating...';
+          }
+          
           const restaurantData = {
             id: firstOrder._id?.toString() || firstOrder.orderId,
             orderId: firstOrder.orderId,
@@ -4429,18 +4603,12 @@ export default function DeliveryHome() {
             address: restaurantAddress,
             lat: firstOrder.restaurantId?.location?.coordinates?.[1],
             lng: firstOrder.restaurantId?.location?.coordinates?.[0],
-            distance: firstOrder.assignmentInfo?.distance 
-              ? `${firstOrder.assignmentInfo.distance.toFixed(2)} km` 
-              : '0 km',
-            timeAway: firstOrder.assignmentInfo?.distance 
-              ? calculateTimeAway(`${firstOrder.assignmentInfo.distance.toFixed(2)} km`)
-              : '0 mins',
+            distance: pickupDistance,
+            timeAway: pickupDistance !== 'Calculating...' ? calculateTimeAway(pickupDistance) : 'Calculating...',
             dropDistance: firstOrder.address?.location?.coordinates 
               ? 'Calculating...' 
               : '0 km',
-            pickupDistance: firstOrder.assignmentInfo?.distance 
-              ? `${firstOrder.assignmentInfo.distance.toFixed(2)} km` 
-              : '0 km',
+            pickupDistance: pickupDistance,
             estimatedEarnings: firstOrder.pricing?.deliveryFee || 0,
             customerName: firstOrder.userId?.name || 'Customer',
             customerAddress: firstOrder.address?.formattedAddress || 
@@ -9134,13 +9302,35 @@ export default function DeliveryHome() {
                         const earnings = newOrder?.estimatedEarnings || selectedRestaurant?.estimatedEarnings || 0;
                         const fallback = newOrder?.deliveryFee ?? selectedRestaurant?.deliveryFee ?? selectedRestaurant?.amount ?? 0;
                         let value = 0;
-                        if (typeof earnings === 'object' && earnings.totalEarning != null) {
-                          value = Number(earnings.totalEarning) || fallback;
-                        } else if (typeof earnings === 'number' && earnings > 0) {
-                          value = earnings;
-                        } else {
-                          value = Number(fallback) || 0;
+                        
+                        console.log('💰 Display earnings calculation:', {
+                          earnings,
+                          earningsType: typeof earnings,
+                          newOrderEarnings: newOrder?.estimatedEarnings,
+                          selectedRestaurantEarnings: selectedRestaurant?.estimatedEarnings,
+                          fallback
+                        });
+                        
+                        if (earnings) {
+                          if (typeof earnings === 'object') {
+                            // Handle earnings object
+                            if (earnings.totalEarning != null) {
+                              value = Number(earnings.totalEarning) || 0;
+                            } else if (earnings.basePayout != null) {
+                              // If only basePayout is available, use it
+                              value = Number(earnings.basePayout) || 0;
+                            }
+                          } else if (typeof earnings === 'number') {
+                            value = earnings > 0 ? earnings : 0;
+                          }
                         }
+                        
+                        // If value is still 0, try fallback
+                        if (value <= 0 && fallback > 0) {
+                          value = Number(fallback);
+                        }
+                        
+                        console.log('💰 Final earnings value to display:', value);
                         return value > 0 ? value.toFixed(2) : '0.00';
                       })()}
                     </p>
@@ -9197,12 +9387,24 @@ export default function DeliveryHome() {
                     
                     <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-2">
                       <Clock className="w-4 h-4" />
-                      <span>{selectedRestaurant?.timeAway || (newOrder?.pickupDistance ? calculateTimeAway(newOrder.pickupDistance) : '0 mins')} away</span>
+                      <span>
+                        {selectedRestaurant?.timeAway && selectedRestaurant.timeAway !== 'Calculating...' 
+                          ? `${selectedRestaurant.timeAway} away`
+                          : (newOrder?.pickupDistance && newOrder.pickupDistance !== '0 km' && newOrder.pickupDistance !== 'Calculating...'
+                            ? `${calculateTimeAway(newOrder.pickupDistance)} away`
+                            : 'Calculating...')}
+                      </span>
                     </div>
                     
                     <div className="flex items-center gap-1.5 text-gray-500 text-sm">
                       <MapPin className="w-4 h-4" />
-                      <span>{newOrder?.pickupDistance || selectedRestaurant?.distance || '0 km'} away</span>
+                      <span>
+                        {selectedRestaurant?.distance && selectedRestaurant.distance !== '0 km' && selectedRestaurant.distance !== 'Calculating...'
+                          ? `${selectedRestaurant.distance} away`
+                          : (newOrder?.pickupDistance && newOrder.pickupDistance !== '0 km' && newOrder.pickupDistance !== 'Calculating...'
+                            ? `${newOrder.pickupDistance} away`
+                            : 'Calculating...')}
+                      </span>
                     </div>
                   </div>
 

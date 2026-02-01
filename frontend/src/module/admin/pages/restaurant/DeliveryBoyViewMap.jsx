@@ -144,8 +144,36 @@ export default function DeliveryBoyViewMap() {
           return isOnline && hasLocation
         })
         
-        console.log(`🚴 Found ${onlineBoys.length} online delivery boys with location`)
-        setDeliveryBoys(onlineBoys)
+        // Remove duplicates based on delivery boy ID
+        const uniqueBoysMap = new Map()
+        onlineBoys.forEach(boy => {
+          // Get unique ID from multiple possible sources
+          const boyId = boy._id || boy.id || boy.deliveryId || boy.fullData?._id || boy.fullData?.id || boy.fullData?.deliveryId
+          
+          if (boyId) {
+            const idString = boyId.toString()
+            // Only keep the first occurrence (or the one with better data)
+            if (!uniqueBoysMap.has(idString)) {
+              uniqueBoysMap.set(idString, boy)
+            } else {
+              // If duplicate found, keep the one with more complete data
+              const existing = uniqueBoysMap.get(idString)
+              const existingHasFullData = existing.fullData || existing.availability
+              const newHasFullData = boy.fullData || boy.availability
+              
+              // Prefer the one with more complete data
+              if (newHasFullData && !existingHasFullData) {
+                uniqueBoysMap.set(idString, boy)
+              }
+            }
+          } else {
+            console.warn("⚠️ Delivery boy without ID:", boy.name || boy.fullData?.name)
+          }
+        })
+        
+        const uniqueBoys = Array.from(uniqueBoysMap.values())
+        console.log(`🚴 Found ${onlineBoys.length} online delivery boys, ${uniqueBoys.length} unique after deduplication`)
+        setDeliveryBoys(uniqueBoys)
       } else {
         console.warn("⚠️ No delivery partners in response:", response.data)
         setDeliveryBoys([])
@@ -387,16 +415,36 @@ export default function DeliveryBoyViewMap() {
     })
     deliveryBoyMarkersRef.current = []
 
+    // Track processed delivery boy IDs to prevent duplicates
+    const processedIds = new Set()
+
     // Process all delivery boys and create markers
     for (const boy of deliveryBoys) {
-      // Get data from multiple sources
+      // Get unique ID to prevent duplicate markers
       const fullData = boy.fullData || boy
+      const boyId = boy._id || boy.id || boy.deliveryId || fullData?._id || fullData?.id || fullData?.deliveryId
+      
+      if (!boyId) {
+        console.warn("⚠️ Skipping delivery boy without ID:", fullData.name || "Unknown")
+        continue
+      }
+      
+      const idString = boyId.toString()
+      
+      // Skip if we've already processed this delivery boy
+      if (processedIds.has(idString)) {
+        console.warn("⚠️ Duplicate delivery boy detected, skipping:", fullData.name || "Unknown", idString)
+        continue
+      }
+      
+      processedIds.add(idString)
+      
       // Try multiple sources for availability
       const availability = boy.availability || fullData?.availability || (fullData && fullData.availability)
       const currentLocation = availability?.currentLocation
       
       if (!currentLocation?.coordinates) {
-        console.warn("⚠️ No coordinates for delivery boy:", boy.name || fullData.name)
+        console.warn("⚠️ No coordinates for delivery boy:", fullData.name || "Unknown")
         continue
       }
 
@@ -431,8 +479,12 @@ export default function DeliveryBoyViewMap() {
       // Get heading if available
       const heading = currentLocation.heading || 0
       
+      // Get name and phone from fullData
+      const boyName = fullData.name || "Delivery Boy"
+      const boyPhone = fullData.phone || "N/A"
+      
       console.log("🚴 Creating bike marker for:", {
-        name: boy.name || fullData.name,
+        name: boyName,
         lat,
         lng,
         heading
@@ -447,10 +499,6 @@ export default function DeliveryBoyViewMap() {
         scaledSize: new google.maps.Size(50, 50), // Size of bike icon
         anchor: new google.maps.Point(25, 25) // Center point
       }
-
-      // Get name and phone from fullData or boy
-      const boyName = boy.name || fullData.name || "Delivery Boy"
-      const boyPhone = boy.phone || fullData.phone || "N/A"
       const lastUpdate = availability?.lastLocationUpdate || currentLocation?.lastUpdate
 
       // Create marker
