@@ -81,6 +81,9 @@ import Notifications from "../pages/Notifications"
 // Wallet
 import Wallet from "../pages/Wallet"
 
+// Complaints
+import SubmitComplaint from "../pages/complaints/SubmitComplaint"
+
 export default function UserRouter() {
   return (
     <Routes>
@@ -369,6 +372,16 @@ export default function UserRouter() {
         element={
           <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
             <Wallet />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* Complaints - Protected */}
+      <Route 
+        path="/complaints/submit/:orderId" 
+        element={
+          <ProtectedRoute requiredRole="user" loginPath="/user/auth/sign-in">
+            <SubmitComplaint />
           </ProtectedRoute>
         } 
       />

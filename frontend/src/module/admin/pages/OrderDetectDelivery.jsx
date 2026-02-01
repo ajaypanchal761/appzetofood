@@ -28,7 +28,12 @@ const mapOrderStatus = (order) => {
   }
 
   if (deliveryState?.currentPhase === 'at_pickup') {
-    return "Reached Pickup"
+    return "Delivery Boy Reached Pickup"
+  }
+
+  // Order ID Accepted
+  if (deliveryState?.status === 'order_confirmed' || deliveryState?.currentPhase === 'en_route_to_delivery' || deliveryState?.orderIdConfirmedAt) {
+    return "Order ID Accepted"
   }
 
   // If delivery boy is assigned
@@ -39,10 +44,10 @@ const mapOrderStatus = (order) => {
   // Map backend status to frontend status
   const statusMap = {
     'pending': 'Ordered',
-    'confirmed': 'Accepted',
-    'preparing': 'Accepted',
-    'ready': 'Accepted',
-    'out_for_delivery': 'Delivery Boy Assigned',
+    'confirmed': 'Restaurant Accepted',
+    'preparing': 'Restaurant Accepted',
+    'ready': 'Restaurant Accepted',
+    'out_for_delivery': 'Order ID Accepted',
   }
 
   return statusMap[status] || 'Ordered'
@@ -82,15 +87,15 @@ const buildStatusHistory = (order) => {
     return history
   }
 
-  // Accepted (confirmed)
+  // Restaurant Accepted (confirmed)
   if (tracking?.confirmed?.status && tracking?.confirmed?.timestamp) {
     history.push({
-      status: "Accepted",
+      status: "Restaurant Accepted",
       timestamp: formatTimestamp(tracking.confirmed.timestamp)
     })
   } else if (status === 'confirmed' || status === 'preparing' || status === 'ready') {
     history.push({
-      status: "Accepted",
+      status: "Restaurant Accepted",
       timestamp: formatTimestamp(order.updatedAt) || "N/A"
     })
   }
@@ -105,28 +110,60 @@ const buildStatusHistory = (order) => {
     })
   }
 
-  // Reached Pickup
+  // Delivery Boy Reached Pickup
   if (deliveryState?.reachedPickupAt) {
     history.push({
-      status: "Reached Pickup",
+      status: "Delivery Boy Reached Pickup",
       timestamp: formatTimestamp(deliveryState.reachedPickupAt)
     })
   } else if (deliveryState?.currentPhase === 'at_pickup') {
     history.push({
-      status: "Reached Pickup",
+      status: "Delivery Boy Reached Pickup",
       timestamp: formatTimestamp(order.updatedAt) || "N/A"
     })
   }
 
-  // Reached Drop
-  if (deliveryState?.currentPhase === 'at_delivery') {
+  // Order ID Accepted
+  if (deliveryState?.orderIdConfirmedAt) {
+    history.push({
+      status: "Order ID Accepted",
+      timestamp: formatTimestamp(deliveryState.orderIdConfirmedAt)
+    })
+  } else if (deliveryState?.status === 'order_confirmed' || deliveryState?.currentPhase === 'en_route_to_delivery') {
+    history.push({
+      status: "Order ID Accepted",
+      timestamp: formatTimestamp(order.updatedAt) || "N/A"
+    })
+  }
+
+  // Reached Drop - must come before Ordered Delivered
+  // Check multiple conditions to ensure we catch it even if order is already delivered
+  if (deliveryState?.reachedDropAt) {
+    // First priority: use reachedDropAt timestamp if available
+    history.push({
+      status: "Reached Drop",
+      timestamp: formatTimestamp(deliveryState.reachedDropAt)
+    })
+  } else if (deliveryState?.currentPhase === 'at_delivery' || deliveryState?.status === 'en_route_to_delivery') {
+    // Second priority: check if currently at delivery phase
     history.push({
       status: "Reached Drop",
       timestamp: formatTimestamp(order.updatedAt) || "N/A"
     })
+  } else if (status === 'delivered' && deliveryPartnerName) {
+    // Third priority: if order is delivered and delivery boy was assigned,
+    // it means reached drop must have happened (can't deliver without reaching drop)
+    // Only add if not already added above
+    const hasReachedDrop = history.some(h => h.status === "Reached Drop")
+    if (!hasReachedDrop) {
+      history.push({
+        status: "Reached Drop",
+        timestamp: formatTimestamp(order.deliveredAt) || formatTimestamp(order.updatedAt) || "N/A"
+      })
+    }
   }
 
-  // Ordered Delivered
+  // Ordered Delivered - must come after Reached Drop
   if (status === 'delivered' && tracking?.delivered?.timestamp) {
     history.push({
       status: "Ordered Delivered",
@@ -259,14 +296,15 @@ export default function OrderDetectDelivery() {
   const stats = useMemo(() => {
     const total = orders.length
     const ordered = filteredData.filter(o => o.status === "Ordered").length
-    const accepted = filteredData.filter(o => o.status === "Accepted").length
+    const restaurantAccepted = filteredData.filter(o => o.status === "Restaurant Accepted" || o.status === "Accepted").length
     const rejected = filteredData.filter(o => o.status === "Rejected").length
     const deliveryBoyAssigned = filteredData.filter(o => o.status === "Delivery Boy Assigned").length
-    const reachedPickup = filteredData.filter(o => o.status === "Reached Pickup").length
+    const reachedPickup = filteredData.filter(o => o.status === "Delivery Boy Reached Pickup" || o.status === "Reached Pickup").length
+    const orderIdAccepted = filteredData.filter(o => o.status === "Order ID Accepted").length
     const reachedDrop = filteredData.filter(o => o.status === "Reached Drop").length
     const delivered = filteredData.filter(o => o.status === "Ordered Delivered").length
     
-    return { total, ordered, accepted, rejected, deliveryBoyAssigned, reachedPickup, reachedDrop, delivered }
+    return { total, ordered, restaurantAccepted, rejected, deliveryBoyAssigned, reachedPickup, orderIdAccepted, reachedDrop, delivered }
   }, [filteredData, orders.length])
 
   const resetColumns = () => {
@@ -354,8 +392,8 @@ export default function OrderDetectDelivery() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500 mb-1">Accepted</p>
-              <p className="text-2xl font-bold text-emerald-600">{stats.accepted}</p>
+              <p className="text-sm text-slate-500 mb-1">Restaurant Accepted</p>
+              <p className="text-2xl font-bold text-emerald-600">{stats.restaurantAccepted}</p>
             </div>
             <div className="p-3 bg-emerald-50 rounded-lg">
               <CheckCircle className="w-6 h-6 text-emerald-600" />
@@ -387,11 +425,22 @@ export default function OrderDetectDelivery() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500 mb-1">Reached Pickup</p>
+              <p className="text-sm text-slate-500 mb-1">Delivery Boy Reached Pickup</p>
               <p className="text-2xl font-bold text-orange-600">{stats.reachedPickup}</p>
             </div>
             <div className="p-3 bg-orange-50 rounded-lg">
               <Package className="w-6 h-6 text-orange-600" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-500 mb-1">Order ID Accepted</p>
+              <p className="text-2xl font-bold text-indigo-600">{stats.orderIdAccepted}</p>
+            </div>
+            <div className="p-3 bg-indigo-50 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-indigo-600" />
             </div>
           </div>
         </div>

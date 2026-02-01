@@ -21,6 +21,7 @@ import RestaurantsList from "../pages/restaurant/RestaurantsList";
 import AddRestaurant from "../pages/restaurant/AddRestaurant";
 import JoiningRequest from "../pages/restaurant/JoiningRequest";
 import RestaurantCommission from "../pages/restaurant/RestaurantCommission";
+import RestaurantComplaints from "../pages/restaurant/RestaurantComplaints";
 import RestaurantsBulkImport from "../pages/restaurant/RestaurantsBulkImport";
 import RestaurantsBulkExport from "../pages/restaurant/RestaurantsBulkExport";
 // Food Management
@@ -170,6 +171,7 @@ export default function AdminRouter() {
         <Route path="restaurants/add" element={<AddRestaurant />} />
         <Route path="restaurants/joining-request" element={<JoiningRequest />} />
         <Route path="restaurants/commission" element={<RestaurantCommission />} />
+        <Route path="restaurants/complaints" element={<RestaurantComplaints />} />
         <Route path="restaurants/bulk-import" element={<RestaurantsBulkImport />} />
         <Route path="restaurants/bulk-export" element={<RestaurantsBulkExport />} />
 

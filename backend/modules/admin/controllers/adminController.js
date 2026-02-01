@@ -152,8 +152,9 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     const activePartners = activeRestaurants + activeDeliveryPartners;
     
     // Get additional stats
-    // Total restaurants (all restaurants)
-    const totalRestaurants = await Restaurant.countDocuments({});
+    // Total restaurants (only active/approved restaurants)
+    // This matches the admin restaurants list which shows only active restaurants by default
+    const totalRestaurants = await Restaurant.countDocuments({ isActive: true });
     
     // Restaurant requests pending (inactive restaurants with completed onboarding, no rejection)
     const pendingRestaurantRequestsQuery = {
@@ -196,9 +197,68 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       ]
     });
     
-    // Total foods (Menu items)
+    // Total foods (Menu items) - Count all individual menu items from active menus
+    // Count ALL items (including disabled sections, unavailable items, pending/approved, excluding only rejected)
     const Menu = (await import('../../restaurant/models/Menu.js')).default;
-    const totalFoods = await Menu.countDocuments({ isActive: true });
+    // Get all active menus and count items in sections and subsections
+    const activeMenus = await Menu.find({ isActive: true }).select('sections').lean();
+    let totalFoods = 0;
+    activeMenus.forEach(menu => {
+      if (menu.sections && Array.isArray(menu.sections)) {
+        menu.sections.forEach(section => {
+          // Count items from ALL sections (enabled and disabled)
+          
+          // Count items directly in section (all items, excluding only rejected)
+          if (section.items && Array.isArray(section.items)) {
+            totalFoods += section.items.filter(item => {
+              // Must have required fields
+              if (!item || !item.id || !item.name) return false;
+              // Exclude only rejected items (include all others: pending, approved, available, unavailable)
+              if (item.approvalStatus === 'rejected') return false;
+              // Count all other items regardless of availability or approval status
+              return true;
+            }).length;
+          }
+          // Count items in subsections (all items, excluding only rejected)
+          if (section.subsections && Array.isArray(section.subsections)) {
+            section.subsections.forEach(subsection => {
+              if (subsection.items && Array.isArray(subsection.items)) {
+                totalFoods += subsection.items.filter(item => {
+                  // Must have required fields
+                  if (!item || !item.id || !item.name) return false;
+                  // Exclude only rejected items (include all others: pending, approved, available, unavailable)
+                  if (item.approvalStatus === 'rejected') return false;
+                  // Count all other items regardless of availability or approval status
+                  return true;
+                }).length;
+              }
+            });
+          }
+        });
+      }
+    });
+    
+    // Total addons - Count all addons from active menus
+    // Count ALL addons (including unavailable, pending/approved, excluding only rejected)
+    let totalAddons = 0;
+    const menusWithAddons = await Menu.find({ isActive: true }).select('addons').lean();
+    menusWithAddons.forEach(menu => {
+      // Only process if menu has addons array and it's not empty
+      if (!menu.addons || !Array.isArray(menu.addons) || menu.addons.length === 0) {
+        return;
+      }
+      
+      totalAddons += menu.addons.filter(addon => {
+        // Only count if addon exists and has required fields (id and name are mandatory)
+        if (!addon || typeof addon !== 'object') return false;
+        if (!addon.id || typeof addon.id !== 'string' || addon.id.trim() === '') return false;
+        if (!addon.name || typeof addon.name !== 'string' || addon.name.trim() === '') return false;
+        // Exclude only rejected addons (include all others: pending, approved, available, unavailable)
+        if (addon.approvalStatus === 'rejected') return false;
+        // Count all other addons regardless of availability or approval status
+        return true;
+      }).length;
+    });
     
     // Total customers (users with role 'user' or no role specified)
     const totalCustomers = await User.countDocuments({
@@ -347,6 +407,9 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       },
       foods: {
         total: totalFoods
+      },
+      addons: {
+        total: totalAddons
       },
       customers: {
         total: totalCustomers

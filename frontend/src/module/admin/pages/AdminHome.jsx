@@ -22,7 +22,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { Activity, ArrowUpRight, ShoppingBag, Users, CreditCard, Truck, Receipt, DollarSign, Store, UserCheck, Package, UserCircle, Clock, CheckCircle } from "lucide-react"
+import { Activity, ArrowUpRight, ShoppingBag, CreditCard, Truck, Receipt, DollarSign, Store, UserCheck, Package, UserCircle, Clock, CheckCircle, Plus } from "lucide-react"
 import appzetoLogo from "@/assets/appzetologo.png"
 import { adminAPI } from "@/lib/api"
 
@@ -112,7 +112,6 @@ export default function AdminHome() {
   const revenueTotal = dashboardData?.revenue?.total || 0
   const commissionTotal = dashboardData?.commission?.total || 0
   const ordersTotal = dashboardData?.orders?.total || 0
-  const activePartners = dashboardData?.partners?.total || 0
   const platformFeeTotal = dashboardData?.platformFee?.total || 0
   const deliveryFeeTotal = dashboardData?.deliveryFee?.total || 0
   const gstTotal = dashboardData?.gst?.total || 0
@@ -125,6 +124,7 @@ export default function AdminHome() {
   const totalDeliveryBoys = dashboardData?.deliveryBoys?.total || 0
   const pendingDeliveryBoyRequests = dashboardData?.deliveryBoys?.pendingRequests || 0
   const totalFoods = dashboardData?.foods?.total || 0
+  const totalAddons = dashboardData?.addons?.total || 0
   const totalCustomers = dashboardData?.customers?.total || 0
   const pendingOrders = dashboardData?.orderStats?.pending || 0
   const completedOrders = dashboardData?.orderStats?.completed || 0
@@ -209,13 +209,6 @@ export default function AdminHome() {
               accent="bg-amber-200/40"
             />
             <MetricCard
-              title="Active partners"
-              value={activePartners.toLocaleString("en-IN")}
-              helper="Vendors & couriers"
-              icon={<Users className="h-5 w-5 text-cyan-600" />}
-              accent="bg-cyan-200/40"
-            />
-            <MetricCard
               title="Platform fee"
               value={`₹${platformFeeTotal.toLocaleString("en-IN")}`}
               helper="Total platform fees"
@@ -277,6 +270,13 @@ export default function AdminHome() {
               helper="Active menu items"
               icon={<Package className="h-5 w-5 text-purple-600" />}
               accent="bg-purple-200/40"
+            />
+            <MetricCard
+              title="Total addons"
+              value={totalAddons.toLocaleString("en-IN")}
+              helper="Active addon items"
+              icon={<Plus className="h-5 w-5 text-pink-600" />}
+              accent="bg-pink-200/40"
             />
             <MetricCard
               title="Total customers"

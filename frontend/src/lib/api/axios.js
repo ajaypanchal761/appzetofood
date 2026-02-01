@@ -118,6 +118,7 @@ apiClient.interceptors.request.use(
                                      !requestUrl.includes('/restaurant/finance') &&
                                      !requestUrl.includes('/restaurant/wallet') &&
                                      !requestUrl.includes('/restaurant/analytics') &&
+                                     !requestUrl.includes('/restaurant/complaints') &&
                                      (requestUrl.match(/\/restaurant\/[^/]+$/) || 
                                       requestUrl.match(/\/restaurant\/[^/]+\/menu/) || 
                                       requestUrl.match(/\/restaurant\/[^/]+\/addons/) || 

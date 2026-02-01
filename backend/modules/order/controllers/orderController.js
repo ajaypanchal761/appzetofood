@@ -964,6 +964,8 @@ export const getUserOrders = async (req, res) => {
       .limit(parseInt(limit))
       .skip(skip)
       .select('-__v')
+      .populate('restaurantId', 'name slug profileImage address location phone ownerPhone')
+      .populate('userId', 'name phone email')
       .lean();
 
     const total = await Order.countDocuments(query);

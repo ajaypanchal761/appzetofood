@@ -13,6 +13,7 @@ import {
 import { authenticate } from '../../auth/middleware/auth.js';
 import { uploadMiddleware } from '../../../shared/utils/cloudinaryService.js';
 import userWalletRoutes from './userWalletRoutes.js';
+import complaintRoutes from './complaintRoutes.js';
 
 const router = express.Router();
 
@@ -42,6 +43,9 @@ router.delete('/addresses/:id', deleteUserAddress);
 
 // Wallet routes
 router.use('/wallet', userWalletRoutes);
+
+// Complaint routes
+router.use('/complaints', complaintRoutes);
 
 export default router;
 

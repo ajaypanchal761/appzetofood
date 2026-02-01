@@ -136,6 +136,7 @@ export default function Feedback() {
   const [customDateRange, setCustomDateRange] = useState({ start: null, end: null })
   const [isCustomDateOpen, setIsCustomDateOpen] = useState(false)
   const [isComplaintsLoading, setIsComplaintsLoading] = useState(false)
+  const [complaints, setComplaints] = useState([])
 
   // Restaurant data state
   const [restaurantData, setRestaurantData] = useState(null)
@@ -164,6 +165,80 @@ export default function Feedback() {
     }
     fetchRestaurantData()
   }, [])
+
+  // Fetch complaints
+  useEffect(() => {
+    const fetchComplaints = async () => {
+      if (activeTab !== 'complaints') return
+      
+      try {
+        setIsComplaintsLoading(true)
+        const dateRanges = getDateRanges()
+        let fromDate = null
+        let toDate = null
+
+        switch (selectedDateRange) {
+          case 'today':
+            fromDate = dateRanges.today
+            toDate = new Date()
+            break
+          case 'yesterday':
+            fromDate = dateRanges.yesterday
+            toDate = new Date(dateRanges.yesterday)
+            toDate.setHours(23, 59, 59, 999)
+            break
+          case 'thisWeek':
+            fromDate = dateRanges.thisWeekStart
+            toDate = dateRanges.thisWeekEnd
+            break
+          case 'lastWeek':
+            fromDate = dateRanges.lastWeekStart
+            toDate = dateRanges.lastWeekEnd
+            break
+          case 'thisMonth':
+            fromDate = dateRanges.thisMonthStart
+            toDate = dateRanges.thisMonthEnd
+            break
+          case 'lastMonth':
+            fromDate = dateRanges.lastMonthStart
+            toDate = dateRanges.lastMonthEnd
+            break
+          case 'last5days':
+            fromDate = dateRanges.last5DaysStart
+            toDate = dateRanges.last5DaysEnd
+            break
+          case 'custom':
+            if (customDateRange.start && customDateRange.end) {
+              fromDate = customDateRange.start
+              toDate = customDateRange.end
+            }
+            break
+        }
+
+        const params = {}
+        if (fromDate) params.fromDate = fromDate.toISOString()
+        if (toDate) params.toDate = toDate.toISOString()
+        if (complaintsFilterValues.issueType?.length > 0) {
+          params.complaintType = complaintsFilterValues.issueType[0]
+        }
+        if (complaintsSearchQuery) params.search = complaintsSearchQuery
+
+        const response = await restaurantAPI.getComplaints(params)
+        if (response?.data?.success && response.data.data?.complaints) {
+          setComplaints(response.data.data.complaints)
+        } else {
+          setComplaints([])
+        }
+      } catch (error) {
+        console.error('Error fetching complaints:', error)
+        setComplaints([])
+      } finally {
+        setIsComplaintsLoading(false)
+      }
+    }
+
+    fetchComplaints()
+  }, [activeTab, selectedDateRange, customDateRange, complaintsFilterValues, complaintsSearchQuery])
 
   // Fetch reviews from orders
   useEffect(() => {
@@ -746,9 +821,41 @@ export default function Feedback() {
                     <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
                   </motion.div>
                 )}
-                <div className="text-center text-sm text-gray-600 mt-12">
-                  No complaints for the selected period.
-                </div>
+                {complaints.length === 0 ? (
+                  <div className="text-center text-sm text-gray-600 mt-12">
+                    No complaints for the selected period.
+                  </div>
+                ) : (
+                  <div className="space-y-3 pb-6">
+                    {complaints.map((complaint) => (
+                      <div key={complaint._id} className="bg-white rounded-lg p-4 border border-gray-200">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="font-semibold text-gray-900">{complaint.customerName}</p>
+                            <p className="text-xs text-gray-500">Order #{complaint.orderNumber}</p>
+                          </div>
+                        </div>
+                        <p className="text-sm font-medium text-gray-800 mb-1">{complaint.subject}</p>
+                        <p className="text-sm text-gray-600 mb-3">{complaint.description}</p>
+                        {complaint.restaurantResponse && (
+                          <div className="bg-gray-50 rounded p-3 mt-3">
+                            <p className="text-xs font-semibold text-gray-700 mb-1">Your Response:</p>
+                            <p className="text-sm text-gray-700">{complaint.restaurantResponse}</p>
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-400 mt-2">
+                          {new Date(complaint.createdAt).toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-2 pb-6">

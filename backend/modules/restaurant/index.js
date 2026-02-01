@@ -16,6 +16,7 @@ import { createOffer, getOffers, getOfferById, updateOfferStatus, deleteOffer, g
 import categoryRoutes from './routes/categoryRoutes.js';
 import restaurantOrderRoutes from './routes/restaurantOrderRoutes.js';
 import outletTimingsRoutes from './routes/outletTimingsRoutes.js';
+import complaintRoutes from './routes/complaintRoutes.js';
 import { getOutletTimingsByRestaurantId } from './controllers/outletTimingsController.js';
 
 const router = express.Router();
@@ -75,6 +76,9 @@ router.delete('/staff/:id', authenticate, deleteStaff);
 // Order routes (authenticated - for restaurant module)
 // Must come BEFORE /:id route to avoid route conflicts (/:id would match /orders)
 router.use('/', restaurantOrderRoutes);
+
+// Complaint routes (authenticated - for restaurant module)
+router.use('/complaints', complaintRoutes);
 
 // Finance routes (authenticated - for restaurant module)
 // Must come BEFORE /:id route to avoid route conflicts (/:id would match /finance)

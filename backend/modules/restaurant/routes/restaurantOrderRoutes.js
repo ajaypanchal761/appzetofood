@@ -29,5 +29,6 @@ router.post('/orders/:id/resend-delivery-notification', authenticate, resendDeli
 router.get('/reviews', authenticate, getRestaurantReviews);
 router.get('/reviews/:orderId', authenticate, getReviewByOrderId);
 
+// Complaint routes - will be imported and used in restaurant index
 export default router;
 

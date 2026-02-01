@@ -607,6 +607,17 @@ export const restaurantAPI = {
   getFinance: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.RESTAURANT.FINANCE, { params });
   },
+
+  // Complaint operations
+  getComplaints: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.COMPLAINTS, { params });
+  },
+  getComplaintById: (id) => {
+    return apiClient.get(API_ENDPOINTS.RESTAURANT.COMPLAINT_BY_ID.replace(':id', id));
+  },
+  respondToComplaint: (id, response) => {
+    return apiClient.put(API_ENDPOINTS.RESTAURANT.COMPLAINT_RESPOND.replace(':id', id), { response });
+  },
 };
 
 // Export delivery API helper functions
@@ -951,6 +962,26 @@ export const adminAPI = {
     return apiClient.post(API_ENDPOINTS.ADMIN.RESTAURANT_COMMISSION_CALCULATE, {
       restaurantId,
       orderAmount
+    });
+  },
+
+  // Restaurant Complaint Management
+  getRestaurantComplaints: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMPLAINTS, { params });
+  },
+  getRestaurantComplaintById: (id) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_COMPLAINT_BY_ID.replace(':id', id));
+  },
+  updateRestaurantComplaintStatus: (id, status, adminResponse, internalNotes) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.RESTAURANT_COMPLAINT_STATUS.replace(':id', id), {
+      status,
+      adminResponse,
+      internalNotes
+    });
+  },
+  updateRestaurantComplaintNotes: (id, internalNotes) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.RESTAURANT_COMPLAINT_NOTES.replace(':id', id), {
+      internalNotes
     });
   },
 
@@ -1299,6 +1330,11 @@ export const adminAPI = {
     return apiClient.put(API_ENDPOINTS.ADMIN.DELIVERY_CASH_LIMIT, typeof data === 'object' ? data : { deliveryCashLimit: data });
   },
 
+  // Deliveryman Reviews
+  getDeliverymanReviews: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY_PARTNER_REVIEWS, { params });
+  },
+
   getCashLimitSettlements: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.CASH_LIMIT_SETTLEMENT, { params });
   },
@@ -1425,6 +1461,17 @@ export const orderAPI = {
   // Get user orders
   getOrders: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ORDER.LIST, { params });
+  },
+
+  // Complaint operations
+  submitComplaint: (data) => {
+    return apiClient.post(API_ENDPOINTS.USER.COMPLAINTS, data);
+  },
+  getUserComplaints: (params = {}) => {
+    return apiClient.get(API_ENDPOINTS.USER.COMPLAINTS, { params });
+  },
+  getComplaintDetails: (id) => {
+    return apiClient.get(API_ENDPOINTS.USER.COMPLAINT_BY_ID.replace(':id', id));
   },
 
   // Get order details

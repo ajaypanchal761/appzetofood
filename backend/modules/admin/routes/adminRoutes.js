@@ -127,6 +127,12 @@ import {
   rejectFoodItem
 } from '../controllers/foodApprovalController.js';
 import {
+  getAllComplaints,
+  getComplaintDetails,
+  updateComplaintStatus,
+  updateInternalNotes
+} from '../controllers/restaurantComplaintController.js';
+import {
   getOrderSettlementDetails,
   getRestaurantSettlements,
   getDeliverySettlements,
@@ -200,7 +206,8 @@ import {
 import {
   getAllReviews,
   getReviewByOrderId,
-  getReviewsByRestaurant
+  getReviewsByRestaurant,
+  getDeliverymanReviews
 } from '../controllers/reviewController.js';
 import {
   getFeeSettings,
@@ -303,6 +310,7 @@ router.get('/fee-settings/history', getFeeSettingsHistory);
 router.get('/delivery-partners/requests', getJoinRequests);
 router.get('/delivery-partners', getDeliveryPartners);
 router.get('/delivery-partners/earnings', getDeliveryEarnings);
+router.get('/delivery-partners/reviews', getDeliverymanReviews); // Must be before /:id route
 router.get('/delivery-partners/:id', getDeliveryPartnerById);
 router.post('/delivery-partners/:id/approve', approveDeliveryPartner);
 router.post('/delivery-partners/:id/reject', rejectDeliveryPartner);
@@ -364,6 +372,12 @@ router.get('/restaurant-commission/:id', getRestaurantCommissionById);
 router.put('/restaurant-commission/:id', updateRestaurantCommission);
 router.delete('/restaurant-commission/:id', deleteRestaurantCommission);
 router.patch('/restaurant-commission/:id/status', toggleRestaurantCommissionStatus);
+
+// Restaurant Complaint Management
+router.get('/restaurant-complaints', getAllComplaints);
+router.get('/restaurant-complaints/:id', getComplaintDetails);
+router.put('/restaurant-complaints/:id/status', updateComplaintStatus);
+router.put('/restaurant-complaints/:id/notes', updateInternalNotes);
 
 // Food Approval Management
 router.get('/food-approvals', getPendingFoodApprovals);
