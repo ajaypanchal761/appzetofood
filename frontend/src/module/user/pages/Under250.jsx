@@ -163,7 +163,12 @@ export default function Under250() {
         // Optional: Add zoneId if available (for sorting/filtering, but show all restaurants)
         const response = await restaurantAPI.getRestaurantsUnder250(zoneId)
         if (response.data.success && response.data.data.restaurants) {
-          setUnder250Restaurants(response.data.data.restaurants)
+          // Filter out inactive restaurants (safety check)
+          const activeRestaurants = response.data.data.restaurants.filter(restaurant => {
+            return restaurant.isActive !== false && restaurant.isActive !== undefined
+          })
+          console.log(`Filtered ${activeRestaurants.length} active restaurants from ${response.data.data.restaurants.length} total`)
+          setUnder250Restaurants(activeRestaurants)
         } else {
           setUnder250Restaurants([])
         }

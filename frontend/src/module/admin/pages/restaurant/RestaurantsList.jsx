@@ -4,6 +4,7 @@ import { Search, Download, ChevronDown, Eye, Settings, ArrowUpDown, Loader2, X, 
 import { adminAPI, restaurantAPI } from "../../../../lib/api"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { exportRestaurantsToPDF } from "../../components/restaurants/restaurantsExportUtils"
+import { toast } from "sonner"
 
 // Import icons from Dashboard-icons
 import locationIcon from "../../assets/Dashboard-icons/image1.png"
@@ -74,8 +75,8 @@ export default function RestaurantsList() {
         
         let response
         try {
-          // Try admin API first
-          response = await adminAPI.getRestaurants()
+          // Try admin API first - fetch all restaurants with high limit
+          response = await adminAPI.getRestaurants({ limit: 10000, page: 1 })
         } catch (adminErr) {
           // Fallback to regular restaurant API if admin endpoint doesn't exist
           console.log("Admin restaurants endpoint not available, using fallback")
@@ -160,16 +161,35 @@ export default function RestaurantsList() {
 
   const handleToggleStatus = async (id) => {
     try {
+      // Find the restaurant to get current status and _id
+      const restaurant = restaurants.find(r => r.id === id || r._id === id)
+      if (!restaurant) {
+        toast.error("Restaurant not found")
+        return
+      }
+
+      const newStatus = !restaurant.status
+      const restaurantId = restaurant._id || restaurant.id
+
       // Optimistically update UI
-      const updatedRestaurants = restaurants.map(restaurant =>
-        restaurant.id === id ? { ...restaurant, status: !restaurant.status } : restaurant
+      const updatedRestaurants = restaurants.map(r =>
+        (r.id === id || r._id === id) ? { ...r, status: newStatus } : r
       )
       setRestaurants(updatedRestaurants)
       
-      // TODO: Call API to update restaurant status
-      // await adminAPI.updateRestaurantStatus(id, !restaurants.find(r => r.id === id).status)
+      // Call API to update restaurant status in database
+      try {
+        await adminAPI.updateRestaurantStatus(restaurantId, newStatus)
+        toast.success(`Restaurant ${newStatus ? 'activated' : 'deactivated'} successfully`)
+      } catch (apiErr) {
+        console.error("API Error:", apiErr)
+        // Revert on error
+        setRestaurants(restaurants)
+        toast.error(apiErr.response?.data?.message || "Failed to update restaurant status")
+      }
     } catch (err) {
       console.error("Error updating restaurant status:", err)
+      toast.error("Failed to update restaurant status")
       // Revert on error
       setRestaurants(restaurants)
     }

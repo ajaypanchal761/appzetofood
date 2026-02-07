@@ -18,6 +18,27 @@ const deliveryFeeRangeSchema = new mongoose.Schema({
   },
 }, { _id: false });
 
+const platformFeeRangeSchema = new mongoose.Schema({
+  min: {
+    type: Number,
+    required: true,
+    min: 0,
+    comment: 'Minimum distance in kilometers'
+  },
+  max: {
+    type: Number,
+    required: true,
+    min: 0,
+    comment: 'Maximum distance in kilometers'
+  },
+  fee: {
+    type: Number,
+    required: true,
+    min: 0,
+    comment: 'Platform fee for this distance range'
+  },
+}, { _id: false });
+
 const feeSettingsSchema = new mongoose.Schema(
   {
     deliveryFee: {
@@ -42,6 +63,12 @@ const feeSettingsSchema = new mongoose.Schema(
       required: [true, 'Platform fee is required'],
       default: 5,
       min: 0,
+      comment: 'Default platform fee (used if no range matches)'
+    },
+    platformFeeRanges: {
+      type: [platformFeeRangeSchema],
+      default: [],
+      comment: 'Platform fee based on distance ranges (km)'
     },
     gstRate: {
       type: Number,

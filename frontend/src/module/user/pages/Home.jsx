@@ -746,8 +746,15 @@ export default function Home() {
         const userLat = location?.latitude
         const userLng = location?.longitude
 
+        // Filter out inactive restaurants first (safety check)
+        const activeRestaurants = restaurantsArray.filter(restaurant => {
+          return restaurant.isActive !== false && restaurant.isActive !== undefined
+        })
+        
+        console.log(`Filtered ${activeRestaurants.length} active restaurants from ${restaurantsArray.length} total`)
+        
         // Transform API data to match expected format
-        const transformedRestaurants = restaurantsArray.map((restaurant, index) => {
+        const transformedRestaurants = activeRestaurants.map((restaurant, index) => {
           // Use restaurant data if available, otherwise use defaults
           const deliveryTime = restaurant.estimatedDeliveryTime || "25-30 mins"
           

@@ -985,6 +985,14 @@ export const adminAPI = {
     });
   },
 
+  // Restaurant Menu Management (Admin)
+  getRestaurantMenu: (restaurantId) => {
+    return apiClient.get(API_ENDPOINTS.ADMIN.RESTAURANT_MENU.replace(':id', restaurantId));
+  },
+  updateRestaurantMenu: (restaurantId, menuData) => {
+    return apiClient.put(API_ENDPOINTS.ADMIN.RESTAURANT_MENU.replace(':id', restaurantId), menuData);
+  },
+
   // Get delivery partners
   getDelivery: (params = {}) => {
     return apiClient.get(API_ENDPOINTS.ADMIN.DELIVERY, { params });

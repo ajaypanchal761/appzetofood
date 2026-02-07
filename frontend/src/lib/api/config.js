@@ -254,6 +254,7 @@ export const API_ENDPOINTS = {
     RESTAURANT_APPROVE: '/admin/restaurants/:id/approve',
     RESTAURANT_REJECT: '/admin/restaurants/:id/reject',
     RESTAURANT_DELETE: '/admin/restaurants/:id',
+    RESTAURANT_MENU: '/admin/restaurants/:id/menu',
     DELIVERY: '/admin/delivery',
     DELIVERY_PARTNERS: '/admin/delivery-partners',
     DELIVERY_PARTNERS_REQUESTS: '/admin/delivery-partners/requests',

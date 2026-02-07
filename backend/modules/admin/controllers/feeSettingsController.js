@@ -54,7 +54,7 @@ export const getFeeSettings = asyncHandler(async (req, res) => {
  */
 export const createOrUpdateFeeSettings = asyncHandler(async (req, res) => {
   try {
-    const { deliveryFee, deliveryFeeRanges, freeDeliveryThreshold, platformFee, gstRate, isActive } = req.body;
+    const { deliveryFee, deliveryFeeRanges, freeDeliveryThreshold, platformFee, platformFeeRanges, gstRate, isActive } = req.body;
 
     // Validate platform fee
     if (platformFee === undefined || platformFee < 0) {
@@ -79,6 +79,24 @@ export const createOrUpdateFeeSettings = asyncHandler(async (req, res) => {
         }
         if (range.fee === undefined || range.fee < 0) {
           return errorResponse(res, 400, 'Each range must have a valid fee value (≥ 0)');
+        }
+      }
+    }
+
+    // Validate platform fee ranges if provided
+    if (platformFeeRanges && Array.isArray(platformFeeRanges)) {
+      for (const range of platformFeeRanges) {
+        if (range.min === undefined || range.min < 0) {
+          return errorResponse(res, 400, 'Each platform fee range must have a valid min value (≥ 0)');
+        }
+        if (range.max === undefined || range.max < 0) {
+          return errorResponse(res, 400, 'Each platform fee range must have a valid max value (≥ 0)');
+        }
+        if (range.min >= range.max) {
+          return errorResponse(res, 400, 'Platform fee range min value must be less than max value');
+        }
+        if (range.fee === undefined || range.fee < 0) {
+          return errorResponse(res, 400, 'Each platform fee range must have a valid fee value (≥ 0)');
         }
       }
     }
@@ -111,6 +129,15 @@ export const createOrUpdateFeeSettings = asyncHandler(async (req, res) => {
       }));
     }
 
+    // Add platform fee ranges if provided
+    if (platformFeeRanges && Array.isArray(platformFeeRanges)) {
+      feeSettingsData.platformFeeRanges = platformFeeRanges.map(range => ({
+        min: Number(range.min),
+        max: Number(range.max),
+        fee: Number(range.fee),
+      }));
+    }
+
     const feeSettings = new FeeSettings(feeSettingsData);
 
     await feeSettings.save();
@@ -131,7 +158,7 @@ export const createOrUpdateFeeSettings = asyncHandler(async (req, res) => {
 export const updateFeeSettings = asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
-    const { deliveryFee, deliveryFeeRanges, freeDeliveryThreshold, platformFee, gstRate, isActive } = req.body;
+    const { deliveryFee, deliveryFeeRanges, freeDeliveryThreshold, platformFee, platformFeeRanges, gstRate, isActive } = req.body;
 
     const feeSettings = await FeeSettings.findById(id);
 
@@ -187,6 +214,29 @@ export const updateFeeSettings = asyncHandler(async (req, res) => {
         return errorResponse(res, 400, 'Platform fee must be a positive number');
       }
       feeSettings.platformFee = Number(platformFee);
+    }
+
+    if (platformFeeRanges !== undefined && Array.isArray(platformFeeRanges)) {
+      // Validate platform fee ranges
+      for (const range of platformFeeRanges) {
+        if (range.min === undefined || range.min < 0) {
+          return errorResponse(res, 400, 'Each platform fee range must have a valid min value (≥ 0)');
+        }
+        if (range.max === undefined || range.max < 0) {
+          return errorResponse(res, 400, 'Each platform fee range must have a valid max value (≥ 0)');
+        }
+        if (range.min >= range.max) {
+          return errorResponse(res, 400, 'Platform fee range min value must be less than max value');
+        }
+        if (range.fee === undefined || range.fee < 0) {
+          return errorResponse(res, 400, 'Each platform fee range must have a valid fee value (≥ 0)');
+        }
+      }
+      feeSettings.platformFeeRanges = platformFeeRanges.map(range => ({
+        min: Number(range.min),
+        max: Number(range.max),
+        fee: Number(range.fee),
+      }));
     }
 
     if (gstRate !== undefined) {

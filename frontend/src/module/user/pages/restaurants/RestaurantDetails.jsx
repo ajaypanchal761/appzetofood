@@ -74,6 +74,10 @@ export default function RestaurantDetails() {
   const [showMenuOptionsSheet, setShowMenuOptionsSheet] = useState(false)
   const [expandedAddButtons, setExpandedAddButtons] = useState(new Set())
   const [expandedSections, setExpandedSections] = useState(new Set([0])) // Default: Recommended section is expanded
+  const [showVariantModal, setShowVariantModal] = useState(false)
+  const [selectedItemForVariant, setSelectedItemForVariant] = useState(null)
+  const [selectedVariant, setSelectedVariant] = useState(null)
+  const [variantQuantity, setVariantQuantity] = useState(1)
   const [filters, setFilters] = useState({
     sortBy: null, // "low-to-high" | "high-to-low"
     vegNonVeg: null, // "veg" | "non-veg"
@@ -720,6 +724,62 @@ export default function RestaurantDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurant?.name, cart])
 
+  // Prevent body scroll when variant modal is open
+  useEffect(() => {
+    if (showVariantModal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [showVariantModal])
+
+  // Handle item click - check for variants first
+  const handleItemAdd = (item, event = null) => {
+    // Check if item has variations
+    const hasVariations = item.variations && Array.isArray(item.variations) && item.variations.length > 0
+    
+    if (hasVariations) {
+      // Open variant selection modal
+      setSelectedItemForVariant(item)
+      setSelectedVariant(null) // Reset selection
+      setVariantQuantity(1) // Reset quantity
+      setShowVariantModal(true)
+    } else {
+      // No variants, add directly
+      updateItemQuantity(item, 1, event)
+    }
+  }
+
+  // Handle variant selection and add to cart
+  const handleAddVariantToCart = (event = null) => {
+    if (!selectedItemForVariant || !selectedVariant) {
+      toast.error('Please select a variant')
+      return
+    }
+
+    // Create item with variant info
+    const itemWithVariant = {
+      ...selectedItemForVariant,
+      price: selectedVariant.price,
+      selectedVariant: selectedVariant,
+      variantId: `${selectedItemForVariant.id}_${selectedVariant.id}`, // Unique ID for variant
+    }
+
+    // Add to cart with quantity
+    for (let i = 0; i < variantQuantity; i++) {
+      updateItemQuantity(itemWithVariant, 1, event)
+    }
+
+    // Close modal
+    setShowVariantModal(false)
+    setSelectedItemForVariant(null)
+    setSelectedVariant(null)
+    setVariantQuantity(1)
+  }
+
   // Helper function to update item quantity in both local state and cart
   const updateItemQuantity = (item, newQuantity, event = null) => {
     // CRITICAL: Check if user is in service zone or restaurant is available
@@ -768,15 +828,19 @@ export default function RestaurantDetails() {
 
     // Prepare cart item with all required properties
     const cartItem = {
-      id: item.id,
-      name: item.name,
+      id: item.variantId || item.id, // Use variantId if available
+      name: item.selectedVariant 
+        ? `${item.name} - ${item.selectedVariant.name}` 
+        : item.name,
       price: item.price,
       image: item.image,
       restaurant: restaurant.name, // Use restaurant.name directly (already validated)
       restaurantId: validRestaurantId, // Use validated restaurantId
       description: item.description,
       originalPrice: item.originalPrice,
-      isVeg: item.isVeg !== false // Add isVeg property
+      isVeg: item.isVeg !== false, // Add isVeg property
+      selectedVariant: item.selectedVariant || null, // Store variant info
+      baseItemId: item.id // Store original item ID
     }
 
     // Get source position for animation from event target
@@ -1720,7 +1784,7 @@ export default function RestaurantDetails() {
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     if (!shouldShowGrayscale) {
-                                      updateItemQuantity(item, 1, e)
+                                      handleItemAdd(item, e)
                                     }
                                   }}
                                   disabled={shouldShowGrayscale}
@@ -1934,7 +1998,7 @@ export default function RestaurantDetails() {
                                             onClick={(e) => {
                                               e.stopPropagation()
                                               if (!shouldShowGrayscale) {
-                                                updateItemQuantity(item, 1, e)
+                                                handleItemAdd(item, e)
                                               }
                                             }}
                                             disabled={shouldShowGrayscale}
@@ -3050,6 +3114,159 @@ export default function RestaurantDetails() {
         linkTo="/cart"
         hideOnPages={true}
       />
+
+      {/* Variant Selection Modal */}
+      <AnimatePresence mode="wait">
+        {showVariantModal && selectedItemForVariant && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.05 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center"
+            onClick={() => {
+              setShowVariantModal(false)
+              setSelectedItemForVariant(null)
+              setSelectedVariant(null)
+              setVariantQuantity(1)
+            }}
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ duration: 0.15, type: "tween", ease: [0.4, 0, 0.2, 1] }}
+              className="bg-white dark:bg-gray-900 w-full max-w-md rounded-t-3xl flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxHeight: '90vh' }}
+            >
+            {/* Header */}
+            <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-4 flex items-center justify-between z-10">
+              <div className="flex items-center gap-3 flex-1">
+                {selectedItemForVariant.image && (
+                  <img
+                    src={selectedItemForVariant.image}
+                    alt={selectedItemForVariant.name}
+                    className="w-12 h-12 rounded-lg object-cover"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white truncate">
+                    {selectedItemForVariant.name}
+                  </h2>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowVariantModal(false)
+                  setSelectedItemForVariant(null)
+                  setSelectedVariant(null)
+                  setVariantQuantity(1)
+                }}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+              >
+                <X size={20} className="text-gray-600 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-4 py-4 space-y-6 flex-1 overflow-hidden">
+              {/* Quantity Section */}
+              {selectedItemForVariant.variations && selectedItemForVariant.variations.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">Quantity</h3>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Required • Select any 1 option</span>
+                  </div>
+                  <div className="space-y-2">
+                    {selectedItemForVariant.variations.map((variant, index) => (
+                      <label
+                        key={variant.id || index}
+                        className={`flex items-center justify-between p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          selectedVariant?.id === variant.id
+                            ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                            selectedVariant?.id === variant.id
+                              ? 'border-red-500'
+                              : 'border-gray-300 dark:border-gray-600'
+                          }`}>
+                            {selectedVariant?.id === variant.id && (
+                              <div className="w-3 h-3 rounded-full bg-red-500" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900 dark:text-white">
+                              {variant.name}
+                            </p>
+                            {variant.stock && variant.stock !== "Unlimited" && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Stock: {variant.stock}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            ₹{Math.round(variant.price || 0)}
+                          </p>
+                        </div>
+                        <input
+                          type="radio"
+                          name="variant"
+                          value={variant.id}
+                          checked={selectedVariant?.id === variant.id}
+                          onChange={() => setSelectedVariant(variant)}
+                          className="sr-only"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Action Bar */}
+            <div className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-4 py-4 flex items-center justify-between gap-4 flex-shrink-0">
+              {/* Quantity Selector */}
+              <div className="flex items-center gap-3 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2">
+                <button
+                  onClick={() => setVariantQuantity(Math.max(1, variantQuantity - 1))}
+                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                >
+                  <Minus size={18} />
+                </button>
+                <span className="text-base font-semibold text-gray-900 dark:text-white w-8 text-center">
+                  {variantQuantity}
+                </span>
+                <button
+                  onClick={() => setVariantQuantity(variantQuantity + 1)}
+                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+
+              {/* Add Button */}
+              <button
+                onClick={handleAddVariantToCart}
+                disabled={!selectedVariant}
+                className={`flex-1 py-3 px-6 rounded-lg font-semibold text-white transition-colors ${
+                  selectedVariant
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
+                }`}
+              >
+                Add item ₹{selectedVariant ? Math.round(selectedVariant.price * variantQuantity) : 0}
+              </button>
+            </div>
+          </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AnimatedPage>
   )
 }
