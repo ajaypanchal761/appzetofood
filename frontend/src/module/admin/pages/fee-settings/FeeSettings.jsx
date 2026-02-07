@@ -11,12 +11,15 @@ export default function FeeSettings() {
     deliveryFeeRanges: [],
     freeDeliveryThreshold: 149,
     platformFee: 5,
+    platformFeeRanges: [],
     gstRate: 5,
   })
   const [loadingFeeSettings, setLoadingFeeSettings] = useState(false)
   const [savingFeeSettings, setSavingFeeSettings] = useState(false)
   const [editingRangeIndex, setEditingRangeIndex] = useState(null)
   const [newRange, setNewRange] = useState({ min: '', max: '', fee: '' })
+  const [editingPlatformRangeIndex, setEditingPlatformRangeIndex] = useState(null)
+  const [newPlatformRange, setNewPlatformRange] = useState({ min: '', max: '', fee: '' })
 
   // Fetch fee settings
   const fetchFeeSettings = async () => {
@@ -29,6 +32,7 @@ export default function FeeSettings() {
           deliveryFeeRanges: response.data.data.feeSettings.deliveryFeeRanges || [],
           freeDeliveryThreshold: response.data.data.feeSettings.freeDeliveryThreshold || 149,
           platformFee: response.data.data.feeSettings.platformFee || 5,
+          platformFeeRanges: response.data.data.feeSettings.platformFeeRanges || [],
           gstRate: response.data.data.feeSettings.gstRate || 5,
         })
       }
@@ -54,6 +58,7 @@ export default function FeeSettings() {
         deliveryFeeRanges: feeSettings.deliveryFeeRanges,
         freeDeliveryThreshold: Number(feeSettings.freeDeliveryThreshold),
         platformFee: Number(feeSettings.platformFee),
+        platformFeeRanges: feeSettings.platformFeeRanges,
         gstRate: Number(feeSettings.gstRate),
         isActive: true,
       })
@@ -177,6 +182,115 @@ export default function FeeSettings() {
   const handleCancelEdit = () => {
     setNewRange({ min: '', max: '', fee: '' })
     setEditingRangeIndex(null)
+  }
+
+  // Add new platform fee range
+  const handleAddPlatformRange = () => {
+    if (!newPlatformRange.min || !newPlatformRange.max || !newPlatformRange.fee) {
+      toast.error('Please fill all fields (Min, Max, Fee)')
+      return
+    }
+
+    const min = Number(newPlatformRange.min)
+    const max = Number(newPlatformRange.max)
+    const fee = Number(newPlatformRange.fee)
+
+    if (min < 0 || max < 0 || fee < 0) {
+      toast.error('All values must be positive numbers')
+      return
+    }
+
+    if (min >= max) {
+      toast.error('Min value must be less than Max value')
+      return
+    }
+
+    // Check for overlapping ranges
+    const ranges = [...(feeSettings.platformFeeRanges || [])]
+    for (const range of ranges) {
+      if ((min >= range.min && min < range.max) || (max > range.min && max <= range.max) || (min <= range.min && max >= range.max)) {
+        toast.error('This range overlaps with an existing range')
+        return
+      }
+    }
+
+    setFeeSettings({
+      ...feeSettings,
+      platformFeeRanges: [...ranges, { min, max, fee }].sort((a, b) => a.min - b.min)
+    })
+    setNewPlatformRange({ min: '', max: '', fee: '' })
+    toast.success('Platform fee range added successfully')
+  }
+
+  // Delete platform fee range
+  const handleDeletePlatformRange = (index) => {
+    const newRanges = (feeSettings.platformFeeRanges || []).filter((_, i) => i !== index)
+    setFeeSettings({
+      ...feeSettings,
+      platformFeeRanges: newRanges
+    })
+    toast.success('Platform fee range deleted successfully')
+  }
+
+  // Edit platform fee range
+  const handleEditPlatformRange = (index) => {
+    const ranges = feeSettings.platformFeeRanges || []
+    const range = ranges[index]
+    if (!range) return
+    setNewPlatformRange({ min: range.min, max: range.max, fee: range.fee })
+    setEditingPlatformRangeIndex(index)
+  }
+
+  // Save edited platform fee range
+  const handleSaveEditPlatformRange = () => {
+    if (!newPlatformRange.min || !newPlatformRange.max || !newPlatformRange.fee) {
+      toast.error('Please fill all fields')
+      return
+    }
+
+    const min = Number(newPlatformRange.min)
+    const max = Number(newPlatformRange.max)
+    const fee = Number(newPlatformRange.fee)
+
+    if (min < 0 || max < 0 || fee < 0) {
+      toast.error('All values must be positive numbers')
+      return
+    }
+
+    if (min >= max) {
+      toast.error('Min value must be less than Max value')
+      return
+    }
+
+    const ranges = [...(feeSettings.platformFeeRanges || [])]
+    // Remove the range being edited
+    ranges.splice(editingPlatformRangeIndex, 1)
+
+    // Check for overlapping ranges
+    for (const range of ranges) {
+      if ((min >= range.min && min < range.max) || (max > range.min && max <= range.max) || (min <= range.min && max >= range.max)) {
+        toast.error('This range overlaps with an existing range')
+        return
+      }
+    }
+
+    // Add updated range
+    ranges.push({ min, max, fee })
+    ranges.sort((a, b) => a.min - b.min)
+
+    setFeeSettings({
+      ...feeSettings,
+      platformFeeRanges: ranges
+    })
+    setNewPlatformRange({ min: '', max: '', fee: '' })
+    setEditingPlatformRangeIndex(null)
+    toast.success('Platform fee range updated successfully')
+  }
+
+  // Cancel edit platform range
+  const handleCancelEditPlatformRange = () => {
+    setNewPlatformRange({ min: '', max: '', fee: '' })
+    setEditingPlatformRangeIndex(null)
   }
 
   return (
@@ -362,12 +476,145 @@ export default function FeeSettings() {
                 </div>
               </div>
 
+              {/* Platform Fee Ranges Section */}
+              <div className="mb-8 border-t border-slate-200 pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Platform Fee by Distance Range</h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Set different platform fees based on distance from user to restaurant (in km)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Platform Fee Ranges Table */}
+                {feeSettings.platformFeeRanges && feeSettings.platformFeeRanges.length > 0 && (
+                  <div className="mb-4 overflow-x-auto">
+                    <table className="w-full border border-slate-200 rounded-lg">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700 border-b border-slate-200">Min (km)</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700 border-b border-slate-200">Max (km)</th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700 border-b border-slate-200">Platform Fee (₹)</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 border-b border-slate-200">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(feeSettings.platformFeeRanges || [])
+                          .map((range, originalIndex) => ({ range, originalIndex }))
+                          .sort((a, b) => a.range.min - b.range.min)
+                          .map(({ range, originalIndex }) => (
+                            <tr key={originalIndex} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 text-sm text-slate-900 border-b border-slate-100">{range.min} km</td>
+                              <td className="px-4 py-3 text-sm text-slate-900 border-b border-slate-100">{range.max} km</td>
+                              <td className="px-4 py-3 text-sm font-medium text-green-600 border-b border-slate-100">₹{range.fee}</td>
+                              <td className="px-4 py-3 text-center border-b border-slate-100">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleEditPlatformRange(originalIndex)}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePlatformRange(originalIndex)}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Add/Edit Platform Fee Range Form */}
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                    {editingPlatformRangeIndex !== null ? 'Edit Platform Fee Range' : 'Add New Platform Fee Range'}
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Min Distance (km)</label>
+                      <input
+                        type="number"
+                        value={newPlatformRange.min}
+                        onChange={(e) => setNewPlatformRange({ ...newPlatformRange, min: e.target.value })}
+                        min="0"
+                        step="0.1"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Max Distance (km)</label>
+                      <input
+                        type="number"
+                        value={newPlatformRange.max}
+                        onChange={(e) => setNewPlatformRange({ ...newPlatformRange, max: e.target.value })}
+                        min="0"
+                        step="0.1"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Platform Fee (₹)</label>
+                      <input
+                        type="number"
+                        value={newPlatformRange.fee}
+                        onChange={(e) => setNewPlatformRange({ ...newPlatformRange, fee: e.target.value })}
+                        min="0"
+                        step="1"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        placeholder="5"
+                      />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      {editingPlatformRangeIndex !== null ? (
+                        <>
+                          <Button
+                            onClick={handleSaveEditPlatformRange}
+                            className="bg-green-600 hover:bg-green-700 text-white text-sm flex-1"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            onClick={handleCancelEditPlatformRange}
+                            variant="outline"
+                            className="text-sm"
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          onClick={handleAddPlatformRange}
+                          className="bg-green-600 hover:bg-green-700 text-white text-sm flex-1 flex items-center justify-center gap-2"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add Range
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Example: If distance from user to restaurant is 0-2 km, platform fee will be ₹5
+                  </p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-slate-200 pt-6 mt-6">
 
-                {/* Platform Fee */}
+                {/* Platform Fee (Default) */}
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-slate-700">
-                    Platform Fee (₹)
+                    Default Platform Fee (₹)
                   </label>
                   <input
                     type="number"
@@ -379,7 +626,7 @@ export default function FeeSettings() {
                     placeholder="5"
                   />
                   <p className="text-xs text-slate-500">
-                    Platform service fee per order
+                    Default platform fee (used if no distance range matches)
                   </p>
                 </div>
 

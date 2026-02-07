@@ -96,7 +96,7 @@ function getRestaurantZoneId(restaurantLat, restaurantLng, activeZones) {
 export const getRestaurants = async (req, res) => {
   try {
     const { 
-      limit = 50, 
+      limit = 10000, // Increased to show all restaurants
       offset = 0,
       sortBy,
       cuisine,
@@ -140,22 +140,12 @@ export const getRestaurants = async (req, res) => {
       }
     
     // Delivery time filter (estimatedDeliveryTime contains time in format "25-30 mins")
-    if (maxDeliveryTime) {
-      const maxTime = parseInt(maxDeliveryTime);
-      query.$or = [
-        { estimatedDeliveryTime: { $regex: new RegExp(`(\\d+)-?\\d*\\s*mins?`, 'i') } }
-      ];
-      // We'll filter this in application logic since it's a string field
-    }
+    // Note: This will be filtered in application logic since it's a string field
+    // We don't add it to query.$or to avoid overriding isActive filter
     
     // Distance filter (distance is stored as string like "1.2 km")
-    if (maxDistance) {
-      const maxDist = parseFloat(maxDistance);
-      query.$or = [
-        { distance: { $regex: new RegExp(`\\d+\\.?\\d*\\s*km`, 'i') } }
-      ];
-      // We'll filter this in application logic since it's a string field
-    }
+    // Note: This will be filtered in application logic since it's a string field
+    // We don't add it to query.$or to avoid overriding isActive filter
     
     // Price range filter
     if (maxPrice) {
@@ -165,12 +155,15 @@ export const getRestaurants = async (req, res) => {
       }
     }
     
-    // Offers filter
+    // Offers filter - combine with existing $or if it exists, otherwise create new
     if (hasOffers === 'true') {
-      query.$or = [
+      if (!query.$or) {
+        query.$or = [];
+      }
+      query.$or.push(
         { offer: { $exists: true, $ne: null, $ne: '' } },
         { featuredPrice: { $exists: true } }
-      ];
+      );
     }
     
     // Build sort object

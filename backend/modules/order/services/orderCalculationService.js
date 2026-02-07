@@ -97,10 +97,43 @@ export const calculateDeliveryFee = async (orderValue, restaurant, deliveryAddre
 };
 
 /**
- * Calculate platform fee
+ * Calculate platform fee based on distance
+ * @param {number} distanceInKm - Distance between user and restaurant in kilometers
+ * @returns {Promise<number>} - Platform fee amount
  */
-export const calculatePlatformFee = async () => {
+export const calculatePlatformFee = async (distanceInKm = null) => {
   const feeSettings = await getFeeSettings();
+  
+  // If distance is provided and platform fee ranges are configured, use range-based calculation
+  if (distanceInKm !== null && distanceInKm !== undefined && 
+      feeSettings.platformFeeRanges && 
+      Array.isArray(feeSettings.platformFeeRanges) && 
+      feeSettings.platformFeeRanges.length > 0) {
+    
+    // Sort ranges by min value to ensure proper checking
+    const sortedRanges = [...feeSettings.platformFeeRanges].sort((a, b) => a.min - b.min);
+    
+    // Find matching range (distance >= min && distance < max)
+    // For the last range, we check distance >= min && distance <= max
+    for (let i = 0; i < sortedRanges.length; i++) {
+      const range = sortedRanges[i];
+      const isLastRange = i === sortedRanges.length - 1;
+      
+      if (isLastRange) {
+        // Last range: include max value
+        if (distanceInKm >= range.min && distanceInKm <= range.max) {
+          return range.fee;
+        }
+      } else {
+        // Other ranges: exclude max value (handled by next range)
+        if (distanceInKm >= range.min && distanceInKm < range.max) {
+          return range.fee;
+        }
+      }
+    }
+  }
+  
+  // Fallback to default platform fee if no range matches or distance not provided
   return feeSettings.platformFee || 5;
 };
 
@@ -286,8 +319,17 @@ export const calculateOrderPricing = async ({
     // Apply free delivery from coupon
     const finalDeliveryFee = appliedCoupon?.freeDelivery ? 0 : deliveryFee;
     
-    // Calculate platform fee
-    const platformFee = await calculatePlatformFee();
+    // Calculate distance for platform fee (if delivery address and restaurant location available)
+    let distanceInKm = null;
+    if (deliveryAddress?.location?.coordinates && restaurant?.location?.coordinates) {
+      distanceInKm = calculateDistance(
+        restaurant.location.coordinates,
+        deliveryAddress.location.coordinates
+      );
+    }
+    
+    // Calculate platform fee based on distance
+    const platformFee = await calculatePlatformFee(distanceInKm);
     
     // Calculate GST on subtotal after discount
     const gst = await calculateGST(subtotal, discount);

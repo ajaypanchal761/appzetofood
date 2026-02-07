@@ -23,7 +23,9 @@ import {
   deleteRestaurant,
   getAllOffers,
   getRestaurantAnalytics,
-  getCustomerWalletReport
+  getCustomerWalletReport,
+  getRestaurantMenu,
+  updateRestaurantMenu
 } from '../controllers/adminController.js';
 import {
   getBusinessSettings,
@@ -290,6 +292,8 @@ router.post('/restaurants/:id/reject', rejectRestaurant);
 router.post('/restaurants/:id/reverify', reverifyRestaurant);
 router.put('/restaurants/:id/status', updateRestaurantStatus);
 router.delete('/restaurants/:id', deleteRestaurant);
+router.get('/restaurants/:id/menu', getRestaurantMenu);
+router.put('/restaurants/:id/menu', updateRestaurantMenu);
 
 // Category Management
 router.get('/categories', getCategories);

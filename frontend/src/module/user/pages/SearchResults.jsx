@@ -181,6 +181,12 @@ export default function SearchResults() {
           const restaurantsArray = response.data.data.restaurants
           console.log(`✅ Got ${restaurantsArray.length} restaurants from API`)
           
+          // Filter out inactive restaurants (safety check)
+          const activeRestaurants = restaurantsArray.filter(restaurant => {
+            return restaurant.isActive !== false && restaurant.isActive !== undefined
+          })
+          console.log(`Filtered ${activeRestaurants.length} active restaurants from ${restaurantsArray.length} total`)
+          
           // Check if we have actual data or just defaults
           if (restaurantsArray.length > 0) {
             console.log('📋 First restaurant sample:', {
@@ -225,7 +231,7 @@ export default function SearchResults() {
           
           // First transform restaurants without menu data - USE ONLY BACKEND DATA
           // Filter out restaurants with only default/mock data
-          const restaurantsWithIds = restaurantsArray
+          const restaurantsWithIds = activeRestaurants
             .filter((restaurant) => {
               // Only include restaurants with real data (not just defaults)
               // At minimum, restaurant should have a name and either images or menu

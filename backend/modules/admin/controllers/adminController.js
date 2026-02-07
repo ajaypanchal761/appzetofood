@@ -1006,7 +1006,7 @@ export const getRestaurants = asyncHandler(async (req, res) => {
   try {
     const { 
       page = 1, 
-      limit = 50,
+      limit = 1000, // Increased default limit to show more restaurants
       search,
       status,
       cuisine,
@@ -1016,17 +1016,14 @@ export const getRestaurants = asyncHandler(async (req, res) => {
     // Build query
     const query = {};
 
-    // Status filter - Default to active only (approved restaurants)
-    // Only show inactive if explicitly requested via status filter
-    // IMPORTANT: Restaurants should only appear in main list AFTER admin approval
-    // Inactive restaurants (pending approval) should only appear in "New Joining Request" section
+    // Status filter - Only apply when explicitly requested
+    // If no status is provided, show ALL restaurants from database
     if (status === 'inactive') {
       query.isActive = false;
-    } else {
-      // Default: Show only active (approved) restaurants
-      // This ensures that restaurants only appear in main list after admin approval
+    } else if (status === 'active') {
       query.isActive = true;
     }
+    // If status is not provided, don't filter by isActive - show all restaurants
 
     console.log('🔍 Admin Restaurants List Query:', {
       status,
@@ -2654,3 +2651,144 @@ export const getCustomerWalletReport = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * Get Restaurant Menu (Admin)
+ * GET /api/admin/restaurants/:id/menu
+ */
+export const getRestaurantMenu = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const Menu = (await import('../../restaurant/models/Menu.js')).default;
+    
+    // Find restaurant by ID
+    const restaurant = await Restaurant.findOne({
+      $or: [
+        { _id: id },
+        { restaurantId: id },
+        { slug: id }
+      ]
+    });
+
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    // Find menu
+    const menu = await Menu.findOne({ 
+      restaurant: restaurant._id,
+      isActive: true,
+    });
+
+    if (!menu) {
+      // Return empty menu if not found
+      return successResponse(res, 200, 'Menu retrieved successfully', {
+        menu: {
+          sections: [],
+          isActive: true,
+        },
+      });
+    }
+
+    return successResponse(res, 200, 'Menu retrieved successfully', {
+      menu: {
+        sections: menu.sections || [],
+        isActive: menu.isActive,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error fetching restaurant menu: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to fetch restaurant menu');
+  }
+});
+
+/**
+ * Update Restaurant Menu (Admin)
+ * PUT /api/admin/restaurants/:id/menu
+ */
+export const updateRestaurantMenu = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sections } = req.body;
+    const adminId = req.user._id;
+    const Menu = (await import('../../restaurant/models/Menu.js')).default;
+    
+    // Find restaurant by ID
+    const restaurant = await Restaurant.findOne({
+      $or: [
+        { _id: id },
+        { restaurantId: id },
+        { slug: id }
+      ]
+    });
+
+    if (!restaurant) {
+      return errorResponse(res, 404, 'Restaurant not found');
+    }
+
+    // Get existing menu to preserve approval status
+    const existingMenu = await Menu.findOne({ restaurant: restaurant._id });
+
+    // Normalize sections (similar to restaurant menu controller)
+    const normalizedSections = Array.isArray(sections) ? sections.map((section, index) => {
+      const existingSection = existingMenu?.sections?.find(
+        s => s.id === section.id || s.name === section.name
+      );
+
+      return {
+        id: section.id || existingSection?.id || `section-${Date.now()}-${index}`,
+        name: section.name || existingSection?.name || `Section ${index + 1}`,
+        items: Array.isArray(section.items) ? section.items.map(item => {
+          const existingItem = existingSection?.items?.find(
+            i => String(i.id) === String(item.id)
+          );
+
+          return {
+            ...item,
+            id: item.id || existingItem?.id || Date.now().toString(),
+            approvalStatus: existingItem?.approvalStatus || item.approvalStatus || 'approved',
+            approvedAt: existingItem?.approvedAt || item.approvedAt || new Date(),
+            approvedBy: existingItem?.approvedBy || item.approvedBy || adminId,
+            rejectedAt: existingItem?.rejectedAt || item.rejectedAt,
+            rejectionReason: existingItem?.rejectionReason || item.rejectionReason || "",
+          };
+        }) : [],
+        subsections: Array.isArray(section.subsections) ? section.subsections : [],
+        isEnabled: section.isEnabled !== undefined ? section.isEnabled : true,
+        order: section.order !== undefined ? section.order : index,
+      };
+    }) : [];
+
+    // Find or create menu
+    let menu = await Menu.findOne({ restaurant: restaurant._id });
+    
+    if (!menu) {
+      menu = new Menu({
+        restaurant: restaurant._id,
+        sections: normalizedSections,
+        isActive: true,
+      });
+    } else {
+      menu.set('sections', normalizedSections);
+      menu.markModified('sections');
+      menu.isNew = false;
+    }
+
+    await menu.save();
+
+    logger.info(`Menu updated by admin: ${restaurant._id}`, {
+      updatedBy: adminId,
+      restaurantName: restaurant.name,
+      sectionsCount: normalizedSections.length
+    });
+
+    return successResponse(res, 200, 'Menu updated successfully', {
+      menu: {
+        sections: menu.sections || [],
+        isActive: menu.isActive,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error updating restaurant menu: ${error.message}`, { error: error.stack });
+    return errorResponse(res, 500, 'Failed to update restaurant menu');
+  }
+});

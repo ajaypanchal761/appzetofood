@@ -210,6 +210,12 @@ export default function CategoryPage() {
         if (response.data && response.data.success && response.data.data && response.data.data.restaurants) {
           const restaurantsArray = response.data.data.restaurants
           
+          // Filter out inactive restaurants (safety check)
+          const activeRestaurants = restaurantsArray.filter(restaurant => {
+            return restaurant.isActive !== false && restaurant.isActive !== undefined
+          })
+          console.log(`Filtered ${activeRestaurants.length} active restaurants from ${restaurantsArray.length} total`)
+          
           // Helper function to check if value is a default/mock value
           const isDefaultValue = (value, fieldName) => {
             if (!value) return false
@@ -232,7 +238,7 @@ export default function CategoryPage() {
           }
           
           // Transform restaurants - filter out default values
-          const restaurantsWithIds = restaurantsArray
+          const restaurantsWithIds = activeRestaurants
             .filter((restaurant) => {
               const hasName = restaurant.name && restaurant.name.trim().length > 0
               const hasRealImage = restaurant.profileImage?.url || 
